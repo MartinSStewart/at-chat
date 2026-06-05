@@ -620,6 +620,7 @@ type BackendMsg
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
+    | RegeneratedPushSubscription SessionId SubscribeData Time.Posix
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels
         Time.Posix

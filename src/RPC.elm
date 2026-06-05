@@ -1,17 +1,24 @@
-module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
+module RPC exposing (checkFileUpload, lamdera_handleEndpoints, regeneratePushSubscription)
 
 import Broadcast
+import Codec
 import Coord
 import DiscordSync
+import Effect.Lamdera
 import FileStatus
 import Http
+import Json.Decode as Decode
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
+import Ports exposing (SubscribeData)
 import SeqDict
 import SessionIdHash
+import Task
+import Time
 import Toop exposing (T4(..))
-import Types exposing (BackendModel, BackendMsg)
+import Types exposing (BackendModel, BackendMsg(..))
+import UserSession exposing (PushSubscription(..))
 
 
 checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg )
@@ -55,11 +62,86 @@ checkFileUpload _ model _ text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+{-| Called by the service worker when the push service rotates/invalidates a
+subscription (the `pushsubscriptionchange` event). The request carries the old
+subscription and the freshly created one. We look up the session whose stored
+subscription matches the old endpoint and keys — only someone who actually held
+that subscription knows them, so this acts as proof of ownership — and replace it
+with the new subscription. The model swap and logging happen in a time-stamped
+`RegeneratedPushSubscription` backend message so we get an accurate timestamp.
+-}
+regeneratePushSubscription : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
+regeneratePushSubscription _ model _ json =
+    case Decode.decodeValue regeneratePushSubscriptionDecoder json of
+        Ok { old, new } ->
+            case findSessionBySubscription old model of
+                Just sessionId ->
+                    ( Ok (Json.object [ ( "status", Json.string "ok" ) ])
+                    , model
+                    , Task.perform (RegeneratedPushSubscription sessionId new) Time.now
+                    )
+
+                Nothing ->
+                    -- No session is currently subscribed with the supplied old
+                    -- subscription, so we can't (and shouldn't) update anything.
+                    ( Err (Http.BadBody "No matching push subscription"), model, Cmd.none )
+
+        Err error ->
+            ( Err (Http.BadBody ("Invalid request: " ++ Decode.errorToString error)), model, Cmd.none )
+
+
+regeneratePushSubscriptionDecoder : Decode.Decoder { old : SubscribeData, new : SubscribeData }
+regeneratePushSubscriptionDecoder =
+    Decode.map2 (\old new -> { old = old, new = new })
+        (Decode.field "old" (Codec.decoder Ports.subscribeDataCodec))
+        (Decode.field "new" (Codec.decoder Ports.subscribeDataCodec))
+
+
+findSessionBySubscription : SubscribeData -> BackendModel -> Maybe Effect.Lamdera.SessionId
+findSessionBySubscription old model =
+    SeqDict.toList model.sessions
+        |> List.filterMap
+            (\( sessionId, session ) ->
+                if subscriptionMatches old session.pushSubscription then
+                    Just sessionId
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
+subscriptionMatches : SubscribeData -> PushSubscription -> Bool
+subscriptionMatches old pushSubscription =
+    case pushSubscription of
+        Subscribed data _ ->
+            sameSubscription old data
+
+        SubscriptionError data _ ->
+            sameSubscription old data
+
+        NotSubscribed ->
+            False
+
+        SubscriptionJsException _ _ ->
+            False
+
+
+sameSubscription : SubscribeData -> SubscribeData -> Bool
+sameSubscription a b =
+    (a.endpoint == b.endpoint)
+        && (a.keys.auth == b.keys.auth)
+        && (a.keys.p256dh == b.keys.p256dh)
+
+
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
 lamdera_handleEndpoints _ req model =
     case req.endpoint of
         "is-file-upload-allowed" ->
             LamderaRPC.handleEndpointString checkFileUpload req model
+
+        "service-worker-regenerate-push-subscription" ->
+            LamderaRPC.handleEndpointJson regeneratePushSubscription req model
 
         _ ->
             ( ResultString "Endpoint not found", model, Cmd.none )

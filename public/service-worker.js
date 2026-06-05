@@ -49,40 +49,51 @@ self.addEventListener('push', function(event) {
 // The push service can unilaterally invalidate a subscription (FCM token
 // rotation, browser update, storage eviction, etc.) without ever setting an
 // expirationTime. When that happens the browser fires 'pushsubscriptionchange'
-// here. If nothing resubscribes and tells the server, the backend keeps pushing
+// here. If nothing resubscribes and tells the backend, the backend keeps pushing
 // to the dead endpoint and gets "push subscription has unsubscribed or expired"
-// (FCM Error 11). So resubscribe with the same VAPID key and forward the new
-// subscription to any open page, which sends it to the backend. If no page is
-// open, the next app load re-registers (see register_push_subscription_to_js in
-// elm-pkg-js/stuff.js).
+// (FCM Error 11). This fires even when no page is open (the common case for
+// push), so we resubscribe and tell the backend ourselves via a Lamdera RPC
+// endpoint rather than relying on an open page. The old subscription is sent
+// alongside the new one: the backend looks up which session owned the old
+// endpoint+keys (proof the caller actually held that subscription) and swaps in
+// the new one.
 self.addEventListener('pushsubscriptionchange', function(event) {
     event.waitUntil((async () => {
         try {
-            // Reuse the VAPID public key from the old subscription so we resubscribe
-            // with the same key the server signs with.
-            const applicationServerKey =
-                (event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey)
-                || (event.newSubscription && event.newSubscription.options && event.newSubscription.options.applicationServerKey)
-                || null;
-
-            // Some browsers already provide the replacement subscription; otherwise
-            // create one ourselves.
-            let subscription = event.newSubscription || await self.registration.pushManager.getSubscription();
-            if (!subscription && applicationServerKey) {
-                subscription = await self.registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: applicationServerKey
-                });
-            }
-
-            if (!subscription) {
+            // The old subscription identifies which backend session to update. After
+            // this event the old one is already gone from getSubscription(), so rely
+            // on event.oldSubscription.
+            const oldSubscription = event.oldSubscription;
+            if (!oldSubscription) {
+                // Without the old subscription we can't tell the backend which session
+                // to update. The next app load re-registers (see
+                // register_push_subscription_to_js in elm-pkg-js/stuff.js).
                 return;
             }
 
-            const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-            for (const client of clientsList) {
-                client.postMessage({ type: "pushsubscriptionchange", subscription: subscription.toJSON() });
+            // Resubscribe with the same VAPID key the server signs with.
+            const applicationServerKey = oldSubscription.options && oldSubscription.options.applicationServerKey;
+            let newSubscription = event.newSubscription;
+            if (!newSubscription) {
+                newSubscription =
+                    (await self.registration.pushManager.getSubscription())
+                    || (applicationServerKey
+                        ? await self.registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: applicationServerKey
+                        })
+                        : null);
             }
+
+            if (!newSubscription) {
+                return;
+            }
+
+            await fetch('/_r/service-worker-regenerate-push-subscription', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old: oldSubscription.toJSON(), new: newSubscription.toJSON() })
+            });
         } catch (error) {
         }
     })());

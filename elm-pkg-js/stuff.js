@@ -37,14 +37,6 @@ exports.init = async function init(app)
             navigator.serviceWorker.register(serviceWorkerJs);
             navigator.serviceWorker.addEventListener("message", (event) => {
                 console.log(event);
-                // The service worker forwards a fresh subscription here when the push
-                // service rotates/expires the old one (the `pushsubscriptionchange`
-                // event). Route it to the push subscription registration flow so the
-                // backend gets the new endpoint instead of the dead one.
-                if (event.data && event.data.type === "pushsubscriptionchange") {
-                    app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ "ServiceWorkerChange", event.data.subscription ]});
-                    return;
-                }
                 app.ports.service_worker_message_from_js.send(event.data);
             });
         }

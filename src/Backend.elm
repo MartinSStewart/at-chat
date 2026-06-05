@@ -625,6 +625,29 @@ update msg model =
                                 model
                         )
 
+        RegeneratedPushSubscription sessionId subscribeData time ->
+            -- The service worker (see public/service-worker.js) hit the
+            -- service-worker-regenerate-push-subscription RPC after the push service
+            -- invalidated the old subscription. RPC.elm already verified the caller
+            -- owned the old subscription and resolved it to this session, so swap in
+            -- the new subscription. Logged so an admin can confirm this self-healing
+            -- path is running even while the app was closed.
+            case SeqDict.get sessionId model.sessions of
+                Just session ->
+                    BackendExtra.addLog
+                        time
+                        (Log.PushSubscriptionRegistered session.userId ServiceWorkerChange)
+                        { model
+                            | sessions =
+                                SeqDict.insert
+                                    sessionId
+                                    { session | pushSubscription = Subscribed subscribeData time }
+                                    model.sessions
+                        }
+
+                Nothing ->
+                    ( model, Command.none )
+
         GotVapidKeys result ->
             ( case result of
                 Ok keys ->
