@@ -51,6 +51,7 @@ module RecordedTestExtra exposing
     , mockCloudflareSfu
     , noMissingMessages
     , publicGoMatchViewTest
+    , pushNotificationRegenerationTest
     , regeneratedServerSecretValue
     , safariIphone
     , scrollToMiddle
@@ -114,7 +115,7 @@ import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
-import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..))
+import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..), SubscribeData)
 import Range exposing (Range)
 import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
@@ -194,7 +195,7 @@ handlePortToJs requestAndData =
                         identity
                         [ Json.Encode.string "UserEnabledNotifications"
                         , Json.Encode.object
-                            [ ( "endpoint", Json.Encode.string "https://vapidserver.com/" )
+                            [ ( "endpoint", Json.Encode.string pushSubscriptionEndpoint )
                             , ( "expirationTime", Json.Encode.null )
                             , ( "keys"
                               , Json.Encode.object
@@ -224,6 +225,34 @@ handlePortToJs requestAndData =
                     Debug.log "port request" requestAndData.currentRequest
             in
             Nothing
+
+
+{-| The push subscription endpoint that the mocked `register_push_subscription_to_js`
+port hands back when a user enables notifications. Push notifications for that user
+are sent here until the subscription is regenerated.
+-}
+pushSubscriptionEndpoint : String
+pushSubscriptionEndpoint =
+    "https://vapidserver.com/"
+
+
+{-| The endpoint the subscription is rotated to when we simulate a
+`pushsubscriptionchange` (see `pushNotificationRegenerationTest`).
+-}
+regeneratedPushSubscriptionEndpoint : String
+regeneratedPushSubscriptionEndpoint =
+    "https://regenerated-push-service.com/"
+
+
+{-| The replacement subscription the service worker would create and POST to the
+`service-worker-regenerate-push-subscription` RPC after a `pushsubscriptionchange`.
+-}
+regeneratedSubscribeData : SubscribeData
+regeneratedSubscribeData =
+    { endpoint = Url.fromString regeneratedPushSubscriptionEndpoint |> Maybe.withDefault domain
+    , expirationTime = Nothing
+    , keys = { auth = "new-auth", p256dh = "new-p256dh" }
+    }
 
 
 desktopWindow : { width : number, height : number }
@@ -1156,6 +1185,135 @@ checkNoNotification body =
                 [] ->
                     Ok ()
         )
+
+
+pushNotificationsToEndpoint : String -> String -> T.Data FrontendModel BackendModel -> List ()
+pushNotificationsToEndpoint endpoint body data =
+    List.filterMap
+        (\request ->
+            case request.body of
+                T.JsonBody json ->
+                    case Codec.decodeValue Broadcast.pushNotificationCodec json of
+                        Ok pushNotification ->
+                            if
+                                (pushNotification.body == body)
+                                    && (pushNotification.endpoint == endpoint)
+                                    && (request.url == "http://localhost:3000/file/internal/push-notification")
+                            then
+                                Just ()
+
+                            else
+                                Nothing
+
+                        Err _ ->
+                            Nothing
+
+                _ ->
+                    Nothing
+        )
+        data.httpRequests
+
+
+{-| Like `checkNotification`, but also asserts the push was sent to a specific
+subscription endpoint. Used to verify which subscription a notification went to
+before and after the subscription is regenerated.
+-}
+checkNotificationToEndpoint : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNotificationToEndpoint endpoint body =
+    T.checkState
+        100
+        (\data ->
+            case pushNotificationsToEndpoint endpoint body data of
+                _ :: _ :: _ ->
+                    Err ("Multiple notifications found for \"" ++ body ++ "\" sent to " ++ endpoint)
+
+                [ _ ] ->
+                    Ok ()
+
+                [] ->
+                    Err ("Notification for \"" ++ body ++ "\" was not sent to " ++ endpoint)
+        )
+
+
+checkNoNotificationToEndpoint : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNoNotificationToEndpoint endpoint body =
+    T.checkState
+        100
+        (\data ->
+            case pushNotificationsToEndpoint endpoint body data of
+                _ :: _ ->
+                    Err ("Notification for \"" ++ body ++ "\" was unexpectedly sent to " ++ endpoint)
+
+                [] ->
+                    Ok ()
+        )
+
+
+{-| Verifies that push notifications work and keep working after the push service
+rotates the subscription (the `pushsubscriptionchange` event).
+
+In a real browser `pushsubscriptionchange` fires in the service worker, which
+resubscribes and POSTs the old + new subscription to the
+`service-worker-regenerate-push-subscription` RPC. The RPC matches the old
+subscription to the owning session and emits a `RegeneratedPushSubscription`
+backend message. There's no service worker (or RPC plumbing) in the end-to-end
+test runtime, so we simulate that event by feeding the same backend message in
+with `T.backendUpdate`, then confirm later notifications follow the user to the
+new subscription instead of piling up on the dead endpoint.
+
+-}
+pushNotificationRegenerationTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+pushNotificationRegenerationTest config =
+    startTest
+        "Push notifications survive a pushsubscriptionchange (subscription regeneration)"
+        startTime
+        config
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin user ->
+                [ -- connectTwoUsersAndJoinNewGuild already had the user enable notifications,
+                  -- registering the subscription at pushSubscriptionEndpoint. Move the user off
+                  -- the channel and bump the notification level so every message notifies.
+                  user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
+
+                -- 1. Push notifications work: the admin's message reaches the subscription the
+                --    user originally registered.
+                , writeMessage admin 100 "Before regeneration"
+                , checkNotificationToEndpoint pushSubscriptionEndpoint "Before regeneration"
+
+                -- 2. The push service rotates the subscription. This is what the regenerate RPC
+                --    produces after the service worker reports a pushsubscriptionchange.
+                , T.backendUpdate 100 (Types.RegeneratedPushSubscription sessionId1 regeneratedSubscribeData startTime)
+                , T.checkBackend 100
+                    (\m ->
+                        case SeqDict.get sessionId1 m.sessions of
+                            Just session ->
+                                case session.pushSubscription of
+                                    UserSession.Subscribed data _ ->
+                                        if Url.toString data.endpoint == regeneratedPushSubscriptionEndpoint then
+                                            Ok ()
+
+                                        else
+                                            Err ("Subscription endpoint was not updated, found " ++ Url.toString data.endpoint)
+
+                                    _ ->
+                                        Err "Session is no longer subscribed after regeneration"
+
+                            Nothing ->
+                                Err "The user's session went missing"
+                    )
+
+                -- 3. Subsequent notifications follow the user to the new subscription, and the
+                --    dead endpoint is no longer used.
+                , writeMessage admin 100 "After regeneration"
+                , checkNotificationToEndpoint regeneratedPushSubscriptionEndpoint "After regeneration"
+                , checkNoNotificationToEndpoint pushSubscriptionEndpoint "After regeneration"
+                ]
+            )
+        ]
 
 
 dropPrefix : String -> String -> String
