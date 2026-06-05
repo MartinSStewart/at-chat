@@ -57,43 +57,88 @@ self.addEventListener('push', function(event) {
 // alongside the new one: the backend looks up which session owned the old
 // endpoint+keys (proof the caller actually held that subscription) and swaps in
 // the new one.
+
+// Read the subscription the page persisted at registration time (elm-pkg-js/
+// stuff.js). Chrome exposes event.oldSubscription/newSubscription, but Firefox
+// and Safari don't, and getSubscription() returns null during the event, so
+// IndexedDB is the only reliable way to recover the old subscription and the
+// VAPID key needed to resubscribe on those browsers.
+function openPushSubscriptionDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open("push-subscription", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("subscription");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function loadPushSubscription() {
+    const db = await openPushSubscriptionDb();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("subscription", "readonly");
+        const request = transaction.objectStore("subscription").get("current");
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function savePushSubscription(value) {
+    const db = await openPushSubscriptionDb();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("subscription", "readwrite");
+        transaction.objectStore("subscription").put(value, "current");
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+    });
+}
+
 self.addEventListener('pushsubscriptionchange', function(event) {
     event.waitUntil((async () => {
         try {
-            // The old subscription identifies which backend session to update. After
-            // this event the old one is already gone from getSubscription(), so rely
-            // on event.oldSubscription.
-            const oldSubscription = event.oldSubscription;
-            if (!oldSubscription) {
-                // Without the old subscription we can't tell the backend which session
-                // to update. The next app load re-registers (see
+            const stored = await loadPushSubscription();
+
+            // Old subscription: Chrome hands it to us on the event; Firefox/Safari
+            // don't, so fall back to the one the page persisted in IndexedDB. The
+            // backend matches on its endpoint+keys to find the session to update.
+            const oldSubscriptionJson =
+                (event.oldSubscription && event.oldSubscription.toJSON())
+                || (stored && stored.subscription)
+                || null;
+
+            if (!oldSubscriptionJson) {
+                // No record of the old subscription, so the backend can't tell which
+                // session to update. The next app load re-registers (see
                 // register_push_subscription_to_js in elm-pkg-js/stuff.js).
                 return;
             }
 
-            // Resubscribe with the same VAPID key the server signs with.
-            const applicationServerKey = oldSubscription.options && oldSubscription.options.applicationServerKey;
-            let newSubscription = event.newSubscription;
-            if (!newSubscription) {
-                newSubscription =
-                    (await self.registration.pushManager.getSubscription())
-                    || (applicationServerKey
-                        ? await self.registration.pushManager.subscribe({
-                            userVisibleOnly: true,
-                            applicationServerKey: applicationServerKey
-                        })
-                        : null);
+            // New subscription: Chrome may provide it; otherwise resubscribe ourselves
+            // using the VAPID key the page stored (the same key the server signs with).
+            const applicationServerKey = stored && stored.publicKey;
+            let newSubscription = event.newSubscription || await self.registration.pushManager.getSubscription();
+            if (!newSubscription && applicationServerKey) {
+                newSubscription = await self.registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: applicationServerKey
+                });
             }
 
             if (!newSubscription) {
                 return;
             }
 
+            const newSubscriptionJson = newSubscription.toJSON();
+
             await fetch('/_r/service-worker-regenerate-push-subscription', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ old: oldSubscription.toJSON(), new: newSubscription.toJSON() })
+                body: JSON.stringify({ old: oldSubscriptionJson, new: newSubscriptionJson })
             });
+
+            // Persist the new subscription so a later change event can recover it too.
+            if (applicationServerKey) {
+                await savePushSubscription({ subscription: newSubscriptionJson, publicKey: applicationServerKey });
+            }
         } catch (error) {
         }
     })());

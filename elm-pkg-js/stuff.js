@@ -14,6 +14,32 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
+// We persist the current push subscription (and the VAPID key it was created
+// with) in IndexedDB so the service worker can recover it during a
+// 'pushsubscriptionchange' event. Firefox and Safari don't include
+// event.oldSubscription/newSubscription, and getSubscription() returns null at
+// that point, so without this the service worker has no way to know which old
+// subscription the backend should replace. IndexedDB is shared between the page
+// and the service worker on the same origin.
+function openPushSubscriptionDb() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open("push-subscription", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("subscription");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function savePushSubscription(value) {
+    const db = await openPushSubscriptionDb();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("subscription", "readwrite");
+        transaction.objectStore("subscription").put(value, "current");
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+    });
+}
+
 async function loadAudio(url, context, sounds) {
     try {
         const response = await fetch("/" + url + ".mp3");
@@ -387,6 +413,10 @@ exports.init = async function init(app)
                         });
                     });
                 }).then(function(subscription) {
+                  // Stash it (plus the VAPID key) so the service worker can recover and
+                  // resubscribe if the push service later invalidates it while the app is
+                  // closed (see public/service-worker.js).
+                  savePushSubscription({ subscription: subscription.toJSON(), publicKey: publicKey }).catch(() => {});
                   // Send the subscription details to the server using the Fetch API.
                   app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ source, subscription.toJSON() ]});
                 }).catch((e) =>
