@@ -1,5 +1,6 @@
 module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
+import Codec
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
@@ -13,6 +14,7 @@ import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import MyUi
 import PersonName
+import Ports
 import Range exposing (Range)
 import RichText
 import Route
@@ -283,11 +285,14 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             Subscribed _ _ ->
                                 Ui.none
 
-                            SubscriptionError error ->
+                            SubscriptionError subscribeData error ->
                                 MyUi.errorBox
                                     (Dom.id "userOptions_pushNotificationError")
                                     PressedCopyText
-                                    (Log.httpErrorToString error)
+                                    (Log.httpErrorToString error
+                                        ++ ", Subscription: "
+                                        ++ Codec.encodeToString 0 Ports.subscribeDataCodec subscribeData
+                                    )
 
                             SubscriptionJsException jsError _ ->
                                 MyUi.errorBox

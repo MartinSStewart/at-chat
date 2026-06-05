@@ -44,7 +44,7 @@ type alias FrontendUserSession =
 type PushSubscription
     = NotSubscribed
     | Subscribed SubscribeData Time.Posix
-    | SubscriptionError Http.Error
+    | SubscriptionError SubscribeData Http.Error
     | SubscriptionJsException String Time.Posix
 
 

@@ -40,6 +40,7 @@ port module Ports exposing
     , shiftScrollByElementDelta
     , showNotification
     , smoothScrollBy
+    , subscribeDataCodec
     , textInputSelectAll
     , unregisterServiceWorker
     , userAgentSub
@@ -441,10 +442,6 @@ registerPushSubscriptionCodec =
 
 type alias SubscribeData =
     { endpoint : Url
-
-    -- When the push service sets a lifetime on the subscription, this is the time it expires at. It's usually
-    -- absent/null (the subscription doesn't expire), but when it's set and passes, the push service starts
-    -- rejecting notifications with "push subscription has unsubscribed or expired" and we need to resubscribe.
     , expirationTime : Maybe Time.Posix
     , keys : SubscribeKeys
     }

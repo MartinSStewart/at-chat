@@ -93,7 +93,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PwaStatus, RegisterPushSubscription)
+import Ports exposing (NotificationPermission, PwaStatus, RegisterPushSubscription, SubscribeData)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
@@ -619,7 +619,7 @@ type BackendMsg
     | DiscordTypingIndicatorSent
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
-    | SentNotification SessionId (Id UserId) Time.Posix (Result Http.Error ())
+    | SentNotification SessionId (Id UserId) Time.Posix SubscribeData (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels
         Time.Posix
@@ -822,7 +822,7 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
-    | Server_PushNotificationFailed Http.Error
+    | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))

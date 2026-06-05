@@ -770,7 +770,7 @@ pushNotification :
     -> SubscribeData
     -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
     -> Command restriction toFrontend BackendMsg
-pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
+pushNotification sessionId userId time title body icon navigateTo subscribeData model =
     Http.request
         { method = "POST"
         , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
@@ -778,9 +778,9 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
         , body =
             Codec.encodeToValue
                 pushNotificationCodec
-                { endpoint = Url.toString pushSubscription.endpoint
-                , p256dh = pushSubscription.keys.p256dh
-                , auth = pushSubscription.keys.auth
+                { endpoint = Url.toString subscribeData.endpoint
+                , p256dh = subscribeData.keys.p256dh
+                , auth = subscribeData.keys.auth
                 , privateKey = model.privateVapidKey
                 , title = title
                 , body = body
@@ -797,7 +797,7 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
                 |> Http.jsonBody
         , expect =
             Http.expectStringResponse
-                (SentNotification sessionId userId time)
+                (SentNotification sessionId userId time subscribeData)
                 (\response ->
                     case response of
                         Http.BadUrl_ url ->
