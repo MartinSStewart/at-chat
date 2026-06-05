@@ -56,6 +56,7 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection(..))
+import Time
 import Url exposing (Url)
 import UserAgent exposing (UserAgent)
 
@@ -439,7 +440,14 @@ registerPushSubscriptionCodec =
 
 
 type alias SubscribeData =
-    { endpoint : Url, keys : SubscribeKeys }
+    { endpoint : Url
+
+    -- When the push service sets a lifetime on the subscription, this is the time it expires at. It's usually
+    -- absent/null (the subscription doesn't expire), but when it's set and passes, the push service starts
+    -- rejecting notifications with "push subscription has unsubscribed or expired" and we need to resubscribe.
+    , expirationTime : Maybe Time.Posix
+    , keys : SubscribeKeys
+    }
 
 
 type alias SubscribeKeys =
@@ -450,8 +458,19 @@ subscribeDataCodec : Codec SubscribeData
 subscribeDataCodec =
     Codec.object SubscribeData
         |> Codec.field "endpoint" .endpoint CodecExtra.url
+        |> Codec.maybeField "expirationTime" .expirationTime expirationTimeCodec
         |> Codec.field "keys" .keys subscribeKeysCodec
         |> Codec.buildObject
+
+
+{-| The Push API reports `expirationTime` as a DOMHighResTimeStamp (milliseconds since the epoch).
+-}
+expirationTimeCodec : Codec Time.Posix
+expirationTimeCodec =
+    Codec.map
+        (\ms -> Time.millisToPosix (round ms))
+        (\posix -> toFloat (Time.posixToMillis posix))
+        Codec.float
 
 
 subscribeKeysCodec : Codec SubscribeKeys

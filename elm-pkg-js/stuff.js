@@ -370,9 +370,14 @@ exports.init = async function init(app)
                         // were rotated or regenerated, the stale subscription's applicationServerKey
                         // no longer matches the private key used to sign, so the push service rejects
                         // it with "VAPID public key mismatch". In that case drop it and resubscribe.
+                        //
+                        // We also drop it when the push service gave the subscription an expirationTime
+                        // that has passed. An expired subscription is rejected with "push subscription has
+                        // unsubscribed or expired", so reusing it would silently break push notifications.
                         if (subscription) {
                             const existingKey = arrayBufferToBase64Url(subscription.options.applicationServerKey);
-                            if (existingKey === publicKey) {
+                            const isExpired = subscription.expirationTime !== null && subscription.expirationTime <= Date.now();
+                            if (existingKey === publicKey && !isExpired) {
                                 return subscription;
                             }
                             await subscription.unsubscribe();

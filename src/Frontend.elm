@@ -449,6 +449,18 @@ loadedInitHelper timezone userAgent loginData loading =
 
             _ ->
                 Command.none
+        , -- Re-register the push subscription on load when this session has push notifications enabled. The
+          -- browser hands us a fresh subscription if the previous one expired (or was created with a different
+          -- VAPID key), which heals subscriptions that the push service has started rejecting.
+          case local.localUser.session.notificationMode of
+            PushNotifications ->
+                Ports.registerPushSubscriptionToJs local.publicVapidKey
+
+            NotifyWhenRunning ->
+                Command.none
+
+            NoNotifications ->
+                Command.none
         , -- We need to check if a video preview is visible immediately since we might be on the call route
           Call.displayModeChangeCmd
             Call.NoVideo
