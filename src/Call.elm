@@ -817,6 +817,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
                         , Html.Attributes.min "0"
                         , Html.Attributes.max "1"
                         , Html.Attributes.step "0.01"
+                        , Html.Attributes.attribute "orient" "vertical"
                         , Html.Attributes.style "margin-bottom" (String.fromInt sliderBottomMargin ++ "px")
                         , Html.Attributes.value (String.fromFloat volume)
                         , Html.Events.onInput
