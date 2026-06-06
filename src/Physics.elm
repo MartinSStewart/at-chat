@@ -1,4 +1,7 @@
-module Physics exposing (Circle, bounds, simulate)
+module Physics exposing
+    ( bounds, simulate
+    , Body
+    )
 
 {-| A small, purpose built rigid body physics simulation for the game Booby
 Trap.
@@ -13,13 +16,60 @@ settles instead of jittering forever.
 -}
 
 import Array exposing (Array)
+import Browser
+import Browser.Events
 import Duration exposing (Duration)
+import Html
+import Html.Attributes
 
 
-{-| A 2D circle: a center (`x`, `y`), a velocity (`vx`, `vy`) and a `radius`.
--}
-type alias Circle =
-    { x : Float, y : Float, vx : Float, vy : Float, radius : Float }
+main : Program () (List Body) ()
+main =
+    Browser.element
+        { init =
+            \_ ->
+                ( List.range 0 10
+                    |> List.map
+                        (\index ->
+                            makeCircle
+                                (toFloat index * 10)
+                                (modBy 7 index |> toFloat)
+                                ((modBy 2 index + 2) * 4 |> toFloat)
+                        )
+                , Cmd.none
+                )
+        , update =
+            \msg model ->
+                ( simulate 10000 (Duration.milliseconds 16.6) model
+                    |> List.map (\a -> { a | vy = a.vy + 1 })
+                , Cmd.none
+                )
+        , view =
+            \model ->
+                Html.div
+                    []
+                    (List.map
+                        (\{ x, y, radius } ->
+                            Html.div
+                                [ Html.Attributes.style "position" "absolute"
+                                , Html.Attributes.style "top" (String.fromFloat ((y - radius) * 10) ++ "px")
+                                , Html.Attributes.style "left" (String.fromFloat ((x - radius) * 10) ++ "px")
+                                , Html.Attributes.style "background-color" "red"
+                                , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
+                                , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
+                                , Html.Attributes.style "border-radius" "999px"
+                                ]
+                                []
+                        )
+                        model
+                    )
+        , subscriptions = \_ -> Browser.Events.onAnimationFrame (\_ -> ())
+        }
+
+
+makeCircle : Float -> Float -> Float -> Body
+makeCircle x y r =
+    { x = x, y = y, vx = 0, vy = 0, radius = r, mass = max r 1.0e-6 ^ 2 }
 
 
 {-| The simulation happens inside a fixed square box centered on the origin.
@@ -27,7 +77,7 @@ Circles bounce off the walls and are always kept fully inside it.
 -}
 bounds : { min : Float, max : Float }
 bounds =
-    { min = -10, max = 10 }
+    { min = 0, max = 100 }
 
 
 {-| Internal simulation state. Mass is proportional to area (radius squared) so
@@ -50,7 +100,7 @@ stable.
 -}
 stiffness : Float
 stiffness =
-    200
+    200000
 
 
 {-| Velocity damping, in units of "per second". Drains kinetic energy so the
@@ -58,7 +108,7 @@ world settles instead of bouncing forever.
 -}
 dampingRate : Float
 dampingRate =
-    4
+    2
 
 
 {-| Run the simulation.
@@ -71,7 +121,7 @@ dampingRate =
 Returns the circles in the same order, with updated positions and velocities.
 
 -}
-simulate : Int -> Duration -> List Circle -> List Circle
+simulate : Int -> Duration -> List Body -> List Body
 simulate steps duration circles =
     if steps <= 0 then
         circles
@@ -84,35 +134,14 @@ simulate steps duration circles =
 
             initial : Array Body
             initial =
-                circles |> List.map toBody |> Array.fromList
+                circles |> Array.fromList
 
             settled : Array Body
             settled =
                 List.range 1 steps
                     |> List.foldl (\_ bodies -> step dt bodies) initial
         in
-        settled |> Array.toList |> List.map toCircle
-
-
-toBody : Circle -> Body
-toBody circle =
-    { x = circle.x
-    , y = circle.y
-    , vx = circle.vx
-    , vy = circle.vy
-    , radius = circle.radius
-    , mass = max circle.radius 1.0e-6 ^ 2
-    }
-
-
-toCircle : Body -> Circle
-toCircle body =
-    { x = body.x
-    , y = body.y
-    , vx = body.vx
-    , vy = body.vy
-    , radius = body.radius
-    }
+        settled |> Array.toList
 
 
 {-| Advance the whole system by one time step using semi-implicit Euler:
@@ -143,11 +172,12 @@ step dt bodies =
                 vy =
                     (body.vy + fy / body.mass * dt) * damping
             in
-            { body
-                | vx = vx
-                , vy = vy
-                , x = body.x + vx * dt
-                , y = body.y + vy * dt
+            { vx = vx
+            , vy = vy
+            , x = body.x + vx * dt
+            , y = body.y + vy * dt
+            , radius = body.radius
+            , mass = body.mass
             }
                 |> resolveWalls
         )
@@ -167,7 +197,7 @@ resolveWalls body =
         ( y, vy ) =
             bounce body.y body.vy body.radius
     in
-    { body | x = x, y = y, vx = vx, vy = vy }
+    { x = x, y = y, vx = vx, vy = vy, radius = body.radius, mass = body.mass }
 
 
 bounce : Float -> Float -> Float -> ( Float, Float )
