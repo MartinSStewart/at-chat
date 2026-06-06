@@ -21,50 +21,73 @@ import Browser.Events
 import Duration exposing (Duration)
 import Html
 import Html.Attributes
+import PhysicsFast
 
 
-main : Program () (List Body) ()
+{-| The viewer renders two parallel worlds: `old` is stepped by `Physics`,
+`new` is stepped by `PhysicsFast`. They start identical, and as long as both
+implementations agree the red and blue circles overlap perfectly. Any
+divergence is immediately visible as red and blue drifting apart.
+-}
+type alias Model =
+    { old : List Body
+    , new : List PhysicsFast.Body
+    }
+
+
+initialBodies : List Body
+initialBodies =
+    List.range 0 10
+        |> List.map
+            (\index ->
+                makeCircle
+                    (toFloat index * 10)
+                    (modBy 7 index |> toFloat)
+                    ((modBy 2 index + 2) * 4 |> toFloat)
+            )
+
+
+main : Program () Model ()
 main =
     Browser.element
         { init =
             \_ ->
-                ( List.range 0 10
-                    |> List.map
-                        (\index ->
-                            makeCircle
-                                (toFloat index * 10)
-                                (modBy 7 index |> toFloat)
-                                ((modBy 2 index + 2) * 4 |> toFloat)
-                        )
-                , Cmd.none
-                )
+                ( { old = initialBodies, new = initialBodies }, Cmd.none )
         , update =
-            \msg model ->
-                ( simulate 10000 (Duration.milliseconds 16.6) model
-                    |> List.map (\a -> { a | vy = a.vy + 1 })
+            \_ model ->
+                ( { old =
+                        simulate 10000 (Duration.milliseconds 16.6) model.old
+                            |> List.map (\a -> { a | vy = a.vy + 1 })
+                  , new =
+                        PhysicsFast.simulate 10000 (Duration.milliseconds 16.6) model.new
+                            |> List.map (\a -> { a | vy = a.vy + 1 })
+                  }
                 , Cmd.none
                 )
         , view =
             \model ->
                 Html.div
                     []
-                    (List.map
-                        (\{ x, y, radius } ->
-                            Html.div
-                                [ Html.Attributes.style "position" "absolute"
-                                , Html.Attributes.style "top" (String.fromFloat ((y - radius) * 10) ++ "px")
-                                , Html.Attributes.style "left" (String.fromFloat ((x - radius) * 10) ++ "px")
-                                , Html.Attributes.style "background-color" "red"
-                                , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
-                                , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
-                                , Html.Attributes.style "border-radius" "999px"
-                                ]
-                                []
-                        )
-                        model
+                    (List.map (viewCircle "red") model.old
+                        ++ List.map (viewCircle "blue") model.new
                     )
         , subscriptions = \_ -> Browser.Events.onAnimationFrame (\_ -> ())
         }
+
+
+viewCircle : String -> { a | x : Float, y : Float, radius : Float } -> Html.Html msg
+viewCircle color { x, y, radius } =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "top" (String.fromFloat ((y - radius) * 10) ++ "px")
+        , Html.Attributes.style "left" (String.fromFloat ((x - radius) * 10) ++ "px")
+        , Html.Attributes.style "background-color" color
+        , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
+        , Html.Attributes.style "border-radius" "999px"
+        , Html.Attributes.style "mix-blend-mode" "multiply"
+        ]
+        []
 
 
 makeCircle : Float -> Float -> Float -> Body

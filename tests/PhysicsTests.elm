@@ -2,26 +2,21 @@ module PhysicsTests exposing (tests)
 
 import Duration
 import Expect
-import Physics exposing (Circle)
+import Physics exposing (Body)
 import Test exposing (Test)
 
 
-distance : Circle -> Circle -> Float
+distance : Body -> Body -> Float
 distance a b =
     sqrt ((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
 
 
-{-| How much two circles overlap. Negative means a gap between them.
--}
-overlap : Circle -> Circle -> Float
+overlap : Body -> Body -> Float
 overlap a b =
     a.radius + b.radius - distance a b
 
 
-{-| Whether a circle lies fully inside the bounding box (with a tiny tolerance
-for floating point error).
--}
-insideBounds : Circle -> Bool
+insideBounds : Body -> Bool
 insideBounds c =
     (c.x - c.radius >= Physics.bounds.min - 1.0e-6)
         && (c.x + c.radius <= Physics.bounds.max + 1.0e-6)
@@ -29,70 +24,67 @@ insideBounds c =
         && (c.y + c.radius <= Physics.bounds.max + 1.0e-6)
 
 
+body : Float -> Float -> Float -> Float -> Float -> Body
+body x y vx vy radius =
+    { x = x
+    , y = y
+    , vx = vx
+    , vy = vy
+    , radius = radius
+    , mass = max radius 1.0e-6 ^ 2
+    }
+
+
 tests : Test
 tests =
     Test.describe "Physics.simulate"
         [ Test.test "an empty world stays empty" <|
             \_ ->
-                Physics.simulate 100 (Duration.seconds 1) []
+                Physics.simulate 100 (Duration.milliseconds 100) []
                     |> Expect.equal []
-        , Test.test "a lone circle at rest does not move" <|
+        , Test.test "a lone body at rest does not move" <|
             \_ ->
                 let
-                    circle : Circle
-                    circle =
-                        { x = 3, y = -2, vx = 0, vy = 0, radius = 1 }
+                    b : Body
+                    b =
+                        body 50 50 0 0 1
                 in
-                Physics.simulate 100 (Duration.seconds 1) [ circle ]
-                    |> Expect.equal [ circle ]
-        , Test.test "circles at rest that don't touch are left alone" <|
+                Physics.simulate 100 (Duration.milliseconds 100) [ b ]
+                    |> Expect.equal [ b ]
+        , Test.test "bodies at rest that don't touch are left alone" <|
             \_ ->
                 let
-                    world : List Circle
+                    world : List Body
                     world =
-                        [ { x = 0, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        ]
+                        [ body 30 50 0 0 1, body 70 50 0 0 1 ]
                 in
-                Physics.simulate 100 (Duration.seconds 1) world
+                Physics.simulate 100 (Duration.milliseconds 100) world
                     |> Expect.equal world
         , Test.test "zero steps is a no-op" <|
             \_ ->
                 let
-                    world : List Circle
+                    world : List Body
                     world =
-                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        ]
+                        [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ]
                 in
-                Physics.simulate 0 (Duration.seconds 1) world
+                Physics.simulate 0 (Duration.milliseconds 100) world
                     |> Expect.equal world
-        , Test.test "a moving circle travels in its direction of motion" <|
+        , Test.test "a moving body travels in its direction of motion" <|
             \_ ->
-                let
-                    circle : Circle
-                    circle =
-                        { x = 0, y = 0, vx = 5, vy = 0, radius = 1 }
-                in
-                case Physics.simulate 100 (Duration.seconds 1) [ circle ] of
+                case Physics.simulate 500 (Duration.milliseconds 50) [ body 50 50 200 0 1 ] of
                     [ moved ] ->
                         Expect.all
-                            [ \_ -> moved.x |> Expect.greaterThan 0.5
-                            , \_ -> moved.y |> Expect.within (Expect.Absolute 1.0e-9) 0
+                            [ \_ -> moved.x |> Expect.greaterThan 50.5
+                            , \_ -> moved.y |> Expect.within (Expect.Absolute 1.0e-9) 50
                             , \_ -> insideBounds moved |> Expect.equal True
                             ]
                             ()
 
                     _ ->
-                        Expect.fail "expected exactly one circle back"
-        , Test.test "a circle bounces off the wall and stays inside the box" <|
+                        Expect.fail "expected exactly one body back"
+        , Test.test "a body bounces off the wall and stays inside the box" <|
             \_ ->
-                let
-                    circle : Circle
-                    circle =
-                        { x = 8, y = 0, vx = 5, vy = 0, radius = 1 }
-                in
-                case Physics.simulate 200 (Duration.seconds 2) [ circle ] of
+                case Physics.simulate 2000 (Duration.milliseconds 200) [ body 80 50 200 0 1 ] of
                     [ bounced ] ->
                         Expect.all
                             [ \_ -> insideBounds bounced |> Expect.equal True
@@ -101,78 +93,48 @@ tests =
                             ()
 
                     _ ->
-                        Expect.fail "expected exactly one circle back"
-        , Test.test "circles never escape the bounding box" <|
+                        Expect.fail "expected exactly one body back"
+        , Test.test "bodies never escape the bounding box" <|
             \_ ->
                 let
-                    world : List Circle
+                    world : List Body
                     world =
-                        [ { x = 9, y = 9, vx = 8, vy = 8, radius = 1 }
-                        , { x = -9, y = 9, vx = -8, vy = 8, radius = 1 }
-                        , { x = 0, y = -9, vx = 0, vy = -8, radius = 2 }
+                        [ body 95 95 200 200 1
+                        , body 5 95 -200 200 1
+                        , body 50 5 0 -200 2
                         ]
                 in
-                Physics.simulate 400 (Duration.seconds 4) world
+                Physics.simulate 1000 (Duration.milliseconds 100) world
                     |> List.all insideBounds
                     |> Expect.equal True
-        , Test.test "two overlapping circles are pushed apart" <|
+        , Test.test "two overlapping bodies are pushed apart" <|
             \_ ->
-                let
-                    world : List Circle
-                    world =
-                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        ]
-                in
-                case Physics.simulate 480 (Duration.seconds 4) world of
+                case Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
                     [ a, b ] ->
-                        overlap a b
-                            |> Expect.atMost 1.0e-2
+                        overlap a b |> Expect.atMost 1.0e-2
 
                     _ ->
-                        Expect.fail "expected exactly two circles back"
+                        Expect.fail "expected exactly two bodies back"
         , Test.test "radii and ordering are preserved" <|
             \_ ->
-                let
-                    world : List Circle
-                    world =
-                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 2 }
-                        ]
-                in
-                Physics.simulate 480 (Duration.seconds 4) world
+                Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 2 ]
                     |> List.map .radius
                     |> Expect.equal [ 1, 2 ]
         , Test.test "equal mass collision conserves the center of mass" <|
             \_ ->
-                let
-                    world : List Circle
-                    world =
-                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
-                        ]
-                in
-                case Physics.simulate 480 (Duration.seconds 4) world of
+                case Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
                     [ a, b ] ->
                         Expect.all
-                            [ \_ -> (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 0
-                            , \_ -> (a.y + b.y) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 0
+                            [ \_ -> (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
+                            , \_ -> (a.y + b.y) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
                             ]
                             ()
 
                     _ ->
-                        Expect.fail "expected exactly two circles back"
-        , Test.test "a pile of three overlapping circles fully separates" <|
+                        Expect.fail "expected exactly two bodies back"
+        , Test.test "a pile of three overlapping bodies fully separates" <|
             \_ ->
-                let
-                    world : List Circle
-                    world =
-                        [ { x = 0, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 1, y = 0, vx = 0, vy = 0, radius = 1 }
-                        , { x = 2, y = 0, vx = 0, vy = 0, radius = 1 }
-                        ]
-                in
-                case Physics.simulate 600 (Duration.seconds 5) world of
+                case Physics.simulate 500 (Duration.milliseconds 5) [ body 49 50 0 0 1, body 50 50 0 0 1, body 51 50 0 0 1 ] of
                     [ a, b, c ] ->
                         Expect.all
                             [ \_ -> overlap a b |> Expect.atMost 1.0e-2
@@ -182,5 +144,5 @@ tests =
                             ()
 
                     _ ->
-                        Expect.fail "expected exactly three circles back"
+                        Expect.fail "expected exactly three bodies back"
         ]

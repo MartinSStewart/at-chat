@@ -37,21 +37,22 @@ type alias Body =
     }
 
 
-{-| The simulation happens inside a fixed square box centered on the origin.
+{-| The simulation happens inside a fixed square box. Kept in sync with the
+matching constants in `Physics`.
 -}
 bounds : { min : Float, max : Float }
 bounds =
-    { min = -10, max = 10 }
+    { min = 0, max = 100 }
 
 
 stiffness : Float
 stiffness =
-    200
+    200000
 
 
 dampingRate : Float
 dampingRate =
-    4
+    2
 
 
 {-| Sentinel returned from out-of-range `Array.get` calls. Every index used
