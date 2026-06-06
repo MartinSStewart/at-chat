@@ -95,7 +95,7 @@ tests =
                         Expect.fail "expected exactly one body back"
         , Test.test "a body that runs into a wall ends up resting against it" <|
             \_ ->
-                case Physics.simulate 4 (Duration.milliseconds 200) [ body 80 50 200 0 1 ] of
+                case Physics.simulate 4 (Duration.milliseconds 200) [ body 40 50 200 0 1 ] of
                     [ stopped ] ->
                         Expect.all
                             [ \_ -> insideBounds stopped |> Expect.equal True
@@ -111,9 +111,9 @@ tests =
                 let
                     world : List Body
                     world =
-                        [ body 95 95 200 200 1
-                        , body 5 95 -200 200 1
-                        , body 50 5 0 -200 2
+                        [ body 55 150 200 200 1
+                        , body 5 150 -200 200 1
+                        , body 30 5 0 -200 2
                         ]
                 in
                 Physics.simulate 4 (Duration.milliseconds 100) world
@@ -149,13 +149,13 @@ tests =
                 let
                     world : List Body
                     world =
-                        [ body 10 80 0 0 1, body 90 80 0 0 1 ]
+                        [ body 5 80 0 0 1, body 55 80 0 0 1 ]
                 in
                 case Physics.simulate 4 (Duration.milliseconds 100) world of
                     [ left, right ] ->
                         Expect.all
-                            [ \_ -> abs (left.x - 10) |> Expect.atMost 1.0e-9
-                            , \_ -> abs (right.x - 90) |> Expect.atMost 1.0e-9
+                            [ \_ -> abs (left.x - 5) |> Expect.atMost 1.0e-9
+                            , \_ -> abs (right.x - 55) |> Expect.atMost 1.0e-9
                             ]
                             ()
 

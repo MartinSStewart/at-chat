@@ -272,7 +272,8 @@ stepN remaining dt neighbors bodies =
 {-| Build the neighbor list once at the start of `simulate`. For each body i,
 record every j > i whose initial center is close enough that the two could
 possibly come into contact during this call, using the squared-distance test
-to avoid a `sqrt`.
+to avoid a `sqrt`. Body i's list doesn't depend on any other body's list, so
+`Array.indexedMap` builds the whole array in a single pass.
 -}
 buildNeighbors : Array Body -> Array (List Int)
 buildNeighbors bodies =
@@ -281,25 +282,9 @@ buildNeighbors bodies =
         n =
             Array.length bodies
     in
-    buildOuterNeighbors 0 n bodies (Array.repeat n [])
-
-
-buildOuterNeighbors : Int -> Int -> Array Body -> Array (List Int) -> Array (List Int)
-buildOuterNeighbors i n bodies acc =
-    if i + 1 - n < 0 then
-        let
-            bi : Body
-            bi =
-                Array.get i bodies |> Maybe.withDefault dummyBody
-
-            list : List Int
-            list =
-                buildInnerNeighbors i (i + 1) n bi bodies []
-        in
-        buildOuterNeighbors (i + 1) n bodies (Array.set i list acc)
-
-    else
-        acc
+    Array.indexedMap
+        (\i bi -> buildInnerNeighbors i (i + 1) n bi bodies [])
+        bodies
 
 
 buildInnerNeighbors : Int -> Int -> Int -> Body -> Array Body -> List Int -> List Int
@@ -353,111 +338,93 @@ step dt neighbors bodies =
 
         topEdge : Float
         topEdge =
-            findTopEdge 0 n bodies 1.0e18
+            findTopEdge bodies
 
         withArm : Array Body
         withArm =
-            applyArmForce 0 n dt topEdge bodies bodies
+            applyArmForce dt topEdge bodies
 
         predicted : Array Body
         predicted =
-            predictAll 0 n dt withArm withArm
+            predictAll dt withArm
 
         resolved : Array Body
         resolved =
             solveIters solverIters n neighbors predicted
     in
-    deriveVelocities 0 n dt damping bodies resolved resolved
+    deriveVelocities dt damping bodies resolved
 
 
 {-| Smallest `y - radius` value across the world — i.e. how high up the topmost
-body's leading edge is.
+body's leading edge is. Pure fold with no writes, so `Array.foldl` lets the
+kernel iterate without going through `Array.get`.
 -}
-findTopEdge : Int -> Int -> Array Body -> Float -> Float
-findTopEdge i n bodies best =
-    if i - n < 0 then
-        let
-            b : Body
-            b =
-                Array.get i bodies |> Maybe.withDefault dummyBody
+findTopEdge : Array Body -> Float
+findTopEdge bodies =
+    Array.foldl
+        (\b best ->
+            let
+                edge : Float
+                edge =
+                    b.y - b.radius
+            in
+            if edge - best < 0 then
+                edge
 
-            edge : Float
-            edge =
-                b.y - b.radius
-
-            next : Float
-            next =
-                if edge - best < 0 then
-                    edge
-
-                else
-                    best
-        in
-        findTopEdge (i + 1) n bodies next
-
-    else
-        best
+            else
+                best
+        )
+        1.0e18
+        bodies
 
 
 {-| Push each body downward with `armStrength`, scaled by an exponential
 falloff in how far below `topEdge` its leading edge sits. The body whose edge
 matches `topEdge` gets the full force; anything else gets less, very quickly.
+
+Each body's new velocity depends only on its own fields and the captured
+`topEdge`, so `Array.map` updates the whole array in one allocation rather
+than the per-body `Array.set` the previous version did.
+
 -}
-applyArmForce : Int -> Int -> Float -> Float -> Array Body -> Array Body -> Array Body
-applyArmForce i n dt topEdge original acc =
-    if i - n < 0 then
-        let
-            b : Body
-            b =
-                Array.get i original |> Maybe.withDefault dummyBody
+applyArmForce : Float -> Float -> Array Body -> Array Body
+applyArmForce dt topEdge bodies =
+    Array.map
+        (\b ->
+            let
+                distance : Float
+                distance =
+                    b.y - b.radius - topEdge
 
-            distance : Float
-            distance =
-                b.y - b.radius - topEdge
-
-            falloff : Float
-            falloff =
-                Basics.e ^ negate (falloffRate * distance)
-
-            new : Body
-            new =
-                { x = b.x
-                , y = b.y
-                , vx = b.vx
-                , vy = b.vy + armStrength * falloff * dt
-                , radius = b.radius
-                }
-        in
-        applyArmForce (i + 1) n dt topEdge original (Array.set i new acc)
-
-    else
-        acc
+                falloff : Float
+                falloff =
+                    Basics.e ^ negate (falloffRate * distance)
+            in
+            { x = b.x
+            , y = b.y
+            , vx = b.vx
+            , vy = b.vy + armStrength * falloff * dt
+            , radius = b.radius
+            }
+        )
+        bodies
 
 
 {-| Predicted position: each body advances by `velocity * dt`. Velocity carried
-through unchanged.
+through unchanged. Per-element independent, so `Array.map`.
 -}
-predictAll : Int -> Int -> Float -> Array Body -> Array Body -> Array Body
-predictAll i n dt original acc =
-    if i - n < 0 then
-        let
-            b : Body
-            b =
-                Array.get i original |> Maybe.withDefault dummyBody
-
-            new : Body
-            new =
-                { x = b.x + b.vx * dt
-                , y = b.y + b.vy * dt
-                , vx = b.vx
-                , vy = b.vy
-                , radius = b.radius
-                }
-        in
-        predictAll (i + 1) n dt original (Array.set i new acc)
-
-    else
-        acc
+predictAll : Float -> Array Body -> Array Body
+predictAll dt bodies =
+    Array.map
+        (\b ->
+            { x = b.x + b.vx * dt
+            , y = b.y + b.vy * dt
+            , vx = b.vx
+            , vy = b.vy
+            , radius = b.radius
+            }
+        )
+        bodies
 
 
 {-| Gauss-Seidel relaxation: alternate between resolving overlapping pairs and
@@ -595,29 +562,27 @@ resolvePairs i js bi bodies =
 {-| The new velocity is the actual displacement (after constraint resolution)
 divided by `dt`. A body that got pushed back to where it started has zero
 velocity, which is what gives contacts and walls their inelastic feel.
+
+Per-body update needs both `resolved[i]` and `originals[i]`, so we walk
+`resolved` with `Array.indexedMap` and do one `Array.get` against `originals`
+per element. That still beats the previous full Gauss-Seidel-style `Array.set`
+loop because the output array is built in a single allocation.
+
 -}
-deriveVelocities : Int -> Int -> Float -> Float -> Array Body -> Array Body -> Array Body -> Array Body
-deriveVelocities i n dt damping originals resolved acc =
-    if i - n < 0 then
-        let
-            orig : Body
-            orig =
-                Array.get i originals |> Maybe.withDefault dummyBody
-
-            now : Body
-            now =
-                Array.get i resolved |> Maybe.withDefault dummyBody
-
-            new : Body
-            new =
-                { x = now.x
-                , y = now.y
-                , vx = (now.x - orig.x) / dt * damping
-                , vy = (now.y - orig.y) / dt * damping
-                , radius = now.radius
-                }
-        in
-        deriveVelocities (i + 1) n dt damping originals resolved (Array.set i new acc)
-
-    else
-        acc
+deriveVelocities : Float -> Float -> Array Body -> Array Body -> Array Body
+deriveVelocities dt damping originals resolved =
+    Array.indexedMap
+        (\i now ->
+            let
+                orig : Body
+                orig =
+                    Array.get i originals |> Maybe.withDefault dummyBody
+            in
+            { x = now.x
+            , y = now.y
+            , vx = (now.x - orig.x) / dt * damping
+            , vy = (now.y - orig.y) / dt * damping
+            , radius = now.radius
+            }
+        )
+        resolved
