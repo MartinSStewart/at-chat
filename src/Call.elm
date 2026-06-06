@@ -28,6 +28,7 @@ port module Call exposing
     , gotUserMediaDevices
     , init
     , initModel
+    , insideThumbnail
     , isPressMsg
     , leaveVoiceChatCmds
     , serverChangeCmd
@@ -550,6 +551,18 @@ videoNodes localUser config loggedIn local =
                     sessions
     )
         |> Html.Keyed.node "div" []
+
+
+insideThumbnail : Coord CssPixels -> { a | windowSize : Coord CssPixels } -> Model -> Bool
+insideThumbnail coord config model =
+    let
+        p0 =
+            thumbnailPosition config.windowSize model
+
+        p1 =
+            Coord.addTuple_ ( thumbnailWindowWidth, round (thumbnailWindowWidth / aspectRatio) ) p0
+    in
+    Coord.maximum p0 coord == coord && Coord.minimum p1 coord == coord
 
 
 aspectRatio : Float

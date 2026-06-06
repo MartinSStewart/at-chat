@@ -54,6 +54,7 @@ import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
+import Point2d
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
@@ -71,7 +72,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -1511,7 +1512,31 @@ updateLoaded msg model =
                             )
                         )
                         { model
-                            | drag = Dragging { horizontalStart = horizontalStart, touches = startTouches }
+                            | drag =
+                                Dragging
+                                    { horizontalStart = horizontalStart
+                                    , touches = startTouches
+                                    , target =
+                                        case model.loginStatus of
+                                            LoggedIn loggedIn ->
+                                                if
+                                                    Call.insideThumbnail
+                                                        (NonemptyDict.values startTouches
+                                                            |> List.Nonempty.map .client
+                                                            |> (\(Nonempty head rest) -> Point2d.centroid head rest)
+                                                            |> Coord.roundPoint
+                                                        )
+                                                        model
+                                                        loggedIn.voiceChat
+                                                then
+                                                    Drag_CallThumbnail
+
+                                                else
+                                                    Drag_Channel
+
+                                            NotLoggedIn _ ->
+                                                Drag_Channel
+                                    }
                             , dragPrevious = model.drag
                         }
 

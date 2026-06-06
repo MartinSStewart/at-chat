@@ -5,6 +5,7 @@ module Types exposing
     , BackendMsg(..)
     , DiscordAttachmentData
     , Drag(..)
+    , DragTarget(..)
     , EditChannelForm
     , EditGuildForm
     , EditMessage
@@ -182,7 +183,12 @@ type PublicGoMatch
 type Drag
     = NoDrag
     | DragStart Time.Posix (NonemptyDict Int Touch)
-    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch }
+    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch, target : DragTarget }
+
+
+type DragTarget
+    = Drag_Channel
+    | Drag_CallThumbnail
 
 
 type LoginStatus
