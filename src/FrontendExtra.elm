@@ -401,22 +401,26 @@ layout model attributes child =
                         Ui.noAttr
                )
             :: attributes
+            -- Touch handlers are attached regardless of window size so the call
+            -- thumbnail can be dragged on desktop too. On a non-touch desktop
+            -- these never fire; the clip/user-select styles stay mobile-only.
+            ++ [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+               , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
+               , Html.Events.on
+                    "touchend"
+                    (Json.Decode.field "timeStamp" Json.Decode.float
+                        |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                    )
+                    |> Ui.htmlAttribute
+               , Html.Events.on
+                    "touchcancel"
+                    (Json.Decode.field "timeStamp" Json.Decode.float
+                        |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                    )
+                    |> Ui.htmlAttribute
+               ]
             ++ (if MyUi.isMobile model then
-                    [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
-                    , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
-                    , Html.Events.on
-                        "touchend"
-                        (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
-                        )
-                        |> Ui.htmlAttribute
-                    , Html.Events.on
-                        "touchcancel"
-                        (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
-                        )
-                        |> Ui.htmlAttribute
-                    , Ui.clip
+                    [ Ui.clip
                     , MyUi.htmlStyle "user-select" "none"
                     , MyUi.htmlStyle "-webkit-user-select" "none"
                     ]

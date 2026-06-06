@@ -1413,63 +1413,71 @@ updateLoaded msg model =
                                 averageMove =
                                     Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
                             in
-                            ( case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
-                                ( Just _, _ ) ->
-                                    loggedIn
+                            ( case dragging.target of
+                                Drag_CallThumbnail ->
+                                    { loggedIn
+                                        | voiceChat =
+                                            Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
+                                    }
 
-                                ( Nothing, MessageMenu messageMenu ) ->
-                                    if dragging.horizontalStart then
-                                        loggedIn
+                                Drag_Channel ->
+                                    case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
+                                        ( Just _, _ ) ->
+                                            loggedIn
 
-                                    else
-                                        let
-                                            previousOffset =
-                                                Types.messageMenuMobileOffset messageMenu.mobileMode
+                                        ( Nothing, MessageMenu messageMenu ) ->
+                                            if dragging.horizontalStart then
+                                                loggedIn
 
-                                            offset =
-                                                Quantity.min
-                                                    (MessageMenu.mobileMenuMaxHeight
-                                                        messageMenu
-                                                        (Local.model loggedIn.localState)
-                                                        model
-                                                    )
-                                                    (Quantity.plus
-                                                        (CssPixels.cssPixels -averageMove.y)
-                                                        previousOffset
-                                                    )
-                                        in
-                                        { loggedIn
-                                            | messageHover =
-                                                MessageMenu
-                                                    { messageMenu
-                                                        | mobileMode =
-                                                            { offset = offset
-                                                            , previousOffset = previousOffset
-                                                            , time = time
+                                            else
+                                                let
+                                                    previousOffset =
+                                                        Types.messageMenuMobileOffset messageMenu.mobileMode
+
+                                                    offset =
+                                                        Quantity.min
+                                                            (MessageMenu.mobileMenuMaxHeight
+                                                                messageMenu
+                                                                (Local.model loggedIn.localState)
+                                                                model
+                                                            )
+                                                            (Quantity.plus
+                                                                (CssPixels.cssPixels -averageMove.y)
+                                                                previousOffset
+                                                            )
+                                                in
+                                                { loggedIn
+                                                    | messageHover =
+                                                        MessageMenu
+                                                            { messageMenu
+                                                                | mobileMode =
+                                                                    { offset = offset
+                                                                    , previousOffset = previousOffset
+                                                                    , time = time
+                                                                    }
+                                                                        |> MessageMenuDragging
                                                             }
-                                                                |> MessageMenuDragging
-                                                    }
-                                        }
+                                                }
 
-                                _ ->
-                                    if dragging.horizontalStart then
-                                        let
-                                            tHorizontal : Float
-                                            tHorizontal =
-                                                averageMove.x / toFloat (Coord.xRaw model.windowSize)
-                                        in
-                                        { loggedIn
-                                            | sidebarMode =
-                                                case ( loggedIn.textInputFocus, isTouchingTextInput dragging.touches ) of
-                                                    ( Just _, True ) ->
-                                                        loggedIn.sidebarMode
+                                        _ ->
+                                            if dragging.horizontalStart then
+                                                let
+                                                    tHorizontal : Float
+                                                    tHorizontal =
+                                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                                in
+                                                { loggedIn
+                                                    | sidebarMode =
+                                                        case ( loggedIn.textInputFocus, isTouchingTextInput dragging.touches ) of
+                                                            ( Just _, True ) ->
+                                                                loggedIn.sidebarMode
 
-                                                    _ ->
-                                                        dragChannelSidebar time tHorizontal loggedIn.sidebarMode
-                                        }
+                                                            _ ->
+                                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                                }
 
-                                    else
-                                        loggedIn
+                                            else
+                                                loggedIn
                             , Command.none
                             )
                         )
@@ -1487,27 +1495,39 @@ updateLoaded msg model =
                         horizontalStart : Bool
                         horizontalStart =
                             abs averageMove.x > abs averageMove.y
+
+                        target : DragTarget
+                        target =
+                            dragTarget startTouches model
                     in
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            ( if horizontalStart then
-                                let
-                                    tHorizontal : Float
-                                    tHorizontal =
-                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
-                                in
-                                { loggedIn
-                                    | sidebarMode =
-                                        case ( loggedIn.textInputFocus, isTouchingTextInput startTouches ) of
-                                            ( Just _, True ) ->
-                                                loggedIn.sidebarMode
+                            ( case target of
+                                Drag_CallThumbnail ->
+                                    { loggedIn
+                                        | voiceChat =
+                                            Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
+                                    }
 
-                                            _ ->
-                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
-                                }
+                                Drag_Channel ->
+                                    if horizontalStart then
+                                        let
+                                            tHorizontal : Float
+                                            tHorizontal =
+                                                averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                        in
+                                        { loggedIn
+                                            | sidebarMode =
+                                                case ( loggedIn.textInputFocus, isTouchingTextInput startTouches ) of
+                                                    ( Just _, True ) ->
+                                                        loggedIn.sidebarMode
 
-                              else
-                                loggedIn
+                                                    _ ->
+                                                        dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                        }
+
+                                    else
+                                        loggedIn
                             , Command.none
                             )
                         )
@@ -1516,26 +1536,7 @@ updateLoaded msg model =
                                 Dragging
                                     { horizontalStart = horizontalStart
                                     , touches = startTouches
-                                    , target =
-                                        case model.loginStatus of
-                                            LoggedIn loggedIn ->
-                                                if
-                                                    Call.insideThumbnail
-                                                        (NonemptyDict.values startTouches
-                                                            |> List.Nonempty.map .client
-                                                            |> (\(Nonempty head rest) -> Point2d.centroid head rest)
-                                                            |> Coord.roundPoint
-                                                        )
-                                                        model
-                                                        loggedIn.voiceChat
-                                                then
-                                                    Drag_CallThumbnail
-
-                                                else
-                                                    Drag_Channel
-
-                                            NotLoggedIn _ ->
-                                                Drag_Channel
+                                    , target = target
                                     }
                             , dragPrevious = model.drag
                         }
@@ -5487,6 +5488,41 @@ handleTouchEnd time model =
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }
+
+
+{-| Decide what a touch drag should manipulate based on where it started. If the
+call thumbnail is visible and the touch began on top of it, the drag moves the
+thumbnail; otherwise it falls back to dragging the channel sidebar.
+-}
+dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> DragTarget
+dragTarget startTouches model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
+                centroid : Coord CssPixels
+                centroid =
+                    NonemptyDict.values startTouches
+                        |> List.Nonempty.map .client
+                        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
+                        |> Coord.roundPoint
+            in
+            case Call.displayMode local.localUser.session.userId model.route local.calls of
+                Call.ShowLocalVideoAndCallThumbnail _ ->
+                    if Call.insideThumbnail centroid model loggedIn.voiceChat then
+                        Drag_CallThumbnail
+
+                    else
+                        Drag_Channel
+
+                _ ->
+                    Drag_Channel
+
+        NotLoggedIn _ ->
+            Drag_Channel
 
 
 dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode

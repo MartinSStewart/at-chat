@@ -959,6 +959,39 @@ voiceChatTest normalConfig =
             normalConfig
             [ connectTwoUsersAndJoinNewGuild desktopWindow
                 (\admin user ->
+                    let
+                        -- A touch event in the shape our global Touch decoder expects
+                        -- (touches is a TouchList-like object with a length and numeric
+                        -- indices). Used to drag the call thumbnail.
+                        touchEvent : List ( Float, Float ) -> Json.Encode.Value
+                        touchEvent points =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "touches"
+                                  , Json.Encode.object
+                                        (( "length", Json.Encode.int (List.length points) )
+                                            :: List.indexedMap
+                                                (\index ( x, y ) ->
+                                                    ( String.fromInt index
+                                                    , Json.Encode.object
+                                                        [ ( "identifier", Json.Encode.int index )
+                                                        , ( "clientX", Json.Encode.float x )
+                                                        , ( "clientY", Json.Encode.float y )
+                                                        , ( "target"
+                                                          , Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ]
+                                                          )
+                                                        ]
+                                                    )
+                                                )
+                                                points
+                                        )
+                                  )
+                                ]
+
+                        touchEndEvent : Json.Encode.Value
+                        touchEndEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+                    in
                     [ T.collapsableGroup
                         "Voice chat"
                         [ addCloudflareRealtimeApiKeys admin
@@ -1067,6 +1100,44 @@ voiceChatTest normalConfig =
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
                         , user.click 100 (Dom.id "guild_voiceChat")
                         , tallSnapshot user 100 { name = "Voice chat with tab closed" }
+
+                        -- The minimized call thumbnail can be dragged. With the
+                        -- 1000x600 window the thumbnail starts in the top-right
+                        -- (normalized position (1, 0.1)). Touching it at (850, 100)
+                        -- and dragging 200px to the left moves it by -200/(1000-200)
+                        -- = -0.25, so the normalized x becomes 0.75 (y unchanged).
+                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchEvent [ ( 850, 100 ) ])
+                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent [ ( 650, 100 ) ])
+                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchend" touchEndEvent
+                        , T.checkState
+                            100
+                            (\data ->
+                                case SeqDict.get user.clientId data.frontends of
+                                    Just (Types.Loaded loaded) ->
+                                        case loaded.loginStatus of
+                                            Types.LoggedIn loggedIn ->
+                                                let
+                                                    ( x, y ) =
+                                                        loggedIn.voiceChat.thumbnailPosition
+                                                in
+                                                if (abs (x - 0.75) < 0.001) && (abs (y - 0.1) < 0.001) then
+                                                    Ok ()
+
+                                                else
+                                                    Err
+                                                        ("Dragging the call thumbnail should have moved it to (0.75, 0.1) but got ("
+                                                            ++ String.fromFloat x
+                                                            ++ ", "
+                                                            ++ String.fromFloat y
+                                                            ++ ")"
+                                                        )
+
+                                            Types.NotLoggedIn _ ->
+                                                Err "Expected user to be logged in"
+
+                                    _ ->
+                                        Err "Expected user frontend to be loaded"
+                            )
                         , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                         , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
                         , tallSnapshot user 100 { name = "Left a DM call user perspective" }

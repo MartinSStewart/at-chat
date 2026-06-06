@@ -23,6 +23,7 @@ port module Call exposing
     , ToJs(..)
     , displayMode
     , displayModeChangeCmd
+    , dragThumbnail
     , encodeFromJs
     , fromJs
     , gotUserMediaDevices
@@ -216,6 +217,40 @@ thumbnailPosition windowSize model =
     Coord.xy
         (round (toFloat (Coord.xRaw windowSize - thumbnailWindowWidth) * x))
         (round ((toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio) * y))
+
+
+{-| Move the thumbnail by the given drag delta (in CSS pixels). The stored
+position is normalized to 0..1, so we divide the pixel delta by the range the
+thumbnail can travel and clamp it back into bounds.
+-}
+dragThumbnail : { x : Float, y : Float } -> Coord CssPixels -> Model -> Model
+dragThumbnail delta windowSize model =
+    let
+        ( x, y ) =
+            model.thumbnailPosition
+
+        availableWidth : Float
+        availableWidth =
+            toFloat (Coord.xRaw windowSize - thumbnailWindowWidth)
+
+        availableHeight : Float
+        availableHeight =
+            toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio
+    in
+    { model
+        | thumbnailPosition =
+            ( if availableWidth > 0 then
+                clamp 0 1 (x + delta.x / availableWidth)
+
+              else
+                x
+            , if availableHeight > 0 then
+                clamp 0 1 (y + delta.y / availableHeight)
+
+              else
+                y
+            )
+    }
 
 
 thumbnailWindowWidth : number
