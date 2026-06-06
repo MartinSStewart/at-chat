@@ -33,7 +33,6 @@ type alias Body =
     , vx : Float
     , vy : Float
     , radius : Float
-    , mass : Float
     }
 
 
@@ -60,7 +59,7 @@ below is always in range, so this is never observed.
 -}
 dummyBody : Body
 dummyBody =
-    { x = 0, y = 0, vx = 0, vy = 0, radius = 0, mass = 1 }
+    { x = 0, y = 0, vx = 0, vy = 0, radius = 0 }
 
 
 {-| Run the simulation. See `Physics.simulate` for the semantics.
@@ -124,11 +123,11 @@ advanceAll i n dt damping bodies forces acc =
 
             vxRaw : Float
             vxRaw =
-                (body.vx + fx / body.mass * dt) * damping
+                (body.vx + fx * dt) * damping
 
             vyRaw : Float
             vyRaw =
-                (body.vy + fy / body.mass * dt) * damping
+                (body.vy + fy * dt) * damping
 
             xRaw : Float
             xRaw =
@@ -165,7 +164,6 @@ advanceAll i n dt damping bodies forces acc =
                 , vx = vx1
                 , vy = vy1
                 , radius = body.radius
-                , mass = body.mass
                 }
         in
         advanceAll (i + 1) n dt damping bodies forces (Array.set i newBody acc)
@@ -202,50 +200,51 @@ per-iteration allocation.
 sumForce : Int -> Int -> Int -> Body -> Array Body -> Float -> Float -> ( Float, Float )
 sumForce i j n bi bodies fx fy =
     if j - n < 0 then
-        if i == j then
+        if i - j == 0 then
             sumForce i (j + 1) n bi bodies fx fy
 
         else
-            let
-                bj : Body
-                bj =
-                    Array.get j bodies |> Maybe.withDefault dummyBody
+            case Array.get j bodies of
+                Just bj ->
+                    let
+                        dx : Float
+                        dx =
+                            bj.x - bi.x
 
-                dx : Float
-                dx =
-                    bj.x - bi.x
+                        dy : Float
+                        dy =
+                            bj.y - bi.y
 
-                dy : Float
-                dy =
-                    bj.y - bi.y
+                        dist : Float
+                        dist =
+                            sqrt (dx * dx + dy * dy)
 
-                dist : Float
-                dist =
-                    sqrt (dx * dx + dy * dy)
+                        penetration : Float
+                        penetration =
+                            bi.radius + bj.radius - dist
+                    in
+                    if penetration <= 0 then
+                        sumForce i (j + 1) n bi bodies fx fy
 
-                penetration : Float
-                penetration =
-                    bi.radius + bj.radius - dist
-            in
-            if penetration <= 0 then
-                sumForce i (j + 1) n bi bodies fx fy
+                    else
+                        let
+                            magnitude : Float
+                            magnitude =
+                                stiffness * penetration
 
-            else
-                let
-                    magnitude : Float
-                    magnitude =
-                        stiffness * penetration
+                            -- Match the floating-point operation order of `Physics`
+                            -- exactly so both implementations agree bit-for-bit.
+                            ( nx, ny ) =
+                                if 1.0e-9 - dist < 0 then
+                                    ( dx / dist, dy / dist )
 
-                    -- Match the floating-point operation order of `Physics`
-                    -- exactly so both implementations agree bit-for-bit.
-                    ( nx, ny ) =
-                        if 1.0e-9 - dist < 0 then
-                            ( dx / dist, dy / dist )
+                                else
+                                    ( 1, 0 )
+                        in
+                        sumForce i (j + 1) n bi bodies (fx - nx * magnitude) (fy - ny * magnitude)
 
-                        else
-                            ( 1, 0 )
-                in
-                sumForce i (j + 1) n bi bodies (fx - nx * magnitude) (fy - ny * magnitude)
+                Nothing ->
+                    sumForce i (j + 1) n bi bodies fx fy
 
     else
         ( fx, fy )

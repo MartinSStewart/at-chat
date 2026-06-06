@@ -85,14 +85,13 @@ viewCircle color { x, y, radius } =
         , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
         , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
         , Html.Attributes.style "border-radius" "999px"
-        , Html.Attributes.style "mix-blend-mode" "multiply"
         ]
         []
 
 
 makeCircle : Float -> Float -> Float -> Body
 makeCircle x y r =
-    { x = x, y = y, vx = 0, vy = 0, radius = r, mass = max r 1.0e-6 ^ 2 }
+    { x = x, y = y, vx = 0, vy = 0, radius = r }
 
 
 {-| The simulation happens inside a fixed square box centered on the origin.
@@ -113,7 +112,6 @@ type alias Body =
     , vx : Float
     , vy : Float
     , radius : Float
-    , mass : Float
     }
 
 
@@ -190,17 +188,16 @@ step dt bodies =
                     Array.get i forces |> Maybe.withDefault ( 0, 0 )
 
                 vx =
-                    (body.vx + fx / body.mass * dt) * damping
+                    (body.vx + fx * dt) * damping
 
                 vy =
-                    (body.vy + fy / body.mass * dt) * damping
+                    (body.vy + fy * dt) * damping
             in
             { vx = vx
             , vy = vy
             , x = body.x + vx * dt
             , y = body.y + vy * dt
             , radius = body.radius
-            , mass = body.mass
             }
                 |> resolveWalls
         )
@@ -220,7 +217,7 @@ resolveWalls body =
         ( y, vy ) =
             bounce body.y body.vy body.radius
     in
-    { x = x, y = y, vx = vx, vy = vy, radius = body.radius, mass = body.mass }
+    { x = x, y = y, vx = vx, vy = vy, radius = body.radius }
 
 
 bounce : Float -> Float -> Float -> ( Float, Float )
