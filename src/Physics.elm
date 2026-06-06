@@ -76,6 +76,24 @@ falloffRate =
     5
 
 
+{-| Conservative upper bound on how far any body could move during a single
+`simulate` call. At the start of the call we build, for each body, a list of
+the other bodies whose centers are within `r_i + r_j + 2 * maxTravelPerCall`
+of it — anything farther away than that cannot possibly come into contact
+during the call, and we skip it in the constraint solver. This is the win:
+`resolvePairs` then runs over a short neighbor list instead of every other
+body.
+
+If a body genuinely moves further than this in one call (e.g. absurdly high
+velocities), pair contacts can be missed and circles could pass through each
+other, so pick a generous value.
+
+-}
+maxTravelPerCall : Float
+maxTravelPerCall =
+    10
+
+
 {-| Sentinel returned from out-of-range `Array.get` calls. Every index used
 below is always in range, so this is never observed.
 -}
@@ -151,17 +169,88 @@ simulate steps duration bodies =
             dt : Float
             dt =
                 durSeconds / toFloat steps
+
+            initial : Array Body
+            initial =
+                Array.fromList bodies
+
+            neighbors : Array (List Int)
+            neighbors =
+                buildNeighbors initial
         in
-        stepN steps dt (Array.fromList bodies) |> Array.toList
+        stepN steps dt neighbors initial |> Array.toList
 
 
-stepN : Int -> Float -> Array Body -> Array Body
-stepN remaining dt bodies =
+stepN : Int -> Float -> Array (List Int) -> Array Body -> Array Body
+stepN remaining dt neighbors bodies =
     if remaining <= 0 then
         bodies
 
     else
-        stepN (remaining - 1) dt (step dt bodies)
+        stepN (remaining - 1) dt neighbors (step dt neighbors bodies)
+
+
+{-| Build the neighbor list once at the start of `simulate`. For each body i,
+record every j > i whose initial center is close enough that the two could
+possibly come into contact during this call, using the squared-distance test
+to avoid a `sqrt`.
+-}
+buildNeighbors : Array Body -> Array (List Int)
+buildNeighbors bodies =
+    let
+        n : Int
+        n =
+            Array.length bodies
+    in
+    buildOuterNeighbors 0 n bodies (Array.repeat n [])
+
+
+buildOuterNeighbors : Int -> Int -> Array Body -> Array (List Int) -> Array (List Int)
+buildOuterNeighbors i n bodies acc =
+    if i + 1 - n < 0 then
+        let
+            bi : Body
+            bi =
+                Array.get i bodies |> Maybe.withDefault dummyBody
+
+            list : List Int
+            list =
+                buildInnerNeighbors i (i + 1) n bi bodies []
+        in
+        buildOuterNeighbors (i + 1) n bodies (Array.set i list acc)
+
+    else
+        acc
+
+
+buildInnerNeighbors : Int -> Int -> Int -> Body -> Array Body -> List Int -> List Int
+buildInnerNeighbors i j n bi bodies acc =
+    if j - n < 0 then
+        let
+            bj : Body
+            bj =
+                Array.get j bodies |> Maybe.withDefault dummyBody
+
+            dx : Float
+            dx =
+                bj.x - bi.x
+
+            dy : Float
+            dy =
+                bj.y - bi.y
+
+            threshold : Float
+            threshold =
+                bi.radius + bj.radius + 2 * maxTravelPerCall
+        in
+        if dx * dx + dy * dy - threshold * threshold < 0 then
+            buildInnerNeighbors i (j + 1) n bi bodies (j :: acc)
+
+        else
+            buildInnerNeighbors i (j + 1) n bi bodies acc
+
+    else
+        acc
 
 
 {-| One position-based dynamics substep:
@@ -172,8 +261,8 @@ stepN remaining dt bodies =
 3.  Read the new velocity out of the actual position change and apply damping.
 
 -}
-step : Float -> Array Body -> Array Body
-step dt bodies =
+step : Float -> Array (List Int) -> Array Body -> Array Body
+step dt neighbors bodies =
     let
         n : Int
         n =
@@ -197,7 +286,7 @@ step dt bodies =
 
         resolved : Array Body
         resolved =
-            solveIters solverIters n predicted
+            solveIters solverIters n neighbors predicted
     in
     deriveVelocities 0 n dt damping bodies resolved resolved
 
@@ -295,97 +384,101 @@ predictAll i n dt original acc =
 {-| Gauss-Seidel relaxation: alternate between resolving overlapping pairs and
 clamping bodies back inside the box, for `solverIters` rounds.
 -}
-solveIters : Int -> Int -> Array Body -> Array Body
-solveIters remaining n bodies =
+solveIters : Int -> Int -> Array (List Int) -> Array Body -> Array Body
+solveIters remaining n neighbors bodies =
     if remaining <= 0 then
         bodies
 
     else
-        solveIters (remaining - 1) n (clampAll 0 n (resolveAllPairs 0 n bodies))
+        solveIters (remaining - 1) n neighbors (clampAll 0 n (resolveAllPairs 0 n neighbors bodies))
 
 
-resolveAllPairs : Int -> Int -> Array Body -> Array Body
-resolveAllPairs i n bodies =
+resolveAllPairs : Int -> Int -> Array (List Int) -> Array Body -> Array Body
+resolveAllPairs i n neighbors bodies =
     if i + 1 - n < 0 then
-        -- i < n - 1: there is at least one j > i to look at.
         let
             bi : Body
             bi =
                 Array.get i bodies |> Maybe.withDefault dummyBody
+
+            js : List Int
+            js =
+                Array.get i neighbors |> Maybe.withDefault []
         in
-        resolveAllPairs (i + 1) n (resolvePairs i (i + 1) n bi bodies)
+        resolveAllPairs (i + 1) n neighbors (resolvePairs i js bi bodies)
 
     else
         bodies
 
 
-{-| Walk j = i+1..n-1. If body i and body j overlap, push each one half the
-penetration along the contact normal so that they end up exactly touching. The
-running `bi` is updated as it moves so subsequent j contacts see the latest
-position.
+{-| Walk i's neighbor list. If body i and body j overlap, push each one half
+the penetration along the contact normal so that they end up exactly touching.
+The running `bi` is updated as it moves so subsequent j contacts see the
+latest position.
 -}
-resolvePairs : Int -> Int -> Int -> Body -> Array Body -> Array Body
-resolvePairs i j n bi bodies =
-    if j - n < 0 then
-        let
-            bj : Body
-            bj =
-                Array.get j bodies |> Maybe.withDefault dummyBody
+resolvePairs : Int -> List Int -> Body -> Array Body -> Array Body
+resolvePairs i js bi bodies =
+    case js of
+        [] ->
+            bodies
 
-            dx : Float
-            dx =
-                bj.x - bi.x
-
-            dy : Float
-            dy =
-                bj.y - bi.y
-
-            dist : Float
-            dist =
-                sqrt (dx * dx + dy * dy)
-
-            penetration : Float
-            penetration =
-                bi.radius + bj.radius - dist
-        in
-        if penetration <= 0 then
-            resolvePairs i (j + 1) n bi bodies
-
-        else
+        j :: rest ->
             let
-                ( nx, ny ) =
-                    if 1.0e-9 - dist < 0 then
-                        ( dx / dist, dy / dist )
+                bj : Body
+                bj =
+                    Array.get j bodies |> Maybe.withDefault dummyBody
 
-                    else
-                        ( 1, 0 )
+                dx : Float
+                dx =
+                    bj.x - bi.x
 
-                half : Float
-                half =
-                    penetration * 0.5
+                dy : Float
+                dy =
+                    bj.y - bi.y
 
-                biNew : Body
-                biNew =
-                    { x = bi.x - nx * half
-                    , y = bi.y - ny * half
-                    , vx = bi.vx
-                    , vy = bi.vy
-                    , radius = bi.radius
-                    }
+                dist : Float
+                dist =
+                    sqrt (dx * dx + dy * dy)
 
-                bjNew : Body
-                bjNew =
-                    { x = bj.x + nx * half
-                    , y = bj.y + ny * half
-                    , vx = bj.vx
-                    , vy = bj.vy
-                    , radius = bj.radius
-                    }
+                penetration : Float
+                penetration =
+                    bi.radius + bj.radius - dist
             in
-            resolvePairs i (j + 1) n biNew (Array.set j bjNew (Array.set i biNew bodies))
+            if penetration <= 0 then
+                resolvePairs i rest bi bodies
 
-    else
-        bodies
+            else
+                let
+                    ( nx, ny ) =
+                        if 1.0e-9 - dist < 0 then
+                            ( dx / dist, dy / dist )
+
+                        else
+                            ( 1, 0 )
+
+                    half : Float
+                    half =
+                        penetration * 0.5
+
+                    biNew : Body
+                    biNew =
+                        { x = bi.x - nx * half
+                        , y = bi.y - ny * half
+                        , vx = bi.vx
+                        , vy = bi.vy
+                        , radius = bi.radius
+                        }
+
+                    bjNew : Body
+                    bjNew =
+                        { x = bj.x + nx * half
+                        , y = bj.y + ny * half
+                        , vx = bj.vx
+                        , vy = bj.vy
+                        , radius = bj.radius
+                        }
+                in
+                resolvePairs i rest biNew (Array.set j bjNew (Array.set i biNew bodies))
 
 
 clampAll : Int -> Int -> Array Body -> Array Body

@@ -140,6 +140,27 @@ tests =
 
                     _ ->
                         Expect.fail "expected exactly two bodies back"
+        , Test.test "distant bodies are left alone even after several substeps" <|
+            \_ ->
+                -- These two are 50+ units apart at every substep so they
+                -- never end up on each other's neighbor list; the test is
+                -- really checking that the neighbor pruning doesn't
+                -- introduce phantom interactions either.
+                let
+                    world : List Body
+                    world =
+                        [ body 10 80 0 0 1, body 90 80 0 0 1 ]
+                in
+                case Physics.simulate 4 (Duration.milliseconds 100) world of
+                    [ left, right ] ->
+                        Expect.all
+                            [ \_ -> abs (left.x - 10) |> Expect.atMost 1.0e-9
+                            , \_ -> abs (right.x - 90) |> Expect.atMost 1.0e-9
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly two bodies back"
         , Test.test "a pile of three overlapping bodies fully separates" <|
             \_ ->
                 case Physics.simulate 4 (Duration.milliseconds 100) [ body 49 50 0 0 1, body 50 50 0 0 1, body 51 50 0 0 1 ] of
