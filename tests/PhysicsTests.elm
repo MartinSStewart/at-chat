@@ -26,13 +26,7 @@ insideBounds c =
 
 body : Float -> Float -> Float -> Float -> Float -> Body
 body x y vx vy radius =
-    { x = x
-    , y = y
-    , vx = vx
-    , vy = vy
-    , radius = radius
-    , mass = max radius 1.0e-6 ^ 2
-    }
+    { x = x, y = y, vx = vx, vy = vy, radius = radius }
 
 
 tests : Test
@@ -40,7 +34,7 @@ tests =
     Test.describe "Physics.simulate"
         [ Test.test "an empty world stays empty" <|
             \_ ->
-                Physics.simulate 100 (Duration.milliseconds 100) []
+                Physics.simulate 4 (Duration.milliseconds 100) []
                     |> Expect.equal []
         , Test.test "a lone body at rest does not move" <|
             \_ ->
@@ -49,7 +43,7 @@ tests =
                     b =
                         body 50 50 0 0 1
                 in
-                Physics.simulate 100 (Duration.milliseconds 100) [ b ]
+                Physics.simulate 4 (Duration.milliseconds 100) [ b ]
                     |> Expect.equal [ b ]
         , Test.test "bodies at rest that don't touch are left alone" <|
             \_ ->
@@ -58,7 +52,7 @@ tests =
                     world =
                         [ body 30 50 0 0 1, body 70 50 0 0 1 ]
                 in
-                Physics.simulate 100 (Duration.milliseconds 100) world
+                Physics.simulate 4 (Duration.milliseconds 100) world
                     |> Expect.equal world
         , Test.test "zero steps is a no-op" <|
             \_ ->
@@ -71,7 +65,7 @@ tests =
                     |> Expect.equal world
         , Test.test "a moving body travels in its direction of motion" <|
             \_ ->
-                case Physics.simulate 500 (Duration.milliseconds 50) [ body 50 50 200 0 1 ] of
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 50 50 20 0 1 ] of
                     [ moved ] ->
                         Expect.all
                             [ \_ -> moved.x |> Expect.greaterThan 50.5
@@ -82,13 +76,14 @@ tests =
 
                     _ ->
                         Expect.fail "expected exactly one body back"
-        , Test.test "a body bounces off the wall and stays inside the box" <|
+        , Test.test "a body that runs into a wall ends up resting against it" <|
             \_ ->
-                case Physics.simulate 2000 (Duration.milliseconds 200) [ body 80 50 200 0 1 ] of
-                    [ bounced ] ->
+                case Physics.simulate 4 (Duration.milliseconds 200) [ body 80 50 200 0 1 ] of
+                    [ stopped ] ->
                         Expect.all
-                            [ \_ -> insideBounds bounced |> Expect.equal True
-                            , \_ -> bounced.vx |> Expect.lessThan 0
+                            [ \_ -> insideBounds stopped |> Expect.equal True
+                            , \_ -> stopped.x |> Expect.within (Expect.Absolute 1.0e-6) (Physics.bounds.max - stopped.radius)
+                            , \_ -> stopped.vx |> Expect.within (Expect.Absolute 1.0e-6) 0
                             ]
                             ()
 
@@ -104,25 +99,25 @@ tests =
                         , body 50 5 0 -200 2
                         ]
                 in
-                Physics.simulate 1000 (Duration.milliseconds 100) world
+                Physics.simulate 4 (Duration.milliseconds 100) world
                     |> List.all insideBounds
                     |> Expect.equal True
-        , Test.test "two overlapping bodies are pushed apart" <|
+        , Test.test "two overlapping bodies are pushed apart in a single substep" <|
             \_ ->
-                case Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
+                case Physics.simulate 1 (Duration.milliseconds 16.6) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
                     [ a, b ] ->
-                        overlap a b |> Expect.atMost 1.0e-2
+                        overlap a b |> Expect.atMost 1.0e-6
 
                     _ ->
                         Expect.fail "expected exactly two bodies back"
         , Test.test "radii and ordering are preserved" <|
             \_ ->
-                Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 2 ]
+                Physics.simulate 4 (Duration.milliseconds 100) [ body 49 50 0 0 1, body 51 50 0 0 2 ]
                     |> List.map .radius
                     |> Expect.equal [ 1, 2 ]
         , Test.test "equal mass collision conserves the center of mass" <|
             \_ ->
-                case Physics.simulate 1000 (Duration.milliseconds 50) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
                     [ a, b ] ->
                         Expect.all
                             [ \_ -> (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
@@ -134,12 +129,12 @@ tests =
                         Expect.fail "expected exactly two bodies back"
         , Test.test "a pile of three overlapping bodies fully separates" <|
             \_ ->
-                case Physics.simulate 500 (Duration.milliseconds 5) [ body 49 50 0 0 1, body 50 50 0 0 1, body 51 50 0 0 1 ] of
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 49 50 0 0 1, body 50 50 0 0 1, body 51 50 0 0 1 ] of
                     [ a, b, c ] ->
                         Expect.all
-                            [ \_ -> overlap a b |> Expect.atMost 1.0e-2
-                            , \_ -> overlap b c |> Expect.atMost 1.0e-2
-                            , \_ -> overlap a c |> Expect.atMost 1.0e-2
+                            [ \_ -> overlap a b |> Expect.atMost 1.0e-3
+                            , \_ -> overlap b c |> Expect.atMost 1.0e-3
+                            , \_ -> overlap a c |> Expect.atMost 1.0e-3
                             ]
                             ()
 
