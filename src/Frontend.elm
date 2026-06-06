@@ -6386,7 +6386,7 @@ view model =
                                       else
                                         Ui.noAttr
                                     , Call.videoNodes
-                                        local.localUser.session.userId
+                                        local.localUser
                                         loaded
                                         loggedIn
                                         local.calls

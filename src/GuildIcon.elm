@@ -3,6 +3,7 @@ module GuildIcon exposing
     , Mode(..)
     , addGuildButton
     , defaultUser
+    , defaultUserHtml
     , fullWidth
     , notificationHelper
     , notificationView
@@ -14,7 +15,7 @@ module GuildIcon exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Icons
 import Id exposing (Id, UserId)
@@ -169,8 +170,7 @@ userView notification maybeIcon userId =
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
 defaultUser centerX size2 rounded userId =
     Ui.el
-        [ Ui.contentCenterX
-        , Ui.contentCenterY
+        [ Ui.contentCenterY
         , Ui.rounded rounded
         , Ui.background (userDefaultColor userId)
         , if centerX then
@@ -184,6 +184,19 @@ defaultUser centerX size2 rounded userId =
         , Ui.Font.color (Ui.rgb 20 20 20)
         ]
         (Ui.html Icons.person)
+
+
+defaultUserHtml : Int -> Int -> Id UserId -> Html msg
+defaultUserHtml size2 rounded userId =
+    Html.div
+        [ Html.Attributes.style "border-radius" (String.fromInt rounded ++ "px")
+        , Html.Attributes.style "background-color" (userDefaultColor userId |> MyUi.colorToStyle)
+        , Html.Attributes.style "width" (String.fromInt (size2 - 8) ++ "px")
+        , Html.Attributes.style "height" (String.fromInt (size2 - 8) ++ "px")
+        , Html.Attributes.style "padding" "4px"
+        , Html.Attributes.style "color" "rgb(20,20,20)"
+        ]
+        [ Icons.person ]
 
 
 iconView : Mode -> FileHash -> Element msg

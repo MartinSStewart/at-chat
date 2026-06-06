@@ -1065,6 +1065,8 @@ voiceChatTest normalConfig =
                                             )
                             )
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
+                        , user.click 100 (Dom.id "guild_voiceChat")
+                        , tallSnapshot user 100 { name = "Voice chat with tab closed" }
                         , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                         , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
                         , tallSnapshot user 100 { name = "Left a DM call user perspective" }
