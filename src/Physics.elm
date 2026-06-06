@@ -174,7 +174,16 @@ main =
                                 [ Html.Attributes.style "position" "absolute"
                                 , Html.Attributes.style "top" (String.fromFloat ((y - radius) * 10) ++ "px")
                                 , Html.Attributes.style "left" (String.fromFloat ((x - radius) * 10) ++ "px")
-                                , Html.Attributes.style "background-color" "red"
+                                , Html.Attributes.style "background-color"
+                                    (if radius == 4 then
+                                        "rgb(245, 240, 80)"
+
+                                     else if radius == 5 then
+                                        "rgb(80, 100, 240)"
+
+                                     else
+                                        "rgb(230, 40, 40)"
+                                    )
                                 , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
                                 , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
                                 , Html.Attributes.style "border-radius" "999px"
