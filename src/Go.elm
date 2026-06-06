@@ -2254,6 +2254,41 @@ gameView windowSize localUser (MatchData data) model =
         , Ui.background MyUi.background1
         ]
         [ statusView state
+        , if isLocalUsersTurn localUser.session.userId data.setup state then
+            case state.phase of
+                Playing { previousPlayerPassed } ->
+                    Ui.el
+                        [ Ui.paddingXY 16 0 ]
+                        (MyUi.simpleButton
+                            (Dom.id "go_pass")
+                            PressedPass
+                            (Ui.text
+                                (if previousPlayerPassed then
+                                    "Pass and mark territory"
+
+                                 else
+                                    "Pass"
+                                )
+                            )
+                        )
+
+                Marking ->
+                    Ui.el
+                        [ Ui.paddingXY 16 0 ]
+                        (MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking"))
+
+                Confirming ->
+                    Ui.row
+                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                        [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
+                        , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
+                        ]
+
+                Scored _ ->
+                    Ui.none
+
+          else
+            Ui.none
         , Ui.column
             [ Ui.width Ui.shrink
             , Ui.background boardColor
@@ -2281,11 +2316,6 @@ gameView windowSize localUser (MatchData data) model =
 
           else
             historyView state model |> Ui.map SpectatorMsg
-        , if isLocalUsersTurn localUser.session.userId data.setup state then
-            controlsView state
-
-          else
-            Ui.none
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -2297,10 +2327,10 @@ gameView windowSize localUser (MatchData data) model =
 
 statusView : GameState -> Element msg
 statusView state =
-    let
-        turnText : String
-        turnText =
-            case state.phase of
+    Ui.el
+        [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
+        (Ui.text
+            (case state.phase of
                 Playing _ ->
                     stoneName state.currentPlayer ++ " to move"
 
@@ -2318,10 +2348,8 @@ statusView state =
                         ++ ", White: "
                         ++ StringExtra.removeTrailing0s 1 s.whiteScore
                         ++ winnerSuffix s.blackScore s.whiteScore
-    in
-    Ui.column
-        [ Ui.spacing 4, Ui.paddingXY 16 0 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText) ]
+            )
+        )
 
 
 winnerSuffix : Float -> Float -> String
@@ -2334,42 +2362,6 @@ winnerSuffix b w =
 
     else
         " (tie)"
-
-
-controlsView : GameState -> Element GameMsg
-controlsView state =
-    let
-        phaseButtons : List (Element GameMsg)
-        phaseButtons =
-            case state.phase of
-                Playing { previousPlayerPassed } ->
-                    [ MyUi.simpleButton
-                        (Dom.id "go_pass")
-                        PressedPass
-                        (Ui.text
-                            (if previousPlayerPassed then
-                                "Pass and mark territory"
-
-                             else
-                                "Pass"
-                            )
-                        )
-                    ]
-
-                Marking ->
-                    [ MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking") ]
-
-                Confirming ->
-                    [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
-                    , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
-                    ]
-
-                Scored _ ->
-                    []
-    in
-    Ui.row
-        [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
-        phaseButtons
 
 
 historyView : GameState -> GameModel -> Element SpectatorMsg
@@ -2495,14 +2487,7 @@ boardView windowSize overlay setup state model =
             ++ overlay
         )
         |> Ui.html
-        |> Ui.el
-            [ Ui.width Ui.shrink
-            , if isMobile then
-                Ui.centerX
-
-              else
-                Ui.noAttr
-            ]
+        |> Ui.el [ Ui.width Ui.shrink, Ui.centerX ]
 
 
 boardColor : Ui.Color
