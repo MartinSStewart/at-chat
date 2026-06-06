@@ -56,6 +56,26 @@ dampingRate =
     2
 
 
+{-| Acceleration the spring loaded arm applies, in y per second per second.
+Booby Trap's arm comes down hard, so this is intentionally well above gravity.
+-}
+armStrength : Float
+armStrength =
+    500
+
+
+{-| How rapidly the arm force falls off with distance below the topmost body.
+Higher values concentrate the force on the very topmost body; lower values
+spread it across nearby bodies. We pick a value that gives the body sitting at
+the top edge full force, a body 0.1 units below ~60% of it, and a body a full
+unit below almost nothing — so the arm doesn't flicker between near-tied
+candidates but doesn't reach down into the pile either.
+-}
+falloffRate : Float
+falloffRate =
+    5
+
+
 {-| Sentinel returned from out-of-range `Array.get` calls. Every index used
 below is always in range, so this is never observed.
 -}
@@ -163,15 +183,87 @@ step dt bodies =
         damping =
             Basics.e ^ negate (dampingRate * dt)
 
+        topEdge : Float
+        topEdge =
+            findTopEdge 0 n bodies 1.0e18
+
+        withArm : Array Body
+        withArm =
+            applyArmForce 0 n dt topEdge bodies bodies
+
         predicted : Array Body
         predicted =
-            predictAll 0 n dt bodies bodies
+            predictAll 0 n dt withArm withArm
 
         resolved : Array Body
         resolved =
             solveIters solverIters n predicted
     in
     deriveVelocities 0 n dt damping bodies resolved resolved
+
+
+{-| Smallest `y - radius` value across the world — i.e. how high up the topmost
+body's leading edge is.
+-}
+findTopEdge : Int -> Int -> Array Body -> Float -> Float
+findTopEdge i n bodies best =
+    if i - n < 0 then
+        let
+            b : Body
+            b =
+                Array.get i bodies |> Maybe.withDefault dummyBody
+
+            edge : Float
+            edge =
+                b.y - b.radius
+
+            next : Float
+            next =
+                if edge - best < 0 then
+                    edge
+
+                else
+                    best
+        in
+        findTopEdge (i + 1) n bodies next
+
+    else
+        best
+
+
+{-| Push each body downward with `armStrength`, scaled by an exponential
+falloff in how far below `topEdge` its leading edge sits. The body whose edge
+matches `topEdge` gets the full force; anything else gets less, very quickly.
+-}
+applyArmForce : Int -> Int -> Float -> Float -> Array Body -> Array Body -> Array Body
+applyArmForce i n dt topEdge original acc =
+    if i - n < 0 then
+        let
+            b : Body
+            b =
+                Array.get i original |> Maybe.withDefault dummyBody
+
+            distance : Float
+            distance =
+                b.y - b.radius - topEdge
+
+            falloff : Float
+            falloff =
+                Basics.e ^ negate (falloffRate * distance)
+
+            new : Body
+            new =
+                { x = b.x
+                , y = b.y
+                , vx = b.vx
+                , vy = b.vy + armStrength * falloff * dt
+                , radius = b.radius
+                }
+        in
+        applyArmForce (i + 1) n dt topEdge original (Array.set i new acc)
+
+    else
+        acc
 
 
 {-| Predicted position: each body advances by `velocity * dt`. Velocity carried

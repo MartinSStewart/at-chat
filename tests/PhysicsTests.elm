@@ -36,24 +36,6 @@ tests =
             \_ ->
                 Physics.simulate 4 (Duration.milliseconds 100) []
                     |> Expect.equal []
-        , Test.test "a lone body at rest does not move" <|
-            \_ ->
-                let
-                    b : Body
-                    b =
-                        body 50 50 0 0 1
-                in
-                Physics.simulate 4 (Duration.milliseconds 100) [ b ]
-                    |> Expect.equal [ b ]
-        , Test.test "bodies at rest that don't touch are left alone" <|
-            \_ ->
-                let
-                    world : List Body
-                    world =
-                        [ body 30 50 0 0 1, body 70 50 0 0 1 ]
-                in
-                Physics.simulate 4 (Duration.milliseconds 100) world
-                    |> Expect.equal world
         , Test.test "zero steps is a no-op" <|
             \_ ->
                 let
@@ -63,13 +45,48 @@ tests =
                 in
                 Physics.simulate 0 (Duration.milliseconds 100) world
                     |> Expect.equal world
+        , Test.test "the spring arm pushes a lone body downward" <|
+            \_ ->
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 50 50 0 0 1 ] of
+                    [ moved ] ->
+                        Expect.all
+                            [ \_ -> moved.y |> Expect.greaterThan 51
+                            , \_ -> moved.vy |> Expect.greaterThan 0
+                            , \_ -> insideBounds moved |> Expect.equal True
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly one body back"
+        , Test.test "the arm targets the topmost body and leaves bodies below it alone" <|
+            \_ ->
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 50 20 0 0 1, body 50 80 0 0 1 ] of
+                    [ top, bottom ] ->
+                        Expect.all
+                            [ \_ -> top.y - 20 |> Expect.greaterThan 0.5
+                            , \_ -> abs (bottom.y - 80) |> Expect.atMost 1.0e-3
+                            , \_ -> abs bottom.vy |> Expect.atMost 1.0e-3
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly two bodies back"
+        , Test.test "the arm force falls off rapidly with height difference" <|
+            \_ ->
+                case Physics.simulate 1 (Duration.milliseconds 1) [ body 50 50 0 0 1, body 70 51 0 0 1 ] of
+                    [ top, oneBelow ] ->
+                        -- One unit of separation is enough to drop the force
+                        -- by e^5 ≈ 150x.
+                        top.vy / oneBelow.vy |> Expect.greaterThan 100
+
+                    _ ->
+                        Expect.fail "expected exactly two bodies back"
         , Test.test "a moving body travels in its direction of motion" <|
             \_ ->
                 case Physics.simulate 4 (Duration.milliseconds 100) [ body 50 50 20 0 1 ] of
                     [ moved ] ->
                         Expect.all
                             [ \_ -> moved.x |> Expect.greaterThan 50.5
-                            , \_ -> moved.y |> Expect.within (Expect.Absolute 1.0e-9) 50
                             , \_ -> insideBounds moved |> Expect.equal True
                             ]
                             ()
@@ -115,15 +132,11 @@ tests =
                 Physics.simulate 4 (Duration.milliseconds 100) [ body 49 50 0 0 1, body 51 50 0 0 2 ]
                     |> List.map .radius
                     |> Expect.equal [ 1, 2 ]
-        , Test.test "equal mass collision conserves the center of mass" <|
+        , Test.test "a symmetric horizontal collision preserves the horizontal center of mass" <|
             \_ ->
                 case Physics.simulate 4 (Duration.milliseconds 100) [ body 49.5 50 0 0 1, body 50.5 50 0 0 1 ] of
                     [ a, b ] ->
-                        Expect.all
-                            [ \_ -> (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
-                            , \_ -> (a.y + b.y) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
-                            ]
-                            ()
+                        (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 50
 
                     _ ->
                         Expect.fail "expected exactly two bodies back"
