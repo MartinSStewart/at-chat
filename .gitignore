@@ -1,4 +1,5 @@
 .idea
+benchmarks/main.js
 elm-stuff
 node_modules
 public/cache

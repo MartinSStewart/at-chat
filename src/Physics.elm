@@ -340,13 +340,9 @@ step dt neighbors bodies =
         topEdge =
             findTopEdge bodies
 
-        withArm : Array Body
-        withArm =
-            applyArmForce dt topEdge bodies
-
         predicted : Array Body
         predicted =
-            predictAll dt withArm
+            applyArmForceAndPredict dt topEdge bodies
 
         resolved : Array Body
         resolved =
@@ -378,17 +374,14 @@ findTopEdge bodies =
         bodies
 
 
-{-| Push each body downward with `armStrength`, scaled by an exponential
-falloff in how far below `topEdge` its leading edge sits. The body whose edge
-matches `topEdge` gets the full force; anything else gets less, very quickly.
-
-Each body's new velocity depends only on its own fields and the captured
-`topEdge`, so `Array.map` updates the whole array in one allocation rather
-than the per-body `Array.set` the previous version did.
-
+{-| Apply the spring arm's downward force and integrate the new velocity into
+a predicted position, in a single `Array.map` pass. Both updates are
+per-body independent given the captured `topEdge` and `dt`, so fusing them
+saves one whole-array allocation per substep compared to running an arm pass
+and a predict pass separately.
 -}
-applyArmForce : Float -> Float -> Array Body -> Array Body
-applyArmForce dt topEdge bodies =
+applyArmForceAndPredict : Float -> Float -> Array Body -> Array Body
+applyArmForceAndPredict dt topEdge bodies =
     Array.map
         (\b ->
             let
@@ -399,36 +392,25 @@ applyArmForce dt topEdge bodies =
                 falloff : Float
                 falloff =
                     Basics.e ^ negate (falloffRate * distance)
+
+                vy : Float
+                vy =
+                    b.vy + armStrength * falloff * dt
             in
-            { x = b.x
-            , y = b.y
-            , vx = b.vx
-            , vy = b.vy + armStrength * falloff * dt
-            , radius = b.radius
-            }
-        )
-        bodies
-
-
-{-| Predicted position: each body advances by `velocity * dt`. Velocity carried
-through unchanged. Per-element independent, so `Array.map`.
--}
-predictAll : Float -> Array Body -> Array Body
-predictAll dt bodies =
-    Array.map
-        (\b ->
             { x = b.x + b.vx * dt
-            , y = b.y + b.vy * dt
+            , y = b.y + vy * dt
             , vx = b.vx
-            , vy = b.vy
+            , vy = vy
             , radius = b.radius
             }
         )
         bodies
 
 
-{-| Gauss-Seidel relaxation: alternate between resolving overlapping pairs and
-clamping bodies back inside the box, for `solverIters` rounds.
+{-| Gauss-Seidel relaxation. Each round walks every body, resolves its
+overlaps with the bodies in its neighbor list, then clamps it back inside the
+box before moving on. Clamping per-body inside the pair walk avoids a full
+`Array.map` clamp pass between rounds.
 -}
 solveIters : Int -> Int -> Array (List Int) -> Array Body -> Array Body
 solveIters remaining n neighbors bodies =
@@ -436,42 +418,12 @@ solveIters remaining n neighbors bodies =
         bodies
 
     else
-        solveIters
-            (remaining - 1)
-            n
-            neighbors
-            (Array.map
-                (\b ->
-                    { x =
-                        if b.x - b.radius < 0 then
-                            b.radius
-
-                        else if boundsX - b.x - b.radius < 0 then
-                            boundsX - b.radius
-
-                        else
-                            b.x
-                    , y =
-                        if b.y - b.radius < 0 then
-                            b.radius
-
-                        else if boundsY - b.y - b.radius < 0 then
-                            boundsY - b.radius
-
-                        else
-                            b.y
-                    , vx = b.vx
-                    , vy = b.vy
-                    , radius = b.radius
-                    }
-                )
-                (resolveAllPairs 0 n neighbors bodies)
-            )
+        solveIters (remaining - 1) n neighbors (resolveAllPairs 0 n neighbors bodies)
 
 
 resolveAllPairs : Int -> Int -> Array (List Int) -> Array Body -> Array Body
 resolveAllPairs i n neighbors bodies =
-    if i + 1 - n < 0 then
+    if i - n < 0 then
         case Array.get i bodies of
             Just bi ->
                 case Array.get i neighbors of
@@ -488,16 +440,43 @@ resolveAllPairs i n neighbors bodies =
         bodies
 
 
+clampBody : Body -> Body
+clampBody b =
+    { x =
+        if b.x - b.radius < 0 then
+            b.radius
+
+        else if boundsX - b.x - b.radius < 0 then
+            boundsX - b.radius
+
+        else
+            b.x
+    , y =
+        if b.y - b.radius < 0 then
+            b.radius
+
+        else if boundsY - b.y - b.radius < 0 then
+            boundsY - b.radius
+
+        else
+            b.y
+    , vx = b.vx
+    , vy = b.vy
+    , radius = b.radius
+    }
+
+
 {-| Walk i's neighbor list. If body i and body j overlap, push each one half
 the penetration along the contact normal so that they end up exactly touching.
 The running `bi` is updated as it moves so subsequent j contacts see the
-latest position.
+latest position, but it's only written back to the array once at the end of
+the walk — earlier writes would be overwritten by the next contact anyway.
 -}
 resolvePairs : Int -> List Int -> Body -> Array Body -> Array Body
 resolvePairs i js bi bodies =
     case js of
         [] ->
-            bodies
+            Array.set i (clampBody bi) bodies
 
         j :: rest ->
             case Array.get j bodies of
@@ -511,19 +490,26 @@ resolvePairs i js bi bodies =
                         dy =
                             bj.y - bi.y
 
-                        dist : Float
-                        dist =
-                            sqrt (dx * dx + dy * dy)
+                        distSq : Float
+                        distSq =
+                            dx * dx + dy * dy
 
-                        penetration : Float
-                        penetration =
-                            bi.radius + bj.radius - dist
+                        sumR : Float
+                        sumR =
+                            bi.radius + bj.radius
                     in
-                    if penetration <= 0 then
-                        resolvePairs i rest bi bodies
-
-                    else
+                    -- Most neighbors aren't actually overlapping this iteration;
+                    -- skip the sqrt when the squared distance test rules them out.
+                    if distSq - sumR * sumR < 0 then
                         let
+                            dist : Float
+                            dist =
+                                sqrt distSq
+
+                            penetration : Float
+                            penetration =
+                                sumR - dist
+
                             ( nx, ny ) =
                                 if 1.0e-9 - dist < 0 then
                                     ( dx / dist, dy / dist )
@@ -553,10 +539,13 @@ resolvePairs i js bi bodies =
                                 , radius = bj.radius
                                 }
                         in
-                        resolvePairs i rest biNew (Array.set j bjNew (Array.set i biNew bodies))
+                        resolvePairs i rest biNew (Array.set j bjNew bodies)
+
+                    else
+                        resolvePairs i rest bi bodies
 
                 Nothing ->
-                    bodies
+                    Array.set i (clampBody bi) bodies
 
 
 {-| The new velocity is the actual displacement (after constraint resolution)

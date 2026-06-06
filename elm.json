@@ -8,6 +8,7 @@
         "vendored/ianmackenzie/elm-float-extra/1.1.0/src",
         "vendored/ianmackenzie/elm-geometry/3.11.0/src",
         "vendored/MartinSStewart/elm-discord/1.0.0/src",
+        "benchmarks",
         "visual-testing/src",
         "tests"
     ],
@@ -35,8 +36,10 @@
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.3",
+            "BrianHicks/elm-trend": "2.1.2",
             "elm-community/easing-functions": "2.0.0",
             "elm-community/json-extra": "4.3.0",
+            "elm-explorations/benchmark": "1.0.2",
             "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.2.0",
             "ianmackenzie/elm-units": "2.10.0",
