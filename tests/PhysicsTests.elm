@@ -18,10 +18,10 @@ overlap a b =
 
 insideBounds : Body -> Bool
 insideBounds c =
-    (c.x - c.radius >= Physics.bounds.min - 1.0e-6)
-        && (c.x + c.radius <= Physics.bounds.max + 1.0e-6)
-        && (c.y - c.radius >= Physics.bounds.min - 1.0e-6)
-        && (c.y + c.radius <= Physics.bounds.max + 1.0e-6)
+    (c.x - c.radius >= -1.0e-6)
+        && (c.x + c.radius <= Physics.boundsX + 1.0e-6)
+        && (c.y - c.radius >= -1.0e-6)
+        && (c.y + c.radius <= Physics.boundsY + 1.0e-6)
 
 
 body : Float -> Float -> Float -> Float -> Float -> Body
@@ -99,7 +99,7 @@ tests =
                     [ stopped ] ->
                         Expect.all
                             [ \_ -> insideBounds stopped |> Expect.equal True
-                            , \_ -> stopped.x |> Expect.within (Expect.Absolute 1.0e-6) (Physics.bounds.max - stopped.radius)
+                            , \_ -> stopped.x |> Expect.within (Expect.Absolute 1.0e-6) (Physics.boundsX - stopped.radius)
                             , \_ -> stopped.vx |> Expect.within (Expect.Absolute 1.0e-6) 0
                             ]
                             ()

@@ -1,4 +1,7 @@
-module Physics exposing (Body, bounds, simulate)
+module Physics exposing
+    ( Body, simulate
+    , boundsX, boundsY
+    )
 
 {-| A small, purpose built rigid body physics simulation for the game Booby
 Trap.
@@ -13,7 +16,7 @@ Because there is no stiff spring, the substep size is no longer pinned by
 stability and the caller can use a much smaller number of substeps than the
 penalty-based version required.
 
-@docs Body, bounds, simulate
+@docs Body, simulate
 
 -}
 
@@ -23,6 +26,10 @@ import Browser.Events
 import Duration exposing (Duration)
 import Html
 import Html.Attributes
+import Html.Events
+import List.Extra
+import Random
+import Time
 
 
 {-| A 2D circle: position, velocity and radius. All pegs are assumed to have
@@ -34,9 +41,14 @@ type alias Body =
 
 {-| The simulation happens inside a fixed square box.
 -}
-bounds : { min : Float, max : Float }
-bounds =
-    { min = 0, max = 100 }
+boundsX : number
+boundsX =
+    60
+
+
+boundsY : number
+boundsY =
+    160
 
 
 {-| How many Gauss-Seidel passes the constraint solver makes per substep. Eight
@@ -53,7 +65,7 @@ world settles instead of jittering forever.
 -}
 dampingRate : Float
 dampingRate =
-    2
+    5
 
 
 {-| Acceleration the spring loaded arm applies, in y per second per second.
@@ -61,7 +73,7 @@ Booby Trap's arm comes down hard, so this is intentionally well above gravity.
 -}
 armStrength : Float
 armStrength =
-    500
+    5000
 
 
 {-| How rapidly the arm force falls off with distance below the topmost body.
@@ -102,33 +114,62 @@ dummyBody =
     { x = 0, y = 0, vx = 0, vy = 0, radius = 0 }
 
 
-main : Program () (List Body) ()
+type Msg
+    = RemoveCircle Int
+    | AnimationFrame Time.Posix
+
+
+main : Program () (List Body) Msg
 main =
     Browser.element
         { init =
             \_ ->
-                ( List.range 0 10
-                    |> List.map
-                        (\index ->
+                let
+                    small =
+                        List.repeat 30 4
+
+                    medium =
+                        List.repeat 25 5
+
+                    large =
+                        List.repeat 12 6
+                in
+                ( Random.step (small ++ medium ++ large |> shuffle) (Random.initialSeed 125)
+                    |> Tuple.first
+                    |> List.indexedMap
+                        (\index radius ->
+                            let
+                                columns : Int
+                                columns =
+                                    boundsX // 10
+                            in
                             makeCircle
-                                (toFloat index * 10)
-                                (modBy 7 index |> toFloat)
-                                ((modBy 2 index + 2) * 4 |> toFloat)
+                                (modBy columns index * 10 |> toFloat)
+                                (10 * toFloat (index // columns))
+                                radius
                         )
                 , Cmd.none
                 )
         , update =
-            \_ model ->
-                ( simulate 4 (Duration.milliseconds 16.6) model
-                    |> List.map (\a -> { a | vy = a.vy + 1 })
-                , Cmd.none
-                )
+            \msg model ->
+                case msg of
+                    RemoveCircle index ->
+                        ( List.Extra.removeAt index model, Cmd.none )
+
+                    AnimationFrame time ->
+                        let
+                            speedup =
+                                1
+                        in
+                        ( simulate (8 * speedup) (Duration.milliseconds (16.6 * speedup)) model
+                        , Cmd.none
+                        )
         , view =
             \model ->
                 Html.div
                     []
-                    (List.map
-                        (\{ x, y, radius } ->
+                    (List.indexedMap
+                        (\index { x, y, radius } ->
                             Html.div
                                 [ Html.Attributes.style "position" "absolute"
                                 , Html.Attributes.style "top" (String.fromFloat ((y - radius) * 10) ++ "px")
@@ -137,13 +178,42 @@ main =
                                 , Html.Attributes.style "width" (String.fromFloat (radius * 20) ++ "px")
                                 , Html.Attributes.style "height" (String.fromFloat (radius * 20) ++ "px")
                                 , Html.Attributes.style "border-radius" "999px"
+                                , Html.Events.onClick (RemoveCircle index)
                                 ]
                                 []
                         )
                         model
                     )
-        , subscriptions = \_ -> Browser.Events.onAnimationFrame (\_ -> ())
+        , subscriptions = \_ -> Browser.Events.onAnimationFrame AnimationFrame
         }
+
+
+anyInt : Random.Generator Int
+anyInt =
+    Random.int Random.minInt Random.maxInt
+
+
+{-| Shuffle the list. Takes O(_n_ log _n_) time and no extra space. Original code from <https://github.com/elm-community/random-extra/blob/3.2.0/src/Random/List.elm>
+-}
+shuffle : List a -> Random.Generator (List a)
+shuffle list =
+    Random.map
+        (\independentSeed ->
+            list
+                |> List.foldl
+                    (\item ( acc, seed ) ->
+                        let
+                            ( tag, nextSeed ) =
+                                Random.step anyInt seed
+                        in
+                        ( ( item, tag ) :: acc, nextSeed )
+                    )
+                    ( [], independentSeed )
+                |> Tuple.first
+                |> List.sortBy Tuple.second
+                |> List.map Tuple.first
+        )
+        Random.independentSeed
 
 
 makeCircle : Float -> Float -> Float -> Body
@@ -390,22 +460,53 @@ solveIters remaining n neighbors bodies =
         bodies
 
     else
-        solveIters (remaining - 1) n neighbors (clampAll 0 n (resolveAllPairs 0 n neighbors bodies))
+        solveIters
+            (remaining - 1)
+            n
+            neighbors
+            (Array.map
+                (\b ->
+                    { x =
+                        if b.x - b.radius < 0 then
+                            b.radius
+
+                        else if boundsX - b.x - b.radius < 0 then
+                            boundsX - b.radius
+
+                        else
+                            b.x
+                    , y =
+                        if b.y - b.radius < 0 then
+                            b.radius
+
+                        else if boundsY - b.y - b.radius < 0 then
+                            boundsY - b.radius
+
+                        else
+                            b.y
+                    , vx = b.vx
+                    , vy = b.vy
+                    , radius = b.radius
+                    }
+                )
+                (resolveAllPairs 0 n neighbors bodies)
+            )
 
 
 resolveAllPairs : Int -> Int -> Array (List Int) -> Array Body -> Array Body
 resolveAllPairs i n neighbors bodies =
     if i + 1 - n < 0 then
-        let
-            bi : Body
-            bi =
-                Array.get i bodies |> Maybe.withDefault dummyBody
+        case Array.get i bodies of
+            Just bi ->
+                case Array.get i neighbors of
+                    Just js ->
+                        resolveAllPairs (i + 1) n neighbors (resolvePairs i js bi bodies)
 
-            js : List Int
-            js =
-                Array.get i neighbors |> Maybe.withDefault []
-        in
-        resolveAllPairs (i + 1) n neighbors (resolvePairs i js bi bodies)
+                    Nothing ->
+                        bodies
+
+            Nothing ->
+                bodies
 
     else
         bodies
@@ -423,102 +524,63 @@ resolvePairs i js bi bodies =
             bodies
 
         j :: rest ->
-            let
-                bj : Body
-                bj =
-                    Array.get j bodies |> Maybe.withDefault dummyBody
+            case Array.get j bodies of
+                Just bj ->
+                    let
+                        dx : Float
+                        dx =
+                            bj.x - bi.x
 
-                dx : Float
-                dx =
-                    bj.x - bi.x
+                        dy : Float
+                        dy =
+                            bj.y - bi.y
 
-                dy : Float
-                dy =
-                    bj.y - bi.y
+                        dist : Float
+                        dist =
+                            sqrt (dx * dx + dy * dy)
 
-                dist : Float
-                dist =
-                    sqrt (dx * dx + dy * dy)
+                        penetration : Float
+                        penetration =
+                            bi.radius + bj.radius - dist
+                    in
+                    if penetration <= 0 then
+                        resolvePairs i rest bi bodies
 
-                penetration : Float
-                penetration =
-                    bi.radius + bj.radius - dist
-            in
-            if penetration <= 0 then
-                resolvePairs i rest bi bodies
+                    else
+                        let
+                            ( nx, ny ) =
+                                if 1.0e-9 - dist < 0 then
+                                    ( dx / dist, dy / dist )
 
-            else
-                let
-                    ( nx, ny ) =
-                        if 1.0e-9 - dist < 0 then
-                            ( dx / dist, dy / dist )
+                                else
+                                    ( 1, 0 )
 
-                        else
-                            ( 1, 0 )
+                            half : Float
+                            half =
+                                penetration * 0.5
 
-                    half : Float
-                    half =
-                        penetration * 0.5
+                            biNew : Body
+                            biNew =
+                                { x = bi.x - nx * half
+                                , y = bi.y - ny * half
+                                , vx = bi.vx
+                                , vy = bi.vy
+                                , radius = bi.radius
+                                }
 
-                    biNew : Body
-                    biNew =
-                        { x = bi.x - nx * half
-                        , y = bi.y - ny * half
-                        , vx = bi.vx
-                        , vy = bi.vy
-                        , radius = bi.radius
-                        }
+                            bjNew : Body
+                            bjNew =
+                                { x = bj.x + nx * half
+                                , y = bj.y + ny * half
+                                , vx = bj.vx
+                                , vy = bj.vy
+                                , radius = bj.radius
+                                }
+                        in
+                        resolvePairs i rest biNew (Array.set j bjNew (Array.set i biNew bodies))
 
-                    bjNew : Body
-                    bjNew =
-                        { x = bj.x + nx * half
-                        , y = bj.y + ny * half
-                        , vx = bj.vx
-                        , vy = bj.vy
-                        , radius = bj.radius
-                        }
-                in
-                resolvePairs i rest biNew (Array.set j bjNew (Array.set i biNew bodies))
-
-
-clampAll : Int -> Int -> Array Body -> Array Body
-clampAll i n bodies =
-    if i - n < 0 then
-        let
-            b : Body
-            b =
-                Array.get i bodies |> Maybe.withDefault dummyBody
-
-            newX : Float
-            newX =
-                if b.x - b.radius - bounds.min < 0 then
-                    bounds.min + b.radius
-
-                else if bounds.max - b.x - b.radius < 0 then
-                    bounds.max - b.radius
-
-                else
-                    b.x
-
-            newY : Float
-            newY =
-                if b.y - b.radius - bounds.min < 0 then
-                    bounds.min + b.radius
-
-                else if bounds.max - b.y - b.radius < 0 then
-                    bounds.max - b.radius
-
-                else
-                    b.y
-
-            clamped : Body
-            clamped =
-                { x = newX, y = newY, vx = b.vx, vy = b.vy, radius = b.radius }
-        in
-        clampAll (i + 1) n (Array.set i clamped bodies)
-
-    else
-        bodies
+                Nothing ->
+                    bodies
 
 
 {-| The new velocity is the actual displacement (after constraint resolution)
@@ -537,17 +599,14 @@ deriveVelocities i n dt damping originals resolved acc =
             now =
                 Array.get i resolved |> Maybe.withDefault dummyBody
 
-            vx : Float
-            vx =
-                (now.x - orig.x) / dt * damping
-
-            vy : Float
-            vy =
-                (now.y - orig.y) / dt * damping
-
             new : Body
             new =
-                { x = now.x, y = now.y, vx = vx, vy = vy, radius = now.radius }
+                { x = now.x
+                , y = now.y
+                , vx = (now.x - orig.x) / dt * damping
+                , vy = (now.y - orig.y) / dt * damping
+                , radius = now.radius
+                }
         in
         deriveVelocities (i + 1) n dt damping originals resolved (Array.set i new acc)
 
