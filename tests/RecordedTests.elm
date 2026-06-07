@@ -1146,6 +1146,51 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "No DM push notification while viewing the channel"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled and is currently viewing the guild channel (not the DM).
+                [ admin.click 100 (Dom.id "guild_openDm_1")
+
+                -- Positive control: while the user isn't viewing the DM they should get a push notification.
+                , RecordedTestExtra.writeMessage admin 100 "DM while away"
+                , RecordedTestExtra.checkNotification "DM while away"
+
+                -- Now the user opens (and is therefore viewing) the DM channel.
+                , user.click 100 (Dom.id "guildsColumn_openDm_0")
+                , RecordedTestExtra.writeMessage admin 100 "DM while viewing"
+
+                -- The user is looking at the channel the message arrived in, so no push notification should be sent.
+                , RecordedTestExtra.checkNoNotification "DM while viewing"
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "No guild push notification while viewing the channel"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled and is currently viewing the guild channel.
+                [ RecordedTestExtra.writeMessage admin 100 "@Stevie Steve while viewing"
+
+                -- The user is looking at the channel the message arrived in, so no push notification should be sent.
+                , RecordedTestExtra.checkNoNotification "@Stevie Steve while viewing"
+
+                -- Navigate the user away from the channel.
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+
+                -- Positive control: while the user isn't viewing the channel they should get a push notification.
+                , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve while away"
+                , RecordedTestExtra.checkNotification "@Stevie Steve while away"
+                ]
+            )
+        ]
     , RecordedTestExtra.voiceChatTest normalConfig
     , RecordedTestExtra.cloudflareCostTest normalConfig
     , RecordedTestExtra.startTest "Logins are rate limited"

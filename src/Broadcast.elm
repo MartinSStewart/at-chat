@@ -878,8 +878,30 @@ broadcastDm :
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
 broadcastDm changeId time clientId userId otherUserId text richText threadRouteWithReplyTo attachedFiles stickers model =
     let
+        threadRouteNoReply : ThreadRoute
+        threadRouteNoReply =
+            case threadRouteWithReplyTo of
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\( _, userSession ) ->
+                    case userSession.currentlyViewing of
+                        Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), viewingThreadRoute ) ->
+                            viewingUserId == userId && viewingThreadRoute == threadRouteNoReply
+
+                        _ ->
+                            False
+                )
+                (userGetAllSessions otherUserId model)
+
         ( sessions, cmds ) =
-            if userId == otherUserId then
+            if userId == otherUserId || isViewing then
                 ( model.sessions, [] )
 
             else
