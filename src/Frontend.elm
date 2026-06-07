@@ -4181,6 +4181,38 @@ updateLoaded msg model =
                         )
                         model
 
+                Call.DoubleClickedVideoNode ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            case Call.displayMode local.localUser.session.userId model.route local.calls of
+                                Call.NoVideo ->
+                                    ( model, Command.none )
+
+                                Call.ShowLocalVideo ->
+                                    ( model, Command.none )
+
+                                Call.ShowLocalVideoAndCall _ ->
+                                    ( model, Command.none )
+
+                                Call.ShowLocalVideoAndCallThumbnail (Call.DmRoomId otherUserId) ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (DmRoute
+                                            { channelId =
+                                                DmChannel.channelIdFromUserIds local.localUser.session.userId otherUserId
+                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                            , tab = Just DmChannelHeaderTab_VoiceChat
+                                            }
+                                        )
+
+                        NotLoggedIn record ->
+                            ( model, Command.none )
+
         FileDragEnter ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

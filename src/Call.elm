@@ -128,6 +128,7 @@ type Msg
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
     | MouseExitVideoNode LocalOrConnection
+    | DoubleClickedVideoNode
 
 
 type alias Local =
@@ -413,6 +414,12 @@ localVideoNodeId =
     "local-video"
 
 
+type VideoNodeState
+    = VideoNodeHidden
+    | VideoNodeThumbnail
+    | VideoNodeFullSize
+
+
 videoNodes :
     LocalUser
     -> { a | windowSize : Coord CssPixels, route : Route }
@@ -477,7 +484,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                True
+                VideoNodeHidden
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
                 model
@@ -488,7 +495,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                False
+                VideoNodeFullSize
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
                 model
@@ -517,7 +524,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                False
+                VideoNodeFullSize
                 (getPosAndSize 0 list)
                 model.localIsSpeaking
                 model
@@ -532,7 +539,7 @@ videoNodes localUser config loggedIn local =
                             (Tuple.first session)
                             localUser
                             (IsConnection connectionId)
-                            False
+                            VideoNodeFullSize
                             (getPosAndSize (index + 1) list)
                             (SeqSet.member connectionId model.isSpeaking)
                             model
@@ -563,7 +570,12 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                (visibleIndex /= 0)
+                (if visibleIndex == 0 then
+                    VideoNodeThumbnail
+
+                 else
+                    VideoNodeHidden
+                )
                 ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
                 model.localIsSpeaking
                 model
@@ -578,7 +590,12 @@ videoNodes localUser config loggedIn local =
                             (Tuple.first session)
                             localUser
                             (IsConnection connectionId)
-                            (visibleIndex /= (index + 1))
+                            (if visibleIndex == (index + 1) then
+                                VideoNodeThumbnail
+
+                             else
+                                VideoNodeHidden
+                            )
                             ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
                             (SeqSet.member connectionId model.isSpeaking)
                             model
@@ -781,12 +798,12 @@ videoNode :
     Id UserId
     -> LocalUser
     -> LocalOrConnection
-    -> Bool
+    -> VideoNodeState
     -> ( Coord CssPixels, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode userId localUser id isHidden ( position, width ) isSpeaking model =
+videoNode userId localUser id videoNodeState ( position, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -809,17 +826,18 @@ videoNode userId localUser id isHidden ( position, width ) isSpeaking model =
         , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt (Coord.yRaw position) ++ "px)")
         , Html.Attributes.style
             "pointer-events"
-            (if isHidden then
+            (if videoNodeState == VideoNodeHidden then
                 "none"
 
              else
                 "auto"
             )
+        , Html.Events.onDoubleClick DoubleClickedVideoNode
         , Html.Events.onMouseEnter (MouseEnterVideoNode id)
         , Html.Events.onMouseLeave (MouseExitVideoNode id)
         , Html.Attributes.style
             "opacity"
-            (if isHidden then
+            (if videoNodeState == VideoNodeHidden then
                 "0"
 
              else
@@ -853,8 +871,8 @@ videoNode userId localUser id isHidden ( position, width ) isSpeaking model =
             , Html.Attributes.attribute "webkit-playsinline" ""
             ]
             []
-        , case id of
-            IsConnection connectionId ->
+        , case ( id, videoNodeState ) of
+            ( IsConnection connectionId, VideoNodeFullSize ) ->
                 let
                     volume =
                         SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1
@@ -880,7 +898,7 @@ videoNode userId localUser id isHidden ( position, width ) isSpeaking model =
                         sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2
 
                     isVisible =
-                        model.videoHover == Just id && not isHidden
+                        model.videoHover == Just id
                 in
                 Html.div
                     [ Html.Attributes.style "position" "absolute"
@@ -940,7 +958,7 @@ videoNode userId localUser id isHidden ( position, width ) isSpeaking model =
                         []
                     ]
 
-            IsLocal ->
+            _ ->
                 Html.text ""
         ]
     )
@@ -1659,6 +1677,9 @@ isPressMsg msg =
             False
 
         MouseExitVideoNode _ ->
+            False
+
+        DoubleClickedVideoNode ->
             False
 
 

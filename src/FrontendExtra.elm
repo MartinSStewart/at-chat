@@ -401,32 +401,47 @@ layout model attributes child =
                         Ui.noAttr
                )
             :: attributes
-            -- Touch handlers are attached regardless of window size so the call
-            -- thumbnail can be dragged on desktop too. On a non-touch desktop
-            -- these never fire; the clip/user-select styles stay mobile-only.
-            ++ [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
-               , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
-               , Html.Events.on
-                    "touchend"
-                    (Json.Decode.field "timeStamp" Json.Decode.float
-                        |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
-                    )
-                    |> Ui.htmlAttribute
-               , Html.Events.on
-                    "touchcancel"
-                    (Json.Decode.field "timeStamp" Json.Decode.float
-                        |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
-                    )
-                    |> Ui.htmlAttribute
-               ]
             ++ (if MyUi.isMobile model then
                     [ Ui.clip
                     , MyUi.htmlStyle "user-select" "none"
                     , MyUi.htmlStyle "-webkit-user-select" "none"
+                    , Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "touchend"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                        )
+                        |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "touchcancel"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                        )
+                        |> Ui.htmlAttribute
                     ]
 
                 else
-                    []
+                    [ Html.Events.on "pointerdown" (Touch.decoderPointerEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    , case model.drag of
+                        Types.NoDrag ->
+                            Ui.noAttr
+
+                        _ ->
+                            Html.Events.on "pointermove" (Touch.decoderPointerEvent TouchMoved) |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "pointerup"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                        )
+                        |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "pointercancel"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                        )
+                        |> Ui.htmlAttribute
+                    ]
                )
         )
         child
