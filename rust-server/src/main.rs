@@ -1238,3 +1238,39 @@ pub struct UploadUrl {
     pub url: String,
     pub sid: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Regression test for the production crash where pasting a link to a binary
+    // image file made post_embed feed the raw image bytes to the HTML parser,
+    // overflowing the stack and aborting the whole server. The endpoint must now
+    // return a response instead of crashing. If the host happens to be
+    // unreachable from the test environment the endpoint still returns gracefully,
+    // so this can never produce a false failure.
+    #[tokio::test]
+    async fn post_embed_does_not_crash_on_image_url() {
+        let url = "https://at-chat.app/file/1/3SFn-guIRPHsr-z_L9bsJA9CCnWnDzWSKETXPA".to_owned();
+        let response = post_embed(Json(EmbedRequest { url })).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "post_embed should return a response instead of crashing on an image URL"
+        );
+    }
+
+    // Deterministic (offline) version of the same failure mode: a deeply nested
+    // document recurses far enough in the parser to overflow a normal thread
+    // stack. The dedicated large-stack parsing thread must absorb this without
+    // aborting the process.
+    #[test]
+    fn parse_html_safe_survives_deeply_nested_html() {
+        let deep = "<div>".repeat(20_000);
+        let result = parse_html_safe(deep, "https://example.com".to_owned());
+        assert!(
+            result.is_some(),
+            "deeply nested HTML should parse without crashing the server"
+        );
+    }
+}
