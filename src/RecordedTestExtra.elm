@@ -953,10 +953,23 @@ dmCallTest :
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 dmCallTest isMobile normalConfig =
     startTest
-        "SFU handshake — two users join a 1:1 call"
+        ("DM voice chat with another user, both on "
+            ++ (if isMobile then
+                    "mobile"
+
+                else
+                    "desktop"
+               )
+        )
         startTime
         normalConfig
-        [ connectTwoUsersAndJoinNewGuild desktopWindow
+        [ connectTwoUsersAndJoinNewGuild
+            (if isMobile then
+                mobileWindow
+
+             else
+                desktopWindow
+            )
             (\admin user ->
                 let
                     -- Used to drag the call thumbnail.
