@@ -1273,4 +1273,199 @@ mod tests {
             "deeply nested HTML should parse without crashing the server"
         );
     }
+
+    // ---- helpers for hermetic metadata tests ----
+
+    // Encode a solid-colour PNG of the given size, for serving as test image data.
+    fn make_png(width: u32, height: u32) -> Vec<u8> {
+        let buffer =
+            image::ImageBuffer::from_pixel(width, height, image::Rgba([200u8, 100, 50, 255]));
+        let mut bytes: Vec<u8> = Vec::new();
+        image::DynamicImage::ImageRgba8(buffer)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
+            .expect("failed to encode test png");
+        bytes
+    }
+
+    // Spawn a throwaway HTTP server on a random local port. `make_routes` receives
+    // the server's own base URL (handy for embedding absolute links in HTML) and
+    // returns the (path, content-type, body) responses to serve. Returns the base
+    // URL the server is listening on.
+    async fn spawn_test_server<F>(make_routes: F) -> String
+    where
+        F: FnOnce(&str) -> Vec<(&'static str, &'static str, Vec<u8>)>,
+    {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let base = format!("http://{}", listener.local_addr().unwrap());
+
+        let mut router = axum::Router::new();
+        for (path, content_type, body) in make_routes(&base) {
+            router = router.route(
+                path,
+                axum::routing::get(move || {
+                    let body = body.clone();
+                    async move { ([(axum::http::header::CONTENT_TYPE, content_type)], body) }
+                }),
+            );
+        }
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        base
+    }
+
+    #[tokio::test]
+    async fn extracts_opengraph_metadata_from_html() {
+        let base = spawn_test_server(|_base| {
+            let html = r#"<html><head>
+                <meta property="og:title" content="Hello World">
+                <meta property="og:description" content="A short summary">
+                <meta property="article:published_time" content="2020-01-02T03:04:05Z">
+                </head><body>hi</body></html>"#
+                .as_bytes()
+                .to_vec();
+            vec![("/", "text/html; charset=utf-8", html)]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert_eq!(
+            embed.title.as_deref(),
+            Some("Hello World"),
+            "og:title should be extracted"
+        );
+        assert_eq!(
+            embed.description.as_deref(),
+            Some("A short summary"),
+            "og:description should be extracted"
+        );
+        assert_eq!(
+            embed.created_at,
+            Some(1_577_934_245),
+            "article:published_time should be parsed to a unix timestamp"
+        );
+        assert!(
+            embed.image.is_none(),
+            "no og:image was provided, so there should be no image"
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_image_url_returns_image_dimensions() {
+        let png = make_png(7, 4);
+        let base = spawn_test_server(move |_base| vec![("/pic.png", "image/png", png)]).await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/pic.png"))
+            .await
+            .expect("expected an embed response");
+
+        let image = embed.image.expect("expected image metadata");
+        assert_eq!(
+            (image.width, image.height),
+            (7, 4),
+            "image dimensions should be read from the file"
+        );
+        assert_eq!(image.format.as_deref(), Some("Png"), "format should be Png");
+        // A link straight to an image is not an HTML page, so there is no
+        // title/description to extract.
+        assert!(
+            embed.title.is_none(),
+            "a direct image link has no page title"
+        );
+        assert!(
+            embed.description.is_none(),
+            "a direct image link has no page description"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolves_image_from_og_image_tag() {
+        let png = make_png(3, 9);
+        let base = spawn_test_server(move |base| {
+            let html = format!(
+                r#"<html><head>
+                    <meta property="og:title" content="Has Image">
+                    <meta property="og:image" content="{base}/og.png">
+                    </head><body></body></html>"#
+            )
+            .into_bytes();
+            vec![
+                ("/", "text/html; charset=utf-8", html),
+                ("/og.png", "image/png", png),
+            ]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert_eq!(
+            embed.title.as_deref(),
+            Some("Has Image"),
+            "og:title should be extracted"
+        );
+        let image = embed.image.expect("expected og:image to be resolved");
+        assert_eq!(
+            (image.width, image.height),
+            (3, 9),
+            "og:image dimensions should be read from the linked file"
+        );
+        assert_eq!(image.format.as_deref(), Some("Png"), "format should be Png");
+    }
+
+    #[tokio::test]
+    async fn page_without_metadata_returns_empty_fields() {
+        let base = spawn_test_server(|_base| {
+            vec![(
+                "/",
+                "text/html; charset=utf-8",
+                b"<html><head><title>Plain</title></head><body>nothing here</body></html>".to_vec(),
+            )]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert!(embed.title.is_none(), "no og:title -> no title");
+        assert!(
+            embed.description.is_none(),
+            "no og:description -> no description"
+        );
+        assert!(embed.image.is_none(), "no og:image -> no image");
+        assert!(
+            embed.created_at.is_none(),
+            "no article:published_time -> no created_at"
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_html_is_rejected() {
+        // Build an HTML document comfortably larger than the 1 MB cap.
+        let mut html = String::from(r#"<meta property="og:title" content="Too Big">"#);
+        html.push_str(&"<!-- padding -->".repeat(MAX_HTML_BYTES / 10));
+        let base = spawn_test_server(move |_base| {
+            vec![("/", "text/html; charset=utf-8", html.into_bytes())]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        assert!(
+            build_embed(&client, &format!("{base}/")).await.is_none(),
+            "HTML larger than the size cap should be rejected rather than parsed"
+        );
+    }
 }
