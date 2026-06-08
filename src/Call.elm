@@ -842,14 +842,7 @@ videoNode userId localUser id videoNodeState ( position, width ) isSpeaking mode
                 "1"
             )
         ]
-        [ Html.div
-            [ Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
-            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
-            , Html.Attributes.style "opacity" "0.8"
-            ]
-            [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
-        , Html.video
+        [ Html.video
             [ Html.Attributes.id idString
             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
             , Html.Attributes.style "width" (String.fromInt width ++ "px")
@@ -958,6 +951,14 @@ videoNode userId localUser id videoNodeState ( position, width ) isSpeaking mode
 
             _ ->
                 Html.text ""
+        , Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
+            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
+            , Html.Attributes.style "opacity" "0.8"
+            , Html.Attributes.style "pointer-events" "none"
+            ]
+            [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
         ]
     )
 

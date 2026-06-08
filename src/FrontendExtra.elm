@@ -80,7 +80,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -442,6 +442,23 @@ layout model attributes child =
                         )
                         |> Ui.htmlAttribute
                     ]
+                        ++ (case model.drag of
+                                NoDrag ->
+                                    []
+
+                                DragStart _ _ ->
+                                    []
+
+                                Dragging dragging ->
+                                    case dragging.target of
+                                        Drag_CallThumbnail ->
+                                            [ MyUi.htmlStyle "user-select" "none"
+                                            , MyUi.htmlStyle "-webkit-user-select" "none"
+                                            ]
+
+                                        Drag_Channel ->
+                                            []
+                           )
                )
         )
         child
