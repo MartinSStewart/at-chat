@@ -1953,7 +1953,7 @@ getStickerPacksPayload =
             []
     , decoder = JD.field "sticker_packs" (JD.list decodeStickerPack)
     , body = Nothing
-    , timeout = Nothing
+    , timeout = Just 60000
     }
 
 
@@ -2104,7 +2104,7 @@ http maybeXContextProperties authentication requestType decoder path queryParame
             queryParameters
     , decoder = decoder
     , body = body
-    , timeout = Nothing
+    , timeout = Just 60000
     }
 
 

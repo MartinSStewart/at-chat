@@ -402,7 +402,10 @@ layout model attributes child =
                )
             :: attributes
             ++ (if MyUi.isMobile model then
-                    [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    [ Ui.clip
+                    , MyUi.htmlStyle "user-select" "none"
+                    , MyUi.htmlStyle "-webkit-user-select" "none"
+                    , Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchend"
@@ -416,13 +419,29 @@ layout model attributes child =
                             |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
                         )
                         |> Ui.htmlAttribute
-                    , Ui.clip
-                    , MyUi.htmlStyle "user-select" "none"
-                    , MyUi.htmlStyle "-webkit-user-select" "none"
                     ]
 
                 else
-                    []
+                    [ Html.Events.on "pointerdown" (Touch.decoderPointerEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    , case model.drag of
+                        Types.NoDrag ->
+                            Ui.noAttr
+
+                        _ ->
+                            Html.Events.on "pointermove" (Touch.decoderPointerEvent TouchMoved) |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "pointerup"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                        )
+                        |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "pointercancel"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                        )
+                        |> Ui.htmlAttribute
+                    ]
                )
         )
         child

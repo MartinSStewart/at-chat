@@ -23,17 +23,20 @@ port module Call exposing
     , ToJs(..)
     , displayMode
     , displayModeChangeCmd
+    , dragThumbnail
     , encodeFromJs
     , fromJs
     , gotUserMediaDevices
     , init
     , initModel
+    , insideThumbnail
     , isPressMsg
     , leaveVoiceChatCmds
     , serverChangeCmd
     , sidebarOffsetAttr
     , startCallCmd
     , startLocalStream
+    , thumbnailPosition
     , toJs
     , videoNodes
     , videoPosAndSize
@@ -52,6 +55,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -70,6 +74,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (ToBeFilledInByBackend)
 
 
@@ -123,6 +128,7 @@ type Msg
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
     | MouseExitVideoNode LocalOrConnection
+    | DoubleClickedVideoNode
 
 
 type alias Local =
@@ -150,6 +156,8 @@ type alias Model =
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
     , videoHover : Maybe LocalOrConnection
+    , -- Thumbnail coordinate ranges from 0 to 1. Actual pixel position is derived by multiplying this by the windowSize
+      thumbnailPosition : ( Float, Float )
     }
 
 
@@ -197,7 +205,58 @@ initModel =
     , startConnectionError = Nothing
     , volume = SeqDict.empty
     , videoHover = Nothing
+    , thumbnailPosition = ( 1, 0.1 )
     }
+
+
+thumbnailPosition : Coord CssPixels -> Model -> Coord CssPixels
+thumbnailPosition windowSize model =
+    let
+        ( x, y ) =
+            model.thumbnailPosition
+    in
+    Coord.xy
+        (round (toFloat (Coord.xRaw windowSize - thumbnailWindowWidth) * x))
+        (round ((toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio) * y))
+
+
+{-| Move the thumbnail by the given drag delta (in CSS pixels). The stored
+position is normalized to 0..1, so we divide the pixel delta by the range the
+thumbnail can travel and clamp it back into bounds.
+-}
+dragThumbnail : { x : Float, y : Float } -> Coord CssPixels -> Model -> Model
+dragThumbnail delta windowSize model =
+    let
+        ( x, y ) =
+            model.thumbnailPosition
+
+        availableWidth : Float
+        availableWidth =
+            toFloat (Coord.xRaw windowSize - thumbnailWindowWidth)
+
+        availableHeight : Float
+        availableHeight =
+            toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio
+    in
+    { model
+        | thumbnailPosition =
+            ( if availableWidth > 0 then
+                clamp 0 1 (x + delta.x / availableWidth)
+
+              else
+                x
+            , if availableHeight > 0 then
+                clamp 0 1 (y + delta.y / availableHeight)
+
+              else
+                y
+            )
+    }
+
+
+thumbnailWindowWidth : number
+thumbnailWindowWidth =
+    200
 
 
 gotUserMediaDevices : List MediaDevice -> List (IdString MediaDeviceId) -> Model -> Model
@@ -238,8 +297,8 @@ type CallId
 type DisplayMode
     = NoVideo
     | ShowLocalVideo
-    | ShowLocalVideoAndCall
-    | ShowLocalVideoAndCallThumbnail
+    | ShowLocalVideoAndCall CallId
+    | ShowLocalVideoAndCallThumbnail CallId
 
 
 displayModeChangeCmd : DisplayMode -> DisplayMode -> Model -> Command FrontendOnly toMsg msg
@@ -273,10 +332,10 @@ showLocalVideo displayMode2 =
         ShowLocalVideo ->
             True
 
-        ShowLocalVideoAndCall ->
+        ShowLocalVideoAndCall _ ->
             True
 
-        ShowLocalVideoAndCallThumbnail ->
+        ShowLocalVideoAndCallThumbnail _ ->
             True
 
 
@@ -285,8 +344,8 @@ displayMode currentUserId route local =
     let
         thumbnailOrNoVideo =
             case local.currentRoom of
-                Just _ ->
-                    ShowLocalVideoAndCallThumbnail
+                Just currentRoom ->
+                    ShowLocalVideoAndCallThumbnail currentRoom
 
                 Nothing ->
                     NoVideo
@@ -317,7 +376,7 @@ displayMode currentUserId route local =
                     if Just roomId == local.currentRoom && isTabExpanded then
                         case SeqDict.get roomId local.voiceChats of
                             Just _ ->
-                                ShowLocalVideoAndCall
+                                ShowLocalVideoAndCall roomId
 
                             Nothing ->
                                 ShowLocalVideo
@@ -355,25 +414,22 @@ localVideoNodeId =
     "local-video"
 
 
+type VideoNodeState
+    = VideoNodeHidden
+    | VideoNodeThumbnail
+    | VideoNodeFullSize
+
+
 videoNodes :
-    Id UserId
+    LocalUser
     -> { a | windowSize : Coord CssPixels, route : Route }
     -> { b | voiceChat : Model, sidebarMode : ChannelSidebarMode }
     -> Local
     -> Html Msg
-videoNodes currentUserId config loggedIn local =
+videoNodes localUser config loggedIn local =
     let
         model =
             loggedIn.voiceChat
-
-        viewingRoomId : Maybe CallId
-        viewingRoomId =
-            case Route.toGuildOrDmId currentUserId config.route of
-                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
-                    DmRoomId otherUserId |> Just
-
-                _ ->
-                    Nothing
 
         voiceChatX : Int
         voiceChatX =
@@ -390,7 +446,6 @@ videoNodes currentUserId config loggedIn local =
         maxWidth =
             Coord.xRaw config.windowSize - voiceChatX - padding
 
-        --|> min (ceiling (toFloat voiceChatHeight * 16 / 9))
         maxHeight : Int
         maxHeight =
             viewHeight config.windowSize
@@ -409,98 +464,157 @@ videoNodes currentUserId config loggedIn local =
         spacing =
             8
 
+        posAndSizes : Int -> List ( Coord CssPixels, Int )
         posAndSizes total =
             videoPosAndSize
                 { containerWidth = maxWidth, containerHeight = maxHeight, spacing = spacing }
-                (List.range 1 total |> List.map (\index -> { id = Id.fromInt index, aspectRatio = 16 / 9 }))
-                |> List.map (\a -> ( a.x + voiceChatX, a.y + voiceChatY, a.width ))
+                (List.range 1 total |> List.map (\index -> { id = Id.fromInt index, aspectRatio = aspectRatio }))
+                |> List.map (\a -> ( Coord.xy (a.x + voiceChatX) (a.y + voiceChatY), a.width ))
 
         getPosAndSize index list =
-            List.Extra.getAt index list |> Maybe.withDefault ( 0, 0, 100 )
+            List.Extra.getAt index list |> Maybe.withDefault ( Coord.origin, 100 )
 
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = config.windowSize }
     in
-    (case viewingRoomId of
-        Just viewingRoomId2 ->
+    (case displayMode localUser.session.userId config.route local of
+        NoVideo ->
+            [ videoNode
+                localUser.session.userId
+                localUser
+                IsLocal
+                VideoNodeHidden
+                (getPosAndSize 0 (posAndSizes 1))
+                model.localIsSpeaking
+                model
+            ]
+
+        ShowLocalVideo ->
+            [ videoNode
+                localUser.session.userId
+                localUser
+                IsLocal
+                VideoNodeFullSize
+                (getPosAndSize 0 (posAndSizes 1))
+                model.localIsSpeaking
+                model
+            ]
+
+        ShowLocalVideoAndCall callId ->
             let
-                isTabExpanded =
-                    case config.route of
-                        DmRoute dmRoute ->
-                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+                total : Int
+                total =
+                    List.length sessions + 1
 
-                        HomePageRoute ->
-                            False
+                list : List ( Coord CssPixels, Int )
+                list =
+                    posAndSizes total
 
-                        AdminRoute _ ->
-                            False
+                sessions : List ( Id UserId, ClientId )
+                sessions =
+                    case SeqDict.get callId local.voiceChats of
+                        Just sessions2 ->
+                            NonemptySet.toList sessions2
 
-                        GuildRoute _ _ ->
-                            False
-
-                        DiscordGuildRoute _ ->
-                            False
-
-                        DiscordDmRoute _ ->
-                            False
-
-                        AiChatRoute ->
-                            False
-
-                        SlackOAuthRedirect _ ->
-                            False
-
-                        TextEditorRoute ->
-                            False
-
-                        LinkDiscord _ ->
-                            False
-
-                        PublicGoMatchRoute _ ->
-                            False
+                        Nothing ->
+                            []
             in
-            if Just viewingRoomId2 == local.currentRoom && isTabExpanded then
-                case SeqDict.get viewingRoomId2 local.voiceChats of
-                    Just sessions ->
+            videoNode
+                localUser.session.userId
+                localUser
+                IsLocal
+                VideoNodeFullSize
+                (getPosAndSize 0 list)
+                model.localIsSpeaking
+                model
+                :: List.indexedMap
+                    (\index session ->
                         let
-                            total : Int
-                            total =
-                                NonemptySet.size sessions + 1
-
-                            list =
-                                posAndSizes total
+                            connectionId : ConnectionId
+                            connectionId =
+                                { roomId = callId, otherClientId = session }
                         in
-                        videoNode IsLocal False (getPosAndSize 0 list) model.localIsSpeaking model
-                            :: List.indexedMap
-                                (\index session ->
-                                    let
-                                        connectionId : ConnectionId
-                                        connectionId =
-                                            { roomId = viewingRoomId2, otherClientId = session }
-                                    in
-                                    videoNode
-                                        (IsConnection connectionId)
-                                        False
-                                        (getPosAndSize (index + 1) list)
-                                        (SeqSet.member connectionId model.isSpeaking)
-                                        model
-                                )
-                                (NonemptySet.toList sessions)
+                        videoNode
+                            (Tuple.first session)
+                            localUser
+                            (IsConnection connectionId)
+                            VideoNodeFullSize
+                            (getPosAndSize (index + 1) list)
+                            (SeqSet.member connectionId model.isSpeaking)
+                            model
+                    )
+                    sessions
 
-                    Nothing ->
-                        [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
+        ShowLocalVideoAndCallThumbnail callId ->
+            let
+                visibleIndex : Int
+                visibleIndex =
+                    case sessions of
+                        [] ->
+                            0
 
-            else if isTabExpanded then
-                [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
+                        _ ->
+                            1
 
-            else
-                [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
+                sessions : List ( Id UserId, ClientId )
+                sessions =
+                    case SeqDict.get callId local.voiceChats of
+                        Just sessions2 ->
+                            NonemptySet.toList sessions2
 
-        Nothing ->
-            [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
+                        Nothing ->
+                            []
+            in
+            videoNode
+                localUser.session.userId
+                localUser
+                IsLocal
+                (if visibleIndex == 0 then
+                    VideoNodeThumbnail
+
+                 else
+                    VideoNodeHidden
+                )
+                ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
+                model.localIsSpeaking
+                model
+                :: List.indexedMap
+                    (\index session ->
+                        let
+                            connectionId : ConnectionId
+                            connectionId =
+                                { roomId = callId, otherClientId = session }
+                        in
+                        videoNode
+                            (Tuple.first session)
+                            localUser
+                            (IsConnection connectionId)
+                            (if visibleIndex == (index + 1) then
+                                VideoNodeThumbnail
+
+                             else
+                                VideoNodeHidden
+                            )
+                            ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
+                            (SeqSet.member connectionId model.isSpeaking)
+                            model
+                    )
+                    sessions
     )
         |> Html.Keyed.node "div" []
+
+
+insideThumbnail : Coord CssPixels -> { a | windowSize : Coord CssPixels } -> Model -> Bool
+insideThumbnail coord config model =
+    let
+        p0 =
+            thumbnailPosition config.windowSize model
+
+        p1 =
+            Coord.addTuple_ ( thumbnailWindowWidth, round (thumbnailWindowWidth / aspectRatio) ) p0
+    in
+    Coord.maximum p0 coord == coord && Coord.minimum p1 coord == coord
 
 
 aspectRatio : Float
@@ -681,13 +795,15 @@ layoutVideos container videos cols =
 
 
 videoNode :
-    LocalOrConnection
-    -> Bool
-    -> ( Int, Int, Int )
+    Id UserId
+    -> LocalUser
+    -> LocalOrConnection
+    -> VideoNodeState
+    -> ( Coord CssPixels, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode id isHidden ( x, y, width ) isSpeaking model =
+videoNode userId localUser id videoNodeState ( position, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -706,28 +822,36 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
         [ Html.Attributes.style "width" (String.fromInt width ++ "px")
         , Html.Attributes.style "height" (String.fromFloat height ++ "px")
         , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (String.fromInt x ++ "px")
-        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt y ++ "px)")
+        , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
+        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt (Coord.yRaw position) ++ "px)")
         , Html.Attributes.style
             "pointer-events"
-            (if isHidden then
+            (if videoNodeState == VideoNodeHidden then
                 "none"
 
              else
                 "auto"
             )
+        , Html.Events.onDoubleClick DoubleClickedVideoNode
         , Html.Events.onMouseEnter (MouseEnterVideoNode id)
         , Html.Events.onMouseLeave (MouseExitVideoNode id)
         , Html.Attributes.style
             "opacity"
-            (if isHidden then
+            (if videoNodeState == VideoNodeHidden then
                 "0"
 
              else
                 "1"
             )
         ]
-        [ Html.video
+        [ Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
+            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
+            , Html.Attributes.style "opacity" "0.8"
+            ]
+            [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
+        , Html.video
             [ Html.Attributes.id idString
             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
             , Html.Attributes.style "width" (String.fromInt width ++ "px")
@@ -747,8 +871,8 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
             , Html.Attributes.attribute "webkit-playsinline" ""
             ]
             []
-        , case id of
-            IsConnection connectionId ->
+        , case ( id, videoNodeState ) of
+            ( IsConnection connectionId, VideoNodeFullSize ) ->
                 let
                     volume =
                         SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1
@@ -774,7 +898,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
                         sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2
 
                     isVisible =
-                        model.videoHover == Just id && not isHidden
+                        model.videoHover == Just id
                 in
                 Html.div
                     [ Html.Attributes.style "position" "absolute"
@@ -834,7 +958,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
                         []
                     ]
 
-            IsLocal ->
+            _ ->
                 Html.text ""
         ]
     )
@@ -1553,6 +1677,9 @@ isPressMsg msg =
             False
 
         MouseExitVideoNode _ ->
+            False
+
+        DoubleClickedVideoNode ->
             False
 
 

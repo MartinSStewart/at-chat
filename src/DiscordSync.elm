@@ -3191,7 +3191,7 @@ http secretKey request =
                         Http.GoodStatus_ _ body ->
                             Discord.handleGoodStatus request.decoder body
                 )
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }
 
 

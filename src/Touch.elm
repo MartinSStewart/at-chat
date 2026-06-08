@@ -1,4 +1,4 @@
-module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, decodeTouchEvent)
+module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, decodeTouchEvent, decoderPointerEvent)
 
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -35,6 +35,20 @@ decodeTouchEvent msg =
                     Nothing ->
                         Json.Decode.fail ""
             )
+
+
+decoderPointerEvent : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
+decoderPointerEvent msg =
+    Json.Decode.map4
+        (\identifier clientX clientY time ->
+            msg
+                (round time |> Time.millisToPosix)
+                (NonemptyDict.singleton identifier { client = Point2d.xy clientX clientY, target = Nothing })
+        )
+        (Json.Decode.field "pointerId" Json.Decode.int)
+        (Json.Decode.field "clientX" decodeQuantity)
+        (Json.Decode.field "clientY" decodeQuantity)
+        (Json.Decode.field "timeStamp" Json.Decode.float)
 
 
 decodeTouch : Decoder ( Int, Touch )

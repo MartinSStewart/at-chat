@@ -26,6 +26,7 @@ module User exposing
     , linkDiscordDataCodec
     , multipleProfileImages
     , profileImage
+    , profileImageHtml
     , profileImageNoRounding
     , profileImageRounding
     , profileImageSize
@@ -54,6 +55,8 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
 import GuildIcon
+import Html exposing (Html)
+import Html.Attributes
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import MyUi
@@ -700,6 +703,22 @@ profileImage userId maybeFileHash =
 
         Nothing ->
             GuildIcon.defaultUser False profileImageSize 8 userId
+
+
+profileImageHtml : Id UserId -> Maybe FileHash -> Html msg
+profileImageHtml userId maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Html.img
+                [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
+                , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+                , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
+                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                ]
+                []
+
+        Nothing ->
+            GuildIcon.defaultUserHtml profileImageSize 8 userId
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg

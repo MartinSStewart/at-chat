@@ -110,7 +110,7 @@ main =
                                     Http.NetworkError_ ->
                                         Err ""
                             )
-                    , timeout = Nothing
+                    , timeout = Just 60000
                     }
                     |> Task.attempt LoadedData
                 )
