@@ -4210,7 +4210,7 @@ updateLoaded msg model =
                                             }
                                         )
 
-                        NotLoggedIn record ->
+                        NotLoggedIn _ ->
                             ( model, Command.none )
 
         FileDragEnter ->

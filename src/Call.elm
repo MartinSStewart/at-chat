@@ -36,7 +36,6 @@ port module Call exposing
     , sidebarOffsetAttr
     , startCallCmd
     , startLocalStream
-    , thumbnailPosition
     , toJs
     , videoNodes
     , videoPosAndSize
@@ -55,13 +54,12 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId, VideoNodeId)
+import Id exposing (Id, UserId, VideoNodeId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -74,7 +72,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
-import User exposing (FrontendUser, LocalUser)
+import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend)
 
 
@@ -608,13 +606,13 @@ videoNodes localUser config loggedIn local =
 insideThumbnail : Coord CssPixels -> { a | windowSize : Coord CssPixels } -> Model -> Bool
 insideThumbnail coord config model =
     let
-        p0 =
+        pA =
             thumbnailPosition config.windowSize model
 
-        p1 =
-            Coord.addTuple_ ( thumbnailWindowWidth, round (thumbnailWindowWidth / aspectRatio) ) p0
+        pB =
+            Coord.addTuple_ ( thumbnailWindowWidth, round (thumbnailWindowWidth / aspectRatio) ) pA
     in
-    Coord.maximum p0 coord == coord && Coord.minimum p1 coord == coord
+    Coord.maximum pA coord == coord && Coord.minimum pB coord == coord
 
 
 aspectRatio : Float
