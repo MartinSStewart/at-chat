@@ -24,8 +24,10 @@ port module AiChat exposing
     , view
     )
 
+import Base64
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (BackendOnly, Command, FrontendOnly)
@@ -168,7 +170,7 @@ type ToBackend
 -}
 type Message
     = TextMessage String
-    | ImageUrlMessage String
+    | LinkMessage String
 
 
 type BackendMsg
@@ -516,10 +518,10 @@ richTextToMessage previousText previousList nonempty =
                         nonempty2
 
                 RichText.Hyperlink url ->
-                    ( "", ImageUrlMessage (Url.toString url) :: TextMessage currentText :: list )
+                    ( "", LinkMessage (Url.toString url) :: TextMessage currentText :: list )
 
                 RichText.MarkdownLink _ url ->
-                    ( "", ImageUrlMessage (Url.toString url) :: TextMessage currentText :: list )
+                    ( "", LinkMessage (Url.toString url) :: TextMessage currentText :: list )
 
                 RichText.InlineCode char rest ->
                     ( currentText ++ "`" ++ String.fromChar char ++ rest ++ "`", list )
@@ -597,7 +599,7 @@ update msg model =
                                     responseId =
                                         RespondId (model.responseCounter + i)
                                 in
-                                (if List.member "image" aiModel.inputs then
+                                (if supportsAttachments aiModel then
                                     AiMessageRequest aiModel.id responseId (chatToMessage newChatHistory)
 
                                  else
@@ -651,7 +653,7 @@ update msg model =
                                 | pendingResponses = SeqDict.insert responseId (Pending modelId) model.pendingResponses
                               }
                             , Command.batch
-                                [ (if List.member "image" aiModel.inputs then
+                                [ (if supportsAttachments aiModel then
                                     AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
 
                                    else
@@ -828,6 +830,15 @@ getSelectedAiModels model =
 
         _ ->
             []
+
+
+{-| Whether the model accepts linked attachments (images or audio) alongside
+text. If so we send the richer multimodal request so links can be resolved into
+image or audio content.
+-}
+supportsAttachments : AiModel -> Bool
+supportsAttachments aiModel =
+    List.member "image" aiModel.inputs || List.member "audio" aiModel.inputs
 
 
 getAiModelById : AiModelName -> FrontendModel -> Maybe AiModel
@@ -1536,20 +1547,209 @@ backendUpdate msg =
             Lamdera.sendToFrontend clientId (AiMessageResponse responseId result)
 
 
-encodeMessage : Message -> Json.Encode.Value
-encodeMessage message =
+{-| A message whose linked urls have been resolved into the appropriate content
+type (image or audio) by inspecting their content type. See `resolveMessage`.
+-}
+type ResolvedMessage
+    = ResolvedText String
+    | ResolvedImage String
+    | ResolvedAudio { data : String, format : String }
+
+
+encodeResolvedMessage : ResolvedMessage -> Json.Encode.Value
+encodeResolvedMessage message =
     case message of
-        TextMessage text ->
+        ResolvedText text ->
             Json.Encode.object
                 [ ( "type", Json.Encode.string "text" )
                 , ( "text", Json.Encode.string text )
                 ]
 
-        ImageUrlMessage url ->
+        ResolvedImage url ->
             Json.Encode.object
                 [ ( "type", Json.Encode.string "image_url" )
                 , ( "image_url", Json.Encode.object [ ( "url", Json.Encode.string url ) ] )
                 ]
+
+        ResolvedAudio audio ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "input_audio" )
+                , ( "input_audio"
+                  , Json.Encode.object
+                        [ ( "data", Json.Encode.string audio.data )
+                        , ( "format", Json.Encode.string audio.format )
+                        ]
+                  )
+                ]
+
+
+{-| Figure out how a linked url should be sent to the model. We make a request
+to the url and inspect the `Content-Type` header (without downloading the body)
+to decide whether it's audio. Audio is downloaded and base64 encoded since
+OpenRouter only accepts inline audio data, while everything else keeps the
+existing behaviour of being passed along as an image url. If anything goes
+wrong we fall back so the request can still be sent.
+-}
+resolveMessage : Message -> Task restriction Http.Error ResolvedMessage
+resolveMessage message =
+    case message of
+        TextMessage text ->
+            Task.succeed (ResolvedText text)
+
+        LinkMessage url ->
+            checkContentType url
+                |> Task.andThen
+                    (\contentType ->
+                        case audioFormatFromContentType contentType of
+                            Just format ->
+                                fetchAudioData url
+                                    |> Task.map (\data -> ResolvedAudio { data = data, format = format })
+                                    |> Task.onError (\_ -> Task.succeed (ResolvedText url))
+
+                            Nothing ->
+                                Task.succeed (ResolvedImage url)
+                    )
+                |> Task.onError (\_ -> Task.succeed (ResolvedImage url))
+
+
+{-| Make a HEAD request to the url and return its `Content-Type` (lowercased and
+stripped of any parameters such as `; charset=...`). We use HEAD so the response
+body is never downloaded.
+-}
+checkContentType : String -> Task restriction Http.Error String
+checkContentType url =
+    Http.task
+        { method = "HEAD"
+        , headers = []
+        , url = url
+        , body = Http.emptyBody
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        BadUrl_ badUrl ->
+                            Err (Http.BadUrl badUrl)
+
+                        Timeout_ ->
+                            Err Http.Timeout
+
+                        NetworkError_ ->
+                            Err Http.NetworkError
+
+                        BadStatus_ metadata _ ->
+                            Err (Http.BadStatus metadata.statusCode)
+
+                        GoodStatus_ metadata _ ->
+                            Ok (getContentType metadata.headers)
+                )
+        , timeout = Just (Duration.seconds 30)
+        }
+
+
+getContentType : Dict String String -> String
+getContentType headers =
+    headers
+        |> Dict.toList
+        |> List.Extra.find (\( key, _ ) -> String.toLower key == "content-type")
+        |> Maybe.map Tuple.second
+        |> Maybe.withDefault ""
+        |> String.split ";"
+        |> List.head
+        |> Maybe.withDefault ""
+        |> String.trim
+        |> String.toLower
+
+
+{-| Map an audio content type to the format string OpenRouter expects, or
+`Nothing` if the content type isn't a supported audio type.
+-}
+audioFormatFromContentType : String -> Maybe String
+audioFormatFromContentType contentType =
+    case contentType of
+        "audio/wav" ->
+            Just "wav"
+
+        "audio/x-wav" ->
+            Just "wav"
+
+        "audio/wave" ->
+            Just "wav"
+
+        "audio/vnd.wave" ->
+            Just "wav"
+
+        "audio/mpeg" ->
+            Just "mp3"
+
+        "audio/mp3" ->
+            Just "mp3"
+
+        "audio/aiff" ->
+            Just "aiff"
+
+        "audio/x-aiff" ->
+            Just "aiff"
+
+        "audio/aac" ->
+            Just "aac"
+
+        "audio/ogg" ->
+            Just "ogg"
+
+        "audio/flac" ->
+            Just "flac"
+
+        "audio/x-flac" ->
+            Just "flac"
+
+        "audio/mp4" ->
+            Just "m4a"
+
+        "audio/m4a" ->
+            Just "m4a"
+
+        "audio/x-m4a" ->
+            Just "m4a"
+
+        _ ->
+            Nothing
+
+
+{-| Download the audio at the url and base64 encode it so it can be sent inline.
+-}
+fetchAudioData : String -> Task restriction Http.Error String
+fetchAudioData url =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = url
+        , body = Http.emptyBody
+        , resolver =
+            Http.bytesResolver
+                (\response ->
+                    case response of
+                        BadUrl_ badUrl ->
+                            Err (Http.BadUrl badUrl)
+
+                        Timeout_ ->
+                            Err Http.Timeout
+
+                        NetworkError_ ->
+                            Err Http.NetworkError
+
+                        BadStatus_ metadata _ ->
+                            Err (Http.BadStatus metadata.statusCode)
+
+                        GoodStatus_ _ bytes ->
+                            case Base64.fromBytes bytes of
+                                Just data ->
+                                    Ok data
+
+                                Nothing ->
+                                    Err (Http.BadBody "Failed to encode audio as base64")
+                )
+        , timeout = Nothing
+        }
 
 
 type alias AiResponse =
@@ -1589,19 +1789,24 @@ updateFromFrontend clientId msg maybeOpenRouterKey =
         Just openRouterKey ->
             case msg of
                 AiMessageRequest aiModel responseId messages ->
-                    openRouterRequest
-                        openRouterKey
-                        aiModel
-                        ( "messages"
-                        , Json.Encode.list
-                            (\messages2 ->
-                                Json.Encode.object
-                                    [ ( "role", Json.Encode.string "user" )
-                                    , ( "content", Json.Encode.list encodeMessage messages2 )
-                                    ]
+                    List.map resolveMessage messages
+                        |> Task.sequence
+                        |> Task.andThen
+                            (\resolved ->
+                                openRouterRequest
+                                    openRouterKey
+                                    aiModel
+                                    ( "messages"
+                                    , Json.Encode.list
+                                        (\content ->
+                                            Json.Encode.object
+                                                [ ( "role", Json.Encode.string "user" )
+                                                , ( "content", Json.Encode.list encodeResolvedMessage content )
+                                                ]
+                                        )
+                                        [ resolved ]
+                                    )
                             )
-                            [ messages ]
-                        )
                         |> Task.attempt (GotAiMessage clientId responseId)
 
                 AiMessageRequestSimple aiModel responseId text ->
