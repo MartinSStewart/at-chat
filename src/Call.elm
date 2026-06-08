@@ -66,6 +66,7 @@ import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import Route exposing (DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
@@ -83,12 +84,16 @@ type LocalChange
     | Local_PublishConnected
     | Local_PullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
     | Local_RenegotiateAnswer Cloudflare.Sdp (ToBeFilledInByBackend (Result () ()))
+    | Local_SetAudioInputEnabled Bool
+    | Local_SetVideoInputEnabled Bool
 
 
 type ServerChange
     = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
     | Server_Joining Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
+    | Server_SetAudioInputEnabled ConnectionId Bool
+    | Server_SetVideoInputEnabled ConnectionId Bool
 
 
 type alias ExistingPeer =
@@ -131,9 +136,13 @@ type Msg
 
 type alias Local =
     { currentRoom : Maybe CallId
-    , voiceChats : SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
+    , voiceChats : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
     , error : Maybe CallError
     }
+
+
+type alias RemoteCallData =
+    { audioInputEnabled : Bool, videoInputEnabled : Bool }
 
 
 type CallError
@@ -182,7 +191,7 @@ type ChannelSidebarMode
     | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
-init : SeqDict CallId (NonemptySet ( Id UserId, ClientId )) -> Local
+init : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
@@ -482,6 +491,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
+                model
                 VideoNodeHidden
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
@@ -493,6 +503,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
+                model
                 VideoNodeFullSize
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
@@ -509,11 +520,11 @@ videoNodes localUser config loggedIn local =
                 list =
                     posAndSizes total
 
-                sessions : List ( Id UserId, ClientId )
+                sessions : List ( ( Id UserId, ClientId ), RemoteCallData )
                 sessions =
                     case SeqDict.get callId local.voiceChats of
                         Just sessions2 ->
-                            NonemptySet.toList sessions2
+                            NonemptyDict.toList sessions2
 
                         Nothing ->
                             []
@@ -522,12 +533,13 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
+                model
                 VideoNodeFullSize
                 (getPosAndSize 0 list)
                 model.localIsSpeaking
                 model
                 :: List.indexedMap
-                    (\index session ->
+                    (\index ( session, data ) ->
                         let
                             connectionId : ConnectionId
                             connectionId =
@@ -537,6 +549,7 @@ videoNodes localUser config loggedIn local =
                             (Tuple.first session)
                             localUser
                             (IsConnection connectionId)
+                            data
                             VideoNodeFullSize
                             (getPosAndSize (index + 1) list)
                             (SeqSet.member connectionId model.isSpeaking)
@@ -555,11 +568,11 @@ videoNodes localUser config loggedIn local =
                         _ ->
                             1
 
-                sessions : List ( Id UserId, ClientId )
+                sessions : List ( ( Id UserId, ClientId ), RemoteCallData )
                 sessions =
                     case SeqDict.get callId local.voiceChats of
                         Just sessions2 ->
-                            NonemptySet.toList sessions2
+                            NonemptyDict.toList sessions2
 
                         Nothing ->
                             []
@@ -568,6 +581,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
+                model
                 (if visibleIndex == 0 then
                     VideoNodeThumbnail
 
@@ -578,7 +592,7 @@ videoNodes localUser config loggedIn local =
                 model.localIsSpeaking
                 model
                 :: List.indexedMap
-                    (\index session ->
+                    (\index ( session, data ) ->
                         let
                             connectionId : ConnectionId
                             connectionId =
@@ -588,6 +602,7 @@ videoNodes localUser config loggedIn local =
                             (Tuple.first session)
                             localUser
                             (IsConnection connectionId)
+                            data
                             (if visibleIndex == (index + 1) then
                                 VideoNodeThumbnail
 
@@ -796,12 +811,13 @@ videoNode :
     Id UserId
     -> LocalUser
     -> LocalOrConnection
+    -> { a | audioInputEnabled : Bool, videoInputEnabled : Bool }
     -> VideoNodeState
     -> ( Coord CssPixels, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode userId localUser id videoNodeState ( position, width ) isSpeaking model =
+videoNode userId localUser id remoteCallData videoNodeState ( position, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -842,15 +858,22 @@ videoNode userId localUser id videoNodeState ( position, width ) isSpeaking mode
                 "1"
             )
         ]
-        [ --Html.div
-          --    [ Html.Attributes.style "position" "absolute"
-          --    , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
-          --    , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
-          --    , Html.Attributes.style "opacity" "0.8"
-          --    , Html.Attributes.style "pointer-events" "none"
-          --    ]
-          --    [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
-          Html.video
+        [ Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
+            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
+            , Html.Attributes.style
+                "opacity"
+                (if remoteCallData.videoInputEnabled then
+                    "0"
+
+                 else
+                    "0.8"
+                )
+            , Html.Attributes.style "pointer-events" "none"
+            ]
+            [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
+        , Html.video
             [ Html.Attributes.id idString
             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
             , Html.Attributes.style "width" (String.fromInt width ++ "px")
@@ -986,7 +1009,7 @@ viewHeight windowSize =
 view : Coord CssPixels -> CallId -> Local -> Model -> Element Msg
 view windowSize roomId calls model =
     let
-        ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
+        ongoingCall : Maybe (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
         ongoingCall =
             SeqDict.get roomId calls.voiceChats
 
@@ -1191,6 +1214,12 @@ serverChangeCmd change _ _ local _ =
 
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)
+
+        Server_SetAudioInputEnabled connectionId bool ->
+            Command.none
+
+        Server_SetVideoInputEnabled connectionId bool ->
+            Command.none
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
