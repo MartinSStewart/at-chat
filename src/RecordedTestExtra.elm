@@ -987,7 +987,27 @@ dmCallTest isMobile normalConfig =
                                 ]
 
                         else
-                            Debug.todo "Add PointerEvent data here"
+                            -- On desktop the drag is driven by PointerEvents, which
+                            -- carry a single pointer rather than a "touches" list.
+                            case points of
+                                ( x, y ) :: _ ->
+                                    Json.Encode.object
+                                        [ ( "timeStamp", Json.Encode.float 0 )
+                                        , ( "pointerId", Json.Encode.int 0 )
+                                        , ( "clientX", Json.Encode.float x )
+                                        , ( "clientY", Json.Encode.float y )
+                                        ]
+
+                                [] ->
+                                    Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                    -- Mobile listens for touch events, desktop for pointer events.
+                    ( startEventName, moveEventName, endEventName ) =
+                        if isMobile then
+                            ( "touchstart", "touchmove", "touchend" )
+
+                        else
+                            ( "pointerdown", "pointermove", "pointerup" )
 
                     touchEndEvent : Json.Encode.Value
                     touchEndEvent =
@@ -1107,9 +1127,9 @@ dmCallTest isMobile normalConfig =
                     -- (normalized position (1, 0.1)). Touching it at (850, 100)
                     -- and dragging 200px to the left moves it by -200/(1000-200)
                     -- = -0.25, so the normalized x becomes 0.75 (y unchanged).
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchEvent [ ( 850, 100 ) ])
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent [ ( 650, 100 ) ])
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchend" touchEndEvent
+                    , user.custom 100 (Dom.id "elm-ui-root-id") startEventName (touchEvent [ ( 850, 100 ) ])
+                    , user.custom 100 (Dom.id "elm-ui-root-id") moveEventName (touchEvent [ ( 650, 100 ) ])
+                    , user.custom 100 (Dom.id "elm-ui-root-id") endEventName touchEndEvent
                     , T.checkState
                         100
                         (\data ->
