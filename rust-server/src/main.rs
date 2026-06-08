@@ -20,7 +20,7 @@ use sha2::{Digest, Sha224};
 use std::fs;
 use std::str::FromStr;
 use web_push::SubscriptionInfo;
-use webpage::{Webpage, WebpageOptions};
+use webpage::HTML;
 mod content_types;
 use rand::RngExt;
 use std::sync::Arc;
@@ -156,79 +156,182 @@ fn thumbnail_filepath(hash: &str) -> String {
     format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
-async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
-    let info = Webpage::from_url(&url, WebpageOptions::default()).expect("Could not read from URL");
+// Reject HTML documents larger than this before parsing them. Parsing arbitrary
+// remote pages is recursive (in the `webpage`/html5ever stack), so an unbounded
+// or pathologically deep document can overflow the stack and abort the whole
+// process. Capping the size bounds the maximum nesting depth we ever feed to the
+// parser.
+const MAX_HTML_BYTES: usize = 1024 * 1024; // 1 MB
+// Generous cap for images so a huge download can't blow up memory.
+const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024; // 20 MB
 
-    let info2 = match (info.html.meta.len(), info.html.meta.get("refresh")) {
-        (1, Some(refresh)) => {
-            let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
+enum FetchedContent {
+    Image(Vec<u8>),
+    Html(String),
+}
 
-            let info2 = Webpage::from_url(&redirect_url, WebpageOptions::default())
-                .expect("Could not read from URL");
+// Fetch a URL, capping how much we read based on its Content-Type. Returns None
+// on any network error, or if the body exceeds the relevant size limit (e.g. an
+// HTML document larger than MAX_HTML_BYTES is rejected outright).
+async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedContent> {
+    let mut response = client.get(url).send().await.ok()?;
 
-            info2
-        }
-        _ => info,
+    let is_image = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().to_ascii_lowercase().starts_with("image/"))
+        .unwrap_or(false);
+
+    let limit = if is_image {
+        MAX_IMAGE_BYTES
+    } else {
+        MAX_HTML_BYTES
     };
 
-    let image = match info2.html.meta.get("og:image") {
-        Some(url) => match reqwest::get(url).await {
-            Ok(response) => match response.bytes().await {
-                Ok(bytes) => {
-                    let reader = ImageReader::new(std::io::Cursor::new(&bytes));
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if buf.len() + chunk.len() > limit {
+            // Too large (e.g. HTML over 1 MB) -> refuse rather than parse it.
+            return None;
+        }
+        buf.extend_from_slice(&chunk);
+    }
 
-                    match reader
-                        .with_guessed_format()
-                        .map(|a| (a.format(), a.decode()))
-                    {
-                        Ok((Some(format), Ok(image))) => {
-                            let (width, height) = image.dimensions();
+    if is_image {
+        Some(FetchedContent::Image(buf))
+    } else {
+        Some(FetchedContent::Html(
+            String::from_utf8_lossy(&buf).into_owned(),
+        ))
+    }
+}
 
-                            Some(ImageData {
-                                url: url.clone(),
-                                width,
-                                height,
-                                format: match format {
-                                    ImageFormat::Png => Some(String::from("Png")),
-                                    ImageFormat::Jpeg => Some(String::from("Jpeg")),
-                                    ImageFormat::Gif => Some(String::from("Gif")),
-                                    ImageFormat::WebP => Some(String::from("WebP")),
-                                    ImageFormat::Pnm => Some(String::from("Pnm")),
-                                    ImageFormat::Tiff => Some(String::from("Tiff")),
-                                    ImageFormat::Tga => Some(String::from("Tga")),
-                                    ImageFormat::Dds => Some(String::from("Dds")),
-                                    ImageFormat::Bmp => Some(String::from("Bmp")),
-                                    ImageFormat::Ico => Some(String::from("Ico")),
-                                    ImageFormat::Hdr => Some(String::from("Hdr")),
-                                    ImageFormat::OpenExr => Some(String::from("OpenExr")),
-                                    ImageFormat::Farbfeld => Some(String::from("Farbfeld")),
-                                    ImageFormat::Avif => Some(String::from("Avif")),
-                                    ImageFormat::Qoi => Some(String::from("Qoi")),
-                                    _ => None,
-                                },
-                            })
-                        }
-                        _ => None,
-                    }
+fn image_format_name(format: ImageFormat) -> Option<String> {
+    match format {
+        ImageFormat::Png => Some(String::from("Png")),
+        ImageFormat::Jpeg => Some(String::from("Jpeg")),
+        ImageFormat::Gif => Some(String::from("Gif")),
+        ImageFormat::WebP => Some(String::from("WebP")),
+        ImageFormat::Pnm => Some(String::from("Pnm")),
+        ImageFormat::Tiff => Some(String::from("Tiff")),
+        ImageFormat::Tga => Some(String::from("Tga")),
+        ImageFormat::Dds => Some(String::from("Dds")),
+        ImageFormat::Bmp => Some(String::from("Bmp")),
+        ImageFormat::Ico => Some(String::from("Ico")),
+        ImageFormat::Hdr => Some(String::from("Hdr")),
+        ImageFormat::OpenExr => Some(String::from("OpenExr")),
+        ImageFormat::Farbfeld => Some(String::from("Farbfeld")),
+        ImageFormat::Avif => Some(String::from("Avif")),
+        ImageFormat::Qoi => Some(String::from("Qoi")),
+        _ => None,
+    }
+}
+
+fn image_data_from_bytes(url: &str, bytes: &[u8]) -> Option<ImageData> {
+    let reader = ImageReader::new(std::io::Cursor::new(bytes));
+
+    match reader
+        .with_guessed_format()
+        .map(|a| (a.format(), a.decode()))
+    {
+        Ok((Some(format), Ok(image))) => {
+            let (width, height) = image.dimensions();
+            Some(ImageData {
+                url: url.to_string(),
+                width,
+                height,
+                format: image_format_name(format),
+            })
+        }
+        _ => None,
+    }
+}
+
+// Parse already-fetched HTML without letting a parse failure take down the
+// server. The parse runs on a dedicated thread with a very large stack so that a
+// deeply nested document (bounded by MAX_HTML_BYTES) cannot overflow the worker
+// thread's stack, and catch_unwind contains any ordinary panic. Returns None if
+// parsing panics or fails.
+fn parse_html_safe(body: String, url: String) -> Option<HTML> {
+    std::thread::Builder::new()
+        .stack_size(1024 * 1024 * 1024) // 1 GiB (lazily committed) headroom for recursion
+        .spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                HTML::from_string(body, Some(url)).ok()
+            }))
+            .ok()
+            .flatten()
+        })
+        .ok()?
+        .join()
+        .ok()
+        .flatten()
+}
+
+async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedResponse> {
+    let html = match fetch_content(client, url).await? {
+        // The link points straight at an image: skip HTML parsing entirely and
+        // build the embed from the image itself.
+        FetchedContent::Image(bytes) => {
+            return Some(EmbedResponse {
+                title: None,
+                description: None,
+                image: image_data_from_bytes(url, &bytes),
+                created_at: None,
+            });
+        }
+        FetchedContent::Html(body) => parse_html_safe(body, url.to_string())?,
+    };
+
+    // Follow a single meta-refresh redirect, matching the previous behaviour.
+    let html = match (html.meta.len(), html.meta.get("refresh")) {
+        (1, Some(refresh)) => {
+            let redirect_url = refresh.split('=').skip(1).collect::<Vec<_>>().join("=");
+            match fetch_content(client, &redirect_url).await {
+                Some(FetchedContent::Html(body)) => {
+                    parse_html_safe(body, redirect_url).unwrap_or(html)
                 }
-                Err(_) => None,
-            },
-            Err(_) => None,
+                _ => html,
+            }
+        }
+        _ => html,
+    };
+
+    let image = match html.meta.get("og:image") {
+        Some(image_url) => match fetch_content(client, image_url).await {
+            Some(FetchedContent::Image(bytes)) => image_data_from_bytes(image_url, &bytes),
+            _ => None,
         },
         None => None,
     };
 
-    let response = EmbedResponse {
-        title: info2.html.meta.get("og:title").map(|a| a.clone()),
-        description: info2.html.meta.get("og:description").map(|a| a.clone()),
-        image: image,
-        created_at: match info2.html.meta.get("article:published_time") {
-            Some(text) => match chrono::DateTime::parse_from_rfc3339(text) {
-                Ok(date) => Some(date.timestamp()),
-                Err(_) => None,
-            },
-            None => None,
-        },
+    Some(EmbedResponse {
+        title: html.meta.get("og:title").cloned(),
+        description: html.meta.get("og:description").cloned(),
+        image,
+        created_at: html
+            .meta
+            .get("article:published_time")
+            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+            .map(|date| date.timestamp()),
+    })
+}
+
+async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
+    let empty = EmbedResponse {
+        title: None,
+        description: None,
+        image: None,
+        created_at: None,
+    };
+
+    let response = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => build_embed(&client, &url).await.unwrap_or(empty),
+        Err(_) => empty,
     };
 
     response_with_headers(
