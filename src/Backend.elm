@@ -350,6 +350,11 @@ update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFro
 update msg model =
     case msg of
         UserConnected sessionId clientId ->
+            let
+                callData : Call.RemoteCallData
+                callData =
+                    Call.defaultRemoteCallData
+            in
             ( { model
                 | connections =
                     SeqDict.update
@@ -357,10 +362,21 @@ update msg model =
                         (\maybeValue ->
                             (case maybeValue of
                                 Just value ->
-                                    NonemptyDict.insert clientId { lastRequest = NoRequestsMade, call = NotInCall, audioInputEnabled = True, videoInputEnabled = True } value
+                                    NonemptyDict.insert clientId
+                                        { lastRequest = NoRequestsMade
+                                        , call = NotInCall
+                                        , audioInputEnabled = callData.audioInputEnabled
+                                        , videoInputEnabled = callData.videoInputEnabled
+                                        }
+                                        value
 
                                 Nothing ->
-                                    NonemptyDict.singleton clientId { lastRequest = NoRequestsMade, call = NotInCall, audioInputEnabled = True, videoInputEnabled = True }
+                                    NonemptyDict.singleton clientId
+                                        { lastRequest = NoRequestsMade
+                                        , call = NotInCall
+                                        , audioInputEnabled = callData.audioInputEnabled
+                                        , videoInputEnabled = callData.videoInputEnabled
+                                        }
                             )
                                 |> Just
                         )
@@ -392,7 +408,13 @@ update msg model =
                             sessionId
                             (NonemptyDict.updateIfExists
                                 clientId
-                                (\data -> { data | lastRequest = LastRequest time })
+                                (\data ->
+                                    { lastRequest = LastRequest time
+                                    , call = data.call
+                                    , audioInputEnabled = data.audioInputEnabled
+                                    , videoInputEnabled = data.videoInputEnabled
+                                    }
+                                )
                             )
                             model.connections
                 }
@@ -5305,57 +5327,53 @@ handleSetInputEnabled :
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleSetInputEnabled sessionId clientId changeId localChange updateConnection toServerChange model session _ =
-    let
-        maybeRoomId : Maybe Call.CallId
-        maybeRoomId =
-            SeqDict.get sessionId model.connections
-                |> Maybe.andThen (NonemptyDict.get clientId)
-                |> Maybe.andThen
-                    (\connection ->
-                        case connection.call of
-                            NotInCall ->
-                                Nothing
+    case SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId) of
+        Just connection ->
+            let
+                maybeRoomId : Maybe Call.CallId
+                maybeRoomId =
+                    case connection.call of
+                        NotInCall ->
+                            Nothing
 
-                            ConnectingToCall roomId ->
-                                Just roomId
+                        ConnectingToCall roomId ->
+                            Just roomId
 
-                            ConnectedToCall roomId _ ->
-                                Just roomId
-                    )
-
-        model2 : BackendModel
-        model2 =
-            { model
+                        ConnectedToCall roomId _ ->
+                            Just roomId
+            in
+            ( { model
                 | connections =
                     SeqDict.updateIfExists
                         sessionId
                         (NonemptyDict.updateIfExists clientId updateConnection)
                         model.connections
-            }
-    in
-    ( model2
-    , Command.batch
-        [ LocalChangeResponse changeId (Local_VoiceChatChange localChange)
-            |> Lamdera.sendToFrontend clientId
-        , case maybeRoomId of
-            Just (Call.DmRoomId otherUserId) ->
-                Broadcast.toDmChannelExcludingOne
-                    clientId
-                    session.userId
-                    otherUserId
-                    (\otherUserId2 ->
-                        toServerChange
-                            { roomId = Call.DmRoomId otherUserId2
-                            , otherClientId = ( session.userId, clientId )
-                            }
-                            |> Server_VoiceChatChange
-                    )
-                    model2
+              }
+            , Command.batch
+                [ LocalChangeResponse changeId (Local_VoiceChatChange localChange)
+                    |> Lamdera.sendToFrontend clientId
+                , case maybeRoomId of
+                    Just (Call.DmRoomId otherUserId) ->
+                        Broadcast.toDmChannelExcludingOne
+                            clientId
+                            session.userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                toServerChange
+                                    { roomId = Call.DmRoomId otherUserId2
+                                    , otherClientId = ( session.userId, clientId )
+                                    }
+                                    |> Server_VoiceChatChange
+                            )
+                            model
 
-            Nothing ->
-                Command.none
-        ]
-    )
+                    Nothing ->
+                        Command.none
+                ]
+            )
+
+        Nothing ->
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 leaveVoice :
