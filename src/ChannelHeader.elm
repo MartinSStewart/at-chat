@@ -21,7 +21,6 @@ import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
-import NonemptySet
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
@@ -462,8 +461,8 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         joinedUsers =
             case SeqDict.get (DmRoomId otherUserId) calls.voiceChats of
                 Just voiceChat ->
-                    NonemptySet.foldl
-                        (\( userId, _ ) dict -> SeqDictHelper.increment userId dict)
+                    NonemptyDict.foldl
+                        (\( userId, _ ) _ dict -> SeqDictHelper.increment userId dict)
                         SeqDict.empty
                         voiceChat
 

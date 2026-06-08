@@ -535,6 +535,8 @@ type WebsocketClosedEvent
 type alias ConnectionData =
     { lastRequest : LastRequest
     , call : CallStatus
+    , audioInputEnabled : Bool
+    , videoInputEnabled : Bool
     }
 
 

@@ -17,10 +17,13 @@ port module Call exposing
     , Msg(..)
     , PublishResult
     , Recording
+    , RemoteCallData
     , ServerChange(..)
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
+    , addVoiceChatMember
+    , defaultRemoteCallData
     , displayMode
     , displayModeChangeCmd
     , dragThumbnail
@@ -37,6 +40,7 @@ port module Call exposing
     , startCallCmd
     , startLocalStream
     , toJs
+    , updateVoiceChatMember
     , videoNodes
     , videoPosAndSize
     , view
@@ -143,6 +147,51 @@ type alias Local =
 
 type alias RemoteCallData =
     { audioInputEnabled : Bool, videoInputEnabled : Bool }
+
+
+defaultRemoteCallData : RemoteCallData
+defaultRemoteCallData =
+    { audioInputEnabled = True, videoInputEnabled = True }
+
+
+{-| Add a peer to a voice chat, keeping their existing call data if they're
+already present. New peers start with audio and video enabled.
+-}
+addVoiceChatMember :
+    CallId
+    -> ( Id UserId, ClientId )
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+addVoiceChatMember roomId otherClientId voiceChats =
+    SeqDict.update
+        roomId
+        (\maybe ->
+            case maybe of
+                Just nonempty ->
+                    NonemptyDict.updateOrInsert
+                        otherClientId
+                        (Maybe.withDefault defaultRemoteCallData)
+                        nonempty
+                        |> Just
+
+                Nothing ->
+                    NonemptyDict.singleton otherClientId defaultRemoteCallData |> Just
+        )
+        voiceChats
+
+
+{-| Update the call data for a single peer in a voice chat, if present.
+-}
+updateVoiceChatMember :
+    ConnectionId
+    -> (RemoteCallData -> RemoteCallData)
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
+updateVoiceChatMember connectionId updateData voiceChats =
+    SeqDict.updateIfExists
+        connectionId.roomId
+        (NonemptyDict.updateIfExists connectionId.otherClientId updateData)
+        voiceChats
 
 
 type CallError

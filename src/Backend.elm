@@ -44,7 +44,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -357,10 +357,10 @@ update msg model =
                         (\maybeValue ->
                             (case maybeValue of
                                 Just value ->
-                                    NonemptyDict.insert clientId { lastRequest = NoRequestsMade, call = NotInCall } value
+                                    NonemptyDict.insert clientId { lastRequest = NoRequestsMade, call = NotInCall, audioInputEnabled = True, videoInputEnabled = True } value
 
                                 Nothing ->
-                                    NonemptyDict.singleton clientId { lastRequest = NoRequestsMade, call = NotInCall }
+                                    NonemptyDict.singleton clientId { lastRequest = NoRequestsMade, call = NotInCall, audioInputEnabled = True, videoInputEnabled = True }
                             )
                                 |> Just
                         )
@@ -392,7 +392,7 @@ update msg model =
                             sessionId
                             (NonemptyDict.updateIfExists
                                 clientId
-                                (\data -> { lastRequest = LastRequest time, call = data.call })
+                                (\data -> { data | lastRequest = LastRequest time })
                             )
                             model.connections
                 }
@@ -5261,10 +5261,101 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
             asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
 
         Call.Local_SetAudioInputEnabled isEnabled ->
-
+            asUser
+                model
+                sessionId
+                (handleSetInputEnabled
+                    sessionId
+                    clientId
+                    changeId
+                    (Call.Local_SetAudioInputEnabled isEnabled)
+                    (\connection -> { connection | audioInputEnabled = isEnabled })
+                    (\connectionId -> Call.Server_SetAudioInputEnabled connectionId isEnabled)
+                    model
+                )
 
         Call.Local_SetVideoInputEnabled isEnabled ->
+            asUser
+                model
+                sessionId
+                (handleSetInputEnabled
+                    sessionId
+                    clientId
+                    changeId
+                    (Call.Local_SetVideoInputEnabled isEnabled)
+                    (\connection -> { connection | videoInputEnabled = isEnabled })
+                    (\connectionId -> Call.Server_SetVideoInputEnabled connectionId isEnabled)
+                    model
+                )
 
+
+{-| Apply a "set audio/video input enabled" change: update the stored state for
+this connection, echo the change back to the requester, and broadcast the new
+state to the other members of the call so their UI can reflect it.
+-}
+handleSetInputEnabled :
+    SessionId
+    -> ClientId
+    -> ChangeId
+    -> Call.LocalChange
+    -> (ConnectionData -> ConnectionData)
+    -> (Call.ConnectionId -> Call.ServerChange)
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleSetInputEnabled sessionId clientId changeId localChange updateConnection toServerChange model session _ =
+    let
+        maybeRoomId : Maybe Call.CallId
+        maybeRoomId =
+            SeqDict.get sessionId model.connections
+                |> Maybe.andThen (NonemptyDict.get clientId)
+                |> Maybe.andThen
+                    (\connection ->
+                        case connection.call of
+                            NotInCall ->
+                                Nothing
+
+                            ConnectingToCall roomId ->
+                                Just roomId
+
+                            ConnectedToCall roomId _ ->
+                                Just roomId
+                    )
+
+        model2 : BackendModel
+        model2 =
+            { model
+                | connections =
+                    SeqDict.updateIfExists
+                        sessionId
+                        (NonemptyDict.updateIfExists clientId updateConnection)
+                        model.connections
+            }
+    in
+    ( model2
+    , Command.batch
+        [ LocalChangeResponse changeId (Local_VoiceChatChange localChange)
+            |> Lamdera.sendToFrontend clientId
+        , case maybeRoomId of
+            Just (Call.DmRoomId otherUserId) ->
+                Broadcast.toDmChannelExcludingOne
+                    clientId
+                    session.userId
+                    otherUserId
+                    (\otherUserId2 ->
+                        toServerChange
+                            { roomId = Call.DmRoomId otherUserId2
+                            , otherClientId = ( session.userId, clientId )
+                            }
+                            |> Server_VoiceChatChange
+                    )
+                    model2
+
+            Nothing ->
+                Command.none
+        ]
+    )
 
 
 leaveVoice :

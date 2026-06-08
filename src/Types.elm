@@ -772,7 +772,7 @@ type alias LoginData =
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-    , voiceChatPeers : SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
+    , voiceChatPeers : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
     }
 
 

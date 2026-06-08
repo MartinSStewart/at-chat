@@ -4037,9 +4037,11 @@ updateLoaded msg model =
                                 audioInputEnabled =
                                     not voiceChat.audioInputEnabled
                             in
-                            ( { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
-                            , Call.toJs (Call.ToJs_SetAudioInputEnabled audioInputEnabled)
-                            )
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Call.Local_SetAudioInputEnabled audioInputEnabled |> Local_VoiceChatChange |> Just)
+                                { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
+                                (Call.toJs (Call.ToJs_SetAudioInputEnabled audioInputEnabled))
                         )
                         model
 
@@ -4055,9 +4057,11 @@ updateLoaded msg model =
                                 videoInputEnabled =
                                     not voiceChat.videoInputEnabled
                             in
-                            ( { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
-                            , Call.toJs (Call.ToJs_SetVideoInputEnabled videoInputEnabled)
-                            )
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Call.Local_SetVideoInputEnabled videoInputEnabled |> Local_VoiceChatChange |> Just)
+                                { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
+                                (Call.toJs (Call.ToJs_SetVideoInputEnabled videoInputEnabled))
                         )
                         model
 
@@ -5882,6 +5886,12 @@ updateLoadedFromBackend msg model =
                                     Command.none
 
                                 Call.Local_RenegotiateAnswer _ _ ->
+                                    Command.none
+
+                                Call.Local_SetAudioInputEnabled _ ->
+                                    Command.none
+
+                                Call.Local_SetVideoInputEnabled _ ->
                                     Command.none
 
                         Local_TextEditor TextEditor.Local_Undo ->
