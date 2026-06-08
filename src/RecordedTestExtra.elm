@@ -960,46 +960,35 @@ dmCallTest isMobile normalConfig =
             (\admin user ->
                 let
                     -- Used to drag the call thumbnail.
-                    touchEvent : List ( Float, Float ) -> Json.Encode.Value
-                    touchEvent points =
+                    touchEvent : ( Float, Float ) -> Json.Encode.Value
+                    touchEvent ( x, y ) =
                         if isMobile then
                             Json.Encode.object
                                 [ ( "timeStamp", Json.Encode.float 0 )
                                 , ( "touches"
                                   , Json.Encode.object
-                                        (( "length", Json.Encode.int (List.length points) )
-                                            :: List.indexedMap
-                                                (\index ( x, y ) ->
-                                                    ( String.fromInt index
-                                                    , Json.Encode.object
-                                                        [ ( "identifier", Json.Encode.int index )
-                                                        , ( "clientX", Json.Encode.float x )
-                                                        , ( "clientY", Json.Encode.float y )
-                                                        , ( "target"
-                                                          , Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ]
-                                                          )
-                                                        ]
-                                                    )
-                                                )
-                                                points
-                                        )
+                                        [ ( "length", Json.Encode.int 1 )
+                                        , ( String.fromInt 0
+                                          , Json.Encode.object
+                                                [ ( "identifier", Json.Encode.int 0 )
+                                                , ( "clientX", Json.Encode.float x )
+                                                , ( "clientY", Json.Encode.float y )
+                                                , ( "target"
+                                                  , Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ]
+                                                  )
+                                                ]
+                                          )
+                                        ]
                                   )
                                 ]
 
                         else
-                            -- On desktop the drag is driven by PointerEvents, which
-                            -- carry a single pointer rather than a "touches" list.
-                            case points of
-                                ( x, y ) :: _ ->
-                                    Json.Encode.object
-                                        [ ( "timeStamp", Json.Encode.float 0 )
-                                        , ( "pointerId", Json.Encode.int 0 )
-                                        , ( "clientX", Json.Encode.float x )
-                                        , ( "clientY", Json.Encode.float y )
-                                        ]
-
-                                [] ->
-                                    Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
 
                     -- Mobile listens for touch events, desktop for pointer events.
                     ( startEventName, moveEventName, endEventName ) =
@@ -1127,8 +1116,8 @@ dmCallTest isMobile normalConfig =
                     -- (normalized position (1, 0.1)). Touching it at (850, 100)
                     -- and dragging 200px to the left moves it by -200/(1000-200)
                     -- = -0.25, so the normalized x becomes 0.75 (y unchanged).
-                    , user.custom 100 (Dom.id "elm-ui-root-id") startEventName (touchEvent [ ( 850, 100 ) ])
-                    , user.custom 100 (Dom.id "elm-ui-root-id") moveEventName (touchEvent [ ( 650, 100 ) ])
+                    , user.custom 100 (Dom.id "elm-ui-root-id") startEventName (touchEvent ( 850, 100 ))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") moveEventName (touchEvent ( 650, 100 ))
                     , user.custom 100 (Dom.id "elm-ui-root-id") endEventName touchEndEvent
                     , T.checkState
                         100
