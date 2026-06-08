@@ -947,24 +947,22 @@ cloudflareCostTest config =
         ]
 
 
-voiceChatTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+dmCallTest :
+    Bool
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-voiceChatTest normalConfig =
-    T.testGroup
-        "Voice chat"
-        [ startTest
-            "SFU handshake — two users join a 1:1 call"
-            startTime
-            normalConfig
-            [ connectTwoUsersAndJoinNewGuild desktopWindow
-                (\admin user ->
-                    let
-                        -- A touch event in the shape our global Touch decoder expects
-                        -- (touches is a TouchList-like object with a length and numeric
-                        -- indices). Used to drag the call thumbnail.
-                        touchEvent : List ( Float, Float ) -> Json.Encode.Value
-                        touchEvent points =
+dmCallTest isMobile normalConfig =
+    startTest
+        "SFU handshake — two users join a 1:1 call"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild desktopWindow
+            (\admin user ->
+                let
+                    -- Used to drag the call thumbnail.
+                    touchEvent : List ( Float, Float ) -> Json.Encode.Value
+                    touchEvent points =
+                        if isMobile then
                             Json.Encode.object
                                 [ ( "timeStamp", Json.Encode.float 0 )
                                 , ( "touches"
@@ -988,163 +986,176 @@ voiceChatTest normalConfig =
                                   )
                                 ]
 
-                        touchEndEvent : Json.Encode.Value
-                        touchEndEvent =
-                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
-                    in
-                    [ T.collapsableGroup
-                        "Voice chat"
-                        [ addCloudflareRealtimeApiKeys admin
-                        , admin.click 100 (Dom.id "guild_openDm_1")
-                        , user.click 100 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_voiceChat")
-                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
-                        , user.click 100 (Dom.id "guild_voiceChat")
-                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
-                        , admin.click 100 (Dom.id "guild_startVoiceChat")
-                        , tallSnapshot admin 100 { name = "Started a DM call" }
-                        , T.checkBackend 200
-                            (\m ->
-                                case
-                                    List.concatMap
-                                        (\( _, conns ) ->
-                                            List.filter
-                                                (\( _, c ) ->
-                                                    case c.call of
-                                                        ConnectedToCall _ _ ->
-                                                            True
+                        else
+                            Debug.todo "Add PointerEvent data here"
 
-                                                        NotInCall ->
-                                                            False
+                    touchEndEvent : Json.Encode.Value
+                    touchEndEvent =
+                        Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+                in
+                [ T.collapsableGroup
+                    "Voice chat"
+                    [ addCloudflareRealtimeApiKeys admin
+                    , admin.click 100 (Dom.id "guild_openDm_1")
+                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
+                    , user.click 100 (Dom.id "guild_voiceChat")
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , tallSnapshot admin 100 { name = "Started a DM call" }
+                    , T.checkBackend 200
+                        (\m ->
+                            case
+                                List.concatMap
+                                    (\( _, conns ) ->
+                                        List.filter
+                                            (\( _, c ) ->
+                                                case c.call of
+                                                    ConnectedToCall _ _ ->
+                                                        True
 
-                                                        ConnectingToCall _ ->
-                                                            False
-                                                )
-                                                (NonemptyDict.toList conns)
-                                        )
-                                        (SeqDict.toList m.connections)
-                                of
-                                    [ _ ] ->
-                                        Ok ()
+                                                    NotInCall ->
+                                                        False
 
-                                    other ->
-                                        Err
-                                            ("Expected exactly one ConnectedToCall after admin publishes, got "
-                                                ++ String.fromInt (List.length other)
+                                                    ConnectingToCall _ ->
+                                                        False
                                             )
-                            )
-                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
-                        , user.click 100 (Dom.id "guild_startVoiceChat")
-                        , T.checkBackend 200
-                            (\m ->
-                                case
-                                    List.concatMap
-                                        (\( _, conns ) ->
-                                            List.filter
-                                                (\( _, c ) ->
-                                                    case c.call of
-                                                        ConnectedToCall _ _ ->
-                                                            True
+                                            (NonemptyDict.toList conns)
+                                    )
+                                    (SeqDict.toList m.connections)
+                            of
+                                [ _ ] ->
+                                    Ok ()
 
-                                                        NotInCall ->
-                                                            False
-
-                                                        ConnectingToCall _ ->
-                                                            False
-                                                )
-                                                (NonemptyDict.toList conns)
+                                other ->
+                                    Err
+                                        ("Expected exactly one ConnectedToCall after admin publishes, got "
+                                            ++ String.fromInt (List.length other)
                                         )
-                                        (SeqDict.toList m.connections)
-                                of
-                                    [ _, _ ] ->
-                                        Ok ()
+                        )
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
+                    , user.click 100 (Dom.id "guild_startVoiceChat")
+                    , T.checkBackend 200
+                        (\m ->
+                            case
+                                List.concatMap
+                                    (\( _, conns ) ->
+                                        List.filter
+                                            (\( _, c ) ->
+                                                case c.call of
+                                                    ConnectedToCall _ _ ->
+                                                        True
 
-                                    other ->
-                                        Err
-                                            ("Expected two connections with callSfu after bob publishes, got "
-                                                ++ String.fromInt (List.length other)
+                                                    NotInCall ->
+                                                        False
+
+                                                    ConnectingToCall _ ->
+                                                        False
                                             )
-                            )
-                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
-                        , tallSnapshot user 100 { name = "Joined a DM call" }
-                        , T.checkBackend 500
-                            (\m ->
-                                case
-                                    List.concatMap
-                                        (\( _, conns ) ->
-                                            List.filter
-                                                (\( _, c ) ->
-                                                    case c.call of
-                                                        ConnectedToCall _ _ ->
-                                                            True
+                                            (NonemptyDict.toList conns)
+                                    )
+                                    (SeqDict.toList m.connections)
+                            of
+                                [ _, _ ] ->
+                                    Ok ()
 
-                                                        NotInCall ->
-                                                            False
-
-                                                        ConnectingToCall _ ->
-                                                            False
-                                                )
-                                                (NonemptyDict.toList conns)
+                                other ->
+                                    Err
+                                        ("Expected two connections with callSfu after bob publishes, got "
+                                            ++ String.fromInt (List.length other)
                                         )
-                                        (SeqDict.toList m.connections)
-                                of
-                                    [ _, _ ] ->
-                                        Ok ()
+                        )
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
+                    , tallSnapshot user 100 { name = "Joined a DM call" }
+                    , T.checkBackend 500
+                        (\m ->
+                            case
+                                List.concatMap
+                                    (\( _, conns ) ->
+                                        List.filter
+                                            (\( _, c ) ->
+                                                case c.call of
+                                                    ConnectedToCall _ _ ->
+                                                        True
 
-                                    other ->
-                                        Err
-                                            ("Expected two connections with callSfu at end, got "
-                                                ++ String.fromInt (List.length other)
+                                                    NotInCall ->
+                                                        False
+
+                                                    ConnectingToCall _ ->
+                                                        False
                                             )
-                            )
-                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
-                        , user.click 100 (Dom.id "guild_voiceChat")
-                        , tallSnapshot user 100 { name = "Voice chat with tab closed" }
+                                            (NonemptyDict.toList conns)
+                                    )
+                                    (SeqDict.toList m.connections)
+                            of
+                                [ _, _ ] ->
+                                    Ok ()
 
-                        -- The minimized call thumbnail can be dragged. With the
-                        -- 1000x600 window the thumbnail starts in the top-right
-                        -- (normalized position (1, 0.1)). Touching it at (850, 100)
-                        -- and dragging 200px to the left moves it by -200/(1000-200)
-                        -- = -0.25, so the normalized x becomes 0.75 (y unchanged).
-                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchEvent [ ( 850, 100 ) ])
-                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent [ ( 650, 100 ) ])
-                        , user.custom 100 (Dom.id "elm-ui-root-id") "touchend" touchEndEvent
-                        , T.checkState
-                            100
-                            (\data ->
-                                case SeqDict.get user.clientId data.frontends of
-                                    Just (Types.Loaded loaded) ->
-                                        case loaded.loginStatus of
-                                            Types.LoggedIn loggedIn ->
-                                                let
-                                                    ( x, y ) =
-                                                        loggedIn.voiceChat.thumbnailPosition
-                                                in
-                                                if (abs (x - 0.75) < 0.001) && (abs (y - 0.1) < 0.001) then
-                                                    Ok ()
+                                other ->
+                                    Err
+                                        ("Expected two connections with callSfu at end, got "
+                                            ++ String.fromInt (List.length other)
+                                        )
+                        )
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
+                    , user.click 100 (Dom.id "guild_voiceChat")
+                    , tallSnapshot user 100 { name = "Voice chat with tab closed" }
 
-                                                else
-                                                    Err
-                                                        ("Dragging the call thumbnail should have moved it to (0.75, 0.1) but got ("
-                                                            ++ String.fromFloat x
-                                                            ++ ", "
-                                                            ++ String.fromFloat y
-                                                            ++ ")"
-                                                        )
+                    -- The minimized call thumbnail can be dragged. With the
+                    -- 1000x600 window the thumbnail starts in the top-right
+                    -- (normalized position (1, 0.1)). Touching it at (850, 100)
+                    -- and dragging 200px to the left moves it by -200/(1000-200)
+                    -- = -0.25, so the normalized x becomes 0.75 (y unchanged).
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchEvent [ ( 850, 100 ) ])
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent [ ( 650, 100 ) ])
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "touchend" touchEndEvent
+                    , T.checkState
+                        100
+                        (\data ->
+                            case SeqDict.get user.clientId data.frontends of
+                                Just (Types.Loaded loaded) ->
+                                    case loaded.loginStatus of
+                                        Types.LoggedIn loggedIn ->
+                                            let
+                                                ( x, y ) =
+                                                    loggedIn.voiceChat.thumbnailPosition
+                                            in
+                                            if (abs (x - 0.75) < 0.001) && (abs (y - 0.1) < 0.001) then
+                                                Ok ()
 
-                                            Types.NotLoggedIn _ ->
-                                                Err "Expected user to be logged in"
+                                            else
+                                                Err
+                                                    ("Dragging the call thumbnail should have moved it to (0.75, 0.1) but got ("
+                                                        ++ String.fromFloat x
+                                                        ++ ", "
+                                                        ++ String.fromFloat y
+                                                        ++ ")"
+                                                    )
 
-                                    _ ->
-                                        Err "Expected user frontend to be loaded"
-                            )
-                        , admin.click 100 (Dom.id "guild_leaveVoiceChat")
-                        , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
-                        , tallSnapshot user 100 { name = "Left a DM call user perspective" }
-                        ]
+                                        Types.NotLoggedIn _ ->
+                                            Err "Expected user to be logged in"
+
+                                _ ->
+                                    Err "Expected user frontend to be loaded"
+                        )
+                    , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                    , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
+                    , tallSnapshot user 100 { name = "Left a DM call user perspective" }
                     ]
-                )
-            ]
+                ]
+            )
+        ]
+
+
+voiceChatTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+voiceChatTest normalConfig =
+    T.testGroup
+        "Voice chat"
+        [ dmCallTest False normalConfig
+        , dmCallTest True normalConfig
         , startTest
             "Hop between voice calls"
             startTime
