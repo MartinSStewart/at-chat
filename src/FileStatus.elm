@@ -440,7 +440,7 @@ uploadFile onResult sessionId guildOrDmId fileId file2 =
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
         }
 
@@ -457,7 +457,7 @@ uploadAvatar onResult sessionId file2 =
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         , tracker = Just "avatar-file-upload"
         }
 
@@ -504,7 +504,7 @@ uploadBytes sessionId bytes =
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" bytes
         , resolver = resolver uploadResponseCodec
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }
 
 
@@ -539,7 +539,7 @@ uploadBackup secretKey name bytes =
                                 |> Http.BadBody
                                 |> Err
                 )
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }
 
 

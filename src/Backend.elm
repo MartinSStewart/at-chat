@@ -2247,7 +2247,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         , url = FileStatus.domain ++ "/file/internal/vapid"
                         , body = Http.emptyBody
                         , expect = Http.expectString GotVapidKeys
-                        , timeout = Nothing
+                        , timeout = Just Duration.minute
                         , tracker = Nothing
                         }
                     , Discord.getStickerPacksPayload
@@ -6705,7 +6705,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                                 Http.NetworkError_ ->
                                     Err Http.NetworkError
                         )
-                , timeout = Nothing
+                , timeout = Just Duration.minute
                 }
                 |> Task.attempt (RegeneratedServerSecret time changeId clientId)
             )

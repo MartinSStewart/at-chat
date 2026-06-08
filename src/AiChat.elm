@@ -1669,5 +1669,5 @@ openRouterRequest openRouterKey aiModel message =
                                 Err error ->
                                     Json.Decode.errorToString error |> Http.BadBody |> Err
                 )
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }

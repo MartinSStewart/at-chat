@@ -13,6 +13,7 @@ module Postmark exposing
     , sendEmailsTask
     )
 
+import Duration
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Task as Task exposing (Task)
@@ -94,7 +95,7 @@ sendEmailTask (ApiKey token) d =
         , url = endpoint ++ "/email"
         , body = Http.jsonBody (encodeEmail d)
         , resolver = jsonResolver
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }
 
 
@@ -119,7 +120,7 @@ sendEmailsTask (ApiKey token) d =
         , url = endpoint ++ "/email/batch"
         , body = List.Nonempty.toList d |> E.list encodeEmail |> Http.jsonBody
         , resolver = jsonResolver2
-        , timeout = Nothing
+        , timeout = Just Duration.minute
         }
 
 
