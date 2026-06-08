@@ -5260,6 +5260,12 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_RenegotiateAnswer answerSdp _ ->
             asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
 
+        Call.Local_SetAudioInputEnabled isEnabled ->
+
+
+        Call.Local_SetVideoInputEnabled isEnabled ->
+
+
 
 leaveVoice :
     SessionId
