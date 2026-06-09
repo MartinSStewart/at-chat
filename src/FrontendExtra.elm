@@ -4848,13 +4848,14 @@ handlePressedArrowUpInEmptyInput :
 handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
     updateLoggedIn
         (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+            in
             case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-
                         maybeMessages : Maybe (Array (MessageStateNoReply (Id UserId)))
                         maybeMessages =
                             LocalState.guildOrDmIdToMessages ( guildOrDmId2, threadRoute ) local
@@ -4934,26 +4935,22 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-
                         maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id Discord.UserId)))
                         maybeMessages =
                             LocalState.discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
-
-                        currentUserId : Discord.Id Discord.UserId
-                        currentUserId =
-                            case guildOrDmId2 of
-                                DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
-                                    currentUserId2
-
-                                DiscordGuildOrDmId_Dm data ->
-                                    data.currentUserId
                     in
                     case maybeMessages of
                         Just messages ->
                             let
+                                currentUserId : Discord.Id Discord.UserId
+                                currentUserId =
+                                    case guildOrDmId2 of
+                                        DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
+                                            currentUserId2
+
+                                        DiscordGuildOrDmId_Dm data ->
+                                            data.currentUserId
+
                                 messageCount : Int
                                 messageCount =
                                     Array.length messages
