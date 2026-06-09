@@ -73,18 +73,11 @@ with the new subscription. The model swap and logging happen in a time-stamped
 regeneratePushSubscription : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
 regeneratePushSubscription _ model _ json =
     case Decode.decodeValue decodeRegeneratePushSubscription json of
-        Ok { old, new } ->
-            case findSessionBySubscription old model of
-                Just sessionId ->
-                    ( Ok (Json.object [ ( "status", Json.string "ok" ) ])
-                    , model
-                    , Task.perform (RegeneratedPushSubscription sessionId new) Time.now
-                    )
-
-                Nothing ->
-                    -- No session is currently subscribed with the supplied old
-                    -- subscription, so we can't (and shouldn't) update anything.
-                    ( Err (Http.BadBody "No matching push subscription"), model, Cmd.none )
+        Ok data ->
+            ( Ok (Json.object [ ( "status", Json.string "ok" ) ])
+            , model
+            , Task.perform (RegeneratedPushSubscription data) Time.now
+            )
 
         Err error ->
             ( Err (Http.BadBody ("Invalid request: " ++ Decode.errorToString error)), model, Cmd.none )
@@ -95,43 +88,6 @@ decodeRegeneratePushSubscription =
     Decode.map2 (\old new -> { old = old, new = new })
         (Decode.field "old" (Codec.decoder Ports.subscribeDataCodec))
         (Decode.field "new" (Codec.decoder Ports.subscribeDataCodec))
-
-
-findSessionBySubscription : SubscribeData -> BackendModel -> Maybe Effect.Lamdera.SessionId
-findSessionBySubscription old model =
-    SeqDict.toList model.sessions
-        |> List.filterMap
-            (\( sessionId, session ) ->
-                if subscriptionMatches old session.pushSubscription then
-                    Just sessionId
-
-                else
-                    Nothing
-            )
-        |> List.head
-
-
-subscriptionMatches : SubscribeData -> PushSubscription -> Bool
-subscriptionMatches old pushSubscription =
-    case pushSubscription of
-        Subscribed data _ ->
-            sameSubscription old data
-
-        SubscriptionError data _ ->
-            sameSubscription old data
-
-        NotSubscribed ->
-            False
-
-        SubscriptionJsException _ _ ->
-            False
-
-
-sameSubscription : SubscribeData -> SubscribeData -> Bool
-sameSubscription a b =
-    (a.endpoint == b.endpoint)
-        && (a.keys.auth == b.keys.auth)
-        && (a.keys.p256dh == b.keys.p256dh)
 
 
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )

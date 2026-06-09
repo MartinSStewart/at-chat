@@ -56,7 +56,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
-import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..))
+import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..), SubscribeData)
 import Postmark
 import Quantity
 import RateLimit
@@ -625,28 +625,60 @@ update msg model =
                                 model
                         )
 
-        RegeneratedPushSubscription sessionId subscribeData time ->
-            -- The service worker (see public/service-worker.js) hit the
-            -- service-worker-regenerate-push-subscription RPC after the push service
-            -- invalidated the old subscription. RPC.elm already verified the caller
-            -- owned the old subscription and resolved it to this session, so swap in
-            -- the new subscription. Logged so an admin can confirm this self-healing
-            -- path is running even while the app was closed.
-            case SeqDict.get sessionId model.sessions of
-                Just session ->
-                    BackendExtra.addLog
-                        time
-                        (Log.PushSubscriptionRegistered session.userId ServiceWorkerChange)
-                        { model
-                            | sessions =
-                                SeqDict.insert
-                                    sessionId
-                                    { session | pushSubscription = Subscribed subscribeData time }
-                                    model.sessions
-                        }
+        RegeneratedPushSubscription { new, old } time ->
+            let
+                findSessionBySubscription : Maybe SessionId
+                findSessionBySubscription =
+                    List.filterMap
+                        (\( sessionId, session ) ->
+                            if subscriptionMatches session.pushSubscription then
+                                Just sessionId
+
+                            else
+                                Nothing
+                        )
+                        (SeqDict.toList model.sessions)
+                        |> List.head
+
+                subscriptionMatches : PushSubscription -> Bool
+                subscriptionMatches pushSubscription =
+                    case pushSubscription of
+                        Subscribed data _ ->
+                            sameSubscription old data
+
+                        SubscriptionError data _ ->
+                            sameSubscription old data
+
+                        NotSubscribed ->
+                            False
+
+                        SubscriptionJsException _ _ ->
+                            False
+
+                sameSubscription : SubscribeData -> SubscribeData -> Bool
+                sameSubscription a b =
+                    a.endpoint == b.endpoint && a.keys == b.keys
+            in
+            case findSessionBySubscription model of
+                Just sessionId ->
+                    case SeqDict.get sessionId model.sessions of
+                        Just session ->
+                            BackendExtra.addLog
+                                time
+                                (Log.PushSubscriptionRegistered session.userId ServiceWorkerChange)
+                                { model
+                                    | sessions =
+                                        SeqDict.insert
+                                            sessionId
+                                            { session | pushSubscription = Subscribed subscribeData time }
+                                            model.sessions
+                                }
+
+                        Nothing ->
+                            ( model, Command.none )
 
                 Nothing ->
-                    ( model, Command.none )
+                    ( Err (Http.BadBody "No matching push subscription"), model, Cmd.none )
 
         GotVapidKeys result ->
             ( case result of

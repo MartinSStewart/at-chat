@@ -418,7 +418,7 @@ registerPushSubscriptionToJs source publicKey =
         "register_push_subscription_to_js"
         register_push_subscription_to_js
         (Json.Encode.object
-            [ ( "source", Json.Encode.string (pushSubscriptionSourceToString source) )
+            [ ( "source", Codec.encoder pushSubscriptionSourceCodec source )
             , ( "publicKey", Json.Encode.string publicKey )
             ]
         )
@@ -429,49 +429,20 @@ type RegisterPushSubscription
     | SubscribeJsException String
 
 
-{-| Describes what triggered a push subscription (re)registration. Used so the
-backend can log which code path produced the subscription, making it possible to
-verify that the self-healing paths (re-registering on app load and reacting to
-the service worker's `pushsubscriptionchange` event) are actually running.
--}
 type PushSubscriptionSource
-    = -- The user explicitly enabled push notifications.
-      UserEnabledNotifications
-    | -- We re-registered on app load because push notifications were already enabled.
-      AppLoadRefresh
-    | -- The service worker's `pushsubscriptionchange` event fired and we resubscribed.
-      ServiceWorkerChange
-
-
-pushSubscriptionSourceToString : PushSubscriptionSource -> String
-pushSubscriptionSourceToString source =
-    case source of
-        UserEnabledNotifications ->
-            "UserEnabledNotifications"
-
-        AppLoadRefresh ->
-            "AppLoadRefresh"
-
-        ServiceWorkerChange ->
-            "ServiceWorkerChange"
+    = UserEnabledNotifications
+    | AppLoadRefresh
+    | ServiceWorkerChange
 
 
 pushSubscriptionSourceCodec : Codec PushSubscriptionSource
 pushSubscriptionSourceCodec =
-    Codec.map
-        (\str ->
-            case str of
-                "AppLoadRefresh" ->
-                    AppLoadRefresh
-
-                "ServiceWorkerChange" ->
-                    ServiceWorkerChange
-
-                _ ->
-                    UserEnabledNotifications
-        )
-        pushSubscriptionSourceToString
+    Codec.enum
         Codec.string
+        [ ( "AppLoadRefresh", AppLoadRefresh )
+        , ( "ServiceWorkerChange", ServiceWorkerChange )
+        , ( "UserEnabledNotifications", UserEnabledNotifications )
+        ]
 
 
 registerPushSubscriptionCodec : Codec RegisterPushSubscription
