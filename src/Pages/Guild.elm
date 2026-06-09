@@ -5771,7 +5771,7 @@ eventDurationText : Time.Posix -> Maybe Time.Posix -> String
 eventDurationText start end =
     case end of
         Just endedAt2 ->
-            ", lasted " ++ MyUi.timeElapsed endedAt2 start
+            ", lasted " ++ MyUi.timeElapsed start endedAt2
 
         Nothing ->
             ""

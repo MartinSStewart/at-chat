@@ -1111,7 +1111,13 @@ dmCallTest isMobile normalConfig =
                         )
                     , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
                     , user.click 100 (Dom.id "guild_startVoiceChat")
-                    , T.checkBackend 200
+                    , admin.checkView
+                        50
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    , T.checkBackend 150
                         (\m ->
                             case
                                 List.concatMap
@@ -1218,6 +1224,15 @@ dmCallTest isMobile normalConfig =
                     , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                     , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
                     , tallSnapshot user 100 { name = "Left a DM call user perspective" }
+                    , user.custom 100 (Dom.id "call_videoThumbnail") "dblclick" (Json.Encode.object [])
+                    , user.click 100 (Dom.id "guild_leaveVoiceChat")
+                    , admin.checkView
+                        50
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1 minute" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    , tallSnapshot user 100 { name = "Call ended" }
                     ]
                 ]
             )
