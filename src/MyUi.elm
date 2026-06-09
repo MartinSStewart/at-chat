@@ -67,6 +67,7 @@ module MyUi exposing
     , tabBackground
     , textLinkColor
     , textLinkColorOnDarkBackground
+    , timeElapsed
     , timeElapsedShort
     , timeElapsedView
     , timestamp

@@ -20,6 +20,7 @@ module RecordedTestExtra exposing
     , desktopWindow
     , discordUserAuth
     , domain
+    , editMostRecentMessageViaArrowUp
     , enableNotifications
     , firefoxDesktop
     , focusEvent
@@ -1110,7 +1111,13 @@ dmCallTest isMobile normalConfig =
                         )
                     , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
                     , user.click 100 (Dom.id "guild_startVoiceChat")
-                    , T.checkBackend 200
+                    , admin.checkView
+                        50
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    , T.checkBackend 150
                         (\m ->
                             case
                                 List.concatMap
@@ -1217,6 +1224,15 @@ dmCallTest isMobile normalConfig =
                     , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                     , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
                     , tallSnapshot user 100 { name = "Left a DM call user perspective" }
+                    , user.custom 100 (Dom.id "call_videoThumbnail") "dblclick" (Json.Encode.object [])
+                    , user.click 100 (Dom.id "guild_leaveVoiceChat")
+                    , admin.checkView
+                        50
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1\u{00A0}minute" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    , tallSnapshot user 100 { name = "Call ended" }
                     ]
                 ]
             )
@@ -1433,6 +1449,46 @@ writeMessageMobile user text =
     T.group
         [ user.input 100 (Dom.id "channel_textinput") text
         , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+        ]
+
+
+{-| Presses the up arrow while the channel text input is empty. This should start
+editing the most recent message that the user wrote (pre-filled with its current
+content), which we then change to `editedText` and submit by pressing enter.
+
+Works the same way for guild channels, DMs, threads and Discord channels since they
+all share the `channel_textinput` and `editMessageTextInput` ids.
+
+-}
+editMostRecentMessageViaArrowUp :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+editMostRecentMessageViaArrowUp user originalText editedText =
+    T.collapsableGroup
+        "Edit most recent message by pressing up arrow"
+        [ -- No message is being edited yet.
+          user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "editMessageTextInput" ])
+
+        -- Pressing up in the empty channel input opens the edit box for the most recent message we wrote.
+        , user.keyDown 100 (Dom.id "channel_textinput") "ArrowUp" []
+        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "editMessageTextInput" ])
+
+        -- The edit box is pre-filled with the existing message content.
+        , user.checkView
+            100
+            (Test.Html.Query.has
+                [ Test.Html.Selector.id "editMessageTextInput"
+                , Test.Html.Selector.attribute (Html.Attributes.value originalText)
+                ]
+            )
+        , user.input 200 (Dom.id "editMessageTextInput") editedText
+        , user.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+
+        -- The edit box closes and the message now shows the edited text.
+        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "editMessageTextInput" ])
+        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText editedText ])
         ]
 
 
@@ -2629,6 +2685,9 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
     "type": 0
 }"""
                     )
+
+            ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
+                StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
 
             ( "PUT", [ "discord.com", "api", "v9", "channels", _, "thread-members", "@me" ] ) ->
                 StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""

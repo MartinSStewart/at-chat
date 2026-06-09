@@ -835,12 +835,12 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
     in
     ( idString
     , Html.div
-        [ Html.Attributes.style "width" (String.fromInt width ++ "px")
-        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-        , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
-        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt (Coord.yRaw position) ++ "px)")
-        , Html.Attributes.style
+        ([ Html.Attributes.style "width" (String.fromInt width ++ "px")
+         , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+         , Html.Attributes.style "position" "absolute"
+         , Html.Attributes.style "left" (String.fromInt (Coord.xRaw position) ++ "px")
+         , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt (Coord.yRaw position) ++ "px)")
+         , Html.Attributes.style
             "pointer-events"
             (if videoNodeState == VideoNodeHidden then
                 "none"
@@ -848,10 +848,10 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
              else
                 "auto"
             )
-        , Html.Events.onDoubleClick DoubleClickedVideoNode
-        , Html.Events.onMouseEnter (MouseEnterVideoNode id)
-        , Html.Events.onMouseLeave (MouseExitVideoNode id)
-        , Html.Attributes.style
+         , Html.Events.onDoubleClick DoubleClickedVideoNode
+         , Html.Events.onMouseEnter (MouseEnterVideoNode id)
+         , Html.Events.onMouseLeave (MouseExitVideoNode id)
+         , Html.Attributes.style
             "opacity"
             (if videoNodeState == VideoNodeHidden then
                 "0"
@@ -859,7 +859,18 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
              else
                 "1"
             )
-        ]
+         ]
+            ++ (case videoNodeState of
+                    VideoNodeThumbnail ->
+                        [ Html.Attributes.id "call_videoThumbnail" ]
+
+                    VideoNodeHidden ->
+                        []
+
+                    VideoNodeFullSize ->
+                        []
+               )
+        )
         [ Html.div
             [ Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
