@@ -5024,6 +5024,93 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_Drawing guildOrDmId drawingChange ->
+                    -- Drawings are intentionally not stored in the backend model. They are
+                    -- only relayed to everyone else who can view the channel.
+                    case guildOrDmId of
+                        GuildOrDmId (GuildOrDmId_Guild guildId _) ->
+                            asGuildMember
+                                model
+                                sessionId
+                                guildId
+                                (\{ userId } _ _ ->
+                                    ( model
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_Drawing userId guildOrDmId drawingChange |> ServerChange)
+                                            model
+                                        ]
+                                    )
+                                )
+
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                            asDmUser
+                                model
+                                sessionId
+                                { otherUserId = otherUserId }
+                                (\session _ _ _ _ ->
+                                    ( model
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            otherUserId
+                                            (\otherUserId2 ->
+                                                Server_Drawing
+                                                    session.userId
+                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                    drawingChange
+                                            )
+                                            model
+                                        ]
+                                    )
+                                )
+
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId _) ->
+                            asDiscordGuildMember
+                                model
+                                sessionId
+                                guildId
+                                currentDiscordUserId
+                                (\session _ _ _ ->
+                                    ( model
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDiscordGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                                            model
+                                        ]
+                                    )
+                                )
+
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                            asDiscordDmUser
+                                model
+                                sessionId
+                                data
+                                (\session _ _ _ ->
+                                    ( model
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDiscordDmChannelExcludingOne
+                                            clientId
+                                            data.channelId
+                                            (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                                            model
+                                        ]
+                                    )
+                                )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model

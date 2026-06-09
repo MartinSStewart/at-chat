@@ -2728,7 +2728,19 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                     [ imageElement [] ]
 
                                                 _ ->
-                                                    fileDownloadView state.spoiler fileData
+                                                    fileDownloadView
+                                                        (case maybePressedSpoiler of
+                                                            Just ( htmlIdPrefix, _ ) ->
+                                                                Dom.idToString htmlIdPrefix
+                                                                    ++ "_file_"
+                                                                    ++ Id.toString fileId
+                                                                    |> Just
+
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        state.spoiler
+                                                        fileData
                                            ]
 
                                 Nothing ->
@@ -3125,14 +3137,20 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
-fileDownloadView : Bool -> FileData -> Html msg
-fileDownloadView isSpoilered fileData =
+fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
+fileDownloadView maybeHtmlId isSpoilered fileData =
     let
         fileUrl =
             FileStatus.fileUrl fileData.contentType fileData.fileHash
     in
     Html.a
-        [ Html.Attributes.style "max-width" "284px"
+        [ case maybeHtmlId of
+            Just htmlId ->
+                Html.Attributes.id htmlId
+
+            Nothing ->
+                Html.Attributes.class ""
+        , Html.Attributes.style "max-width" "284px"
         , Html.Attributes.style
             "background-color"
             (if isSpoilered then

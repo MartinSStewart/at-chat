@@ -3015,6 +3015,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Go _ _ ->
                     True
 
+                Local_Drawing _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -3203,6 +3206,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetGuildIcon _ _ ->
+                            True
+
+                        Types.Server_Drawing _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->

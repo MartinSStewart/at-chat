@@ -1413,6 +1413,9 @@ toBackendLog toBackend =
                 Local_Go _ _ ->
                     ToBackendLog_Local_Go
 
+                Local_Drawing _ _ ->
+                    ToBackendLog_Local_Drawing
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 

@@ -58,6 +58,7 @@ import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
+import Drawing
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -239,6 +240,10 @@ type alias LoggedIn2 =
     , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
+    , drawingMode : Maybe Drawing.Model
+    , -- Position of drawing anchor elements relative to their message container,
+      -- measured from the DOM so strokes can be rendered at the right place.
+      drawingAnchorOffsets : SeqDict Drawing.Anchor ( Float, Float )
     }
 
 
@@ -540,6 +545,8 @@ type FrontendMsg
     | PressedUnregisterServiceWorkers
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
+    | PressedDrawButton AnyGuildOrDmId
+    | DrawingMsg Drawing.Msg
 
 
 type ScrollPosition
@@ -863,6 +870,7 @@ type ServerChange
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
     | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
+    | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.LocalChange
 
 
 type LocalChange
@@ -906,3 +914,4 @@ type LocalChange
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange
+    | Local_Drawing AnyGuildOrDmId Drawing.LocalChange

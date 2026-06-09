@@ -12,6 +12,7 @@ import CssPixels exposing (CssPixels)
 import CustomEmoji
 import Discord
 import DmChannel exposing (FrontendDmChannel)
+import Drawing
 import Duration exposing (Duration, Seconds)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -433,6 +434,8 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
+            , drawingMode = Nothing
+            , drawingAnchorOffsets = SeqDict.empty
             }
     in
     ( loggedIn
@@ -491,6 +494,7 @@ loginDataToLocalState userAgent timezone loginData =
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
     , calls = Call.init loginData.voiceChatPeers
+    , drawings = SeqDict.empty
     }
 
 
@@ -620,10 +624,40 @@ updateLoaded msg model =
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
-            ( { model | time = time }, Command.none )
+            ( { model | time = time }
+            , -- Drawing anchors get measured lazily. This catches anchors that couldn't
+              -- be measured earlier (for example because their message wasn't loaded yet).
+              case model.loginStatus of
+                LoggedIn loggedIn ->
+                    measureMissingDrawingAnchors model loggedIn
+
+                NotLoggedIn _ ->
+                    Command.none
+            )
 
         GotWindowSize width height ->
-            ( { model | windowSize = Coord.xy width height }, Command.none )
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | -- Resizing the window can reflow message contents so all anchor
+                          -- measurements are invalidated and measured again.
+                          drawingAnchorOffsets = SeqDict.empty
+                        , drawingMode =
+                            Maybe.map
+                                (\drawingMode ->
+                                    { drawingMode
+                                        | anchor =
+                                            Maybe.map
+                                                (\selected -> { selected | position = Nothing, stroke = Nothing })
+                                                drawingMode.anchor
+                                    }
+                                )
+                                loggedIn.drawingMode
+                      }
+                    , Command.none
+                    )
+                )
+                { model | windowSize = Coord.xy width height }
 
         GotTimezone _ ->
             -- We should only get the timezone while loading
@@ -4392,6 +4426,338 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDrawButton guildOrDmId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | drawingMode =
+                            case loggedIn.drawingMode of
+                                Just drawingMode ->
+                                    if drawingMode.channel == guildOrDmId then
+                                        Nothing
+
+                                    else
+                                        Just (Drawing.init guildOrDmId)
+
+                                Nothing ->
+                                    Just (Drawing.init guildOrDmId)
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        DrawingMsg drawingMsg ->
+            updateDrawing
+                drawingMsg
+                (case drawingMsg of
+                    Drawing.PickedAnchor (Just _) ->
+                        -- Clicking an attached image normally opens the image viewer.
+                        -- When the click was used for picking a drawing anchor, close
+                        -- the viewer again (its message is handled before this one).
+                        { model | imageViewer = Nothing }
+
+                    _ ->
+                        model
+                )
+
+
+updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+updateDrawing drawingMsg model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            case drawingMsg of
+                Drawing.GotAnchorElement anchor result ->
+                    case result of
+                        Ok elements ->
+                            ( { loggedIn
+                                | drawingAnchorOffsets =
+                                    SeqDict.insert
+                                        anchor
+                                        ( elements.anchor.element.x - elements.container.element.x
+                                        , elements.anchor.element.y - elements.container.element.y
+                                        )
+                                        loggedIn.drawingAnchorOffsets
+                                , drawingMode =
+                                    Maybe.map
+                                        (\drawingMode ->
+                                            { drawingMode
+                                                | anchor =
+                                                    Maybe.map
+                                                        (\selected ->
+                                                            if selected.anchor == anchor then
+                                                                { selected
+                                                                    | position =
+                                                                        Just
+                                                                            ( elements.anchor.element.x
+                                                                            , elements.anchor.element.y
+                                                                            )
+                                                                }
+
+                                                            else
+                                                                selected
+                                                        )
+                                                        drawingMode.anchor
+                                            }
+                                        )
+                                        loggedIn.drawingMode
+                              }
+                            , Command.none
+                            )
+
+                        Err _ ->
+                            ( loggedIn, Command.none )
+
+                Drawing.PickedAnchor maybeAnchor ->
+                    case ( loggedIn.drawingMode, maybeAnchor ) of
+                        ( Just drawingMode, Just anchor ) ->
+                            ( { loggedIn
+                                | drawingMode =
+                                    Just { drawingMode | anchor = Just (Drawing.initialAnchorSelection anchor) }
+                              }
+                            , measureDrawingAnchor anchor
+                            )
+
+                        _ ->
+                            ( loggedIn, Command.none )
+
+                Drawing.MouseDown x y ->
+                    case loggedIn.drawingMode of
+                        Just drawingMode ->
+                            case drawingMode.anchor of
+                                Just selected ->
+                                    case ( selected.position, selected.stroke ) of
+                                        ( Just ( anchorX, anchorY ), Nothing ) ->
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_Drawing
+                                                    drawingMode.channel
+                                                    (Drawing.StartStroke
+                                                        selected.anchor
+                                                        ( x - anchorX, y - anchorY )
+                                                    )
+                                                    |> Just
+                                                )
+                                                { loggedIn
+                                                    | drawingMode =
+                                                        Just
+                                                            { drawingMode
+                                                                | anchor =
+                                                                    Just { selected | stroke = Just { unsent = [] } }
+                                                            }
+                                                }
+                                                Command.none
+
+                                        _ ->
+                                            ( loggedIn, Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+
+                Drawing.MouseMoved x y ->
+                    case loggedIn.drawingMode of
+                        Just drawingMode ->
+                            case drawingMode.anchor of
+                                Just selected ->
+                                    case ( selected.position, selected.stroke ) of
+                                        ( Just ( anchorX, anchorY ), Just stroke ) ->
+                                            let
+                                                unsent : List ( Float, Float )
+                                                unsent =
+                                                    ( x - anchorX, y - anchorY ) :: stroke.unsent
+
+                                                setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
+                                                setStroke newStroke =
+                                                    { loggedIn
+                                                        | drawingMode =
+                                                            Just
+                                                                { drawingMode
+                                                                    | anchor =
+                                                                        Just { selected | stroke = newStroke }
+                                                                }
+                                                    }
+                                            in
+                                            -- Points are sent in small batches to avoid sending a
+                                            -- message to the backend for every mousemove event.
+                                            if List.length unsent >= 4 then
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    (case List.Nonempty.fromList (List.reverse unsent) of
+                                                        Just points ->
+                                                            Local_Drawing
+                                                                drawingMode.channel
+                                                                (Drawing.ContinueStroke points)
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            Nothing
+                                                    )
+                                                    (setStroke (Just { unsent = [] }))
+                                                    Command.none
+
+                                            else
+                                                ( setStroke (Just { unsent = unsent }), Command.none )
+
+                                        _ ->
+                                            ( loggedIn, Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+
+                Drawing.MouseUp ->
+                    case loggedIn.drawingMode of
+                        Just drawingMode ->
+                            case drawingMode.anchor of
+                                Just selected ->
+                                    case selected.stroke of
+                                        Just stroke ->
+                                            let
+                                                ( loggedIn2, flushCmd ) =
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (case List.Nonempty.fromList (List.reverse stroke.unsent) of
+                                                            Just points ->
+                                                                Local_Drawing
+                                                                    drawingMode.channel
+                                                                    (Drawing.ContinueStroke points)
+                                                                    |> Just
+
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        { loggedIn
+                                                            | drawingMode =
+                                                                Just
+                                                                    { drawingMode
+                                                                        | anchor =
+                                                                            Just { selected | stroke = Nothing }
+                                                                    }
+                                                        }
+                                                        Command.none
+                                            in
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_Drawing drawingMode.channel Drawing.EndStroke |> Just)
+                                                loggedIn2
+                                                (Command.batch
+                                                    [ flushCmd
+                                                    , -- The page might have shifted while drawing so
+                                                      -- remeasure before the next stroke begins.
+                                                      measureDrawingAnchor selected.anchor
+                                                    ]
+                                                )
+
+                                        Nothing ->
+                                            ( loggedIn, Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+        )
+        model
+
+
+{-| The channel whose messages are currently visible (drawing on top of thread messages isn't supported).
+-}
+routeToDrawingChannel : Route -> LocalState -> Maybe AnyGuildOrDmId
+routeToDrawingChannel route local =
+    case route of
+        GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) ->
+            GuildOrDmId (GuildOrDmId_Guild guildId channelId) |> Just
+
+        DmRoute dmRoute ->
+            case ( DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId, dmRoute.threadRoute ) of
+                ( Just otherUserId, NoThreadWithFriends _ _ ) ->
+                    GuildOrDmId (GuildOrDmId_Dm otherUserId) |> Just
+
+                _ ->
+                    Nothing
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) _ ->
+                    DiscordGuildOrDmId
+                        (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                        |> Just
+
+                _ ->
+                    Nothing
+
+        DiscordDmRoute routeData ->
+            DiscordGuildOrDmId
+                (DiscordGuildOrDmId_Dm
+                    { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                )
+                |> Just
+
+        _ ->
+            Nothing
+
+
+measureDrawingAnchor : Drawing.Anchor -> Command FrontendOnly ToBackend FrontendMsg
+measureDrawingAnchor anchor =
+    Task.map2
+        (\anchorElement containerElement -> { anchor = anchorElement, container = containerElement })
+        (Dom.getElement (Drawing.anchorDomId anchor)
+            |> Task.onError
+                (\error ->
+                    case Drawing.anchorDomIdFallback anchor of
+                        Just fallbackId ->
+                            Dom.getElement fallbackId
+
+                        Nothing ->
+                            Task.fail error
+                )
+        )
+        (Dom.getElement (Pages.Guild.channelMessageHtmlId anchor.messageId))
+        |> Task.attempt (\result -> Drawing.GotAnchorElement anchor result |> DrawingMsg)
+
+
+{-| Measure the position of any drawing anchors in the current channel that haven't been measured yet.
+-}
+measureMissingDrawingAnchors : LoadedFrontend -> LoggedIn2 -> Command FrontendOnly ToBackend FrontendMsg
+measureMissingDrawingAnchors model loggedIn =
+    let
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+    in
+    case routeToDrawingChannel model.route local of
+        Just guildOrDmId ->
+            (case SeqDict.get (Drawing.targetChannel guildOrDmId) local.drawings of
+                Just drawing ->
+                    Drawing.channelAnchors drawing
+
+                Nothing ->
+                    []
+            )
+                ++ (case loggedIn.drawingMode of
+                        Just drawingMode ->
+                            case drawingMode.anchor of
+                                Just selected ->
+                                    [ selected.anchor ]
+
+                                Nothing ->
+                                    []
+
+                        Nothing ->
+                            []
+                   )
+                |> List.filter (\anchor -> not (SeqDict.member anchor loggedIn.drawingAnchorOffsets))
+                |> List.map measureDrawingAnchor
+                |> Command.batch
+
+        Nothing ->
+            Command.none
+
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
 copyText text model =
@@ -6324,6 +6690,13 @@ updateLoadedFromBackend msg model =
 
                                         Go.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
+
+                                Server_Drawing _ _ _ ->
+                                    ( loggedIn2
+                                    , -- Measure any newly drawn-on anchors right away so the
+                                      -- drawing shows up without waiting for the next GotTime tick.
+                                      measureMissingDrawingAnchors model loggedIn2
+                                    )
 
                                 _ ->
                                     ( loggedIn2, Command.none )

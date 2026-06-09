@@ -119,6 +119,7 @@ import Cloudflare
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannelId, FrontendDmChannel)
+import Drawing
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
@@ -170,6 +171,10 @@ type alias LocalState =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , calls : Call.Local
+    , -- Freehand drawings placed on top of messages, anchored to an element
+      -- within a message. Not persisted by the backend, so they only exist for
+      -- as long as someone keeps the app open.
+      drawings : SeqDict Drawing.TargetChannel Drawing.ChannelDrawing
     }
 
 

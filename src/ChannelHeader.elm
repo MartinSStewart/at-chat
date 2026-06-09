@@ -17,7 +17,7 @@ import Go
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
@@ -49,11 +49,15 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile currentChannelHeaderTab local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if otherUserId == local.localUser.session.userId then
+                        privateChatWithYourself isMobile currentChannelHeaderTab local
 
-                else
-                    privateChatWith isMobile currentChannelHeaderTab otherUserId local name
+                      else
+                        privateChatWith isMobile currentChannelHeaderTab otherUserId local name
+                    , drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
+                    ]
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
@@ -66,6 +70,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
+                    , drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
                     , showFilesButton
                     ]
         )
@@ -107,11 +112,15 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
-                if chattingWithYourself data local then
-                    privateChatWithYourself isMobile Nothing local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if chattingWithYourself data local then
+                        privateChatWithYourself isMobile Nothing local
 
-                else
-                    discordPrivateChatWith name
+                      else
+                        discordPrivateChatWith name
+                    , drawButton isMobile (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
+                    ]
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
@@ -124,6 +133,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
+                    , drawButton isMobile (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
                     , showFilesButton
                     ]
         )
@@ -162,6 +172,46 @@ chattingWithYourself data local =
 
         Nothing ->
             False
+
+
+{-| Toggles a mode where the user can draw freehand on top of messages.
+Only available on non-mobile since it requires a mouse.
+-}
+drawButton : Bool -> AnyGuildOrDmId -> LoggedIn2 -> Element FrontendMsg
+drawButton isMobile guildOrDmId loggedIn =
+    if isMobile then
+        Ui.none
+
+    else
+        let
+            isActive : Bool
+            isActive =
+                case loggedIn.drawingMode of
+                    Just drawingMode ->
+                        drawingMode.channel == guildOrDmId
+
+                    Nothing ->
+                        False
+        in
+        MyUi.elButton
+            (Dom.id "channelHeader_drawOnMessages")
+            (PressedDrawButton guildOrDmId)
+            [ Ui.alignRight
+            , Ui.width (Ui.px 32)
+            , Ui.paddingXY 6 0
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.Font.color
+                (if isActive then
+                    MyUi.font1
+
+                 else
+                    MyUi.font3
+                )
+            , Ui.attrIf isActive (Ui.background MyUi.tabBackground)
+            , Ui.Accessibility.description "Draw on top of messages"
+            ]
+            (Ui.html Icons.pencil)
 
 
 showFilesButton : Element FrontendMsg

@@ -29,6 +29,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import Drawing
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
@@ -1981,6 +1982,15 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        channelStrokes : SeqDict (Id ChannelMessageId) (List ( Id UserId, Drawing.Stroke ))
+        channelStrokes =
+            case SeqDict.get (Drawing.targetChannel (GuildOrDmId guildOrDmIdNoThread)) local.drawings of
+                Just drawing ->
+                    Drawing.strokesByMessage drawing
+
+                Nothing ->
+                    SeqDict.empty
     in
     Array.foldr
         (\messageState ( index, maybeLastDate, list ) ->
@@ -2159,8 +2169,13 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
+                        |> Tuple.mapSecond
+                            (Drawing.wrapMessageView loggedIn.drawingAnchorOffsets (SeqDict.get messageId channelStrokes))
+                        |> (\keyedMessage ->
+                                keyedMessage
+                                    :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                                    ++ list
+                           )
                     )
 
                 MessageUnloaded ->
@@ -2267,6 +2282,15 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        channelStrokes : SeqDict (Id ChannelMessageId) (List ( Id UserId, Drawing.Stroke ))
+        channelStrokes =
+            case SeqDict.get (Drawing.targetChannel (DiscordGuildOrDmId guildOrDmIdNoThread)) local.drawings of
+                Just drawing ->
+                    Drawing.strokesByMessage drawing
+
+                Nothing ->
+                    SeqDict.empty
     in
     Array.foldr
         (\messageState ( index, maybeLastDate, list ) ->
@@ -2439,8 +2463,13 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     message
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
+                        |> Tuple.mapSecond
+                            (Drawing.wrapMessageView loggedIn.drawingAnchorOffsets (SeqDict.get messageId channelStrokes))
+                        |> (\keyedMessage ->
+                                keyedMessage
+                                    :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                                    ++ list
+                           )
                     )
 
                 MessageUnloaded ->
@@ -3279,6 +3308,44 @@ replyToHeaderHelper onPress userId allUsers =
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
+{-| Attributes added to the conversation while the drawing mode is enabled.
+First the user picks an anchor by clicking on a profile image, timestamp or
+attachment. After that an overlay captures mouse events for freehand drawing.
+-}
+drawingModeAttributes : AnyGuildOrDmId -> LoggedIn2 -> List (Ui.Attribute FrontendMsg)
+drawingModeAttributes guildOrDmId loggedIn =
+    case loggedIn.drawingMode of
+        Just drawingMode ->
+            if drawingMode.channel == guildOrDmId then
+                case drawingMode.anchor of
+                    Nothing ->
+                        [ Ui.Events.on
+                            "click"
+                            (Json.Decode.map
+                                (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
+                                Drawing.pickAnchorDecoder
+                            )
+                        , Ui.inFront
+                            (Drawing.instructionsBanner
+                                "Click on a profile image, timestamp, or attachment to anchor your drawing to it"
+                            )
+                        ]
+
+                    Just selected ->
+                        [ Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg)
+                        , Ui.inFront
+                            (Drawing.instructionsBanner
+                                "Draw with the mouse. Press the pencil button or Escape when you're done"
+                            )
+                        ]
+
+            else
+                []
+
+        Nothing ->
+            []
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3333,16 +3400,18 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ ChannelHeader.channel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            [ emojiSelector
+            ([ emojiSelector
                 isMobile
                 local.localUser.user.availableCustomEmojis
                 local.localUser.user.availableStickers
                 local
                 loggedIn
                 model
-            , Ui.heightMin 0
-            , Ui.height Ui.fill
-            ]
+             , Ui.heightMin 0
+             , Ui.height Ui.fill
+             ]
+                ++ drawingModeAttributes (GuildOrDmId guildOrDmIdNoThread) loggedIn
+            )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
@@ -3509,10 +3578,12 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         ]
         [ ChannelHeader.discordChannel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
-            , Ui.heightMin 0
-            , Ui.height Ui.fill
-            ]
+            ([ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
+             , Ui.heightMin 0
+             , Ui.height Ui.fill
+             ]
+                ++ drawingModeAttributes (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
+            )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
@@ -5474,6 +5545,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 }
             , Ui.width Ui.shrink
             , Ui.alignTop
+            , Drawing.profileImageAnchorId spoilerHtmlId messageIndex |> Dom.idToString |> Ui.id
             ]
             (case SeqDict.get message2.createdBy allUsers of
                 Just user ->
@@ -5497,7 +5569,11 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
+                , Ui.el
+                    [ Ui.width Ui.shrink
+                    , Drawing.timestampAnchorId spoilerHtmlId messageIndex |> Dom.idToString |> Ui.id
+                    ]
+                    (messageTimestamp message2.createdAt localUser.timezone |> Ui.html)
                 , messageIdView messageIndex
                 ]
             , Html.div
@@ -5583,6 +5659,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                 }
             , Ui.width Ui.shrink
             , Ui.alignTop
+            , Drawing.profileImageAnchorId spoilerHtmlId messageIndex |> Dom.idToString |> Ui.id
             ]
             (case SeqDict.get message2.createdBy allUsers of
                 Just user ->
@@ -5606,7 +5683,11 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
+                , Ui.el
+                    [ Ui.width Ui.shrink
+                    , Drawing.timestampAnchorId spoilerHtmlId messageIndex |> Dom.idToString |> Ui.id
+                    ]
+                    (messageTimestamp message2.createdAt localUser.timezone |> Ui.html)
                 , messageIdView messageIndex
                 ]
             , Html.div
