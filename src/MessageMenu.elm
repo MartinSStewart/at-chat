@@ -852,7 +852,7 @@ messageCustomEmojiIds message =
         CallStarted _ _ _ reactions ->
             reactionIds reactions
 
-        GoMatchStarted _ _ _ reactions ->
+        GoMatchStarted _ _ reactions ->
             reactionIds reactions
 
 

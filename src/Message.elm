@@ -41,7 +41,7 @@ type Message messageId userId
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage Time.Posix
     | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
-    | GoMatchStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 maxEmbeds : number
@@ -229,7 +229,7 @@ addEmbed ( url, result ) message =
         CallStarted _ _ _ _ ->
             message
 
-        GoMatchStarted _ _ _ _ ->
+        GoMatchStarted _ _ _ ->
             message
 
 
@@ -288,7 +288,7 @@ createdAt message =
         CallStarted time _ _ _ ->
             time
 
-        GoMatchStarted time _ _ _ ->
+        GoMatchStarted time _ _ ->
             time
 
 
@@ -307,8 +307,8 @@ addReactionEmoji userId emoji message =
         CallStarted time endedAt startedBy reactions ->
             CallStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions)
 
-        GoMatchStarted time endedAt startedBy reactions ->
-            GoMatchStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions)
+        GoMatchStarted time startedBy reactions ->
+            GoMatchStarted time startedBy (addReactionEmojiHelper userId emoji reactions)
 
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -331,8 +331,8 @@ removeReactionEmoji userId emoji message =
         CallStarted time endedAt startedBy reactions ->
             CallStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions)
 
-        GoMatchStarted time endedAt startedBy reactions ->
-            GoMatchStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions)
+        GoMatchStarted time startedBy reactions ->
+            GoMatchStarted time startedBy (removeReactionEmojiHelper userId emoji reactions)
 
 
 removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -367,5 +367,5 @@ reactionEmojis message =
         CallStarted _ _ _ reactions ->
             reactions
 
-        GoMatchStarted _ _ _ reactions ->
+        GoMatchStarted _ _ reactions ->
             reactions

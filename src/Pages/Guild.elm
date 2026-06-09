@@ -2196,7 +2196,7 @@ maybeRepliedTo message channel =
         CallStarted _ _ _ _ ->
             Nothing
 
-        GoMatchStarted _ _ _ _ ->
+        GoMatchStarted _ _ _ ->
             Nothing
 
 
@@ -3230,7 +3230,7 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         CallStarted _ _ userId _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
-                        GoMatchStarted _ _ userId _ ->
+                        GoMatchStarted _ userId _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -4507,7 +4507,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallStarted _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GoMatchStarted _ _ _ ->
             Ui.none
 
 
@@ -4638,7 +4638,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         CallStarted _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GoMatchStarted _ _ _ ->
             Ui.none
 
 
@@ -4984,7 +4984,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GoMatchStarted time endedAt userId reactions ->
+        GoMatchStarted time userId reactions ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5000,7 +5000,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId time endedAt userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageId
                     ]
@@ -5121,7 +5121,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GoMatchStarted time endedAt userId reactions ->
+        GoMatchStarted time userId reactions ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5137,7 +5137,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId time endedAt userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageId
                     ]
@@ -5240,7 +5240,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GoMatchStarted time endedAt userId reactions ->
+        GoMatchStarted time userId reactions ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5252,7 +5252,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId time endedAt userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     ]
                 )
@@ -5347,7 +5347,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row [] [ callStartedCard userId time endedAt allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
-        GoMatchStarted time endedAt userId reactions ->
+        GoMatchStarted time userId reactions ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5359,7 +5359,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId time endedAt userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     ]
                 )
@@ -5679,8 +5679,8 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
         Just ( repliedToIndex, CallStarted startedAt endedAt userId _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GoMatchStarted startedAt endedAt userId _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId startedAt endedAt allUsers)
+        Just ( repliedToIndex, GoMatchStarted startedAt userId _ ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
             Ui.none
@@ -5777,14 +5777,14 @@ eventDurationText start end =
             ""
 
 
-goMatchStarted : userId -> Time.Posix -> Maybe Time.Posix -> SeqDict userId { a | name : PersonName } -> Element msg
-goMatchStarted userId startedAt endedAt allUsers =
+goMatchStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
+goMatchStarted userId allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
         [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
-        , " started a Go match" ++ eventDurationText startedAt endedAt |> Ui.text |> Ui.el []
+        , Ui.text " started a Go match" |> Ui.el []
         ]
 
 
@@ -5798,14 +5798,14 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> Time.Posix -> Maybe Time.Posix -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-goMatchStartedCard messageId startedAt endedAt userId allUsers =
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
+goMatchStartedCard messageId userId allUsers =
     eventCard
         (Dom.id ("guild_goMatchStartedCard_" ++ Id.toString messageId))
         MessageViewMsg_PressedGoMatchStartedCard
         (Ui.html Icons.go)
         (User.toString userId allUsers)
-        ("started a Go match" ++ eventDurationText startedAt endedAt)
+        "started a Go match"
 
 
 eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
@@ -6241,16 +6241,11 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GoMatchStarted _ endedAt userId _ ->
+                            GoMatchStarted _ userId _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
-                                    , case endedAt of
-                                        Just _ ->
-                                            Html.text "'s Go match ended"
-
-                                        Nothing ->
-                                            Html.text " started a Go match"
+                                    , Html.text " started a Go match"
                                     ]
                                 ]
 
@@ -7345,8 +7340,8 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallStarted _ endedAt _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ endedAt _ _ ->
-                                    LocalState.goMatchStartedText endedAt
+                                GoMatchStarted _ _ _ ->
+                                    LocalState.goMatchStartedText
 
                         MessageUnloaded ->
                             ""
@@ -7468,8 +7463,8 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 CallStarted _ endedAt _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ endedAt _ _ ->
-                                    LocalState.goMatchStartedText endedAt
+                                GoMatchStarted _ _ _ ->
+                                    LocalState.goMatchStartedText
 
                         MessageUnloaded ->
                             ""

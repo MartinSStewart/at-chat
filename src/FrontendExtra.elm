@@ -4032,7 +4032,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt Nothing changeBy SeqDict.empty)
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId
