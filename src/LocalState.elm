@@ -415,7 +415,7 @@ messageToString allUsers3 message =
 callStartedText : Maybe Time.Posix -> String
 callStartedText endedAt =
     case endedAt of
-        Just endedAt2 ->
+        Just _ ->
             "Call ended"
 
         Nothing ->
@@ -2684,7 +2684,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             DeletedMessage time ->
                                                 DeletedMessage_NoReply time
 
-                                            CallStarted time endedAt startedBy reactions ->
+                                            CallStarted time _ startedBy reactions ->
                                                 CallStarted_NoReply time startedBy reactions
 
                                             GoMatchStarted time _ reactions ->
@@ -2719,7 +2719,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                         DeletedMessage time ->
                                             DeletedMessage_NoReply time
 
-                                        CallStarted time endedAt startedBy reactions ->
+                                        CallStarted time _ startedBy reactions ->
                                             CallStarted_NoReply time startedBy reactions
 
                                         GoMatchStarted time _ reactions ->
@@ -2777,7 +2777,7 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                 DeletedMessage time ->
                                     DeletedMessage_NoReply time
 
-                                CallStarted time endedAt startedBy reactions ->
+                                CallStarted time _ startedBy reactions ->
                                     CallStarted_NoReply time startedBy reactions
 
                                 GoMatchStarted time _ reactions ->

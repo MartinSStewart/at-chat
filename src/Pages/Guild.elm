@@ -5679,7 +5679,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
         Just ( repliedToIndex, CallStarted startedAt endedAt userId _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GoMatchStarted startedAt userId _ ) ->
+        Just ( repliedToIndex, GoMatchStarted _ userId _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
@@ -5833,11 +5833,6 @@ eventCard htmlId onPress icon userName action =
                 ]
             ]
         )
-
-
-callEnded : Element msg
-callEnded =
-    Ui.Prose.paragraph [ Ui.paddingXY 0 4 ] [ Ui.el [] (Ui.text "Call ended") ]
 
 
 messagePaddingX : number

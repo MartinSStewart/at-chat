@@ -1,7 +1,7 @@
 module Frontend exposing (app, app_)
 
 import AiChat
-import Array exposing (Array)
+import Array
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
@@ -33,7 +33,7 @@ import Go
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -43,7 +43,6 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
