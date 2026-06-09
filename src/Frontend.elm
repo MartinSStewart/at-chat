@@ -1495,51 +1495,52 @@ updateLoaded msg model =
                         horizontalStart : Bool
                         horizontalStart =
                             abs averageMove.x > abs averageMove.y
-
-                        target : DragTarget
-                        target =
-                            dragTarget startTouches model
                     in
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( case target of
-                                Drag_CallThumbnail ->
-                                    { loggedIn
-                                        | voiceChat =
-                                            Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
-                                    }
+                    case dragTarget startTouches model of
+                        Just target ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    ( case target of
+                                        Drag_CallThumbnail ->
+                                            { loggedIn
+                                                | voiceChat =
+                                                    Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
+                                            }
 
-                                Drag_Channel ->
-                                    if horizontalStart then
-                                        let
-                                            tHorizontal : Float
-                                            tHorizontal =
-                                                averageMove.x / toFloat (Coord.xRaw model.windowSize)
-                                        in
-                                        { loggedIn
-                                            | sidebarMode =
-                                                case ( loggedIn.textInputFocus, isTouchingTextInput startTouches ) of
-                                                    ( Just _, True ) ->
-                                                        loggedIn.sidebarMode
+                                        Drag_Channel ->
+                                            if horizontalStart then
+                                                let
+                                                    tHorizontal : Float
+                                                    tHorizontal =
+                                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                                in
+                                                { loggedIn
+                                                    | sidebarMode =
+                                                        case ( loggedIn.textInputFocus, isTouchingTextInput startTouches ) of
+                                                            ( Just _, True ) ->
+                                                                loggedIn.sidebarMode
 
-                                                    _ ->
-                                                        dragChannelSidebar time tHorizontal loggedIn.sidebarMode
-                                        }
+                                                            _ ->
+                                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                                }
 
-                                    else
-                                        loggedIn
-                            , Command.none
-                            )
-                        )
-                        { model
-                            | drag =
-                                Dragging
-                                    { horizontalStart = horizontalStart
-                                    , touches = startTouches
-                                    , target = target
-                                    }
-                            , dragPrevious = model.drag
-                        }
+                                            else
+                                                loggedIn
+                                    , Command.none
+                                    )
+                                )
+                                { model
+                                    | drag =
+                                        Dragging
+                                            { horizontalStart = horizontalStart
+                                            , touches = startTouches
+                                            , target = target
+                                            }
+                                    , dragPrevious = model.drag
+                                }
+
+                        Nothing ->
+                            ( model, Command.none )
 
         TouchEnd time ->
             handleTouchEnd time model
@@ -5526,11 +5527,14 @@ handleTouchEnd time model =
 call thumbnail is visible and the touch began on top of it, the drag moves the
 thumbnail; otherwise it falls back to dragging the channel sidebar.
 -}
-dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> DragTarget
+dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
 dragTarget startTouches model =
     case model.loginStatus of
         LoggedIn loggedIn ->
             let
+                isMobile =
+                    MyUi.isMobile model
+
                 local : LocalState
                 local =
                     Local.model loggedIn.localState
@@ -5545,16 +5549,23 @@ dragTarget startTouches model =
             case Call.displayMode local.localUser.session.userId model.route local.calls of
                 Call.ShowLocalVideoAndCallThumbnail _ ->
                     if Call.insideThumbnail centroid model loggedIn.voiceChat then
-                        Drag_CallThumbnail
+                        Just Drag_CallThumbnail
+
+                    else if isMobile then
+                        Just Drag_Channel
 
                     else
-                        Drag_Channel
+                        Nothing
 
                 _ ->
-                    Drag_Channel
+                    if isMobile then
+                        Just Drag_Channel
+
+                    else
+                        Nothing
 
         NotLoggedIn _ ->
-            Drag_Channel
+            Nothing
 
 
 dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode
