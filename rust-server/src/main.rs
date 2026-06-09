@@ -156,25 +156,14 @@ fn thumbnail_filepath(hash: &str) -> String {
     format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
-// Reject HTML documents larger than this before parsing them. Parsing arbitrary
-// remote pages is recursive (in the `webpage`/html5ever stack), so an unbounded
-// or pathologically deep document can overflow the stack and abort the whole
-// process. Capping the size bounds the maximum nesting depth we ever feed to the
-// parser.
-const MAX_HTML_BYTES: usize = 1024 * 1024; // 1 MB
-// Generous cap for images so a huge download can't blow up memory.
-const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024; // 20 MB
 
 enum FetchedContent {
     Image(Vec<u8>),
     Html(String),
 }
 
-// Fetch a URL, capping how much we read based on its Content-Type. Returns None
-// on any network error, or if the body exceeds the relevant size limit (e.g. an
-// HTML document larger than MAX_HTML_BYTES is rejected outright).
 async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedContent> {
-    let mut response = client.get(url).send().await.ok()?;
+    let response: reqwest::Response = client.get(url).send().await.ok()?;
 
     let is_image = response
         .headers()
@@ -183,27 +172,21 @@ async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedCon
         .map(|v| v.trim().to_ascii_lowercase().starts_with("image/"))
         .unwrap_or(false);
 
-    let limit = if is_image {
-        MAX_IMAGE_BYTES
-    } else {
-        MAX_HTML_BYTES
-    };
-
-    let mut buf: Vec<u8> = Vec::new();
-    while let Some(chunk) = response.chunk().await.ok()? {
-        if buf.len() + chunk.len() > limit {
-            // Too large (e.g. HTML over 1 MB) -> refuse rather than parse it.
-            return None;
-        }
-        buf.extend_from_slice(&chunk);
-    }
+    let buf: Vec<u8> = response.bytes().await.ok()?.to_vec();
 
     if is_image {
-        Some(FetchedContent::Image(buf))
-    } else {
+        if buf.len() < 10 * 1024 * 1024 {
+            Some(FetchedContent::Image(buf))
+        } else {
+            None
+        }
+    } else if buf.len() < 1024 * 1024 {
         Some(FetchedContent::Html(
             String::from_utf8_lossy(&buf).into_owned(),
         ))
+    }
+    else {
+        None
     }
 }
 
@@ -248,11 +231,7 @@ fn image_data_from_bytes(url: &str, bytes: &[u8]) -> Option<ImageData> {
     }
 }
 
-// Parse already-fetched HTML without letting a parse failure take down the
-// server. The parse runs on a dedicated thread with a very large stack so that a
-// deeply nested document (bounded by MAX_HTML_BYTES) cannot overflow the worker
-// thread's stack, and catch_unwind contains any ordinary panic. Returns None if
-// parsing panics or fails.
+// Parse already-fetched HTML without letting a parse failure take down the server.
 fn parse_html_safe(body: String, url: String) -> Option<HTML> {
     std::thread::Builder::new()
         .stack_size(1024 * 1024 * 1024) // 1 GiB (lazily committed) headroom for recursion
@@ -1456,7 +1435,7 @@ mod tests {
     async fn oversized_html_is_rejected() {
         // Build an HTML document comfortably larger than the 1 MB cap.
         let mut html = String::from(r#"<meta property="og:title" content="Too Big">"#);
-        html.push_str(&"<!-- padding -->".repeat(MAX_HTML_BYTES / 10));
+        html.push_str(&"<!-- padding -->".repeat(1024 * 1024 / 10));
         let base = spawn_test_server(move |_base| {
             vec![("/", "text/html; charset=utf-8", html.into_bytes())]
         })
