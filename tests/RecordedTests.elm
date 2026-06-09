@@ -1991,9 +1991,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.testGroup
         "Go matches"
-        [ goMatchTest normalConfig
-        , goTurnNotificationDotTest normalConfig
-        , publicGoMatchViewTest normalConfig
+        [ RecordedTestExtra.goMatchTest normalConfig
+        , RecordedTestExtra.goTurnNotificationDotTest normalConfig
+        , RecordedTestExtra.publicGoMatchViewTest normalConfig
         ]
     ]
 
