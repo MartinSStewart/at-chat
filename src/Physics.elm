@@ -100,10 +100,18 @@ resists more sliding — so a settled, compressed pile holds together and only
 gives way once something pushes hard enough, instead of collapsing the moment
 a circle is removed.
 
+Pick a small-ish coefficient. With `μ = 1` the friction budget equals the full
+penetration depth, and in a dense Gauss-Seidel pile the symmetric tangential
+snap-back at one contact ends up shoving bodies into their other contacts hard
+enough that the solver oscillates instead of converging — circles visibly
+overlap. Values in the 0.1–0.3 range still grip pleasantly (the bottom
+contacts of a stack carry more penetration, so they grip more) without driving
+the solver unstable.
+
 -}
 frictionCoeff : Float
 frictionCoeff =
-    1
+    0.1
 
 
 {-| Conservative upper bound on how far any body could move during a single
