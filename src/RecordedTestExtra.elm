@@ -84,6 +84,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict
 import Discord
+import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
@@ -3413,6 +3414,9 @@ allAttackerLocalChanges =
         { otherUserId = Broadcast.adminUserId }
         (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
+    , Local_Drawing
+        guildOrDmId_guild
+        (Drawing.StartStroke { messageId = Id.fromInt 0, anchorType = Drawing.ProfileImageAnchor } ( 0, 0 ))
     ]
 
 

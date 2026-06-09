@@ -70,8 +70,11 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
-                    , drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -184,8 +187,8 @@ drawButton isMobile guildOrDmId loggedIn =
 
     else
         let
-            isActive : Bool
-            isActive =
+            isSelected : Bool
+            isSelected =
                 case loggedIn.drawingMode of
                     Just drawingMode ->
                         drawingMode.channel == guildOrDmId
@@ -202,13 +205,15 @@ drawButton isMobile guildOrDmId loggedIn =
             , Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.Font.color
-                (if isActive then
+                (if isSelected then
                     MyUi.font1
 
                  else
                     MyUi.font3
                 )
-            , Ui.attrIf isActive (Ui.background MyUi.tabBackground)
+            , Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
+            , Ui.attrIf isSelected (outwardBottomCorner 8 True)
+            , Ui.attrIf isSelected (outwardBottomCorner 8 False)
             , Ui.Accessibility.description "Draw on top of messages"
             ]
             (Ui.html Icons.pencil)
@@ -223,6 +228,8 @@ showFilesButton =
         , Ui.width (Ui.px 32)
         , Ui.paddingXY 4 0
         , Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.Font.color MyUi.font3
         ]
         (Ui.html Icons.document)
 

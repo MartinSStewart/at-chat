@@ -3323,7 +3323,7 @@ drawingModeAttributes guildOrDmId loggedIn =
                             "click"
                             (Json.Decode.map
                                 (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
-                                Drawing.pickAnchorDecoder
+                                Drawing.decodePickAnchor
                             )
                         , Ui.inFront
                             (Drawing.instructionsBanner

@@ -11,20 +11,17 @@ module Drawing exposing
     , TargetChannel(..)
     , anchorDomId
     , anchorDomIdFallback
-    , anchorFromDomId
     , applyChange
     , channelAnchors
+    , decodePickAnchor
     , init
     , initialAnchorSelection
     , inputOverlay
     , instructionsBanner
-    , messageOverlay
-    , pickAnchorDecoder
     , profileImageAnchorId
     , strokesByMessage
     , targetChannel
     , timestampAnchorId
-    , userColor
     , wrapMessageView
     )
 
@@ -374,8 +371,8 @@ parseAnchor messageIdText anchorType =
 {-| Walks up from the clicked element looking for something that can be used as
 a drawing anchor (profile image, timestamp, or attached file/image).
 -}
-pickAnchorDecoder : Json.Decode.Decoder (Maybe Anchor)
-pickAnchorDecoder =
+decodePickAnchor : Json.Decode.Decoder (Maybe Anchor)
+decodePickAnchor =
     Json.Decode.field "target" (walkUpForAnchor 30)
 
 
@@ -499,7 +496,7 @@ inputOverlay strokeActive toMsg =
                 |> Json.Decode.andThen
                     (\button ->
                         if button == 0 then
-                            mousePositionDecoder MouseDown
+                            decodeMousePosition MouseDown
 
                         else
                             Json.Decode.fail "Only drawing with the primary mouse button is supported"
@@ -507,7 +504,7 @@ inputOverlay strokeActive toMsg =
             )
          ]
             ++ (if strokeActive then
-                    [ Html.Events.on "mousemove" (mousePositionDecoder MouseMoved)
+                    [ Html.Events.on "mousemove" (decodeMousePosition MouseMoved)
                     , Html.Events.on "mouseup" (Json.Decode.succeed MouseUp)
                     , Html.Events.on "mouseleave" (Json.Decode.succeed MouseUp)
                     ]
@@ -519,11 +516,11 @@ inputOverlay strokeActive toMsg =
         []
         |> Html.map toMsg
         |> Ui.html
-        |> Ui.el [ Ui.width Ui.fill, Ui.height Ui.fill ]
+        |> Ui.el [ Ui.height Ui.fill ]
 
 
-mousePositionDecoder : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
-mousePositionDecoder toMsg =
+decodeMousePosition : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
+decodeMousePosition toMsg =
     Json.Decode.map2
         toMsg
         (Json.Decode.field "clientX" Json.Decode.float)
