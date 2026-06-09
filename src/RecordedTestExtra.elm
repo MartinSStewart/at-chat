@@ -1114,8 +1114,10 @@ dmCallTest isMobile normalConfig =
                     , admin.checkView
                         50
                         (\html ->
+                            -- While the call is ongoing the "started a call" card is shown both in
+                            -- the message list and in the open voice chat view.
                             Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call" ] html
-                                |> Test.Html.Query.count (Expect.equal 1)
+                                |> Test.Html.Query.count (Expect.equal 2)
                         )
                     , T.checkBackend 150
                         (\m ->
@@ -1229,6 +1231,8 @@ dmCallTest isMobile normalConfig =
                     , admin.checkView
                         50
                         (\html ->
+                            -- Once the call has ended the voice chat view is gone, so the card with
+                            -- the call duration only remains in the message list.
                             Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1\u{00A0}minute" ] html
                                 |> Test.Html.Query.count (Expect.equal 1)
                         )
