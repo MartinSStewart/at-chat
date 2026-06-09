@@ -22,7 +22,6 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
-    , addVoiceChatMember
     , defaultRemoteCallData
     , displayMode
     , displayModeChangeCmd
@@ -40,7 +39,6 @@ port module Call exposing
     , startCallCmd
     , startLocalStream
     , toJs
-    , updateVoiceChatMember
     , videoNodes
     , videoPosAndSize
     , view
@@ -71,7 +69,6 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
 import Route exposing (DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -88,16 +85,14 @@ type LocalChange
     | Local_PublishConnected
     | Local_PullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
     | Local_RenegotiateAnswer Cloudflare.Sdp (ToBeFilledInByBackend (Result () ()))
-    | Local_SetAudioInputEnabled Bool
-    | Local_SetVideoInputEnabled Bool
+    | Local_SetRemoteCallData RemoteCallData
 
 
 type ServerChange
     = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
     | Server_Joining Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
-    | Server_SetAudioInputEnabled ConnectionId Bool
-    | Server_SetVideoInputEnabled ConnectionId Bool
+    | Server_SetRemoteCallData ConnectionId RemoteCallData
 
 
 type alias ExistingPeer =
@@ -154,46 +149,6 @@ defaultRemoteCallData =
     { audioInputEnabled = True, videoInputEnabled = True }
 
 
-{-| Add a peer to a voice chat, keeping their existing call data if they're
-already present. New peers start with audio and video enabled.
--}
-addVoiceChatMember :
-    CallId
-    -> ( Id UserId, ClientId )
-    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-addVoiceChatMember roomId otherClientId voiceChats =
-    SeqDict.update
-        roomId
-        (\maybe ->
-            case maybe of
-                Just nonempty ->
-                    NonemptyDict.updateOrInsert
-                        otherClientId
-                        (Maybe.withDefault defaultRemoteCallData)
-                        nonempty
-                        |> Just
-
-                Nothing ->
-                    NonemptyDict.singleton otherClientId defaultRemoteCallData |> Just
-        )
-        voiceChats
-
-
-{-| Update the call data for a single peer in a voice chat, if present.
--}
-updateVoiceChatMember :
-    ConnectionId
-    -> (RemoteCallData -> RemoteCallData)
-    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) RemoteCallData)
-updateVoiceChatMember connectionId updateData voiceChats =
-    SeqDict.updateIfExists
-        connectionId.roomId
-        (NonemptyDict.updateIfExists connectionId.otherClientId updateData)
-        voiceChats
-
-
 type CallError
     = MissingApiKeys
     | FailedToPullTracks
@@ -204,8 +159,7 @@ type alias Model =
     { userMediaDevices : MediaDevicesStatus
     , selectedAudioInputDevice : Maybe (IdString MediaDeviceId)
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
-    , audioInputEnabled : Bool
-    , videoInputEnabled : Bool
+    , remoteCallData : RemoteCallData
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict CallId (Nonempty Recording)
     , localIsSpeaking : Bool
@@ -253,8 +207,7 @@ initModel =
     { userMediaDevices = MediaDevicesNotLoaded
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
-    , audioInputEnabled = True
-    , videoInputEnabled = True
+    , remoteCallData = defaultRemoteCallData
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , localIsSpeaking = False
@@ -373,8 +326,8 @@ displayModeChangeCmd displayModeOld displayModeNew model =
             ToJs_StartLocalStream
                 { audioInput = model.selectedAudioInputDevice
                 , videoInput = model.selectedVideoInputDevice
-                , audioInputEnabled = model.audioInputEnabled
-                , videoInputEnabled = model.videoInputEnabled
+                , audioInputEnabled = model.remoteCallData.audioInputEnabled
+                , videoInputEnabled = model.remoteCallData.videoInputEnabled
                 }
                 |> toJs
 
@@ -540,7 +493,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                model
+                model.remoteCallData
                 VideoNodeHidden
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
@@ -552,7 +505,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                model
+                model.remoteCallData
                 VideoNodeFullSize
                 (getPosAndSize 0 (posAndSizes 1))
                 model.localIsSpeaking
@@ -582,7 +535,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                model
+                model.remoteCallData
                 VideoNodeFullSize
                 (getPosAndSize 0 list)
                 model.localIsSpeaking
@@ -630,7 +583,7 @@ videoNodes localUser config loggedIn local =
                 localUser.session.userId
                 localUser
                 IsLocal
-                model
+                model.remoteCallData
                 (if visibleIndex == 0 then
                     VideoNodeThumbnail
 
@@ -860,7 +813,7 @@ videoNode :
     Id UserId
     -> LocalUser
     -> LocalOrConnection
-    -> { a | audioInputEnabled : Bool, videoInputEnabled : Bool }
+    -> RemoteCallData
     -> VideoNodeState
     -> ( Coord CssPixels, Int )
     -> Bool
@@ -1167,12 +1120,12 @@ view windowSize roomId calls model =
                         , voiceChatControlButton
                             "guild_voiceChatMute"
                             (Ui.html Icons.microphone)
-                            model.audioInputEnabled
+                            model.remoteCallData.audioInputEnabled
                             PressedToggleMute
                         , voiceChatControlButton
                             "guild_voiceChatPauseVideo"
                             (Ui.html Icons.camera)
-                            model.videoInputEnabled
+                            model.remoteCallData.videoInputEnabled
                             PressedTogglePauseVideo
                         ]
                     ]
@@ -1264,10 +1217,7 @@ serverChangeCmd change _ _ local _ =
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)
 
-        Server_SetAudioInputEnabled connectionId bool ->
-            Command.none
-
-        Server_SetVideoInputEnabled connectionId bool ->
+        Server_SetRemoteCallData connectionId bool ->
             Command.none
 
 
@@ -1306,8 +1256,8 @@ startLocalStream model =
     ToJs_StartLocalStream
         { audioInput = model.selectedAudioInputDevice
         , videoInput = model.selectedVideoInputDevice
-        , audioInputEnabled = model.audioInputEnabled
-        , videoInputEnabled = model.videoInputEnabled
+        , audioInputEnabled = model.remoteCallData.audioInputEnabled
+        , videoInputEnabled = model.remoteCallData.videoInputEnabled
         }
         |> toJs
 
@@ -1454,8 +1404,8 @@ startCallCmd roomId existingPeers model =
     { roomId = roomId
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
-    , audioInputEnabled = model.audioInputEnabled
-    , videoInputEnabled = model.videoInputEnabled
+    , audioInputEnabled = model.remoteCallData.audioInputEnabled
+    , videoInputEnabled = model.remoteCallData.videoInputEnabled
     , existingPeers = existingPeers
     }
         |> ToJs_StartCall

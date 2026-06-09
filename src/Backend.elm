@@ -14,7 +14,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
-import Call
+import Call exposing (RemoteCallData)
 import ChannelDescription
 import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
@@ -350,11 +350,6 @@ update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFro
 update msg model =
     case msg of
         UserConnected sessionId clientId ->
-            let
-                callData : Call.RemoteCallData
-                callData =
-                    Call.defaultRemoteCallData
-            in
             ( { model
                 | connections =
                     SeqDict.update
@@ -365,8 +360,7 @@ update msg model =
                                     NonemptyDict.insert clientId
                                         { lastRequest = NoRequestsMade
                                         , call = NotInCall
-                                        , audioInputEnabled = callData.audioInputEnabled
-                                        , videoInputEnabled = callData.videoInputEnabled
+                                        , remoteCallData = Call.defaultRemoteCallData
                                         }
                                         value
 
@@ -374,8 +368,7 @@ update msg model =
                                     NonemptyDict.singleton clientId
                                         { lastRequest = NoRequestsMade
                                         , call = NotInCall
-                                        , audioInputEnabled = callData.audioInputEnabled
-                                        , videoInputEnabled = callData.videoInputEnabled
+                                        , remoteCallData = Call.defaultRemoteCallData
                                         }
                             )
                                 |> Just
@@ -411,8 +404,7 @@ update msg model =
                                 (\data ->
                                     { lastRequest = LastRequest time
                                     , call = data.call
-                                    , audioInputEnabled = data.audioInputEnabled
-                                    , videoInputEnabled = data.videoInputEnabled
+                                    , remoteCallData = data.remoteCallData
                                     }
                                 )
                             )
@@ -5282,33 +5274,8 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_RenegotiateAnswer answerSdp _ ->
             asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
 
-        Call.Local_SetAudioInputEnabled isEnabled ->
-            asUser
-                model
-                sessionId
-                (handleSetInputEnabled
-                    sessionId
-                    clientId
-                    changeId
-                    (Call.Local_SetAudioInputEnabled isEnabled)
-                    (\connection -> { connection | audioInputEnabled = isEnabled })
-                    (\connectionId -> Call.Server_SetAudioInputEnabled connectionId isEnabled)
-                    model
-                )
-
-        Call.Local_SetVideoInputEnabled isEnabled ->
-            asUser
-                model
-                sessionId
-                (handleSetInputEnabled
-                    sessionId
-                    clientId
-                    changeId
-                    (Call.Local_SetVideoInputEnabled isEnabled)
-                    (\connection -> { connection | videoInputEnabled = isEnabled })
-                    (\connectionId -> Call.Server_SetVideoInputEnabled connectionId isEnabled)
-                    model
-                )
+        Call.Local_SetRemoteCallData remoteCallData ->
+            asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
 
 
 {-| Apply a "set audio/video input enabled" change: update the stored state for
@@ -5319,14 +5286,12 @@ handleSetInputEnabled :
     SessionId
     -> ClientId
     -> ChangeId
-    -> Call.LocalChange
-    -> (ConnectionData -> ConnectionData)
-    -> (Call.ConnectionId -> Call.ServerChange)
+    -> RemoteCallData
     -> BackendModel
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleSetInputEnabled sessionId clientId changeId localChange updateConnection toServerChange model session _ =
+handleSetInputEnabled sessionId clientId changeId remoteCallData model session _ =
     case SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId) of
         Just connection ->
             let
@@ -5346,11 +5311,14 @@ handleSetInputEnabled sessionId clientId changeId localChange updateConnection t
                 | connections =
                     SeqDict.updateIfExists
                         sessionId
-                        (NonemptyDict.updateIfExists clientId updateConnection)
+                        (NonemptyDict.updateIfExists
+                            clientId
+                            (\connection2 -> { connection2 | remoteCallData = remoteCallData })
+                        )
                         model.connections
               }
             , Command.batch
-                [ LocalChangeResponse changeId (Local_VoiceChatChange localChange)
+                [ LocalChangeResponse changeId (Local_VoiceChatChange (Call.Local_SetRemoteCallData remoteCallData))
                     |> Lamdera.sendToFrontend clientId
                 , case maybeRoomId of
                     Just (Call.DmRoomId otherUserId) ->
@@ -5359,10 +5327,11 @@ handleSetInputEnabled sessionId clientId changeId localChange updateConnection t
                             session.userId
                             otherUserId
                             (\otherUserId2 ->
-                                toServerChange
+                                Call.Server_SetRemoteCallData
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( session.userId, clientId )
                                     }
+                                    remoteCallData
                                     |> Server_VoiceChatChange
                             )
                             model

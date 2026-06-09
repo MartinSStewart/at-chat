@@ -640,19 +640,12 @@ getVoiceChatData clientId session model =
                 Just otherSession ->
                     NonemptyDict.foldl
                         (\otherClientId data dict2 ->
-                            let
-                                remoteCallData : Call.RemoteCallData
-                                remoteCallData =
-                                    { audioInputEnabled = data.audioInputEnabled
-                                    , videoInputEnabled = data.videoInputEnabled
-                                    }
-                            in
                             case ( data.call, otherClientId == clientId ) of
                                 ( ConnectedToCall roomId _, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData dict2
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 ( ConnectingToCall roomId, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData dict2
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 _ ->
                                     dict2

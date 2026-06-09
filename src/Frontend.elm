@@ -2192,7 +2192,7 @@ updateLoaded msg model =
                                                     SeqDict.update
                                                         threadMessageIndex
                                                         (\maybe ->
-                                                            SeqDictHelper.addItem
+                                                            SeqDictHelper.addToSet
                                                                 messageId
                                                                 spoilerIndex
                                                                 (Maybe.withDefault SeqDict.empty maybe)
@@ -2204,7 +2204,7 @@ updateLoaded msg model =
                                         NoThreadWithMessage messageId ->
                                             { revealedSpoilers
                                                 | messages =
-                                                    SeqDictHelper.addItem
+                                                    SeqDictHelper.addToSet
                                                         messageId
                                                         spoilerIndex
                                                         revealedSpoilers.messages
@@ -4033,14 +4033,23 @@ updateLoaded msg model =
                                 voiceChat =
                                     loggedIn.voiceChat
 
+                                remoteCallData =
+                                    voiceChat.remoteCallData
+
                                 audioInputEnabled : Bool
                                 audioInputEnabled =
-                                    not voiceChat.audioInputEnabled
+                                    not remoteCallData.audioInputEnabled
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Call.Local_SetAudioInputEnabled audioInputEnabled |> Local_VoiceChatChange |> Just)
-                                { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
+                                (Call.Local_SetRemoteCallData { remoteCallData | audioInputEnabled = audioInputEnabled }
+                                    |> Local_VoiceChatChange
+                                    |> Just
+                                )
+                                { loggedIn
+                                    | voiceChat =
+                                        { voiceChat | remoteCallData = { remoteCallData | audioInputEnabled = audioInputEnabled } }
+                                }
                                 (Call.toJs (Call.ToJs_SetAudioInputEnabled audioInputEnabled))
                         )
                         model
@@ -4053,14 +4062,23 @@ updateLoaded msg model =
                                 voiceChat =
                                     loggedIn.voiceChat
 
+                                remoteCallData =
+                                    voiceChat.remoteCallData
+
                                 videoInputEnabled : Bool
                                 videoInputEnabled =
-                                    not voiceChat.videoInputEnabled
+                                    not remoteCallData.videoInputEnabled
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Call.Local_SetVideoInputEnabled videoInputEnabled |> Local_VoiceChatChange |> Just)
-                                { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
+                                (Call.Local_SetRemoteCallData { remoteCallData | videoInputEnabled = videoInputEnabled }
+                                    |> Local_VoiceChatChange
+                                    |> Just
+                                )
+                                { loggedIn
+                                    | voiceChat =
+                                        { voiceChat | remoteCallData = { remoteCallData | videoInputEnabled = videoInputEnabled } }
+                                }
                                 (Call.toJs (Call.ToJs_SetVideoInputEnabled videoInputEnabled))
                         )
                         model
@@ -5888,10 +5906,7 @@ updateLoadedFromBackend msg model =
                                 Call.Local_RenegotiateAnswer _ _ ->
                                     Command.none
 
-                                Call.Local_SetAudioInputEnabled _ ->
-                                    Command.none
-
-                                Call.Local_SetVideoInputEnabled _ ->
+                                Call.Local_SetRemoteCallData _ ->
                                     Command.none
 
                         Local_TextEditor TextEditor.Local_Undo ->

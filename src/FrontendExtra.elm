@@ -241,11 +241,8 @@ pendingChangesText localChange =
                 Call.Local_RenegotiateAnswer _ _ ->
                     "Renegotiate"
 
-                Call.Local_SetAudioInputEnabled _ ->
-                    "Set audio input enabled"
-
-                Call.Local_SetVideoInputEnabled _ ->
-                    "Set video input enabled"
+                Call.Local_SetRemoteCallData _ ->
+                    "Set audio/video input enabled"
 
         Local_Go _ change ->
             case change of
@@ -2808,7 +2805,11 @@ changeUpdate localMsg local =
                                                         , voiceChats =
                                                             List.foldl
                                                                 (\peer5 set2 ->
-                                                                    Call.addVoiceChatMember roomId peer5.connectionId.otherClientId set2
+                                                                    SeqDictHelper.addToDict
+                                                                        roomId
+                                                                        peer5.connectionId.otherClientId
+                                                                        Call.defaultRemoteCallData
+                                                                        set2
                                                                 )
                                                                 calls.voiceChats
                                                                 peer4
@@ -2864,10 +2865,7 @@ changeUpdate localMsg local =
                         Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
                             local
 
-                        Call.Local_SetAudioInputEnabled _ ->
-                            local
-
-                        Call.Local_SetVideoInputEnabled _ ->
+                        Call.Local_SetRemoteCallData _ ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -3937,7 +3935,10 @@ changeUpdate localMsg local =
                         Call.Server_Joined time { roomId, otherClientId } _ _ ->
                             { local
                                 | calls =
-                                    { calls | voiceChats = Call.addVoiceChatMember roomId otherClientId calls.voiceChats }
+                                    { calls
+                                        | voiceChats =
+                                            SeqDictHelper.addToDict roomId otherClientId Call.defaultRemoteCallData calls.voiceChats
+                                    }
                                 , dmChannels =
                                     case roomId of
                                         DmRoomId otherUserId ->
@@ -3967,7 +3968,11 @@ changeUpdate localMsg local =
                                         | calls =
                                             { calls
                                                 | voiceChats =
-                                                    Call.addVoiceChatMember connectionId.roomId connectionId.otherClientId calls.voiceChats
+                                                    SeqDictHelper.addToDict
+                                                        connectionId.roomId
+                                                        connectionId.otherClientId
+                                                        Call.defaultRemoteCallData
+                                                        calls.voiceChats
                                                 , error = Nothing
                                             }
                                         , dmChannels =
@@ -3986,26 +3991,14 @@ changeUpdate localMsg local =
                                                     local.dmChannels
                                     }
 
-                        Call.Server_SetAudioInputEnabled connectionId isEnabled ->
+                        Call.Server_SetRemoteCallData connectionId remoteCallData ->
                             { local
                                 | calls =
                                     { calls
                                         | voiceChats =
-                                            Call.updateVoiceChatMember
-                                                connectionId
-                                                (\data -> { data | audioInputEnabled = isEnabled })
-                                                calls.voiceChats
-                                    }
-                            }
-
-                        Call.Server_SetVideoInputEnabled connectionId isEnabled ->
-                            { local
-                                | calls =
-                                    { calls
-                                        | voiceChats =
-                                            Call.updateVoiceChatMember
-                                                connectionId
-                                                (\data -> { data | videoInputEnabled = isEnabled })
+                                            SeqDict.updateIfExists
+                                                connectionId.roomId
+                                                (NonemptyDict.insert connectionId.otherClientId remoteCallData)
                                                 calls.voiceChats
                                     }
                             }
