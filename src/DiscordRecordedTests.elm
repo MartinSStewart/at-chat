@@ -228,6 +228,37 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , RecordedTestExtra.startTest
+        "Edit Discord message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+
+                        -- Two messages written by the currently logged in Discord user (at28727 / id 184437096813953035).
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":50,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1500000000000000001","flags":0,"embeds":[],"edited_timestamp":null,"content":"First Discord message","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First Discord message" ])
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":51,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:01:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1500000000000000002","flags":0,"embeds":[],"edited_timestamp":null,"content":"Second Discord message","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second Discord message" ])
+                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second Discord message" "Second Discord message edited"
+
+                        -- Only the most recent message was edited; the earlier one is untouched.
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second Discord message" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First Discord message" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Link Discord account with login"
         RecordedTestExtra.startTime
         normalConfig

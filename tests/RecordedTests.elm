@@ -896,6 +896,77 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "Edit guild message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                [ RecordedTestExtra.writeMessage admin 100 "First message"
+                , RecordedTestExtra.writeMessage admin 100 "Second message"
+                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second message" "Second message edited"
+
+                -- Only the most recent message was edited; the earlier one is untouched.
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second message" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First message" ])
+
+                -- The edit is also visible to the other user.
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second message edited" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Edit DM message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\admin ->
+                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                , RecordedTestExtra.inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , RecordedTestExtra.writeMessage user 100 "Hello from user"
+                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                        , RecordedTestExtra.writeMessage admin 100 "First DM"
+                        , RecordedTestExtra.writeMessage admin 100 "Second DM"
+                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
+
+                        -- Only the most recent message we wrote was edited.
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second DM" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First DM" ])
+
+                        -- The other side of the DM sees the edit too.
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second DM edited" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Edit thread message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                [ RecordedTestExtra.writeMessage admin 100 "Thread starter"
+                , RecordedTestExtra.createThread admin (Id.fromInt 1)
+                , RecordedTestExtra.writeMessage admin 100 "First thread reply"
+                , RecordedTestExtra.writeMessage admin 100 "Second thread reply"
+                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second thread reply" "Second thread reply edited"
+
+                -- Only the most recent thread message was edited; the earlier reply is untouched.
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second thread reply" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First thread reply" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Change notification level"
         RecordedTestExtra.startTime
         normalConfig
