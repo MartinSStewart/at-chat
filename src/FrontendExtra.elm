@@ -2825,7 +2825,7 @@ changeUpdate localMsg local =
                                                             (\maybe ->
                                                                 Maybe.withDefault DmChannel.frontendInit maybe
                                                                     |> LocalState.createChannelMessageFrontend
-                                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                                        (CallStarted time Nothing local2.localUser.session.userId SeqDict.empty)
                                                                     |> Just
                                                             )
                                                             local2.dmChannels
@@ -3949,7 +3949,7 @@ changeUpdate localMsg local =
                                                         (\maybe ->
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted time (Tuple.first otherClientId) SeqDict.empty)
+                                                                    (CallStarted time Nothing (Tuple.first otherClientId) SeqDict.empty)
                                                                 |> Just
                                                         )
                                                         local.dmChannels
@@ -3985,7 +3985,7 @@ changeUpdate localMsg local =
                                                     (\maybe ->
                                                         Maybe.withDefault DmChannel.frontendInit maybe
                                                             |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time local.localUser.session.userId SeqDict.empty)
+                                                                (CallStarted time Nothing local.localUser.session.userId SeqDict.empty)
                                                             |> Just
                                                     )
                                                     local.dmChannels
@@ -4030,7 +4030,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
+                                        (GoMatchStarted createdAt Nothing changeBy SeqDict.empty)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId
@@ -4094,13 +4094,9 @@ otherUserLeaveCall time { roomId, otherClientId } local =
                         DmRoomId otherUserId ->
                             case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
                                 ( False, False ) ->
-                                    SeqDict.update
+                                    SeqDict.updateIfExists
                                         otherUserId
-                                        (\maybe ->
-                                            Maybe.withDefault DmChannel.frontendInit maybe
-                                                |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
-                                                |> Just
-                                        )
+                                        (LocalState.markCallMessageAsEndedFrontend time)
                                         local.dmChannels
 
                                 _ ->
@@ -4128,13 +4124,9 @@ leaveCall time local =
                                 local.dmChannels
 
                             else
-                                SeqDict.update
+                                SeqDict.updateIfExists
                                     otherUserId
-                                    (\maybe ->
-                                        Maybe.withDefault DmChannel.frontendInit maybe
-                                            |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
-                                            |> Just
-                                    )
+                                    (LocalState.markCallMessageAsEndedFrontend time)
                                     local.dmChannels
                     }
 

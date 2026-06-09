@@ -3605,9 +3605,6 @@ updateLoaded msg model =
                                                                             CallStarted_NoReply _ _ _ ->
                                                                                 Nothing
 
-                                                                            CallEnded_NoReply _ _ ->
-                                                                                Nothing
-
                                                                             GoMatchStarted_NoReply _ _ ->
                                                                                 Nothing
 
@@ -3698,9 +3695,6 @@ updateLoaded msg model =
                                                                                 Nothing
 
                                                                             CallStarted_NoReply _ _ _ ->
-                                                                                Nothing
-
-                                                                            CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
                                                                             GoMatchStarted_NoReply _ _ ->

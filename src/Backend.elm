@@ -1163,13 +1163,10 @@ update msg model =
                                                                 DeletedMessage _ ->
                                                                     members
 
-                                                                CallStarted _ _ _ ->
+                                                                CallStarted _ _ _ _ ->
                                                                     members
 
-                                                                CallEnded _ _ ->
-                                                                    members
-
-                                                                GoMatchStarted _ _ _ ->
+                                                                GoMatchStarted _ _ _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -2056,15 +2053,7 @@ disconnectClient time sessionId clientId model =
                         model.dmChannels
 
                     else
-                        SeqDict.updateIfExists
-                            dmChannelId
-                            (\dmChannel ->
-                                LocalState.createChannelMessageBackend
-                                    (CallEnded time SeqDict.empty)
-                                    dmChannel
-                                    |> Tuple.second
-                            )
-                            model.dmChannels
+                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
 
                 model2 =
                     { model
@@ -2209,14 +2198,11 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
-                        CallStarted _ _ _ ->
-                            "Call started"
+                        CallStarted _ endedAt _ _ ->
+                            LocalState.callStartedText endedAt
 
-                        CallEnded _ _ ->
-                            "Call ended"
-
-                        GoMatchStarted _ _ _ ->
-                            "Go match started"
+                        GoMatchStarted _ endedAt _ _ ->
+                            LocalState.goMatchStartedText endedAt
 
                 Nothing ->
                     "Thread"
@@ -4894,7 +4880,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         ( messageId, dmChannel2 ) =
                                             LocalState.createChannelMessageBackend
-                                                (GoMatchStarted createdAt session.userId SeqDict.empty)
+                                                (GoMatchStarted createdAt Nothing session.userId SeqDict.empty)
                                                 dmChannel
                                     in
                                     ( { model
@@ -5413,15 +5399,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                         model.dmChannels
 
                     else
-                        SeqDict.update
-                            dmChannelId
-                            (\maybe ->
-                                Maybe.withDefault DmChannel.backendInit maybe
-                                    |> LocalState.createChannelMessageBackend (CallEnded time SeqDict.empty)
-                                    |> Tuple.second
-                                    |> Just
-                            )
-                            model.dmChannels
+                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
       }
     , Command.batch
         [ case maybeChangeId of
@@ -5508,7 +5486,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                             SeqDict.insert
                                                 dmChannelId
                                                 (LocalState.createChannelMessageBackend
-                                                    (CallStarted time session.userId SeqDict.empty)
+                                                    (CallStarted time Nothing session.userId SeqDict.empty)
                                                     dmChannel
                                                     |> Tuple.second
                                                 )

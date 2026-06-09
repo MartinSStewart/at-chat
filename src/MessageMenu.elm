@@ -849,13 +849,10 @@ messageCustomEmojiIds message =
         DeletedMessage _ ->
             []
 
-        CallStarted _ _ reactions ->
+        CallStarted _ _ _ reactions ->
             reactionIds reactions
 
-        CallEnded _ reactions ->
-            reactionIds reactions
-
-        GoMatchStarted _ _ reactions ->
+        GoMatchStarted _ _ _ reactions ->
             reactionIds reactions
 
 
