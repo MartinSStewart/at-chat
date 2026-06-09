@@ -3978,7 +3978,7 @@ changeUpdate localMsg local =
                                                 , error = Nothing
                                             }
                                         , dmChannels =
-                                            if SeqDict.member connectionId.roomId calls.voiceChats then
+                                            if (calls.currentRoom == Just connectionId.roomId) || SeqDict.member connectionId.roomId calls.voiceChats then
                                                 local.dmChannels
 
                                             else

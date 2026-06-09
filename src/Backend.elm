@@ -5483,14 +5483,20 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                 )
                                                 model2.connections
                                         , dmChannels =
-                                            SeqDict.insert
-                                                dmChannelId
-                                                (LocalState.createChannelMessageBackend
-                                                    (CallStarted time Nothing session.userId SeqDict.empty)
-                                                    dmChannel
-                                                    |> Tuple.second
-                                                )
+                                            -- Only the person who starts the call adds a "started a call"
+                                            -- message. Anyone joining an already ongoing call doesn't.
+                                            if isAnyoneElseInCall voiceChatId session.userId clientId model2 then
                                                 model2.dmChannels
+
+                                            else
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    (LocalState.createChannelMessageBackend
+                                                        (CallStarted time Nothing session.userId SeqDict.empty)
+                                                        dmChannel
+                                                        |> Tuple.second
+                                                    )
+                                                    model2.dmChannels
                                     }
                             in
                             ( model3
@@ -5580,6 +5586,38 @@ collectExistingPeers roomId currentUserId currentClientId model =
         )
         []
         model.connections
+
+
+{-| Is anyone other than the joining client already in (or connecting to) this
+call? Used to decide whether a join is starting a brand new call (and so should
+add a "started a call" message) or just joining an ongoing one.
+-}
+isAnyoneElseInCall : Call.CallId -> Id UserId -> ClientId -> BackendModel -> Bool
+isAnyoneElseInCall roomId currentUserId currentClientId model =
+    SeqDict.toList model.connections
+        |> List.any
+            (\( sessionId2, connections ) ->
+                case SeqDict.get sessionId2 model.sessions of
+                    Just session ->
+                        NonemptyDict.toList connections
+                            |> List.any
+                                (\( clientId2, connection ) ->
+                                    (clientId2 /= currentClientId)
+                                        && (case connection.call of
+                                                ConnectedToCall otherRoomId _ ->
+                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
+
+                                                ConnectingToCall otherRoomId ->
+                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
+
+                                                NotInCall ->
+                                                    False
+                                           )
+                                )
+
+                    Nothing ->
+                        False
+            )
 
 
 {-| Given the joining user's room and the peer's call state, decide whether
