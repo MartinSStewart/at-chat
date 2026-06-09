@@ -1229,7 +1229,7 @@ dmCallTest isMobile normalConfig =
                     , admin.checkView
                         50
                         (\html ->
-                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1 minute" ] html
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "started a call, lasted 1\u{00A0}minute" ] html
                                 |> Test.Html.Query.count (Expect.equal 1)
                         )
                     , tallSnapshot user 100 { name = "Call ended" }
