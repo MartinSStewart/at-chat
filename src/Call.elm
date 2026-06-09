@@ -1217,7 +1217,7 @@ serverChangeCmd change _ _ local _ =
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)
 
-        Server_SetRemoteCallData connectionId bool ->
+        Server_SetRemoteCallData _ _ ->
             Command.none
 
 

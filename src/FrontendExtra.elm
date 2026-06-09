@@ -62,7 +62,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
