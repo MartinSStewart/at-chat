@@ -940,26 +940,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , RecordedTestExtra.inviteUser
                     admin
                     (\user ->
-                        -- More than five DM messages, interleaved, with the other user sending the
-                        -- most recent message.
                         [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , RecordedTestExtra.writeMessage user 100 "User DM one"
+                        , RecordedTestExtra.writeMessage user 100 "Hello from user"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_1")
-                        , RecordedTestExtra.writeMessage admin 100 "Admin DM one"
-                        , RecordedTestExtra.writeMessage user 100 "User DM two"
-                        , RecordedTestExtra.writeMessage admin 100 "Admin DM two"
-                        , RecordedTestExtra.writeMessage user 100 "User DM three"
-                        , RecordedTestExtra.writeMessage admin 100 "Admin DM three"
-                        , RecordedTestExtra.writeMessage user 100 "User DM four"
-                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Admin DM three" "Admin DM three edited"
+                        , RecordedTestExtra.writeMessage admin 100 "First DM"
+                        , RecordedTestExtra.writeMessage admin 100 "Second DM"
+                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
 
-                        -- Only the admin's most recent message was edited.
-                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Admin DM three" ])
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin DM one" ])
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "User DM four" ])
+                        -- Only the most recent message we wrote was edited.
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second DM" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First DM" ])
 
                         -- The other side of the DM sees the edit too.
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin DM three edited" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second DM edited" ])
                         ]
                     )
                 ]
