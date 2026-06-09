@@ -5211,8 +5211,9 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
 
                         _ ->
                             Command.none
-                    , case model.loginStatus of
-                        LoggedIn loggedIn ->
+                    , -- This is so the virtual keyboard gets hidden when we start dragging the channel sidebar
+                      case ( model.loginStatus, MyUi.isMobile model ) of
+                        ( LoggedIn loggedIn, True ) ->
                             case loggedIn.textInputFocus of
                                 Just textInputFocus ->
                                     Dom.blur textInputFocus.htmlId |> Task.attempt (\_ -> RemoveFocus)
@@ -5220,7 +5221,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
                                 Nothing ->
                                     Command.none
 
-                        NotLoggedIn _ ->
+                        _ ->
                             Command.none
                     ]
                 )
