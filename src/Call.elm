@@ -877,7 +877,7 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
             [ User.profileImageHtml userId (User.getUser userId localUser |> Maybe.andThen .icon) ]
         , Html.video
             [ Html.Attributes.id idString
-            , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+            , Html.Attributes.style "background-color" "rgba(0,0,0)"
             , Html.Attributes.style "width" (String.fromInt width ++ "px")
             , Html.Attributes.style "height" (String.fromFloat height ++ "px")
             , Html.Attributes.style
