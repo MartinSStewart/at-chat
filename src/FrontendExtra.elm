@@ -62,7 +62,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -240,6 +240,9 @@ pendingChangesText localChange =
 
                 Call.Local_RenegotiateAnswer _ _ ->
                     "Renegotiate"
+
+                Call.Local_SetRemoteCallData _ ->
+                    "Set audio/video input enabled"
 
         Local_Go _ change ->
             case change of
@@ -2802,7 +2805,11 @@ changeUpdate localMsg local =
                                                         , voiceChats =
                                                             List.foldl
                                                                 (\peer5 set2 ->
-                                                                    SeqDictHelper.addItem roomId peer5.connectionId.otherClientId set2
+                                                                    SeqDictHelper.addToDict
+                                                                        roomId
+                                                                        peer5.connectionId.otherClientId
+                                                                        Call.defaultRemoteCallData
+                                                                        set2
                                                                 )
                                                                 calls.voiceChats
                                                                 peer4
@@ -2856,6 +2863,9 @@ changeUpdate localMsg local =
                                     { local | calls = { calls | error = Just Call.FailedToRenegotiate } }
 
                         Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
+                            local
+
+                        Call.Local_SetRemoteCallData _ ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -3925,7 +3935,10 @@ changeUpdate localMsg local =
                         Call.Server_Joined time { roomId, otherClientId } _ _ ->
                             { local
                                 | calls =
-                                    { calls | voiceChats = SeqDictHelper.addItem roomId otherClientId calls.voiceChats }
+                                    { calls
+                                        | voiceChats =
+                                            SeqDictHelper.addToDict roomId otherClientId Call.defaultRemoteCallData calls.voiceChats
+                                    }
                                 , dmChannels =
                                     case roomId of
                                         DmRoomId otherUserId ->
@@ -3955,7 +3968,11 @@ changeUpdate localMsg local =
                                         | calls =
                                             { calls
                                                 | voiceChats =
-                                                    SeqDictHelper.addItem connectionId.roomId connectionId.otherClientId calls.voiceChats
+                                                    SeqDictHelper.addToDict
+                                                        connectionId.roomId
+                                                        connectionId.otherClientId
+                                                        Call.defaultRemoteCallData
+                                                        calls.voiceChats
                                                 , error = Nothing
                                             }
                                         , dmChannels =
@@ -3973,6 +3990,18 @@ changeUpdate localMsg local =
                                                     )
                                                     local.dmChannels
                                     }
+
+                        Call.Server_SetRemoteCallData connectionId remoteCallData ->
+                            { local
+                                | calls =
+                                    { calls
+                                        | voiceChats =
+                                            SeqDict.updateIfExists
+                                                connectionId.roomId
+                                                (NonemptyDict.insert connectionId.otherClientId remoteCallData)
+                                                calls.voiceChats
+                                    }
+                            }
 
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
@@ -4051,11 +4080,11 @@ otherUserLeaveCall time { roomId, otherClientId } local =
     case SeqDict.get roomId calls.voiceChats of
         Just dmVoiceChat ->
             let
-                voiceChats : SeqDict CallId (NonemptySet ( Id UserId, Lamdera.ClientId ))
+                voiceChats : SeqDict CallId (NonemptyDict.NonemptyDict ( Id UserId, Lamdera.ClientId ) Call.RemoteCallData)
                 voiceChats =
                     SeqDict.update
                         roomId
-                        (\_ -> NonemptySet.remove otherClientId dmVoiceChat |> NonemptySet.fromSeqSet)
+                        (\_ -> NonemptyDict.remove otherClientId dmVoiceChat |> NonemptyDict.fromSeqDict)
                         calls.voiceChats
             in
             { local

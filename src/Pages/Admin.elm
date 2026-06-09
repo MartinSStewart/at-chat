@@ -1939,7 +1939,7 @@ websocketCloseEventsSection currentTime timezone user adminData model =
                         ( name, time ) =
                             websocketCloseEventToString event
                     in
-                    SeqDictHelper.addList name time dict
+                    SeqDictHelper.addToList name time dict
                 )
                 SeqDict.empty
                 adminData.websocketCloseEvents

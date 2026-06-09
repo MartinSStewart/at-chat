@@ -14,7 +14,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
-import Call
+import Call exposing (RemoteCallData)
 import ChannelDescription
 import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
@@ -357,10 +357,19 @@ update msg model =
                         (\maybeValue ->
                             (case maybeValue of
                                 Just value ->
-                                    NonemptyDict.insert clientId { lastRequest = NoRequestsMade, call = NotInCall } value
+                                    NonemptyDict.insert clientId
+                                        { lastRequest = NoRequestsMade
+                                        , call = NotInCall
+                                        , remoteCallData = Call.defaultRemoteCallData
+                                        }
+                                        value
 
                                 Nothing ->
-                                    NonemptyDict.singleton clientId { lastRequest = NoRequestsMade, call = NotInCall }
+                                    NonemptyDict.singleton clientId
+                                        { lastRequest = NoRequestsMade
+                                        , call = NotInCall
+                                        , remoteCallData = Call.defaultRemoteCallData
+                                        }
                             )
                                 |> Just
                         )
@@ -392,7 +401,12 @@ update msg model =
                             sessionId
                             (NonemptyDict.updateIfExists
                                 clientId
-                                (\data -> { lastRequest = LastRequest time, call = data.call })
+                                (\data ->
+                                    { lastRequest = LastRequest time
+                                    , call = data.call
+                                    , remoteCallData = data.remoteCallData
+                                    }
+                                )
                             )
                             model.connections
                 }
@@ -5259,6 +5273,76 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
 
         Call.Local_RenegotiateAnswer answerSdp _ ->
             asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
+
+        Call.Local_SetRemoteCallData remoteCallData ->
+            asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
+
+
+{-| Apply a "set audio/video input enabled" change: update the stored state for
+this connection, echo the change back to the requester, and broadcast the new
+state to the other members of the call so their UI can reflect it.
+-}
+handleSetInputEnabled :
+    SessionId
+    -> ClientId
+    -> ChangeId
+    -> RemoteCallData
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleSetInputEnabled sessionId clientId changeId remoteCallData model session _ =
+    case SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId) of
+        Just connection ->
+            let
+                maybeRoomId : Maybe Call.CallId
+                maybeRoomId =
+                    case connection.call of
+                        NotInCall ->
+                            Nothing
+
+                        ConnectingToCall roomId ->
+                            Just roomId
+
+                        ConnectedToCall roomId _ ->
+                            Just roomId
+            in
+            ( { model
+                | connections =
+                    SeqDict.updateIfExists
+                        sessionId
+                        (NonemptyDict.updateIfExists
+                            clientId
+                            (\connection2 -> { connection2 | remoteCallData = remoteCallData })
+                        )
+                        model.connections
+              }
+            , Command.batch
+                [ LocalChangeResponse changeId (Local_VoiceChatChange (Call.Local_SetRemoteCallData remoteCallData))
+                    |> Lamdera.sendToFrontend clientId
+                , case maybeRoomId of
+                    Just (Call.DmRoomId otherUserId) ->
+                        Broadcast.toDmChannelExcludingOne
+                            clientId
+                            session.userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                Call.Server_SetRemoteCallData
+                                    { roomId = Call.DmRoomId otherUserId2
+                                    , otherClientId = ( session.userId, clientId )
+                                    }
+                                    remoteCallData
+                                    |> Server_VoiceChatChange
+                            )
+                            model
+
+                    Nothing ->
+                        Command.none
+                ]
+            )
+
+        Nothing ->
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 leaveVoice :

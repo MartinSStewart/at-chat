@@ -54,7 +54,6 @@ import LoginForm
 import MembersAndOwner
 import Message
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
 import PersonName
@@ -64,7 +63,6 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
-import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
@@ -603,9 +601,10 @@ getVoiceChatDataHelper :
     -> UserSession
     -> UserSession
     -> ClientId
-    -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
-    -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
-getVoiceChatDataHelper roomId session otherSession otherClientId dict2 =
+    -> Call.RemoteCallData
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+    -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData dict2 =
     case roomId of
         DmRoomId dmingWith ->
             let
@@ -615,16 +614,23 @@ getVoiceChatDataHelper roomId session otherSession otherClientId dict2 =
             in
             case DmChannel.otherUserId session.userId dmChannelId of
                 Just otherUserId ->
-                    SeqDictHelper.addItem
+                    SeqDict.update
                         (DmRoomId otherUserId)
-                        ( otherSession.userId, otherClientId )
+                        (\maybe ->
+                            case maybe of
+                                Just nonempty ->
+                                    NonemptyDict.insert ( otherSession.userId, otherClientId ) remoteCallData nonempty |> Just
+
+                                Nothing ->
+                                    NonemptyDict.singleton ( otherSession.userId, otherClientId ) remoteCallData |> Just
+                        )
                         dict2
 
                 Nothing ->
                     dict2
 
 
-getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
+getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
 getVoiceChatData clientId session model =
     SeqDict.foldl
         (\otherSessionId connections dict ->
@@ -634,10 +640,10 @@ getVoiceChatData clientId session model =
                         (\otherClientId data dict2 ->
                             case ( data.call, otherClientId == clientId ) of
                                 ( ConnectedToCall roomId _, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId dict2
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 ( ConnectingToCall roomId, False ) ->
-                                    getVoiceChatDataHelper roomId session otherSession otherClientId dict2
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId data.remoteCallData dict2
 
                                 _ ->
                                     dict2

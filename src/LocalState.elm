@@ -535,13 +535,19 @@ type WebsocketClosedEvent
 type alias ConnectionData =
     { lastRequest : LastRequest
     , call : CallStatus
+    , remoteCallData : Call.RemoteCallData
     }
 
 
 type CallStatus
     = NotInCall
     | ConnectingToCall Call.CallId
-    | ConnectedToCall Call.CallId { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, pullTracksReady : Bool }
+    | ConnectedToCall
+        Call.CallId
+        { sessionId : Cloudflare.RealtimeSessionId
+        , trackNames : List Cloudflare.TrackName
+        , pullTracksReady : Bool
+        }
 
 
 type ServerSecretStatus

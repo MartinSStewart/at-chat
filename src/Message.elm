@@ -324,7 +324,7 @@ addReactionEmoji userId emoji message =
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 addReactionEmojiHelper userId emoji reactions =
-    SeqDictHelper.addItem emoji userId reactions
+    SeqDictHelper.addToSet emoji userId reactions
 
 
 removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
