@@ -20,7 +20,7 @@ use sha2::{Digest, Sha224};
 use std::fs;
 use std::str::FromStr;
 use web_push::SubscriptionInfo;
-use webpage::{Webpage, WebpageOptions};
+use webpage::HTML;
 mod content_types;
 use rand::RngExt;
 use std::sync::Arc;
@@ -156,79 +156,161 @@ fn thumbnail_filepath(hash: &str) -> String {
     format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
-async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
-    let info = Webpage::from_url(&url, WebpageOptions::default()).expect("Could not read from URL");
 
-    let info2 = match (info.html.meta.len(), info.html.meta.get("refresh")) {
-        (1, Some(refresh)) => {
-            let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
+enum FetchedContent {
+    Image(Vec<u8>),
+    Html(String),
+}
 
-            let info2 = Webpage::from_url(&redirect_url, WebpageOptions::default())
-                .expect("Could not read from URL");
+async fn fetch_content(client: &reqwest::Client, url: &str) -> Option<FetchedContent> {
+    let response: reqwest::Response = client.get(url).send().await.ok()?;
 
-            info2
+    let is_image = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().to_ascii_lowercase().starts_with("image/"))
+        .unwrap_or(false);
+
+    let buf: Vec<u8> = response.bytes().await.ok()?.to_vec();
+
+    if is_image {
+        if buf.len() < 10 * 1024 * 1024 {
+            Some(FetchedContent::Image(buf))
+        } else {
+            None
         }
-        _ => info,
+    } else if buf.len() < 1024 * 1024 {
+        Some(FetchedContent::Html(
+            String::from_utf8_lossy(&buf).into_owned(),
+        ))
+    }
+    else {
+        None
+    }
+}
+
+fn image_format_name(format: ImageFormat) -> Option<String> {
+    match format {
+        ImageFormat::Png => Some(String::from("Png")),
+        ImageFormat::Jpeg => Some(String::from("Jpeg")),
+        ImageFormat::Gif => Some(String::from("Gif")),
+        ImageFormat::WebP => Some(String::from("WebP")),
+        ImageFormat::Pnm => Some(String::from("Pnm")),
+        ImageFormat::Tiff => Some(String::from("Tiff")),
+        ImageFormat::Tga => Some(String::from("Tga")),
+        ImageFormat::Dds => Some(String::from("Dds")),
+        ImageFormat::Bmp => Some(String::from("Bmp")),
+        ImageFormat::Ico => Some(String::from("Ico")),
+        ImageFormat::Hdr => Some(String::from("Hdr")),
+        ImageFormat::OpenExr => Some(String::from("OpenExr")),
+        ImageFormat::Farbfeld => Some(String::from("Farbfeld")),
+        ImageFormat::Avif => Some(String::from("Avif")),
+        ImageFormat::Qoi => Some(String::from("Qoi")),
+        _ => None,
+    }
+}
+
+fn image_data_from_bytes(url: &str, bytes: &[u8]) -> Option<ImageData> {
+    let reader = ImageReader::new(std::io::Cursor::new(bytes));
+
+    match reader
+        .with_guessed_format()
+        .map(|a| (a.format(), a.decode()))
+    {
+        Ok((Some(format), Ok(image))) => {
+            let (width, height) = image.dimensions();
+            Some(ImageData {
+                url: url.to_string(),
+                width,
+                height,
+                format: image_format_name(format),
+            })
+        }
+        _ => None,
+    }
+}
+
+// Parse already-fetched HTML without letting a parse failure take down the server.
+fn parse_html_safe(body: String, url: String) -> Option<HTML> {
+    std::thread::Builder::new()
+        .stack_size(1024 * 1024 * 1024) // 1 GiB (lazily committed) headroom for recursion
+        .spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                HTML::from_string(body, Some(url)).ok()
+            }))
+            .ok()
+            .flatten()
+        })
+        .ok()?
+        .join()
+        .ok()
+        .flatten()
+}
+
+async fn build_embed(client: &reqwest::Client, url: &str) -> Option<EmbedResponse> {
+    let html = match fetch_content(client, url).await? {
+        // The link points straight at an image: skip HTML parsing entirely and
+        // build the embed from the image itself.
+        FetchedContent::Image(bytes) => {
+            return Some(EmbedResponse {
+                title: None,
+                description: None,
+                image: image_data_from_bytes(url, &bytes),
+                created_at: None,
+            });
+        }
+        FetchedContent::Html(body) => parse_html_safe(body, url.to_string())?,
     };
 
-    let image = match info2.html.meta.get("og:image") {
-        Some(url) => match reqwest::get(url).await {
-            Ok(response) => match response.bytes().await {
-                Ok(bytes) => {
-                    let reader = ImageReader::new(std::io::Cursor::new(&bytes));
-
-                    match reader
-                        .with_guessed_format()
-                        .map(|a| (a.format(), a.decode()))
-                    {
-                        Ok((Some(format), Ok(image))) => {
-                            let (width, height) = image.dimensions();
-
-                            Some(ImageData {
-                                url: url.clone(),
-                                width,
-                                height,
-                                format: match format {
-                                    ImageFormat::Png => Some(String::from("Png")),
-                                    ImageFormat::Jpeg => Some(String::from("Jpeg")),
-                                    ImageFormat::Gif => Some(String::from("Gif")),
-                                    ImageFormat::WebP => Some(String::from("WebP")),
-                                    ImageFormat::Pnm => Some(String::from("Pnm")),
-                                    ImageFormat::Tiff => Some(String::from("Tiff")),
-                                    ImageFormat::Tga => Some(String::from("Tga")),
-                                    ImageFormat::Dds => Some(String::from("Dds")),
-                                    ImageFormat::Bmp => Some(String::from("Bmp")),
-                                    ImageFormat::Ico => Some(String::from("Ico")),
-                                    ImageFormat::Hdr => Some(String::from("Hdr")),
-                                    ImageFormat::OpenExr => Some(String::from("OpenExr")),
-                                    ImageFormat::Farbfeld => Some(String::from("Farbfeld")),
-                                    ImageFormat::Avif => Some(String::from("Avif")),
-                                    ImageFormat::Qoi => Some(String::from("Qoi")),
-                                    _ => None,
-                                },
-                            })
-                        }
-                        _ => None,
-                    }
+    // Follow a single meta-refresh redirect, matching the previous behaviour.
+    let html = match (html.meta.len(), html.meta.get("refresh")) {
+        (1, Some(refresh)) => {
+            let redirect_url = refresh.split('=').skip(1).collect::<Vec<_>>().join("=");
+            match fetch_content(client, &redirect_url).await {
+                Some(FetchedContent::Html(body)) => {
+                    parse_html_safe(body, redirect_url).unwrap_or(html)
                 }
-                Err(_) => None,
-            },
-            Err(_) => None,
+                _ => html,
+            }
+        }
+        _ => html,
+    };
+
+    let image = match html.meta.get("og:image") {
+        Some(image_url) => match fetch_content(client, image_url).await {
+            Some(FetchedContent::Image(bytes)) => image_data_from_bytes(image_url, &bytes),
+            _ => None,
         },
         None => None,
     };
 
-    let response = EmbedResponse {
-        title: info2.html.meta.get("og:title").map(|a| a.clone()),
-        description: info2.html.meta.get("og:description").map(|a| a.clone()),
-        image: image,
-        created_at: match info2.html.meta.get("article:published_time") {
-            Some(text) => match chrono::DateTime::parse_from_rfc3339(text) {
-                Ok(date) => Some(date.timestamp()),
-                Err(_) => None,
-            },
-            None => None,
-        },
+    Some(EmbedResponse {
+        title: html.meta.get("og:title").cloned(),
+        description: html.meta.get("og:description").cloned(),
+        image,
+        created_at: html
+            .meta
+            .get("article:published_time")
+            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+            .map(|date| date.timestamp()),
+    })
+}
+
+async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
+    let empty = EmbedResponse {
+        title: None,
+        description: None,
+        image: None,
+        created_at: None,
+    };
+
+    let response = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => build_embed(&client, &url).await.unwrap_or(empty),
+        Err(_) => empty,
     };
 
     response_with_headers(
@@ -1134,4 +1216,235 @@ pub struct Header {
 pub struct UploadUrl {
     pub url: String,
     pub sid: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Regression test for the production crash where pasting a link to a binary
+    // image file made post_embed feed the raw image bytes to the HTML parser,
+    // overflowing the stack and aborting the whole server. The endpoint must now
+    // return a response instead of crashing. If the host happens to be
+    // unreachable from the test environment the endpoint still returns gracefully,
+    // so this can never produce a false failure.
+    #[tokio::test]
+    async fn post_embed_does_not_crash_on_image_url() {
+        let url = "https://at-chat.app/file/1/3SFn-guIRPHsr-z_L9bsJA9CCnWnDzWSKETXPA".to_owned();
+        let response = post_embed(Json(EmbedRequest { url })).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "post_embed should return a response instead of crashing on an image URL"
+        );
+    }
+
+    // Deterministic (offline) version of the same failure mode: a deeply nested
+    // document recurses far enough in the parser to overflow a normal thread
+    // stack. The dedicated large-stack parsing thread must absorb this without
+    // aborting the process.
+    #[test]
+    fn parse_html_safe_survives_deeply_nested_html() {
+        let deep = "<div>".repeat(20_000);
+        let result = parse_html_safe(deep, "https://example.com".to_owned());
+        assert!(
+            result.is_some(),
+            "deeply nested HTML should parse without crashing the server"
+        );
+    }
+
+    // ---- helpers for hermetic metadata tests ----
+
+    // Encode a solid-colour PNG of the given size, for serving as test image data.
+    fn make_png(width: u32, height: u32) -> Vec<u8> {
+        let buffer =
+            image::ImageBuffer::from_pixel(width, height, image::Rgba([200u8, 100, 50, 255]));
+        let mut bytes: Vec<u8> = Vec::new();
+        image::DynamicImage::ImageRgba8(buffer)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
+            .expect("failed to encode test png");
+        bytes
+    }
+
+    // Spawn a throwaway HTTP server on a random local port. `make_routes` receives
+    // the server's own base URL (handy for embedding absolute links in HTML) and
+    // returns the (path, content-type, body) responses to serve. Returns the base
+    // URL the server is listening on.
+    async fn spawn_test_server<F>(make_routes: F) -> String
+    where
+        F: FnOnce(&str) -> Vec<(&'static str, &'static str, Vec<u8>)>,
+    {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let base = format!("http://{}", listener.local_addr().unwrap());
+
+        let mut router = axum::Router::new();
+        for (path, content_type, body) in make_routes(&base) {
+            router = router.route(
+                path,
+                axum::routing::get(move || {
+                    let body = body.clone();
+                    async move { ([(axum::http::header::CONTENT_TYPE, content_type)], body) }
+                }),
+            );
+        }
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        base
+    }
+
+    #[tokio::test]
+    async fn extracts_opengraph_metadata_from_html() {
+        let base = spawn_test_server(|_base| {
+            let html = r#"<html><head>
+                <meta property="og:title" content="Hello World">
+                <meta property="og:description" content="A short summary">
+                <meta property="article:published_time" content="2020-01-02T03:04:05Z">
+                </head><body>hi</body></html>"#
+                .as_bytes()
+                .to_vec();
+            vec![("/", "text/html; charset=utf-8", html)]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert_eq!(
+            embed.title.as_deref(),
+            Some("Hello World"),
+            "og:title should be extracted"
+        );
+        assert_eq!(
+            embed.description.as_deref(),
+            Some("A short summary"),
+            "og:description should be extracted"
+        );
+        assert_eq!(
+            embed.created_at,
+            Some(1_577_934_245),
+            "article:published_time should be parsed to a unix timestamp"
+        );
+        assert!(
+            embed.image.is_none(),
+            "no og:image was provided, so there should be no image"
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_image_url_returns_image_dimensions() {
+        let png = make_png(7, 4);
+        let base = spawn_test_server(move |_base| vec![("/pic.png", "image/png", png)]).await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/pic.png"))
+            .await
+            .expect("expected an embed response");
+
+        let image = embed.image.expect("expected image metadata");
+        assert_eq!(
+            (image.width, image.height),
+            (7, 4),
+            "image dimensions should be read from the file"
+        );
+        assert_eq!(image.format.as_deref(), Some("Png"), "format should be Png");
+        // A link straight to an image is not an HTML page, so there is no
+        // title/description to extract.
+        assert!(
+            embed.title.is_none(),
+            "a direct image link has no page title"
+        );
+        assert!(
+            embed.description.is_none(),
+            "a direct image link has no page description"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolves_image_from_og_image_tag() {
+        let png = make_png(3, 9);
+        let base = spawn_test_server(move |base| {
+            let html = format!(
+                r#"<html><head>
+                    <meta property="og:title" content="Has Image">
+                    <meta property="og:image" content="{base}/og.png">
+                    </head><body></body></html>"#
+            )
+            .into_bytes();
+            vec![
+                ("/", "text/html; charset=utf-8", html),
+                ("/og.png", "image/png", png),
+            ]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert_eq!(
+            embed.title.as_deref(),
+            Some("Has Image"),
+            "og:title should be extracted"
+        );
+        let image = embed.image.expect("expected og:image to be resolved");
+        assert_eq!(
+            (image.width, image.height),
+            (3, 9),
+            "og:image dimensions should be read from the linked file"
+        );
+        assert_eq!(image.format.as_deref(), Some("Png"), "format should be Png");
+    }
+
+    #[tokio::test]
+    async fn page_without_metadata_returns_empty_fields() {
+        let base = spawn_test_server(|_base| {
+            vec![(
+                "/",
+                "text/html; charset=utf-8",
+                b"<html><head><title>Plain</title></head><body>nothing here</body></html>".to_vec(),
+            )]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        let embed = build_embed(&client, &format!("{base}/"))
+            .await
+            .expect("expected an embed response");
+
+        assert!(embed.title.is_none(), "no og:title -> no title");
+        assert!(
+            embed.description.is_none(),
+            "no og:description -> no description"
+        );
+        assert!(embed.image.is_none(), "no og:image -> no image");
+        assert!(
+            embed.created_at.is_none(),
+            "no article:published_time -> no created_at"
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_html_is_rejected() {
+        // Build an HTML document comfortably larger than the 1 MB cap.
+        let mut html = String::from(r#"<meta property="og:title" content="Too Big">"#);
+        html.push_str(&"<!-- padding -->".repeat(1024 * 1024 / 10));
+        let base = spawn_test_server(move |_base| {
+            vec![("/", "text/html; charset=utf-8", html.into_bytes())]
+        })
+        .await;
+
+        let client = reqwest::Client::new();
+        assert!(
+            build_embed(&client, &format!("{base}/")).await.is_none(),
+            "HTML larger than the size cap should be rejected rather than parsed"
+        );
+    }
 }
