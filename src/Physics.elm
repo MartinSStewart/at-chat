@@ -88,6 +88,24 @@ falloffRate =
     5
 
 
+{-| Coulomb friction coefficient. When the solver resolves a contact it pushes
+the two bodies apart by `penetration` along the contact normal; it then also
+tries to cancel however far they slid _tangentially_ during this substep, but
+only up to `frictionCoeff * penetration` of sliding. Slides smaller than that
+budget are cancelled completely (static friction: the contact sticks), larger
+ones are only damped (kinetic friction: it slips).
+
+Because the budget scales with penetration, a contact under more compression
+resists more sliding — so a settled, compressed pile holds together and only
+gives way once something pushes hard enough, instead of collapsing the moment
+a circle is removed.
+
+-}
+frictionCoeff : Float
+frictionCoeff =
+    1
+
+
 {-| Conservative upper bound on how far any body could move during a single
 `simulate` call. At the start of the call we build, for each body, a list of
 the other bodies whose centers are within `r_i + r_j + 2 * maxTravelPerCall`
@@ -346,7 +364,7 @@ step dt neighbors bodies =
 
         resolved : Array Body
         resolved =
-            solveIters solverIters n neighbors predicted
+            solveIters solverIters n neighbors bodies predicted
     in
     deriveVelocities dt damping bodies resolved
 
@@ -409,28 +427,33 @@ applyArmForceAndPredict dt topEdge bodies =
 
 {-| Gauss-Seidel relaxation. Each round walks every body, resolves its
 overlaps with the bodies in its neighbor list, then clamps it back inside the
-box before moving on. Clamping per-body inside the pair walk avoids a full
-`Array.map` clamp pass between rounds.
+box (with wall friction) before moving on. Clamping per-body inside the pair
+walk avoids a full `Array.map` clamp pass between rounds.
+
+`originals` is the state at the start of the substep; the solver compares
+against it to work out how far each body has slid tangentially, which is what
+friction resists.
+
 -}
-solveIters : Int -> Int -> Array (List Int) -> Array Body -> Array Body
-solveIters remaining n neighbors bodies =
+solveIters : Int -> Int -> Array (List Int) -> Array Body -> Array Body -> Array Body
+solveIters remaining n neighbors originals bodies =
     if remaining <= 0 then
         bodies
 
     else
-        solveIters (remaining - 1) n neighbors (resolveAllPairs 0 n neighbors bodies)
+        solveIters (remaining - 1) n neighbors originals (resolveAllPairs 0 n neighbors originals bodies)
 
 
-resolveAllPairs : Int -> Int -> Array (List Int) -> Array Body -> Array Body
-resolveAllPairs i n neighbors bodies =
+resolveAllPairs : Int -> Int -> Array (List Int) -> Array Body -> Array Body -> Array Body
+resolveAllPairs i n neighbors originals bodies =
     if i - n < 0 then
         case Array.get i bodies of
             Just bi ->
-                case Array.get i neighbors of
-                    Just js ->
-                        resolveAllPairs (i + 1) n neighbors (resolvePairs i js bi bodies)
+                case ( Array.get i neighbors, Array.get i originals ) of
+                    ( Just js, Just origI ) ->
+                        resolveAllPairs (i + 1) n neighbors originals (resolvePairs i origI js bi originals bodies)
 
-                    Nothing ->
+                    _ ->
                         bodies
 
             Nothing ->
@@ -440,43 +463,107 @@ resolveAllPairs i n neighbors bodies =
         bodies
 
 
-clampBody : Body -> Body
-clampBody b =
-    { x =
-        if b.x - b.radius < 0 then
-            b.radius
+{-| Clamp a body back inside the box and apply wall friction. Clamping a wall
+is a contact along that wall's normal, so the tangential direction is the
+other axis: a body resting on the floor (a `y` clamp) has its `x` sliding
+resisted, and a body against a side wall (an `x` clamp) has its `y` sliding
+resisted. The friction budget is `frictionCoeff * penetration`, same Coulomb
+rule as body-body contacts, with `orig` giving the substep-start position the
+slide is measured from.
 
-        else if boundsX - b.x - b.radius < 0 then
-            boundsX - b.radius
+Floor friction matters most: the bottom row of a pile rests on the floor, so
+without it the whole stack could slide sideways no matter how much the bodies
+grip each other.
 
-        else
-            b.x
-    , y =
-        if b.y - b.radius < 0 then
-            b.radius
+-}
+resolveBody : Body -> Body -> Body
+resolveBody orig b =
+    let
+        ( x1, penX ) =
+            if b.x - b.radius < 0 then
+                ( b.radius, b.radius - b.x )
 
-        else if boundsY - b.y - b.radius < 0 then
-            boundsY - b.radius
+            else if boundsX - b.x - b.radius < 0 then
+                ( boundsX - b.radius, b.x + b.radius - boundsX )
 
-        else
-            b.y
+            else
+                ( b.x, 0 )
+
+        ( y1, penY ) =
+            if b.y - b.radius < 0 then
+                ( b.radius, b.radius - b.y )
+
+            else if boundsY - b.y - b.radius < 0 then
+                ( boundsY - b.radius, b.y + b.radius - boundsY )
+
+            else
+                ( b.y, 0 )
+
+        -- A floor/ceiling contact (penY) resists sliding along x; a side-wall
+        -- contact (penX) resists sliding along y.
+        x2 : Float
+        x2 =
+            if 0 - penY < 0 then
+                frictionResist orig.x x1 (frictionCoeff * penY)
+
+            else
+                x1
+
+        y2 : Float
+        y2 =
+            if 0 - penX < 0 then
+                frictionResist orig.y y1 (frictionCoeff * penX)
+
+            else
+                y1
+    in
+    { x = x2
+    , y = y2
     , vx = b.vx
     , vy = b.vy
     , radius = b.radius
     }
 
 
-{-| Walk i's neighbor list. If body i and body j overlap, push each one half
-the penetration along the contact normal so that they end up exactly touching.
-The running `bi` is updated as it moves so subsequent j contacts see the
-latest position, but it's only written back to the array once at the end of
-the walk — earlier writes would be overwritten by the next contact anyway.
+{-| Resist a 1D slide from `origValue` to `value`, given a friction `budget`.
+If the slide is within budget it is cancelled entirely (static friction: the
+value snaps back to where it started); otherwise it is shortened by the budget
+(kinetic friction: it keeps moving but loses ground).
 -}
-resolvePairs : Int -> List Int -> Body -> Array Body -> Array Body
-resolvePairs i js bi bodies =
+frictionResist : Float -> Float -> Float -> Float
+frictionResist origValue value budget =
+    let
+        d : Float
+        d =
+            value - origValue
+    in
+    if abs d - budget < 0 then
+        origValue
+
+    else if d - 0 < 0 then
+        value + budget
+
+    else
+        value - budget
+
+
+{-| Walk i's neighbor list. If body i and body j overlap, push each one half
+the penetration along the contact normal so that they end up exactly touching,
+then apply tangential friction to resist however far they have slid past each
+other this substep. The running `bi` is updated as it moves so subsequent j
+contacts see the latest position, but it's only written back to the array once
+at the end of the walk — earlier writes would be overwritten by the next
+contact anyway.
+
+`origI` / `originals` give the substep-start positions that the friction
+slide is measured against.
+
+-}
+resolvePairs : Int -> Body -> List Int -> Body -> Array Body -> Array Body -> Array Body
+resolvePairs i origI js bi originals bodies =
     case js of
         [] ->
-            Array.set i (clampBody bi) bodies
+            Array.set i (resolveBody origI bi) bodies
 
         j :: rest ->
             case Array.get j bodies of
@@ -521,10 +608,80 @@ resolvePairs i js bi bodies =
                             half =
                                 penetration * 0.5
 
+                            -- Position after the normal (overlap) correction.
+                            biNormX : Float
+                            biNormX =
+                                bi.x - nx * half
+
+                            biNormY : Float
+                            biNormY =
+                                bi.y - ny * half
+
+                            bjNormX : Float
+                            bjNormX =
+                                bj.x + nx * half
+
+                            bjNormY : Float
+                            bjNormY =
+                                bj.y + ny * half
+
+                            origJ : Body
+                            origJ =
+                                Array.get j originals |> Maybe.withDefault dummyBody
+
+                            -- Tangential slide of the contact over this substep
+                            -- (relative displacement with the normal part removed).
+                            rdx : Float
+                            rdx =
+                                (biNormX - origI.x) - (bjNormX - origJ.x)
+
+                            rdy : Float
+                            rdy =
+                                (biNormY - origI.y) - (bjNormY - origJ.y)
+
+                            dot : Float
+                            dot =
+                                rdx * nx + rdy * ny
+
+                            tx : Float
+                            tx =
+                                rdx - dot * nx
+
+                            ty : Float
+                            ty =
+                                rdy - dot * ny
+
+                            tSq : Float
+                            tSq =
+                                tx * tx + ty * ty
+
+                            budget : Float
+                            budget =
+                                frictionCoeff * penetration
+
+                            -- Fraction of the slide each body gives back.
+                            -- Within budget: cancel it all (0.5 each, no sqrt).
+                            -- Over budget: only walk it back by the budget.
+                            scale : Float
+                            scale =
+                                if tSq - budget * budget < 0 then
+                                    0.5
+
+                                else
+                                    budget / sqrt tSq * 0.5
+
+                            cx : Float
+                            cx =
+                                tx * scale
+
+                            cy : Float
+                            cy =
+                                ty * scale
+
                             biNew : Body
                             biNew =
-                                { x = bi.x - nx * half
-                                , y = bi.y - ny * half
+                                { x = biNormX - cx
+                                , y = biNormY - cy
                                 , vx = bi.vx
                                 , vy = bi.vy
                                 , radius = bi.radius
@@ -532,20 +689,20 @@ resolvePairs i js bi bodies =
 
                             bjNew : Body
                             bjNew =
-                                { x = bj.x + nx * half
-                                , y = bj.y + ny * half
+                                { x = bjNormX + cx
+                                , y = bjNormY + cy
                                 , vx = bj.vx
                                 , vy = bj.vy
                                 , radius = bj.radius
                                 }
                         in
-                        resolvePairs i rest biNew (Array.set j bjNew bodies)
+                        resolvePairs i origI rest biNew originals (Array.set j bjNew bodies)
 
                     else
-                        resolvePairs i rest bi bodies
+                        resolvePairs i origI rest bi originals bodies
 
                 Nothing ->
-                    Array.set i (clampBody bi) bodies
+                    Array.set i (resolveBody origI bi) bodies
 
 
 {-| The new velocity is the actual displacement (after constraint resolution)

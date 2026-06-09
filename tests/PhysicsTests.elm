@@ -174,4 +174,37 @@ tests =
 
                     _ ->
                         Expect.fail "expected exactly three bodies back"
+        , Test.test "floor friction holds a slowly sliding body nearly in place" <|
+            \_ ->
+                -- Resting on the floor (the large-y wall the arm pushes toward)
+                -- with a gentle sideways nudge. Static friction should cancel
+                -- almost all of the would-be 0.5 unit slide.
+                case Physics.simulate 8 (Duration.milliseconds 100) [ body 30 154 5 0 6 ] of
+                    [ moved ] ->
+                        abs (moved.x - 30) |> Expect.atMost 0.1
+
+                    _ ->
+                        Expect.fail "expected exactly one body back"
+        , Test.test "a hard sideways shove overcomes friction and still slides" <|
+            \_ ->
+                case Physics.simulate 8 (Duration.milliseconds 100) [ body 30 154 200 0 6 ] of
+                    [ moved ] ->
+                        moved.x - 30 |> Expect.greaterThan 2
+
+                    _ ->
+                        Expect.fail "expected exactly one body back"
+        , Test.test "friction does not interfere with a head-on (purely normal) separation" <|
+            \_ ->
+                -- Overlapping along x with no tangential motion: friction has
+                -- nothing to resist, so they still separate symmetrically.
+                case Physics.simulate 4 (Duration.milliseconds 100) [ body 29.5 80 0 0 1, body 30.5 80 0 0 1 ] of
+                    [ a, b ] ->
+                        Expect.all
+                            [ \_ -> overlap a b |> Expect.atMost 1.0e-3
+                            , \_ -> (a.x + b.x) / 2 |> Expect.within (Expect.Absolute 1.0e-9) 30
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly two bodies back"
         ]
