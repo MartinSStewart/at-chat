@@ -764,7 +764,13 @@ undoRedoButton htmlId onPress label isEnabled =
         , Ui.rounded 4
         , Ui.border 1
         , Ui.borderColor MyUi.border1
-        , Ui.background MyUi.background1
+        , Ui.background
+            (if isEnabled then
+                MyUi.background2
+
+             else
+                MyUi.background1
+            )
         , Ui.Font.color
             (if isEnabled then
                 MyUi.font1

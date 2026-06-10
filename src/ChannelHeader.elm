@@ -196,8 +196,8 @@ drawButton isMobile currentTab =
             DmChannelHeaderTab_Draw
             currentTab
             (Ui.el
-                [ Ui.width Ui.shrink, Ui.Accessibility.description "Draw on top of messages" ]
-                (Ui.html Icons.pencil)
+                [ Ui.width (Ui.px 24), Ui.Accessibility.description "Draw on top of messages" ]
+                (Ui.html Icons.paintbrush)
             )
 
 
