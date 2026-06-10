@@ -4216,7 +4216,7 @@ updateLoaded msg model =
             updateDrawing
                 drawingMsg
                 (case drawingMsg of
-                    Drawing.PickedAnchor (Just _) ->
+                    Drawing.PickedMessageAnchor (Just _) ->
                         -- Clicking an attached image normally opens the image viewer.
                         -- When the click was used for picking a drawing anchor, close
                         -- the viewer again (its message is handled before this one).
@@ -4266,18 +4266,26 @@ updateDrawing drawingMsg model =
                         Err _ ->
                             ( loggedIn, Command.none )
 
-                Drawing.PickedAnchor maybeAnchor ->
-                    case ( loggedIn.drawingMode, maybeAnchor ) of
-                        ( Just drawingMode, Just anchor ) ->
+                Drawing.PickedMessageAnchor guildOrDmId threadRoute maybeAnchor ->
+                    case maybeAnchor of
+                        Just { anchor, messageId } ->
                             ( { loggedIn
                                 | drawingMode =
-                                    Just { drawingMode | anchor = Just (Drawing.initialAnchorSelection anchor) }
+                                    Drawing.SelectedAnchor
+                                        { guildOrDmId = guildOrDmId
+                                        , threadRoute = Id.threadRouteWithMessage messageId threadRoute
+                                        , anchorType = AnchorType
+                                        , position = Nothing
+                                        , stroke = Nothing
+                                        }
+
+                                --{ drawingMode | anchor = Just (Drawing.initialAnchorSelection anchor) }
                               }
                             , measureDrawingAnchor anchor
                             )
 
-                        _ ->
-                            ( loggedIn, Command.none )
+                        Nothing ->
+                            ( model, Command.none )
 
                 Drawing.MouseDown x y ->
                     case loggedIn.drawingMode of

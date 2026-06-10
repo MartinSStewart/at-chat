@@ -1884,7 +1884,7 @@ isPressMsg msg =
 
         DrawingMsg drawingMsg ->
             case drawingMsg of
-                Drawing.PickedAnchor _ ->
+                Drawing.PickedMessageAnchor _ ->
                     True
 
                 Drawing.PressedUndo ->

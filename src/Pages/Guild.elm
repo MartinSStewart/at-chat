@@ -3299,8 +3299,8 @@ drawingModeAttributes guildOrDmId threadRoute loggedIn =
             , Ui.Events.on
                 "click"
                 (Json.Decode.map
-                    (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
-                    Drawing.decodePickAnchor
+                    (\maybeAnchor -> Drawing.PickedMessageAnchor guildOrDmId threadRoute maybeAnchor |> DrawingMsg)
+                    (Json.Decode.field "target" (walkUpForAnchor 30))
                 )
             , Ui.inFront Drawing.anchorHighlightStyle
             ]

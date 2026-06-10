@@ -13,7 +13,6 @@ module Drawing exposing
     , anchorHighlightStyle
     , canRedo
     , canUndo
-    , decodePickAnchor
     , discordUserColor
     , emptyChannelDrawing
     , handleLocalChange
@@ -30,6 +29,7 @@ module Drawing exposing
     , undoButtonId
     , undoRedoButton
     , userColor
+    , walkUpForAnchor
     , wrapMessageView
     )
 
@@ -98,8 +98,8 @@ type LocalChange
 
 
 type Msg
-    = PickedAnchor (Maybe Anchor)
-    | GotAnchorElement Anchor (Result Dom.Error { anchor : Dom.Element, container : Dom.Element })
+    = PickedMessageAnchor AnyGuildOrDmId ThreadRouteWithMessage (Maybe AnchorType)
+    | GotAnchorElement AnyGuildOrDmId ThreadRouteWithMessage AnchorType (Result Dom.Error { anchor : Dom.Element, container : Dom.Element })
     | MouseDown Float Float
     | MouseMoved Float Float
     | MouseUp
@@ -365,14 +365,6 @@ parseAnchor messageIdText anchorType =
 
         Nothing ->
             Nothing
-
-
-{-| Walks up from the clicked element looking for something that can be used as
-a drawing anchor (profile image, timestamp, or attached file/image).
--}
-decodePickAnchor : Json.Decode.Decoder (Maybe Anchor)
-decodePickAnchor =
-    Json.Decode.field "target" (walkUpForAnchor 30)
 
 
 walkUpForAnchor : Int -> Json.Decode.Decoder (Maybe Anchor)
