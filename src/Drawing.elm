@@ -20,6 +20,7 @@ module Drawing exposing
     , initialAnchorSelection
     , inputOverlay
     , inputOverlayId
+    , messageOverlay
     , pickAreaId
     , profileImageAnchorId
     , redoButtonId
@@ -41,7 +42,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import SeqDict exposing (SeqDict)
-import Svg
+import Svg exposing (Svg)
 import Svg.Attributes
 import Ui exposing (Element)
 import Ui.Font
@@ -68,7 +69,12 @@ type alias Stroke =
 
 
 type alias ChannelDrawing userId =
-    { finished : List { createdBy : userId, stroke : Stroke }
+    { finished :
+        List
+            { createdBy : userId
+            , anchor : AnchorType
+            , points : Nonempty ( Float, Float )
+            }
     , inProgress : SeqDict userId Stroke
     , -- Per-user redo stacks, most recently undone stroke first
       undone : SeqDict userId (List Stroke)
@@ -409,16 +415,43 @@ userColor userId =
     List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
 
 
-{-| Places the strokes drawn on a message in front of the message view.
--}
-wrapMessageView : SeqDict AnchorType ( Float, Float ) -> Maybe (List ( Id UserId, Stroke )) -> Element msg -> Element msg
-wrapMessageView anchorOffsets maybeStrokes element =
-    case maybeStrokes of
-        Just strokes ->
-            Ui.el [ Ui.inFront (messageOverlay anchorOffsets strokes) ] element
+wrapMessageView : ChannelDrawing userId -> List (Element msg)
+wrapMessageView drawings =
+    if List.isEmpty drawings.finished && SeqDict.isEmpty drawings.inProgress then
+        []
 
-        Nothing ->
-            element
+    else
+        List.foldl
+            (\{ createdBy, anchor, points } state ->
+                case anchor of
+                    ProfileImageAnchor ->
+                        Ui.el
+                            [ Ui.width (Ui.px 0)
+                            , Ui.height (Ui.px 0)
+                            , MyUi.htmlStyle "pointer-events" "none"
+                            ]
+                            (messageOverlay points)
+                            :: state
+
+                    TimestampAnchor ->
+                        Ui.el
+                            [ Ui.width (Ui.px 0)
+                            , Ui.height (Ui.px 0)
+                            , Ui.alignRight
+                            , MyUi.htmlStyle "pointer-events" "none"
+                            ]
+                            (messageOverlay points)
+                            :: state
+
+                    AttachmentAnchor fileId ->
+                        state
+            )
+            []
+            drawings.finished
+
+
+
+--Ui.el [ Ui.inFront (messageOverlay strokes) ] element
 
 
 {-| Renders all strokes belonging to a single message. Positioned inFront of
@@ -426,45 +459,30 @@ the message container so it moves together with the message when scrolling.
 The svg has no size of its own (overflow is visible) and ignores pointer
 events so it never blocks interactions with the message below it.
 -}
-messageOverlay : SeqDict AnchorType ( Float, Float ) -> List ( Id UserId, Stroke ) -> Element msg
-messageOverlay anchorOffsets strokes =
+messageOverlay : Id UserId -> Nonempty ( Float, Float ) -> Element msg
+messageOverlay userId points =
     Svg.svg
         [ Svg.Attributes.width "1"
         , Svg.Attributes.height "1"
         , Svg.Attributes.style "position:absolute;left:0;top:0;overflow:visible;pointer-events:none;display:block"
         ]
-        (List.filterMap
-            (\( userId, stroke ) ->
-                case SeqDict.get stroke.anchor anchorOffsets of
-                    Just offset ->
-                        strokeView (userColor userId) offset stroke |> Just
-
-                    Nothing ->
-                        Nothing
-            )
-            strokes
-        )
-        |> Ui.html
-        |> Ui.el [ Ui.width (Ui.px 0), Ui.height (Ui.px 0), MyUi.htmlStyle "pointer-events" "none" ]
-
-
-strokeView : String -> ( Float, Float ) -> Stroke -> Svg.Svg msg
-strokeView color ( offsetX, offsetY ) stroke =
-    Svg.polyline
-        [ List.Nonempty.toList stroke.points
-            |> List.map
-                (\( x, y ) ->
-                    String.fromFloat (x + offsetX) ++ "," ++ String.fromFloat (y + offsetY)
-                )
-            |> String.join " "
-            |> Svg.Attributes.points
-        , Svg.Attributes.fill "none"
-        , Svg.Attributes.stroke color
-        , Svg.Attributes.strokeWidth "3"
-        , Svg.Attributes.strokeLinecap "round"
-        , Svg.Attributes.strokeLinejoin "round"
+        [ Svg.polyline
+            [ List.Nonempty.toList points
+                |> List.map
+                    (\( x, y ) ->
+                        String.fromFloat x ++ "," ++ String.fromFloat y
+                    )
+                |> String.join " "
+                |> Svg.Attributes.points
+            , Svg.Attributes.fill "none"
+            , Svg.Attributes.stroke (userColor userId)
+            , Svg.Attributes.strokeWidth "3"
+            , Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            ]
+            []
         ]
-        []
+        |> Ui.html
 
 
 inputOverlayId : Dom.HtmlId

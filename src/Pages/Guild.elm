@@ -4562,16 +4562,16 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 ]
 
-        UserJoinedMessage _ _ _ ->
+        UserJoinedMessage _ _ _ _ ->
             Ui.none
 
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ ->
+        CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ ->
+        GoMatchStarted _ _ _ _ ->
             Ui.none
 
 
@@ -4693,16 +4693,16 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         Ui.none
                 ]
 
-        UserJoinedMessage _ _ _ ->
+        UserJoinedMessage _ _ _ _ ->
             Ui.none
 
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ ->
+        CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ ->
+        GoMatchStarted _ _ _ _ ->
             Ui.none
 
 
@@ -5026,7 +5026,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time endedAt userId reactions ->
+        CallStarted time endedAt userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -6004,9 +6004,10 @@ messageContainer :
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
     -> IsHovered
+    -> Drawing.ChannelDrawing userId
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent drawings =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
