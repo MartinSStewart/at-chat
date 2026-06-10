@@ -240,10 +240,7 @@ type alias LoggedIn2 =
     , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
-    , drawingMode : Maybe Drawing.Model
-    , -- Position of drawing anchor elements relative to their message container,
-      -- measured from the DOM so strokes can be rendered at the right place.
-      drawingAnchorOffsets : SeqDict Drawing.Anchor ( Float, Float )
+    , drawingMode : Drawing.Model
     }
 
 
@@ -372,7 +369,6 @@ type alias BackendModel =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
-    , drawings : SeqDict Drawing.BackendChannel Drawing.ChannelDrawing
     }
 
 
@@ -780,7 +776,6 @@ type alias LoginData =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , voiceChatPeers : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
-    , drawings : SeqDict Drawing.TargetChannel Drawing.ChannelDrawing
     }
 
 
@@ -915,4 +910,4 @@ type LocalChange
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange
-    | Local_Drawing AnyGuildOrDmId Drawing.LocalChange
+    | Local_Drawing AnyGuildOrDmId ThreadRouteWithMessage Drawing.LocalChange

@@ -242,7 +242,6 @@ init =
       , serverSecretRegeneratedAt = Nothing
       , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
-      , drawings = SeqDict.empty
       }
     , Command.none
     )
@@ -5026,7 +5025,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_Drawing guildOrDmId drawingChange ->
+                Local_Drawing guildOrDmId threadRoute drawingChange ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember

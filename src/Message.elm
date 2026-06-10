@@ -18,6 +18,7 @@ module Message exposing
     )
 
 import Array exposing (Array)
+import Drawing
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
@@ -66,6 +67,7 @@ userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
     , repliedTo = repliedTo
     , attachedFiles = attachedFiles
     , embeds = Array.empty
+    , drawings = Drawing.emptyChannelDrawing
     }
         |> UserTextMessage
 
@@ -93,6 +95,7 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
       , repliedTo = repliedTo
       , attachedFiles = attachedFiles
       , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+      , drawings = Drawing.emptyChannelDrawing
       }
         |> UserTextMessage
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
@@ -136,6 +139,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     , repliedTo = repliedTo
     , attachedFiles = attachedFiles
     , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+    , drawings = Drawing.emptyChannelDrawing
     }
         |> UserTextMessage
 
@@ -251,6 +255,7 @@ type alias UserTextMessageData messageId userId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     , embeds : Array Embed
+    , drawings : Drawing.ChannelDrawing
     }
 
 
@@ -275,6 +280,7 @@ type alias UserTextMessageDataNoReply userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
+    , drawings : Drawing.ChannelDrawing
     }
 
 

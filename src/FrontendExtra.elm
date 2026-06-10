@@ -256,7 +256,7 @@ pendingChangesText localChange =
                 Go.CreatePublicLink _ _ ->
                     "Shared Go match"
 
-        Local_Drawing _ _ ->
+        Local_Drawing _ _ _ ->
             "Drew on a message"
 
 
@@ -1205,48 +1205,10 @@ routeRequest previousRoute newRoute model =
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        loggedIn2 : LoggedIn2
-                        loggedIn2 =
-                            if previousRoute == Just newRoute then
-                                loggedIn
-
-                            else
-                                -- Drawing anchor offsets are only valid for the channel they were
-                                -- measured in (anchor keys aren't qualified by channel) so they get
-                                -- cleared and remeasured when navigating.
-                                { loggedIn | drawingAnchorOffsets = SeqDict.empty }
-                    in
                     handleLocalChange
                         model.time
-                        (routeViewingLocalChange (Local.model loggedIn2.localState) newRoute)
-                        { loggedIn2
-                            | -- The drawing mode is active whenever the draw channel header tab is selected
-                              drawingMode =
-                                if Route.toChannelHeaderTab newRoute == Just Route.DmChannelHeaderTab_Draw then
-                                    case
-                                        Drawing.routeToChannel
-                                            (Local.model loggedIn2.localState).localUser.session.userId
-                                            newRoute
-                                    of
-                                        Just channel ->
-                                            case loggedIn2.drawingMode of
-                                                Just drawingMode ->
-                                                    if drawingMode.channel == channel then
-                                                        Just drawingMode
-
-                                                    else
-                                                        Just (Drawing.init channel)
-
-                                                Nothing ->
-                                                    Just (Drawing.init channel)
-
-                                        Nothing ->
-                                            Nothing
-
-                                else
-                                    Nothing
-                        }
+                        (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
+                        loggedIn
                         Command.none
                 )
                 { model | route = newRoute }
@@ -2927,15 +2889,8 @@ changeUpdate localMsg local =
                 Local_Go { otherUserId } goChange ->
                     goChangeUpdate local.localUser.session.userId otherUserId goChange local
 
-                Local_Drawing guildOrDmId drawingChange ->
-                    { local
-                        | drawings =
-                            Drawing.applyChange
-                                changedBy
-                                (Drawing.targetChannel guildOrDmId)
-                                drawingChange
-                                local.drawings
-                    }
+                Local_Drawing guildOrDmId threadRoute drawingChange ->
+                    LocalState.drawingHandleChange guildOrDmId threadRoute changedBy drawingChange local
 
         ServerChange serverChange ->
             case serverChange of

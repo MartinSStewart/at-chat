@@ -69,6 +69,7 @@ module LocalState exposing
     , discordGuildOrDmIdToMessage
     , discordGuildOrDmIdToMessages
     , discordTopicToDescription
+    , drawingHandleChange
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -171,10 +172,6 @@ type alias LocalState =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , calls : Call.Local
-    , -- Freehand drawings placed on top of messages, anchored to an element
-      -- within a message. Not persisted by the backend, so they only exist for
-      -- as long as someone keeps the app open.
-      drawings : SeqDict Drawing.TargetChannel Drawing.ChannelDrawing
     }
 
 
@@ -2558,6 +2555,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               , attachedFiles = data.attachedFiles
+                              , drawings = data.drawings
                               }
                             , ViewThreadWithMaybeMessage threadId data.repliedTo
                             )
@@ -2575,6 +2573,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               , attachedFiles = data.attachedFiles
+                              , drawings = data.drawings
                               }
                             , NoThreadWithMaybeMessage data.repliedTo
                             )
@@ -2617,6 +2616,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                       , reactions = data.reactions
                       , editedAt = data.editedAt
                       , attachedFiles = data.attachedFiles
+                      , drawings = data.drawings
                       }
                     , NoThreadWithMaybeMessage data.repliedTo
                     )
@@ -2644,6 +2644,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       , attachedFiles = data.attachedFiles
+                                      , drawings = data.drawings
                                       }
                                     , ViewThreadWithMaybeMessage threadId data.repliedTo
                                     )
@@ -2688,6 +2689,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                                 , reactions = data.reactions
                                                 , editedAt = data.editedAt
                                                 , attachedFiles = data.attachedFiles
+                                                , drawings = data.drawings
                                                 }
                                                     |> UserTextMessage_NoReply
 
@@ -2726,6 +2728,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             , reactions = data.reactions
                                             , editedAt = data.editedAt
                                             , attachedFiles = data.attachedFiles
+                                            , drawings = data.drawings
                                             }
                                                 |> UserTextMessage_NoReply
 
@@ -2787,6 +2790,7 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                     , reactions = data.reactions
                                     , editedAt = data.editedAt
                                     , attachedFiles = data.attachedFiles
+                                    , drawings = data.drawings
                                     }
                                         |> UserTextMessage_NoReply
 
@@ -2909,3 +2913,122 @@ discordGuildAvailableStickersAndCustomEmojis localUser guild =
     ( SeqSet.intersect localUser.user.availableCustomEmojis guild.customEmojis
     , SeqSet.intersect localUser.user.availableStickers guild.stickers
     )
+
+
+drawingHandleChange :
+    AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> Id UserId
+    -> Drawing.LocalChange
+    -> LocalState
+    -> LocalState
+drawingHandleChange guildOrDmId threadRoute changedBy change local =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            { local
+                | guilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (updateChannel
+                            (\channel ->
+                                channel
+                            )
+                            channelId
+                        )
+                        local.guilds
+            }
+
+        DiscordGuildOrDmId discordGuildOrDmId ->
+            Debug.todo ""
+
+
+drawingApplyToMessage change =
+    case change of
+        Drawing.StartStroke anchor point ->
+            SeqDict.insert
+                key
+                { drawing
+                    | inProgress =
+                        SeqDict.insert
+                            userId
+                            { anchor = anchor, points = Nonempty point [] }
+                            drawing.inProgress
+                    , -- Starting a new stroke clears anything that could be redone
+                      undone = SeqDict.remove userId drawing.undone
+                }
+                drawings
+
+        Drawing.ContinueStroke points ->
+            case SeqDict.get userId drawing.inProgress of
+                Just stroke ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | inProgress =
+                                SeqDict.insert
+                                    userId
+                                    { stroke
+                                        | points =
+                                            List.Nonempty.append stroke.points points
+                                                |> nonemptyTake maxPointsPerStroke
+                                    }
+                                    drawing.inProgress
+                        }
+                        drawings
+
+                Nothing ->
+                    drawings
+
+        Drawing.EndStroke ->
+            case SeqDict.get userId drawing.inProgress of
+                Just stroke ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | inProgress = SeqDict.remove userId drawing.inProgress
+                            , finished =
+                                { createdBy = userId, stroke = stroke }
+                                    :: drawing.finished
+                                    |> List.take maxFinishedStrokes
+                        }
+                        drawings
+
+                Nothing ->
+                    drawings
+
+        Drawing.UndoStroke ->
+            case List.Extra.splitWhen (\finished -> finished.createdBy == userId) drawing.finished of
+                Just ( before, undoneStroke :: after ) ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | finished = before ++ after
+                            , undone =
+                                SeqDict.update
+                                    userId
+                                    (\maybe ->
+                                        undoneStroke.stroke
+                                            :: Maybe.withDefault [] maybe
+                                            |> Just
+                                    )
+                                    drawing.undone
+                        }
+                        drawings
+
+                _ ->
+                    drawings
+
+        Drawing.RedoStroke ->
+            case SeqDict.get userId drawing.undone of
+                Just (stroke :: rest) ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | finished = { createdBy = userId, stroke = stroke } :: drawing.finished
+                            , undone = SeqDict.insert userId rest drawing.undone
+                        }
+                        drawings
+
+                _ ->
+                    drawings
+drawings

@@ -434,14 +434,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
-            , drawingMode =
-                if Route.toChannelHeaderTab loading.route == Just DmChannelHeaderTab_Draw then
-                    Drawing.routeToChannel local.localUser.session.userId loading.route
-                        |> Maybe.map Drawing.init
-
-                else
-                    Nothing
-            , drawingAnchorOffsets = SeqDict.empty
+            , drawingMode = Drawing.init
             }
     in
     ( loggedIn
@@ -500,7 +493,6 @@ loginDataToLocalState userAgent timezone loginData =
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
     , calls = Call.init loginData.voiceChatPeers
-    , drawings = loginData.drawings
     }
 
 
@@ -630,39 +622,11 @@ updateLoaded msg model =
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
-            ( { model | time = time }
-            , -- Drawing anchors get measured lazily. This catches anchors that couldn't
-              -- be measured earlier (for example because their message wasn't loaded yet).
-              case model.loginStatus of
-                LoggedIn loggedIn ->
-                    measureMissingDrawingAnchors model loggedIn
-
-                NotLoggedIn _ ->
-                    Command.none
-            )
+            ( { model | time = time }, Command.none )
 
         GotWindowSize width height ->
             FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | -- Resizing the window can reflow message contents so all anchor
-                          -- measurements are invalidated and measured again.
-                          drawingAnchorOffsets = SeqDict.empty
-                        , drawingMode =
-                            Maybe.map
-                                (\drawingMode ->
-                                    { drawingMode
-                                        | anchor =
-                                            Maybe.map
-                                                (\selected -> { selected | position = Nothing, stroke = Nothing })
-                                                drawingMode.anchor
-                                    }
-                                )
-                                loggedIn.drawingMode
-                      }
-                    , Command.none
-                    )
-                )
+                (\loggedIn -> ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }, Command.none ))
                 { model | windowSize = Coord.xy width height }
 
         GotTimezone _ ->
@@ -4520,7 +4484,8 @@ updateDrawing drawingMsg model =
                                                 (Local_Drawing
                                                     drawingMode.channel
                                                     (Drawing.StartStroke
-                                                        selected.anchor
+                                                        selected.anchor.messageId
+                                                        selected.anchor.anchorType
                                                         ( x - anchorX, y - anchorY )
                                                     )
                                                     |> Just
@@ -4617,7 +4582,8 @@ updateDrawing drawingMsg model =
                                                         (case List.Nonempty.fromList (List.reverse stroke.unsent) of
                                                             Just points ->
                                                                 Local_Drawing
-                                                                    drawingMode.channel
+                                                                    (Tuple.first drawingMode.guildOrDmId)
+                                                                    (Tuple.second drawingMode.guildOrDmId)
                                                                     (Drawing.ContinueStroke points)
                                                                     |> Just
 
@@ -4708,44 +4674,6 @@ measureDrawingAnchor anchor =
         )
         (Dom.getElement (Pages.Guild.channelMessageHtmlId anchor.messageId))
         |> Task.attempt (\result -> Drawing.GotAnchorElement anchor result |> DrawingMsg)
-
-
-{-| Measure the position of any drawing anchors in the current channel that haven't been measured yet.
--}
-measureMissingDrawingAnchors : LoadedFrontend -> LoggedIn2 -> Command FrontendOnly ToBackend FrontendMsg
-measureMissingDrawingAnchors model loggedIn =
-    let
-        local : LocalState
-        local =
-            Local.model loggedIn.localState
-    in
-    case Drawing.routeToChannel local.localUser.session.userId model.route of
-        Just guildOrDmId ->
-            (case SeqDict.get (Drawing.targetChannel guildOrDmId) local.drawings of
-                Just drawing ->
-                    Drawing.channelAnchors drawing
-
-                Nothing ->
-                    []
-            )
-                ++ (case loggedIn.drawingMode of
-                        Just drawingMode ->
-                            case drawingMode.anchor of
-                                Just selected ->
-                                    [ selected.anchor ]
-
-                                Nothing ->
-                                    []
-
-                        Nothing ->
-                            []
-                   )
-                |> List.filter (\anchor -> not (SeqDict.member anchor loggedIn.drawingAnchorOffsets))
-                |> List.map measureDrawingAnchor
-                |> Command.batch
-
-        Nothing ->
-            Command.none
 
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
@@ -6679,13 +6607,6 @@ updateLoadedFromBackend msg model =
 
                                         Go.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
-
-                                Server_Drawing _ _ _ ->
-                                    ( loggedIn2
-                                    , -- Measure any newly drawn-on anchors right away so the
-                                      -- drawing shows up without waiting for the next GotTime tick.
-                                      measureMissingDrawingAnchors model loggedIn2
-                                    )
 
                                 _ ->
                                     ( loggedIn2, Command.none )

@@ -2,22 +2,17 @@ module Drawing exposing
     ( ActiveStroke
     , Anchor
     , AnchorType(..)
-    , BackendChannel(..)
     , ChannelDrawing
     , LocalChange(..)
-    , Model
+    , Model(..)
     , Msg(..)
-    , SelectedAnchor
+    , SelectedAnchorData
     , Stroke
-    , TargetChannel(..)
     , anchorDomId
     , anchorDomIdFallback
     , anchorHighlightStyle
-    , applyChange
-    , backendToFrontendChannel
     , canRedo
     , canUndo
-    , channelAnchors
     , decodePickAnchor
     , emptyChannelDrawing
     , init
@@ -27,44 +22,27 @@ module Drawing exposing
     , pickAreaId
     , profileImageAnchorId
     , redoButtonId
-    , routeToChannel
-    , strokesByMessage
-    , tabView
-    , targetChannel
+    , resetAnchor
     , timestampAnchorId
     , undoButtonId
+    , undoRedoButton
     , wrapMessageView
     )
 
-import Discord
-import DmChannel
 import Effect.Browser.Dom as Dom
 import FileStatus exposing (FileId)
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute, ThreadRouteWithMessage, UserId)
 import Json.Decode
-import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
 import Ui exposing (Element)
 import Ui.Font
-
-
-{-| Identifies which channel a drawing belongs to. Unlike AnyGuildOrDmId this
-doesn't include the viewer's Discord user id, so every user ends up with the
-same key for the same channel.
--}
-type TargetChannel
-    = TargetGuildChannel (Id GuildId) (Id ChannelId)
-    | TargetDmChannel (Id UserId)
-    | TargetDiscordGuildChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
-    | TargetDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
 
 
 type AnchorType
@@ -82,7 +60,7 @@ type alias Anchor =
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
 -}
 type alias Stroke =
-    { anchor : Anchor
+    { anchor : AnchorType
     , points : Nonempty ( Float, Float )
     }
 
@@ -101,7 +79,7 @@ emptyChannelDrawing =
 
 
 type LocalChange
-    = StartStroke Anchor ( Float, Float )
+    = StartStroke AnchorType ( Float, Float )
     | ContinueStroke (Nonempty ( Float, Float ))
     | EndStroke
     | UndoStroke
@@ -118,17 +96,15 @@ type Msg
     | PressedRedo
 
 
-{-| State of the drawing tool for the current user (only exists while the
-drawing mode is enabled).
--}
-type alias Model =
-    { channel : AnyGuildOrDmId
-    , anchor : Maybe SelectedAnchor
-    }
+type Model
+    = NoSelectedAnchor
+    | SelectedAnchor SelectedAnchorData
 
 
-type alias SelectedAnchor =
-    { anchor : Anchor
+type alias SelectedAnchorData =
+    { guildOrDmId : GuildOrDmId
+    , threadRoute : ThreadRouteWithMessage
+    , anchorType : AnchorType
     , -- Position of the anchor element in viewport coordinates, used to convert
       -- mouse positions into anchor relative points. Nothing while being measured.
       position : Maybe ( Float, Float )
@@ -142,103 +118,19 @@ type alias ActiveStroke =
     }
 
 
-init : AnyGuildOrDmId -> Model
-init channel =
-    { channel = channel, anchor = Nothing }
+init : Model
+init =
+    NoSelectedAnchor
 
 
-initialAnchorSelection : Anchor -> SelectedAnchor
-initialAnchorSelection anchor =
-    { anchor = anchor, position = Nothing, stroke = Nothing }
-
-
-targetChannel : AnyGuildOrDmId -> TargetChannel
-targetChannel guildOrDmId =
-    case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-            TargetGuildChannel guildId channelId
-
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-            TargetDmChannel otherUserId
-
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
-            TargetDiscordGuildChannel guildId channelId
-
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-            TargetDiscordDmChannel data.channelId
-
-
-{-| Same as TargetChannel but DM channels are identified by both participants
-instead of being relative to the viewing user, so it can be used as a key in
-the backend model.
--}
-type BackendChannel
-    = BackendGuildChannel (Id GuildId) (Id ChannelId)
-    | BackendDmChannel DmChannel.DmChannelId
-    | BackendDiscordGuildChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
-    | BackendDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
-
-
-{-| Convert a backend drawing key into the key a specific user stores it under.
-Returns Nothing for DM channels the user isn't part of.
--}
-backendToFrontendChannel : Id UserId -> BackendChannel -> Maybe TargetChannel
-backendToFrontendChannel userId backendChannel =
-    case backendChannel of
-        BackendGuildChannel guildId channelId ->
-            TargetGuildChannel guildId channelId |> Just
-
-        BackendDmChannel dmChannelId ->
-            case DmChannel.otherUserId userId dmChannelId of
-                Just otherUserId ->
-                    TargetDmChannel otherUserId |> Just
-
-                Nothing ->
-                    Nothing
-
-        BackendDiscordGuildChannel guildId channelId ->
-            TargetDiscordGuildChannel guildId channelId |> Just
-
-        BackendDiscordDmChannel channelId ->
-            TargetDiscordDmChannel channelId |> Just
-
-
-{-| The channel whose messages are currently visible (drawing on top of thread
-messages isn't supported).
--}
-routeToChannel : Id UserId -> Route -> Maybe AnyGuildOrDmId
-routeToChannel userId route =
-    case route of
-        GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) ->
-            GuildOrDmId (GuildOrDmId_Guild guildId channelId) |> Just
-
-        DmRoute dmRoute ->
-            case ( DmChannel.otherUserId userId dmRoute.channelId, dmRoute.threadRoute ) of
-                ( Just otherUserId, NoThreadWithFriends _ _ ) ->
-                    GuildOrDmId (GuildOrDmId_Dm otherUserId) |> Just
-
-                _ ->
-                    Nothing
-
-        DiscordGuildRoute routeData ->
-            case routeData.channelRoute of
-                DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) _ ->
-                    DiscordGuildOrDmId
-                        (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
-                        |> Just
-
-                _ ->
-                    Nothing
-
-        DiscordDmRoute routeData ->
-            DiscordGuildOrDmId
-                (DiscordGuildOrDmId_Dm
-                    { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
-                )
-                |> Just
-
-        _ ->
-            Nothing
+initialAnchorSelection : GuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> SelectedAnchorData
+initialAnchorSelection guildOrDmId threadRoute anchorType =
+    { guildOrDmId = guildOrDmId
+    , threadRoute = threadRoute
+    , anchorType = anchorType
+    , position = Nothing
+    , stroke = Nothing
+    }
 
 
 maxFinishedStrokes : Int
@@ -251,109 +143,14 @@ maxPointsPerStroke =
     4000
 
 
-{-| The key is generic so this can be used both for the frontend
-(keyed by TargetChannel) and the backend (keyed by BackendChannel).
--}
-applyChange :
-    Id UserId
-    -> key
-    -> LocalChange
-    -> SeqDict key ChannelDrawing
-    -> SeqDict key ChannelDrawing
-applyChange userId key change drawings =
-    let
-        drawing : ChannelDrawing
-        drawing =
-            SeqDict.get key drawings |> Maybe.withDefault emptyChannelDrawing
-    in
-    case change of
-        StartStroke anchor point ->
-            SeqDict.insert
-                key
-                { drawing
-                    | inProgress =
-                        SeqDict.insert
-                            userId
-                            { anchor = anchor, points = Nonempty point [] }
-                            drawing.inProgress
-                    , -- Starting a new stroke clears anything that could be redone
-                      undone = SeqDict.remove userId drawing.undone
-                }
-                drawings
+resetAnchor : Model -> Model
+resetAnchor model =
+    case model of
+        NoSelectedAnchor ->
+            model
 
-        ContinueStroke points ->
-            case SeqDict.get userId drawing.inProgress of
-                Just stroke ->
-                    SeqDict.insert
-                        key
-                        { drawing
-                            | inProgress =
-                                SeqDict.insert
-                                    userId
-                                    { stroke
-                                        | points =
-                                            List.Nonempty.append stroke.points points
-                                                |> nonemptyTake maxPointsPerStroke
-                                    }
-                                    drawing.inProgress
-                        }
-                        drawings
-
-                Nothing ->
-                    drawings
-
-        EndStroke ->
-            case SeqDict.get userId drawing.inProgress of
-                Just stroke ->
-                    SeqDict.insert
-                        key
-                        { drawing
-                            | inProgress = SeqDict.remove userId drawing.inProgress
-                            , finished =
-                                { createdBy = userId, stroke = stroke }
-                                    :: drawing.finished
-                                    |> List.take maxFinishedStrokes
-                        }
-                        drawings
-
-                Nothing ->
-                    drawings
-
-        UndoStroke ->
-            case List.Extra.splitWhen (\finished -> finished.createdBy == userId) drawing.finished of
-                Just ( before, undoneStroke :: after ) ->
-                    SeqDict.insert
-                        key
-                        { drawing
-                            | finished = before ++ after
-                            , undone =
-                                SeqDict.update
-                                    userId
-                                    (\maybe ->
-                                        undoneStroke.stroke
-                                            :: Maybe.withDefault [] maybe
-                                            |> Just
-                                    )
-                                    drawing.undone
-                        }
-                        drawings
-
-                _ ->
-                    drawings
-
-        RedoStroke ->
-            case SeqDict.get userId drawing.undone of
-                Just (stroke :: rest) ->
-                    SeqDict.insert
-                        key
-                        { drawing
-                            | finished = { createdBy = userId, stroke = stroke } :: drawing.finished
-                            , undone = SeqDict.insert userId rest drawing.undone
-                        }
-                        drawings
-
-                _ ->
-                    drawings
+        SelectedAnchor data ->
+            SelectedAnchor { data | position = Nothing, stroke = Nothing }
 
 
 canUndo : Id UserId -> ChannelDrawing -> Bool
@@ -374,43 +171,6 @@ canRedo userId drawing =
 nonemptyTake : Int -> Nonempty a -> Nonempty a
 nonemptyTake amount (Nonempty head rest) =
     Nonempty head (List.take (amount - 1) rest)
-
-
-{-| All anchors that have at least one stroke attached to them.
--}
-channelAnchors : ChannelDrawing -> List Anchor
-channelAnchors drawing =
-    List.map (\finished -> finished.stroke.anchor) drawing.finished
-        ++ List.map .anchor (SeqDict.values drawing.inProgress)
-        |> List.foldl
-            (\anchor list ->
-                if List.member anchor list then
-                    list
-
-                else
-                    anchor :: list
-            )
-            []
-
-
-strokesByMessage : ChannelDrawing -> SeqDict (Id ChannelMessageId) (List ( Id UserId, Stroke ))
-strokesByMessage drawing =
-    List.map (\finished -> ( finished.createdBy, finished.stroke )) drawing.finished
-        ++ SeqDict.toList drawing.inProgress
-        |> List.foldl
-            (\( userId, stroke ) dict ->
-                SeqDict.update
-                    stroke.anchor.messageId
-                    (\maybe -> ( userId, stroke ) :: Maybe.withDefault [] maybe |> Just)
-                    dict
-            )
-            SeqDict.empty
-
-
-
--- DOM ids used for locating anchor elements. The "spoiler" prefix matches the
--- htmlIdPrefix used for channel messages (attached images already get an id of
--- the form "spoiler_<messageIndex>_image_<fileId>" from RichText.view).
 
 
 profileImageAnchorId : Dom.HtmlId -> Id messageId -> Dom.HtmlId
@@ -572,7 +332,7 @@ userColor userId =
 
 {-| Places the strokes drawn on a message in front of the message view.
 -}
-wrapMessageView : SeqDict Anchor ( Float, Float ) -> Maybe (List ( Id UserId, Stroke )) -> Element msg -> Element msg
+wrapMessageView : SeqDict AnchorType ( Float, Float ) -> Maybe (List ( Id UserId, Stroke )) -> Element msg -> Element msg
 wrapMessageView anchorOffsets maybeStrokes element =
     case maybeStrokes of
         Just strokes ->
@@ -587,7 +347,7 @@ the message container so it moves together with the message when scrolling.
 The svg has no size of its own (overflow is visible) and ignores pointer
 events so it never blocks interactions with the message below it.
 -}
-messageOverlay : SeqDict Anchor ( Float, Float ) -> List ( Id UserId, Stroke ) -> Element msg
+messageOverlay : SeqDict AnchorType ( Float, Float ) -> List ( Id UserId, Stroke ) -> Element msg
 messageOverlay anchorOffsets strokes =
     Svg.svg
         [ Svg.Attributes.width "1"
@@ -719,39 +479,6 @@ anchorHighlightStyle =
         ]
         |> Ui.html
         |> Ui.el [ Ui.width (Ui.px 0), Ui.height (Ui.px 0) ]
-
-
-{-| Shown in the channel header below the tab buttons while the drawing tab is selected.
--}
-tabView : (Msg -> msg) -> Id UserId -> Maybe Model -> ChannelDrawing -> Element msg
-tabView toMsg userId maybeModel drawing =
-    let
-        pickingAnchor : Bool
-        pickingAnchor =
-            case maybeModel of
-                Just model ->
-                    model.anchor == Nothing
-
-                Nothing ->
-                    True
-    in
-    Ui.row
-        [ Ui.paddingXY 16 12
-        , Ui.background MyUi.tabBackground
-        , Ui.Font.color MyUi.font2
-        , Ui.spacing 16
-        ]
-        [ Ui.text
-            (if pickingAnchor then
-                "Click on a profile image, timestamp, or attachment to anchor your drawing to it."
-
-             else
-                "Draw with the mouse. Press Escape or the pencil tab when you're done."
-            )
-        , undoRedoButton undoButtonId PressedUndo "Undo" (canUndo userId drawing)
-        , undoRedoButton redoButtonId PressedRedo "Redo" (canRedo userId drawing)
-        ]
-        |> Ui.map toMsg
 
 
 undoRedoButton : Dom.HtmlId -> Msg -> String -> Bool -> Element Msg

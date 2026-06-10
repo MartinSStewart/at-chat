@@ -12,7 +12,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
-import Drawing
+import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Go
 import GuildIcon
@@ -571,15 +571,6 @@ discordPrivateChatWith name =
         ]
 
 
-drawTabBody : Drawing.TargetChannel -> LocalState -> LoggedIn2 -> Element FrontendMsg
-drawTabBody target local loggedIn =
-    Drawing.tabView
-        DrawingMsg
-        local.localUser.session.userId
-        loggedIn.drawingMode
-        (SeqDict.get target local.drawings |> Maybe.withDefault Drawing.emptyChannelDrawing)
-
-
 tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 tabBodyView local loggedIn model =
     case model.route of
@@ -602,7 +593,7 @@ tabBodyView local loggedIn model =
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
-                            drawTabBody (Drawing.TargetGuildChannel guildId channelId) local loggedIn |> Just
+                            drawingTabView loggedIn.drawingMode local |> Just
 
                 ChannelRoute _ _ _ ->
                     Nothing
@@ -653,7 +644,7 @@ tabBodyView local loggedIn model =
                                 |> Just
 
                         Just DmChannelHeaderTab_Draw ->
-                            drawTabBody (Drawing.TargetDmChannel otherUserId) local loggedIn |> Just
+                            drawingTabView loggedIn.drawingMode local |> Just
 
                         Nothing ->
                             Nothing
@@ -686,8 +677,7 @@ tabBodyView local loggedIn model =
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
-                            drawTabBody (Drawing.TargetDiscordGuildChannel routeData.guildId channelId) local loggedIn
-                                |> Just
+                            drawingTabView loggedIn.drawingMode local |> Just
 
                 DiscordChannel_ChannelRoute _ _ _ ->
                     Nothing
@@ -704,7 +694,7 @@ tabBodyView local loggedIn model =
         DiscordDmRoute routeData ->
             case routeData.tab of
                 Just DmChannelHeaderTab_Draw ->
-                    drawTabBody (Drawing.TargetDiscordDmChannel routeData.channelId) local loggedIn |> Just
+                    drawingTabView loggedIn.drawingMode local |> Just
 
                 _ ->
                     Nothing
@@ -723,6 +713,35 @@ tabBodyView local loggedIn model =
 
         PublicGoMatchRoute _ ->
             Nothing
+
+
+{-| Shown in the channel header below the tab buttons while the drawing tab is selected.
+-}
+drawingTabView : Drawing.Model -> LocalState -> Element FrontendMsg
+drawingTabView model local =
+    let
+        userId : Id UserId
+        userId =
+            local.localUser.session.userId
+    in
+    Ui.row
+        [ Ui.paddingXY 16 12
+        , Ui.background MyUi.tabBackground
+        , Ui.Font.color MyUi.font2
+        , Ui.spacing 16
+        ]
+        [ Ui.text
+            (case model of
+                NoSelectedAnchor ->
+                    "Click on a profile image, timestamp, or attachment to anchor your drawing to it."
+
+                SelectedAnchor _ ->
+                    "Draw with the mouse. Press Escape or the pencil tab when you're done."
+            )
+        , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" (Drawing.canUndo userId drawing)
+        , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" (Drawing.canRedo userId drawing)
+        ]
+        |> Ui.map DrawingMsg
 
 
 channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg

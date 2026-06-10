@@ -594,80 +594,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
     , stickers = model.stickers
     , customEmojis = model.customEmojis
     , voiceChatPeers = getVoiceChatData clientId session model
-    , drawings = drawingsForUser session.userId linkedDiscordUsers model
     }
-
-
-{-| The message drawings the user is allowed to see, keyed the way the user's frontend stores them.
--}
-drawingsForUser :
-    Id UserId
-    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
-    -> BackendModel
-    -> SeqDict Drawing.TargetChannel Drawing.ChannelDrawing
-drawingsForUser userId linkedDiscordUsers model =
-    SeqDict.foldl
-        (\backendChannel drawing dict ->
-            let
-                isVisible : Bool
-                isVisible =
-                    case backendChannel of
-                        Drawing.BackendGuildChannel guildId _ ->
-                            case SeqDict.get guildId model.guilds of
-                                Just guild ->
-                                    case MembersAndOwner.isMember userId guild.membersAndOwner of
-                                        MembersAndOwner.IsNotMember ->
-                                            False
-
-                                        _ ->
-                                            True
-
-                                Nothing ->
-                                    False
-
-                        Drawing.BackendDmChannel _ ->
-                            -- backendToFrontendChannel already filters out DM channels
-                            -- the user isn't part of
-                            True
-
-                        Drawing.BackendDiscordGuildChannel guildId _ ->
-                            case SeqDict.get guildId model.discordGuilds of
-                                Just guild ->
-                                    SeqDict.member (MembersAndOwner.owner guild.membersAndOwner) linkedDiscordUsers
-                                        || not
-                                            (SeqDict.isEmpty
-                                                (SeqDict.intersect
-                                                    (MembersAndOwner.members guild.membersAndOwner)
-                                                    linkedDiscordUsers
-                                                )
-                                            )
-
-                                Nothing ->
-                                    False
-
-                        Drawing.BackendDiscordDmChannel channelId ->
-                            case SeqDict.get channelId model.discordDmChannels of
-                                Just dmChannel ->
-                                    NonemptyDict.toList dmChannel.members
-                                        |> List.any
-                                            (\( memberId, _ ) -> SeqDict.member memberId linkedDiscordUsers)
-
-                                Nothing ->
-                                    False
-            in
-            if isVisible then
-                case Drawing.backendToFrontendChannel userId backendChannel of
-                    Just target ->
-                        SeqDict.insert target drawing dict
-
-                    Nothing ->
-                        dict
-
-            else
-                dict
-        )
-        SeqDict.empty
-        model.drawings
 
 
 getVoiceChatDataHelper :
@@ -1487,7 +1414,7 @@ toBackendLog toBackend =
                 Local_Go _ _ ->
                     ToBackendLog_Local_Go
 
-                Local_Drawing _ _ ->
+                Local_Drawing _ _ _ ->
                     ToBackendLog_Local_Drawing
 
         TwoFactorToBackend _ ->
