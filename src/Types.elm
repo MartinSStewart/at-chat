@@ -372,6 +372,7 @@ type alias BackendModel =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    , drawings : SeqDict Drawing.BackendChannel Drawing.ChannelDrawing
     }
 
 
@@ -545,7 +546,6 @@ type FrontendMsg
     | PressedUnregisterServiceWorkers
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
-    | PressedDrawButton AnyGuildOrDmId
     | DrawingMsg Drawing.Msg
 
 
@@ -780,6 +780,7 @@ type alias LoginData =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , voiceChatPeers : SeqDict CallId (NonemptyDict ( Id UserId, ClientId ) Call.RemoteCallData)
+    , drawings : SeqDict Drawing.TargetChannel Drawing.ChannelDrawing
     }
 
 

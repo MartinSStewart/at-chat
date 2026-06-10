@@ -15,6 +15,7 @@ module Route exposing
     , linkDiscordQueryParam
     , requiresLogin
     , sameChannelHeaderTab
+    , setChannelHeaderTab
     , toChannelHeaderTab
     , toGuildOrDmId
     )
@@ -71,6 +72,7 @@ type DmChannelHeaderTab
     = DmChannelHeaderTab_VoiceChat
     | DmChannelHeaderTab_Go (Maybe (Id ChannelMessageId))
     | DmChannelHeaderTab_ChannelDescription
+    | DmChannelHeaderTab_Draw
 
 
 type alias DiscordGuildRouteData =
@@ -377,6 +379,9 @@ decodeChannelHeaderTab url2 =
                 "call" ->
                     DmChannelHeaderTab_VoiceChat |> Just
 
+                "draw" ->
+                    DmChannelHeaderTab_Draw |> Just
+
                 _ ->
                     Nothing
 
@@ -446,6 +451,33 @@ toChannelHeaderTab route =
             Nothing
 
 
+{-| Replaces the channel header tab for routes that can have one, leaves other routes unchanged.
+-}
+setChannelHeaderTab : Maybe DmChannelHeaderTab -> Route -> Route
+setChannelHeaderTab tab route =
+    case route of
+        DmRoute dmRoute ->
+            DmRoute { dmRoute | tab = tab }
+
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
+            GuildRoute guildId (ChannelRoute channelId threadRoute tab)
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
+                    DiscordGuildRoute
+                        { routeData | channelRoute = DiscordChannel_ChannelRoute channelId threadRoute tab }
+
+                _ ->
+                    route
+
+        DiscordDmRoute routeData ->
+            DiscordDmRoute { routeData | tab = tab }
+
+        _ ->
+            route
+
+
 sameChannelHeaderTab : DmChannelHeaderTab -> DmChannelHeaderTab -> Bool
 sameChannelHeaderTab tabA tabB =
     case tabA of
@@ -462,6 +494,9 @@ sameChannelHeaderTab tabA tabB =
 
         DmChannelHeaderTab_ChannelDescription ->
             tabB == DmChannelHeaderTab_ChannelDescription
+
+        DmChannelHeaderTab_Draw ->
+            tabB == DmChannelHeaderTab_Draw
 
 
 goMatchParam : String
@@ -665,6 +700,9 @@ encodeChannelHeaderTab tab =
 
         Just DmChannelHeaderTab_ChannelDescription ->
             [ Url.Builder.string tabParam "description" ]
+
+        Just DmChannelHeaderTab_Draw ->
+            [ Url.Builder.string tabParam "draw" ]
 
         Nothing ->
             []

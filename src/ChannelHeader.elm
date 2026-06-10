@@ -12,12 +12,13 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
+import Drawing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Go
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
@@ -56,7 +57,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
 
                       else
                         privateChatWith isMobile currentChannelHeaderTab otherUserId local name
-                    , drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
+                    , drawButton isMobile currentChannelHeaderTab
                     ]
 
             GuildOrDmId_Guild _ _ ->
@@ -72,7 +73,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile (GuildOrDmId guildOrDmIdNoThread) loggedIn
+                        [ drawButton isMobile currentChannelHeaderTab
                         , showFilesButton
                         ]
                     ]
@@ -122,7 +123,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
 
                       else
                         discordPrivateChatWith name
-                    , drawButton isMobile (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
+                    , drawButton isMobile currentChannelHeaderTab
                     ]
 
             DiscordGuildOrDmId_Guild _ _ _ ->
@@ -136,8 +137,11 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
-                    , drawButton isMobile (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile currentChannelHeaderTab
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -180,43 +184,21 @@ chattingWithYourself data local =
 {-| Toggles a mode where the user can draw freehand on top of messages.
 Only available on non-mobile since it requires a mouse.
 -}
-drawButton : Bool -> AnyGuildOrDmId -> LoggedIn2 -> Element FrontendMsg
-drawButton isMobile guildOrDmId loggedIn =
+drawButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
+drawButton isMobile currentTab =
     if isMobile then
         Ui.none
 
     else
-        let
-            isSelected : Bool
-            isSelected =
-                case loggedIn.drawingMode of
-                    Just drawingMode ->
-                        drawingMode.channel == guildOrDmId
-
-                    Nothing ->
-                        False
-        in
-        MyUi.elButton
+        channelHeaderTab
+            isMobile
             (Dom.id "channelHeader_drawOnMessages")
-            (PressedDrawButton guildOrDmId)
-            [ Ui.alignRight
-            , Ui.width (Ui.px 32)
-            , Ui.paddingXY 6 0
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.Font.color
-                (if isSelected then
-                    MyUi.font1
-
-                 else
-                    MyUi.font3
-                )
-            , Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
-            , Ui.attrIf isSelected (outwardBottomCorner 8 True)
-            , Ui.attrIf isSelected (outwardBottomCorner 8 False)
-            , Ui.Accessibility.description "Draw on top of messages"
-            ]
-            (Ui.html Icons.pencil)
+            DmChannelHeaderTab_Draw
+            currentTab
+            (Ui.el
+                [ Ui.width Ui.shrink, Ui.Accessibility.description "Draw on top of messages" ]
+                (Ui.html Icons.pencil)
+            )
 
 
 showFilesButton : Element FrontendMsg
@@ -589,6 +571,15 @@ discordPrivateChatWith name =
         ]
 
 
+drawTabBody : Drawing.TargetChannel -> LocalState -> LoggedIn2 -> Element FrontendMsg
+drawTabBody target local loggedIn =
+    Drawing.tabView
+        DrawingMsg
+        local.localUser.session.userId
+        loggedIn.drawingMode
+        (SeqDict.get target local.drawings |> Maybe.withDefault Drawing.emptyChannelDrawing)
+
+
 tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 tabBodyView local loggedIn model =
     case model.route of
@@ -609,6 +600,9 @@ tabBodyView local loggedIn model =
 
                         DmChannelHeaderTab_Go _ ->
                             Nothing
+
+                        DmChannelHeaderTab_Draw ->
+                            drawTabBody (Drawing.TargetGuildChannel guildId channelId) local loggedIn |> Just
 
                 ChannelRoute _ _ _ ->
                     Nothing
@@ -658,6 +652,9 @@ tabBodyView local loggedIn model =
                                 )
                                 |> Just
 
+                        Just DmChannelHeaderTab_Draw ->
+                            drawTabBody (Drawing.TargetDmChannel otherUserId) local loggedIn |> Just
+
                         Nothing ->
                             Nothing
 
@@ -688,6 +685,10 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_Go _ ->
                             Nothing
 
+                        DmChannelHeaderTab_Draw ->
+                            drawTabBody (Drawing.TargetDiscordGuildChannel routeData.guildId channelId) local loggedIn
+                                |> Just
+
                 DiscordChannel_ChannelRoute _ _ _ ->
                     Nothing
 
@@ -700,8 +701,13 @@ tabBodyView local loggedIn model =
                 DiscordChannel_GuildSettingsRoute ->
                     Nothing
 
-        DiscordDmRoute _ ->
-            Nothing
+        DiscordDmRoute routeData ->
+            case routeData.tab of
+                Just DmChannelHeaderTab_Draw ->
+                    drawTabBody (Drawing.TargetDiscordDmChannel routeData.channelId) local loggedIn |> Just
+
+                _ ->
+                    Nothing
 
         AiChatRoute ->
             Nothing

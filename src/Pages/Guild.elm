@@ -3319,25 +3319,18 @@ drawingModeAttributes guildOrDmId loggedIn =
             if drawingMode.channel == guildOrDmId then
                 case drawingMode.anchor of
                     Nothing ->
-                        [ Ui.Events.on
+                        [ Ui.id (Dom.idToString Drawing.pickAreaId)
+                        , Ui.Events.on
                             "click"
                             (Json.Decode.map
                                 (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
                                 Drawing.decodePickAnchor
                             )
-                        , Ui.inFront
-                            (Drawing.instructionsBanner
-                                "Click on a profile image, timestamp, or attachment to anchor your drawing to it"
-                            )
+                        , Ui.inFront Drawing.anchorHighlightStyle
                         ]
 
                     Just selected ->
-                        [ Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg)
-                        , Ui.inFront
-                            (Drawing.instructionsBanner
-                                "Draw with the mouse. Press the pencil button or Escape when you're done"
-                            )
-                        ]
+                        [ Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg) ]
 
             else
                 []

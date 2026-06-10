@@ -434,7 +434,13 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
-            , drawingMode = Nothing
+            , drawingMode =
+                if Route.toChannelHeaderTab loading.route == Just DmChannelHeaderTab_Draw then
+                    Drawing.routeToChannel local.localUser.session.userId loading.route
+                        |> Maybe.map Drawing.init
+
+                else
+                    Nothing
             , drawingAnchorOffsets = SeqDict.empty
             }
     in
@@ -494,7 +500,7 @@ loginDataToLocalState userAgent timezone loginData =
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
     , calls = Call.init loginData.voiceChatPeers
-    , drawings = SeqDict.empty
+    , drawings = loginData.drawings
     }
 
 
@@ -4368,8 +4374,10 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
-                DiscordDmRoute _ ->
-                    ( model, Command.none )
+                DiscordDmRoute routeData ->
+                    FrontendExtra.routePush
+                        model
+                        (DiscordDmRoute { routeData | tab = sameTab tab routeData.tab })
 
                 AiChatRoute ->
                     ( model, Command.none )
@@ -4420,27 +4428,6 @@ updateLoaded msg model =
                             Maybe.map
                                 (\userOptions -> { userOptions | serviceWorkerData = Just serviceWorkerData })
                                 loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        PressedDrawButton guildOrDmId ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | drawingMode =
-                            case loggedIn.drawingMode of
-                                Just drawingMode ->
-                                    if drawingMode.channel == guildOrDmId then
-                                        Nothing
-
-                                    else
-                                        Just (Drawing.init guildOrDmId)
-
-                                Nothing ->
-                                    Just (Drawing.init guildOrDmId)
                       }
                     , Command.none
                     )
@@ -4610,6 +4597,12 @@ updateDrawing drawingMsg model =
                         Nothing ->
                             ( loggedIn, Command.none )
 
+                Drawing.PressedUndo ->
+                    undoOrRedoDrawing Drawing.UndoStroke Drawing.canUndo model loggedIn
+
+                Drawing.PressedRedo ->
+                    undoOrRedoDrawing Drawing.RedoStroke Drawing.canRedo model loggedIn
+
                 Drawing.MouseUp ->
                     case loggedIn.drawingMode of
                         Just drawingMode ->
@@ -4665,41 +4658,37 @@ updateDrawing drawingMsg model =
         model
 
 
-{-| The channel whose messages are currently visible (drawing on top of thread messages isn't supported).
--}
-routeToDrawingChannel : Route -> LocalState -> Maybe AnyGuildOrDmId
-routeToDrawingChannel route local =
-    case route of
-        GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) ->
-            GuildOrDmId (GuildOrDmId_Guild guildId channelId) |> Just
+undoOrRedoDrawing :
+    Drawing.LocalChange
+    -> (Id UserId -> Drawing.ChannelDrawing -> Bool)
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+undoOrRedoDrawing change isAllowed model loggedIn =
+    case loggedIn.drawingMode of
+        Just drawingMode ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
 
-        DmRoute dmRoute ->
-            case ( DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId, dmRoute.threadRoute ) of
-                ( Just otherUserId, NoThreadWithFriends _ _ ) ->
-                    GuildOrDmId (GuildOrDmId_Dm otherUserId) |> Just
+                drawing : Drawing.ChannelDrawing
+                drawing =
+                    SeqDict.get (Drawing.targetChannel drawingMode.channel) local.drawings
+                        |> Maybe.withDefault Drawing.emptyChannelDrawing
+            in
+            if isAllowed local.localUser.session.userId drawing then
+                FrontendExtra.handleLocalChange
+                    model.time
+                    (Local_Drawing drawingMode.channel change |> Just)
+                    loggedIn
+                    Command.none
 
-                _ ->
-                    Nothing
+            else
+                ( loggedIn, Command.none )
 
-        DiscordGuildRoute routeData ->
-            case routeData.channelRoute of
-                DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) _ ->
-                    DiscordGuildOrDmId
-                        (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
-                        |> Just
-
-                _ ->
-                    Nothing
-
-        DiscordDmRoute routeData ->
-            DiscordGuildOrDmId
-                (DiscordGuildOrDmId_Dm
-                    { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
-                )
-                |> Just
-
-        _ ->
-            Nothing
+        Nothing ->
+            ( loggedIn, Command.none )
 
 
 measureDrawingAnchor : Drawing.Anchor -> Command FrontendOnly ToBackend FrontendMsg
@@ -4730,7 +4719,7 @@ measureMissingDrawingAnchors model loggedIn =
         local =
             Local.model loggedIn.localState
     in
-    case routeToDrawingChannel model.route local of
+    case Drawing.routeToChannel local.localUser.session.userId model.route of
         Just guildOrDmId ->
             (case SeqDict.get (Drawing.targetChannel guildOrDmId) local.drawings of
                 Just drawing ->

@@ -24,6 +24,7 @@ import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
+import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -241,6 +242,7 @@ init =
       , serverSecretRegeneratedAt = Nothing
       , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
+      , drawings = SeqDict.empty
       }
     , Command.none
     )
@@ -5025,26 +5027,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_Drawing guildOrDmId drawingChange ->
-                    -- Drawings are intentionally not stored in the backend model. They are
-                    -- only relayed to everyone else who can view the channel.
                     case guildOrDmId of
-                        GuildOrDmId (GuildOrDmId_Guild guildId _) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model
                                 sessionId
                                 guildId
-                                (\{ userId } _ _ ->
-                                    ( model
-                                    , Command.batch
-                                        [ LocalChangeResponse changeId localMsg
-                                            |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.toGuildExcludingOne
-                                            clientId
-                                            guildId
-                                            (Server_Drawing userId guildOrDmId drawingChange |> ServerChange)
-                                            model
-                                        ]
-                                    )
+                                (\{ userId } _ guild ->
+                                    if SeqDict.member channelId guild.channels then
+                                        ( { model
+                                            | drawings =
+                                                Drawing.applyChange
+                                                    userId
+                                                    (Drawing.BackendGuildChannel guildId channelId)
+                                                    drawingChange
+                                                    model.drawings
+                                          }
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toGuildExcludingOne
+                                                clientId
+                                                guildId
+                                                (Server_Drawing userId guildOrDmId drawingChange |> ServerChange)
+                                                model
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
@@ -5052,8 +5063,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\session _ _ _ _ ->
-                                    ( model
+                                (\session _ _ dmChannelId _ ->
+                                    ( { model
+                                        | drawings =
+                                            Drawing.applyChange
+                                                session.userId
+                                                (Drawing.BackendDmChannel dmChannelId)
+                                                drawingChange
+                                                model.drawings
+                                      }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg
                                             |> Lamdera.sendToFrontend clientId
@@ -5072,24 +5090,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId _) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
                             asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session _ _ _ ->
-                                    ( model
-                                    , Command.batch
-                                        [ LocalChangeResponse changeId localMsg
-                                            |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.toDiscordGuildExcludingOne
-                                            clientId
-                                            guildId
-                                            (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
-                                            model
-                                        ]
-                                    )
+                                (\session _ _ guild ->
+                                    if SeqDict.member channelId guild.channels then
+                                        ( { model
+                                            | drawings =
+                                                Drawing.applyChange
+                                                    session.userId
+                                                    (Drawing.BackendDiscordGuildChannel guildId channelId)
+                                                    drawingChange
+                                                    model.drawings
+                                          }
+                                        , Command.batch
+                                            [ LocalChangeResponse changeId localMsg
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDiscordGuildExcludingOne
+                                                clientId
+                                                guildId
+                                                (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                                                model
+                                            ]
+                                        )
+
+                                    else
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
@@ -5098,7 +5127,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session _ _ _ ->
-                                    ( model
+                                    ( { model
+                                        | drawings =
+                                            Drawing.applyChange
+                                                session.userId
+                                                (Drawing.BackendDiscordDmChannel data.channelId)
+                                                drawingChange
+                                                model.drawings
+                                      }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg
                                             |> Lamdera.sendToFrontend clientId

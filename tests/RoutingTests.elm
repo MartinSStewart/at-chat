@@ -68,6 +68,7 @@ tabFuzzer =
         [ DmChannelHeaderTab_VoiceChat
         , DmChannelHeaderTab_Go Nothing
         , DmChannelHeaderTab_Go (Just (Id.fromInt 123))
+        , DmChannelHeaderTab_Draw
         ]
 
 

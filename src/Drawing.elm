@@ -2,6 +2,7 @@ module Drawing exposing
     ( ActiveStroke
     , Anchor
     , AnchorType(..)
+    , BackendChannel(..)
     , ChannelDrawing
     , LocalChange(..)
     , Model
@@ -11,21 +12,32 @@ module Drawing exposing
     , TargetChannel(..)
     , anchorDomId
     , anchorDomIdFallback
+    , anchorHighlightStyle
     , applyChange
+    , backendToFrontendChannel
+    , canRedo
+    , canUndo
     , channelAnchors
     , decodePickAnchor
+    , emptyChannelDrawing
     , init
     , initialAnchorSelection
     , inputOverlay
-    , instructionsBanner
+    , inputOverlayId
+    , pickAreaId
     , profileImageAnchorId
+    , redoButtonId
+    , routeToChannel
     , strokesByMessage
+    , tabView
     , targetChannel
     , timestampAnchorId
+    , undoButtonId
     , wrapMessageView
     )
 
 import Discord
+import DmChannel
 import Effect.Browser.Dom as Dom
 import FileStatus exposing (FileId)
 import Html
@@ -33,8 +45,10 @@ import Html.Attributes
 import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, UserId)
 import Json.Decode
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
@@ -76,13 +90,22 @@ type alias Stroke =
 type alias ChannelDrawing =
     { finished : List { createdBy : Id UserId, stroke : Stroke }
     , inProgress : SeqDict (Id UserId) Stroke
+    , -- Per-user redo stacks, most recently undone stroke first
+      undone : SeqDict (Id UserId) (List Stroke)
     }
+
+
+emptyChannelDrawing : ChannelDrawing
+emptyChannelDrawing =
+    { finished = [], inProgress = SeqDict.empty, undone = SeqDict.empty }
 
 
 type LocalChange
     = StartStroke Anchor ( Float, Float )
     | ContinueStroke (Nonempty ( Float, Float ))
     | EndStroke
+    | UndoStroke
+    | RedoStroke
 
 
 type Msg
@@ -91,6 +114,8 @@ type Msg
     | MouseDown Float Float
     | MouseMoved Float Float
     | MouseUp
+    | PressedUndo
+    | PressedRedo
 
 
 {-| State of the drawing tool for the current user (only exists while the
@@ -143,6 +168,79 @@ targetChannel guildOrDmId =
             TargetDiscordDmChannel data.channelId
 
 
+{-| Same as TargetChannel but DM channels are identified by both participants
+instead of being relative to the viewing user, so it can be used as a key in
+the backend model.
+-}
+type BackendChannel
+    = BackendGuildChannel (Id GuildId) (Id ChannelId)
+    | BackendDmChannel DmChannel.DmChannelId
+    | BackendDiscordGuildChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
+    | BackendDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
+
+
+{-| Convert a backend drawing key into the key a specific user stores it under.
+Returns Nothing for DM channels the user isn't part of.
+-}
+backendToFrontendChannel : Id UserId -> BackendChannel -> Maybe TargetChannel
+backendToFrontendChannel userId backendChannel =
+    case backendChannel of
+        BackendGuildChannel guildId channelId ->
+            TargetGuildChannel guildId channelId |> Just
+
+        BackendDmChannel dmChannelId ->
+            case DmChannel.otherUserId userId dmChannelId of
+                Just otherUserId ->
+                    TargetDmChannel otherUserId |> Just
+
+                Nothing ->
+                    Nothing
+
+        BackendDiscordGuildChannel guildId channelId ->
+            TargetDiscordGuildChannel guildId channelId |> Just
+
+        BackendDiscordDmChannel channelId ->
+            TargetDiscordDmChannel channelId |> Just
+
+
+{-| The channel whose messages are currently visible (drawing on top of thread
+messages isn't supported).
+-}
+routeToChannel : Id UserId -> Route -> Maybe AnyGuildOrDmId
+routeToChannel userId route =
+    case route of
+        GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _) ->
+            GuildOrDmId (GuildOrDmId_Guild guildId channelId) |> Just
+
+        DmRoute dmRoute ->
+            case ( DmChannel.otherUserId userId dmRoute.channelId, dmRoute.threadRoute ) of
+                ( Just otherUserId, NoThreadWithFriends _ _ ) ->
+                    GuildOrDmId (GuildOrDmId_Dm otherUserId) |> Just
+
+                _ ->
+                    Nothing
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) _ ->
+                    DiscordGuildOrDmId
+                        (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                        |> Just
+
+                _ ->
+                    Nothing
+
+        DiscordDmRoute routeData ->
+            DiscordGuildOrDmId
+                (DiscordGuildOrDmId_Dm
+                    { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                )
+                |> Just
+
+        _ ->
+            Nothing
+
+
 maxFinishedStrokes : Int
 maxFinishedStrokes =
     200
@@ -153,22 +251,20 @@ maxPointsPerStroke =
     4000
 
 
+{-| The key is generic so this can be used both for the frontend
+(keyed by TargetChannel) and the backend (keyed by BackendChannel).
+-}
 applyChange :
     Id UserId
-    -> AnyGuildOrDmId
+    -> key
     -> LocalChange
-    -> SeqDict TargetChannel ChannelDrawing
-    -> SeqDict TargetChannel ChannelDrawing
-applyChange userId guildOrDmId change drawings =
+    -> SeqDict key ChannelDrawing
+    -> SeqDict key ChannelDrawing
+applyChange userId key change drawings =
     let
-        key : TargetChannel
-        key =
-            targetChannel guildOrDmId
-
         drawing : ChannelDrawing
         drawing =
-            SeqDict.get key drawings
-                |> Maybe.withDefault { finished = [], inProgress = SeqDict.empty }
+            SeqDict.get key drawings |> Maybe.withDefault emptyChannelDrawing
     in
     case change of
         StartStroke anchor point ->
@@ -180,6 +276,8 @@ applyChange userId guildOrDmId change drawings =
                             userId
                             { anchor = anchor, points = Nonempty point [] }
                             drawing.inProgress
+                    , -- Starting a new stroke clears anything that could be redone
+                      undone = SeqDict.remove userId drawing.undone
                 }
                 drawings
 
@@ -220,6 +318,57 @@ applyChange userId guildOrDmId change drawings =
 
                 Nothing ->
                     drawings
+
+        UndoStroke ->
+            case List.Extra.splitWhen (\finished -> finished.createdBy == userId) drawing.finished of
+                Just ( before, undoneStroke :: after ) ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | finished = before ++ after
+                            , undone =
+                                SeqDict.update
+                                    userId
+                                    (\maybe ->
+                                        undoneStroke.stroke
+                                            :: Maybe.withDefault [] maybe
+                                            |> Just
+                                    )
+                                    drawing.undone
+                        }
+                        drawings
+
+                _ ->
+                    drawings
+
+        RedoStroke ->
+            case SeqDict.get userId drawing.undone of
+                Just (stroke :: rest) ->
+                    SeqDict.insert
+                        key
+                        { drawing
+                            | finished = { createdBy = userId, stroke = stroke } :: drawing.finished
+                            , undone = SeqDict.insert userId rest drawing.undone
+                        }
+                        drawings
+
+                _ ->
+                    drawings
+
+
+canUndo : Id UserId -> ChannelDrawing -> Bool
+canUndo userId drawing =
+    List.any (\finished -> finished.createdBy == userId) drawing.finished
+
+
+canRedo : Id UserId -> ChannelDrawing -> Bool
+canRedo userId drawing =
+    case SeqDict.get userId drawing.undone of
+        Just (_ :: _) ->
+            True
+
+        _ ->
+            False
 
 
 nonemptyTake : Int -> Nonempty a -> Nonempty a
@@ -479,12 +628,35 @@ strokeView color ( offsetX, offsetY ) stroke =
         []
 
 
+inputOverlayId : Dom.HtmlId
+inputOverlayId =
+    Dom.id "drawing_inputOverlay"
+
+
+{-| Id of the element that listens for anchor picking clicks.
+-}
+pickAreaId : Dom.HtmlId
+pickAreaId =
+    Dom.id "drawing_pickArea"
+
+
+undoButtonId : Dom.HtmlId
+undoButtonId =
+    Dom.id "drawing_undo"
+
+
+redoButtonId : Dom.HtmlId
+redoButtonId =
+    Dom.id "drawing_redo"
+
+
 {-| Transparent overlay that captures mouse events while the user is drawing.
 -}
 inputOverlay : Bool -> (Msg -> msg) -> Element msg
 inputOverlay strokeActive toMsg =
     Html.div
-        ([ Html.Attributes.style "position" "absolute"
+        ([ Html.Attributes.id (Dom.idToString inputOverlayId)
+         , Html.Attributes.style "position" "absolute"
          , Html.Attributes.style "left" "0"
          , Html.Attributes.style "top" "0"
          , Html.Attributes.style "width" "100%"
@@ -527,18 +699,78 @@ decodeMousePosition toMsg =
         (Json.Decode.field "clientY" Json.Decode.float)
 
 
-instructionsBanner : String -> Element msg
-instructionsBanner text =
-    Ui.el
-        [ Ui.centerX
-        , Ui.alignTop
-        , Ui.width Ui.shrink
-        , Ui.move { x = 0, y = 8, z = 0 }
-        , Ui.paddingXY 12 6
-        , Ui.rounded 8
-        , Ui.background (Ui.rgba 0 0 0 0.7)
-        , Ui.Font.color (Ui.rgb 255 255 255)
-        , Ui.Font.size 14
-        , MyUi.htmlStyle "pointer-events" "none"
+{-| While picking an anchor, highlights valid anchor elements when the cursor
+hovers over them.
+-}
+anchorHighlightStyle : Element msg
+anchorHighlightStyle =
+    Html.node
+        "style"
+        []
+        [ Html.text
+            ("[id^='spoiler_drawAnchor']:hover, [id^='spoiler_'][id*='_image_']:hover, [id^='spoiler_'][id*='_file_']:hover {"
+                ++ "outline: 3px solid rgba(96, 165, 250, 0.8);"
+                ++ "outline-offset: 2px;"
+                ++ "background-color: rgba(96, 165, 250, 0.3);"
+                ++ "border-radius: 4px;"
+                ++ "cursor: pointer;"
+                ++ "}"
+            )
         ]
-        (Ui.text text)
+        |> Ui.html
+        |> Ui.el [ Ui.width (Ui.px 0), Ui.height (Ui.px 0) ]
+
+
+{-| Shown in the channel header below the tab buttons while the drawing tab is selected.
+-}
+tabView : (Msg -> msg) -> Id UserId -> Maybe Model -> ChannelDrawing -> Element msg
+tabView toMsg userId maybeModel drawing =
+    let
+        pickingAnchor : Bool
+        pickingAnchor =
+            case maybeModel of
+                Just model ->
+                    model.anchor == Nothing
+
+                Nothing ->
+                    True
+    in
+    Ui.row
+        [ Ui.paddingXY 16 12
+        , Ui.background MyUi.tabBackground
+        , Ui.Font.color MyUi.font2
+        , Ui.spacing 16
+        ]
+        [ Ui.text
+            (if pickingAnchor then
+                "Click on a profile image, timestamp, or attachment to anchor your drawing to it."
+
+             else
+                "Draw with the mouse. Press Escape or the pencil tab when you're done."
+            )
+        , undoRedoButton undoButtonId PressedUndo "Undo" (canUndo userId drawing)
+        , undoRedoButton redoButtonId PressedRedo "Redo" (canRedo userId drawing)
+        ]
+        |> Ui.map toMsg
+
+
+undoRedoButton : Dom.HtmlId -> Msg -> String -> Bool -> Element Msg
+undoRedoButton htmlId onPress label isEnabled =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.width Ui.shrink
+        , Ui.paddingXY 12 4
+        , Ui.rounded 4
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.background MyUi.background1
+        , Ui.Font.color
+            (if isEnabled then
+                MyUi.font1
+
+             else
+                MyUi.font3
+            )
+        ]
+        (Ui.text label)

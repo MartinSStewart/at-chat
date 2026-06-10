@@ -1205,18 +1205,48 @@ routeRequest previousRoute newRoute model =
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        loggedIn2 : LoggedIn2
+                        loggedIn2 =
+                            if previousRoute == Just newRoute then
+                                loggedIn
+
+                            else
+                                -- Drawing anchor offsets are only valid for the channel they were
+                                -- measured in (anchor keys aren't qualified by channel) so they get
+                                -- cleared and remeasured when navigating.
+                                { loggedIn | drawingAnchorOffsets = SeqDict.empty }
+                    in
                     handleLocalChange
                         model.time
-                        (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
-                        (if previousRoute == Just newRoute then
-                            loggedIn
+                        (routeViewingLocalChange (Local.model loggedIn2.localState) newRoute)
+                        { loggedIn2
+                            | -- The drawing mode is active whenever the draw channel header tab is selected
+                              drawingMode =
+                                if Route.toChannelHeaderTab newRoute == Just Route.DmChannelHeaderTab_Draw then
+                                    case
+                                        Drawing.routeToChannel
+                                            (Local.model loggedIn2.localState).localUser.session.userId
+                                            newRoute
+                                    of
+                                        Just channel ->
+                                            case loggedIn2.drawingMode of
+                                                Just drawingMode ->
+                                                    if drawingMode.channel == channel then
+                                                        Just drawingMode
 
-                         else
-                            -- Drawing anchor offsets are only valid for the channel they were
-                            -- measured in (anchor keys aren't qualified by channel) so they get
-                            -- cleared and remeasured when navigating.
-                            { loggedIn | drawingAnchorOffsets = SeqDict.empty }
-                        )
+                                                    else
+                                                        Just (Drawing.init channel)
+
+                                                Nothing ->
+                                                    Just (Drawing.init channel)
+
+                                        Nothing ->
+                                            Nothing
+
+                                else
+                                    Nothing
+                        }
                         Command.none
                 )
                 { model | route = newRoute }
@@ -1888,12 +1918,15 @@ isPressMsg msg =
         GotServiceWorkerData _ ->
             False
 
-        PressedDrawButton _ ->
-            True
-
         DrawingMsg drawingMsg ->
             case drawingMsg of
                 Drawing.PickedAnchor _ ->
+                    True
+
+                Drawing.PressedUndo ->
+                    True
+
+                Drawing.PressedRedo ->
                     True
 
                 _ ->
@@ -2897,7 +2930,11 @@ changeUpdate localMsg local =
                 Local_Drawing guildOrDmId drawingChange ->
                     { local
                         | drawings =
-                            Drawing.applyChange changedBy guildOrDmId drawingChange local.drawings
+                            Drawing.applyChange
+                                changedBy
+                                (Drawing.targetChannel guildOrDmId)
+                                drawingChange
+                                local.drawings
                     }
 
         ServerChange serverChange ->
@@ -4038,7 +4075,11 @@ changeUpdate localMsg local =
                 Server_Drawing changeBy guildOrDmId drawingChange ->
                     { local
                         | drawings =
-                            Drawing.applyChange changeBy guildOrDmId drawingChange local.drawings
+                            Drawing.applyChange
+                                changeBy
+                                (Drawing.targetChannel guildOrDmId)
+                                drawingChange
+                                local.drawings
                     }
 
 
@@ -4771,16 +4812,12 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.drawingMode of
-                        Just _ ->
-                            ( { loggedIn | drawingMode = Nothing }, Command.none )
+            if Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw then
+                -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
+                routePush model (Route.setChannelHeaderTab Nothing model.route)
 
-                        Nothing ->
-                            handleEscapeKeyHelper model loggedIn
-                )
-                model
+            else
+                updateLoggedIn (handleEscapeKeyHelper model) model
 
 
 handleEscapeKeyHelper : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )

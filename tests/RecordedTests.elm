@@ -7,6 +7,7 @@ import Codec
 import Coord
 import Dict
 import DiscordRecordedTests
+import Drawing
 import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Browser.Events exposing (Visibility(..))
@@ -19,7 +20,7 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
@@ -40,6 +41,36 @@ import Test.Html.Selector
 import Time
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import VisibleMessages
+
+
+{-| The id of the most recent message in the first channel of the most recently created guild.
+-}
+lastGuildChannelMessage : BackendModel -> Maybe ( Id GuildId, Id ChannelMessageId )
+lastGuildChannelMessage backend =
+    case SeqDict.toList backend.guilds |> List.reverse |> List.head of
+        Just ( guildId, guild ) ->
+            case SeqDict.get (Id.fromInt 0) guild.channels of
+                Just channel ->
+                    if Array.isEmpty channel.messages then
+                        Nothing
+
+                    else
+                        Just ( guildId, Id.fromInt (Array.length channel.messages - 1) )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+drawingMouseEvent : Float -> Float -> Json.Encode.Value
+drawingMouseEvent x y =
+    Json.Encode.object
+        [ ( "button", Json.Encode.int 0 )
+        , ( "clientX", Json.Encode.float x )
+        , ( "clientY", Json.Encode.float y )
+        ]
 
 
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
@@ -446,6 +477,146 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                     ]
                 , checkCards 1 0
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Draw on top of messages"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                [ RecordedTestExtra.writeMessage admin 100 "Draw on this message!"
+
+                -- Open the drawing tab and check that the instructions show up
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                , admin.snapshotView 100 { name = "Drawing tab waiting for an anchor to be picked" }
+                , T.andThen
+                    100
+                    (\data ->
+                        case lastGuildChannelMessage data.backend of
+                            Just ( guildId, messageId ) ->
+                                let
+                                    anchor : Drawing.Anchor
+                                    anchor =
+                                        { messageId = messageId
+                                        , anchorType = Drawing.ProfileImageAnchor
+                                        }
+                                in
+                                [ -- Pick the message's profile image as the drawing anchor
+                                  admin.custom
+                                    100
+                                    Drawing.pickAreaId
+                                    "click"
+                                    (Json.Encode.object
+                                        [ ( "target"
+                                          , Json.Encode.object
+                                                [ ( "id"
+                                                  , Drawing.anchorDomId anchor
+                                                        |> Dom.idToString
+                                                        |> Json.Encode.string
+                                                  )
+                                                ]
+                                          )
+                                        ]
+                                    )
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+
+                                -- Draw a zigzag stroke
+                                , admin.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
+                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 80 60)
+                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 110 30)
+                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
+                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
+                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
+                                , admin.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+
+                                -- The stroke is visible for the user that drew it and, in
+                                -- realtime, for other users viewing the same channel
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
+
+                                -- The stroke is also stored on the backend
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case SeqDict.values data2.backend.drawings of
+                                            [ drawing ] ->
+                                                if List.length drawing.finished == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected exactly one finished stroke on the backend"
+
+                                            _ ->
+                                                Err "Expected drawings in exactly one channel on the backend"
+                                    )
+
+                                -- Undo removes the stroke for everyone, redo brings it back
+                                , admin.click 100 Drawing.undoButtonId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.tag "polyline" ])
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.tag "polyline" ])
+                                , admin.click 100 Drawing.redoButtonId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                , user.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+
+                                -- Pressing the pencil tab again closes the drawing tab
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+
+                                -- The drawing is persisted so it survives loading the page again
+                                , T.connectFrontend
+                                    100
+                                    RecordedTestExtra.sessionId0
+                                    (Route.encode
+                                        (Route.GuildRoute
+                                            guildId
+                                            (Route.ChannelRoute
+                                                (Id.fromInt 0)
+                                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                Nothing
+                                            )
+                                        )
+                                    )
+                                    RecordedTestExtra.desktopWindow
+                                    (\admin2 ->
+                                        [ admin2.portEvent
+                                            10
+                                            "user_agent_from_js"
+                                            (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                        , -- Anchor positions are remeasured on a 2 second timer so
+                                          -- wait long enough for the strokes to get positioned
+                                          admin2.checkView
+                                            5000
+                                            (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                        ]
+                                    )
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                    )
                 ]
             )
         ]
