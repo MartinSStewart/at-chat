@@ -1,6 +1,5 @@
 module Drawing exposing
     ( ActiveStroke
-    , Anchor
     , AnchorType(..)
     , ChannelDrawing
     , LocalChange(..)
@@ -8,8 +7,6 @@ module Drawing exposing
     , Msg(..)
     , SelectedAnchorData
     , Stroke
-    , anchorDomId
-    , anchorDomIdFallback
     , anchorHighlightStyle
     , canRedo
     , canUndo
@@ -20,34 +17,30 @@ module Drawing exposing
     , initialAnchorSelection
     , inputOverlay
     , inputOverlayId
-    , messageOverlay
-    , pickAreaId
     , profileImageAnchorId
+    , profileImageOverlay
     , redoButtonId
     , resetAnchor
-    , timestampAnchorId
+    , timestampOverlays
     , undoButtonId
     , undoRedoButton
     , userColor
-    , walkUpForAnchor
-    , wrapMessageView
     )
 
 import CssPixels exposing (CssPixels)
 import Discord
 import Effect.Browser.Dom as Dom
-import FileStatus exposing (FileId)
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, Id, ThreadRouteWithMessage, UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import Point2d exposing (Point2d)
 import SeqDict exposing (SeqDict)
-import Svg exposing (Svg)
+import Svg
 import Svg.Attributes
 import Touch exposing (ScreenCoordinate)
 import Ui exposing (Element)
@@ -57,13 +50,6 @@ import Ui.Font
 type AnchorType
     = ProfileImageAnchor
     | TimestampAnchor
-    | AttachmentAnchor (Id FileId)
-
-
-type alias Anchor =
-    { messageId : Id ChannelMessageId
-    , anchorType : AnchorType
-    }
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
@@ -155,14 +141,12 @@ maxPointsPerStroke =
     4000
 
 
+{-| Resizing the window can move the anchor element and its position was only
+captured when the user clicked on it, so the user has to pick an anchor again.
+-}
 resetAnchor : Model -> Model
-resetAnchor model =
-    case model of
-        NoSelectedAnchor ->
-            model
-
-        SelectedAnchor data ->
-            SelectedAnchor { data | position = Nothing, stroke = Nothing }
+resetAnchor _ =
+    NoSelectedAnchor
 
 
 handleLocalChange : userId -> LocalChange -> ChannelDrawing userId -> ChannelDrawing userId
@@ -269,127 +253,6 @@ profileImageAnchorId htmlIdPrefix messageId =
     Dom.id (Dom.idToString htmlIdPrefix ++ "_drawAnchorProfile_" ++ Id.toString messageId)
 
 
-timestampAnchorId : Dom.HtmlId -> Id messageId -> Dom.HtmlId
-timestampAnchorId htmlIdPrefix messageId =
-    Dom.id (Dom.idToString htmlIdPrefix ++ "_drawAnchorTimestamp_" ++ Id.toString messageId)
-
-
-channelHtmlIdPrefix : String
-channelHtmlIdPrefix =
-    "spoiler"
-
-
-anchorDomId : Anchor -> Dom.HtmlId
-anchorDomId anchor =
-    case anchor.anchorType of
-        ProfileImageAnchor ->
-            profileImageAnchorId (Dom.id channelHtmlIdPrefix) anchor.messageId
-
-        TimestampAnchor ->
-            timestampAnchorId (Dom.id channelHtmlIdPrefix) anchor.messageId
-
-        AttachmentAnchor fileId ->
-            Dom.id
-                (channelHtmlIdPrefix
-                    ++ "_"
-                    ++ Id.toString anchor.messageId
-                    ++ "_image_"
-                    ++ Id.toString fileId
-                )
-
-
-{-| Attachments that aren't images use a different DOM id, so if the primary id
-isn't found this one should be tried instead.
--}
-anchorDomIdFallback : Anchor -> Maybe Dom.HtmlId
-anchorDomIdFallback anchor =
-    case anchor.anchorType of
-        AttachmentAnchor fileId ->
-            Dom.id
-                (channelHtmlIdPrefix
-                    ++ "_"
-                    ++ Id.toString anchor.messageId
-                    ++ "_file_"
-                    ++ Id.toString fileId
-                )
-                |> Just
-
-        ProfileImageAnchor ->
-            Nothing
-
-        TimestampAnchor ->
-            Nothing
-
-
-anchorFromDomId : String -> Maybe Anchor
-anchorFromDomId domId =
-    case String.split "_" domId of
-        [ prefix, "drawAnchorProfile", messageId ] ->
-            if prefix == channelHtmlIdPrefix then
-                parseAnchor messageId ProfileImageAnchor
-
-            else
-                Nothing
-
-        [ prefix, "drawAnchorTimestamp", messageId ] ->
-            if prefix == channelHtmlIdPrefix then
-                parseAnchor messageId TimestampAnchor
-
-            else
-                Nothing
-
-        [ prefix, messageId, "image", fileId ] ->
-            if prefix == channelHtmlIdPrefix then
-                String.toInt fileId
-                    |> Maybe.andThen (\int -> parseAnchor messageId (AttachmentAnchor (Id.fromInt int)))
-
-            else
-                Nothing
-
-        [ prefix, messageId, "file", fileId ] ->
-            if prefix == channelHtmlIdPrefix then
-                String.toInt fileId
-                    |> Maybe.andThen (\int -> parseAnchor messageId (AttachmentAnchor (Id.fromInt int)))
-
-            else
-                Nothing
-
-        _ ->
-            Nothing
-
-
-parseAnchor : String -> AnchorType -> Maybe Anchor
-parseAnchor messageIdText anchorType =
-    case String.toInt messageIdText of
-        Just int ->
-            Just { messageId = Id.fromInt int, anchorType = anchorType }
-
-        Nothing ->
-            Nothing
-
-
-walkUpForAnchor : Int -> Json.Decode.Decoder (Maybe Anchor)
-walkUpForAnchor depth =
-    if depth <= 0 then
-        Json.Decode.succeed Nothing
-
-    else
-        Json.Decode.oneOf
-            [ Json.Decode.field "id" Json.Decode.string
-                |> Json.Decode.andThen
-                    (\id ->
-                        case anchorFromDomId id of
-                            Just anchor ->
-                                Json.Decode.succeed (Just anchor)
-
-                            Nothing ->
-                                Json.Decode.fail "Not an anchor"
-                    )
-            , Json.Decode.field "parentElement" (Json.Decode.lazy (\() -> walkUpForAnchor (depth - 1)))
-            , Json.Decode.succeed Nothing
-            ]
-
-
 userColor : Id UserId -> String
 userColor userId =
     let
@@ -435,52 +298,66 @@ discordUserColor userId =
     List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
 
 
-wrapMessageView : (userId -> String) -> ChannelDrawing userId -> List (Ui.Attribute msg)
-wrapMessageView getColor drawings =
-    if List.isEmpty drawings.finished && SeqDict.isEmpty drawings.inProgress then
-        []
-
-    else
-        List.foldl
-            (\{ createdBy, anchor, points } state ->
-                case anchor of
-                    ProfileImageAnchor ->
-                        Ui.inFront
-                            (Ui.el
-                                [ Ui.width (Ui.px 0)
-                                , Ui.height (Ui.px 0)
-                                , MyUi.htmlStyle "pointer-events" "none"
-                                ]
-                                (messageOverlay (getColor createdBy) points)
-                            )
-                            :: state
-
-                    TimestampAnchor ->
-                        Ui.inFront
-                            (Ui.el
-                                [ Ui.width (Ui.px 0)
-                                , Ui.height (Ui.px 0)
-                                , Ui.alignRight
-                                , MyUi.htmlStyle "pointer-events" "none"
-                                ]
-                                (messageOverlay (getColor createdBy) points)
-                            )
-                            :: state
-
-                    AttachmentAnchor fileId ->
-                        state
-            )
-            []
-            drawings.finished
-
-
-{-| Renders all strokes belonging to a single message. Positioned inFront of
-the message container so it moves together with the message when scrolling.
-The svg has no size of its own (overflow is visible) and ignores pointer
-events so it never blocks interactions with the message below it.
+{-| Finished and in-progress strokes that are attached to the given anchor type.
 -}
-messageOverlay : String -> Nonempty ( Float, Float ) -> Element msg
-messageOverlay color points =
+strokesFor : AnchorType -> ChannelDrawing userId -> List ( userId, Nonempty ( Float, Float ) )
+strokesFor anchorType drawing =
+    List.filterMap
+        (\finished ->
+            if finished.anchor == anchorType then
+                Just ( finished.createdBy, finished.points )
+
+            else
+                Nothing
+        )
+        drawing.finished
+        ++ List.filterMap
+            (\( createdBy, stroke ) ->
+                if stroke.anchor == anchorType then
+                    Just ( createdBy, stroke.points )
+
+                else
+                    Nothing
+            )
+            (SeqDict.toList drawing.inProgress)
+
+
+{-| Strokes anchored to the profile image of a message, placed in front of it
+so they move together with the profile image. The svg has no size of its own
+(overflow is visible) and ignores pointer events so it never blocks
+interactions with the message below it.
+-}
+profileImageOverlay : (userId -> String) -> ChannelDrawing userId -> Ui.Attribute msg
+profileImageOverlay getColor drawing =
+    case strokesFor ProfileImageAnchor drawing of
+        [] ->
+            Ui.noAttr
+
+        strokes ->
+            List.map (\( createdBy, points ) -> strokeSvg (getColor createdBy) points) strokes
+                |> Html.div []
+                |> Ui.html
+                |> Ui.el
+                    [ Ui.width (Ui.px 0)
+                    , Ui.height (Ui.px 0)
+                    , MyUi.htmlStyle "pointer-events" "none"
+                    ]
+                |> Ui.inFront
+
+
+{-| Strokes anchored to the timestamp of a message. These are added as children
+of the timestamp element (which is position:relative) so they move together
+with the timestamp.
+-}
+timestampOverlays : (userId -> String) -> ChannelDrawing userId -> List (Html msg)
+timestampOverlays getColor drawing =
+    List.map
+        (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
+        (strokesFor TimestampAnchor drawing)
+
+
+strokeSvg : String -> Nonempty ( Float, Float ) -> Html msg
+strokeSvg color points =
     Svg.svg
         [ Svg.Attributes.width "1"
         , Svg.Attributes.height "1"
@@ -502,19 +379,11 @@ messageOverlay color points =
             ]
             []
         ]
-        |> Ui.html
 
 
 inputOverlayId : Dom.HtmlId
 inputOverlayId =
     Dom.id "drawing_inputOverlay"
-
-
-{-| Id of the element that listens for anchor picking clicks.
--}
-pickAreaId : Dom.HtmlId
-pickAreaId =
-    Dom.id "drawing_pickArea"
 
 
 undoButtonId : Dom.HtmlId
@@ -585,7 +454,7 @@ anchorHighlightStyle =
         "style"
         []
         [ Html.text
-            ("[id^='spoiler_drawAnchor']:hover, [id^='spoiler_'][id*='_image_']:hover, [id^='spoiler_'][id*='_file_']:hover {"
+            ("[id*='drawAnchorProfile']:hover, [id^='guild_messageTimestamp']:hover {"
                 ++ "outline: 3px solid rgba(96, 165, 250, 0.8);"
                 ++ "outline-offset: 2px;"
                 ++ "background-color: rgba(96, 165, 250, 0.3);"

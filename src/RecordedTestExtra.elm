@@ -3075,7 +3075,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Go _ _ ->
                     True
 
-                Local_Drawing _ _ ->
+                Local_Drawing _ _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -3268,7 +3268,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetGuildIcon _ _ ->
                             True
 
-                        Types.Server_Drawing _ _ _ ->
+                        Types.Server_Drawing _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3475,7 +3475,8 @@ allAttackerLocalChanges =
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     , Local_Drawing
         guildOrDmId_guild
-        (Drawing.StartStroke { messageId = Id.fromInt 0, anchorType = Drawing.ProfileImageAnchor } ( 0, 0 ))
+        threadRouteWithMessage
+        (Drawing.StartStroke Drawing.ProfileImageAnchor ( 0, 0 ))
     ]
 
 

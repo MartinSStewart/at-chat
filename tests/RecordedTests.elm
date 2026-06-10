@@ -26,6 +26,7 @@ import Json.Encode
 import Local exposing (ChangeId(..))
 import LoginForm
 import MembersAndOwner
+import Message
 import NonemptyDict
 import Pages.Home
 import PersonName
@@ -43,19 +44,20 @@ import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, Loc
 import VisibleMessages
 
 
-{-| The id of the most recent message in the first channel of the most recently created guild.
+{-| The most recent message in the first channel of the most recently created guild.
 -}
-lastGuildChannelMessage : BackendModel -> Maybe ( Id GuildId, Id ChannelMessageId )
+lastGuildChannelMessage : BackendModel -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) )
 lastGuildChannelMessage backend =
     case SeqDict.toList backend.guilds |> List.reverse |> List.head of
         Just ( guildId, guild ) ->
             case SeqDict.get (Id.fromInt 0) guild.channels of
                 Just channel ->
-                    if Array.isEmpty channel.messages then
-                        Nothing
+                    case Array.get (Array.length channel.messages - 1) channel.messages of
+                        Just message ->
+                            Just ( guildId, Id.fromInt (Array.length channel.messages - 1), message )
 
-                    else
-                        Just ( guildId, Id.fromInt (Array.length channel.messages - 1) )
+                        Nothing ->
+                            Nothing
 
                 Nothing ->
                     Nothing
@@ -499,29 +501,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     100
                     (\data ->
                         case lastGuildChannelMessage data.backend of
-                            Just ( guildId, messageId ) ->
-                                let
-                                    anchor : Drawing.Anchor
-                                    anchor =
-                                        { messageId = messageId
-                                        , anchorType = Drawing.ProfileImageAnchor
-                                        }
-                                in
-                                [ -- Pick the message's profile image as the drawing anchor
+                            Just ( guildId, messageId, _ ) ->
+                                [ -- Click the message's profile image to use it as the drawing
+                                  -- anchor. The anchor's screen position is part of the click
+                                  -- event (clientX/Y minus offsetX/Y).
                                   admin.custom
                                     100
-                                    Drawing.pickAreaId
+                                    (Drawing.profileImageAnchorId (Dom.id "spoiler") messageId)
                                     "click"
                                     (Json.Encode.object
-                                        [ ( "target"
-                                          , Json.Encode.object
-                                                [ ( "id"
-                                                  , Drawing.anchorDomId anchor
-                                                        |> Dom.idToString
-                                                        |> Json.Encode.string
-                                                  )
-                                                ]
-                                          )
+                                        [ ( "clientX", Json.Encode.float 30 )
+                                        , ( "clientY", Json.Encode.float 25 )
+                                        , ( "offsetX", Json.Encode.float 10 )
+                                        , ( "offsetY", Json.Encode.float 5 )
                                         ]
                                     )
                                 , admin.checkView
@@ -547,20 +539,20 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
 
-                                -- The stroke is also stored on the backend
+                                -- The stroke is also stored in the message on the backend
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case SeqDict.values data2.backend.drawings of
-                                            [ drawing ] ->
-                                                if List.length drawing.finished == 1 then
+                                        case lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                if List.length (Message.drawing message).finished == 1 then
                                                     Ok ()
 
                                                 else
-                                                    Err "Expected exactly one finished stroke on the backend"
+                                                    Err "Expected the message to contain exactly one finished stroke"
 
-                                            _ ->
-                                                Err "Expected drawings in exactly one channel on the backend"
+                                            Nothing ->
+                                                Err "Message not found on the backend"
                                     )
 
                                 -- Undo removes the stroke for everyone, redo brings it back
@@ -605,10 +597,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                             10
                                             "user_agent_from_js"
                                             (Json.Encode.string RecordedTestExtra.firefoxDesktop)
-                                        , -- Anchor positions are remeasured on a 2 second timer so
-                                          -- wait long enough for the strokes to get positioned
+                                        , -- Drawings are part of the message data so they render
+                                          -- as soon as the messages are shown
                                           admin2.checkView
-                                            5000
+                                            2000
                                             (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
                                         ]
                                     )

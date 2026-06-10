@@ -312,16 +312,16 @@ drawing message =
         UserTextMessage data ->
             data.drawings
 
-        UserJoinedMessage time _ _ drawings ->
+        UserJoinedMessage _ _ _ drawings ->
             drawings
 
-        DeletedMessage time ->
+        DeletedMessage _ ->
             Drawing.emptyChannelDrawing
 
-        CallStarted time _ _ _ drawings ->
+        CallStarted _ _ _ _ drawings ->
             drawings
 
-        GoMatchStarted time _ _ drawings ->
+        GoMatchStarted _ _ _ drawings ->
             drawings
 
 

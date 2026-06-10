@@ -28,7 +28,6 @@ import Id
         , DiscordGuildOrDmId_DmData
         , GuildOrDmId(..)
         , Id
-        , ThreadRoute(..)
         , ThreadRouteWithMessage(..)
         , UserId
         )
@@ -103,18 +102,26 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if otherUserId == local.localUser.session.userId then
+                        privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
 
-                else
-                    privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
+                      else
+                        privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
+                    , drawButton isMobile (Route.toChannelHeaderTab model.route)
+                    ]
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -180,7 +187,11 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -789,7 +800,7 @@ drawingCanUndoOrRedo guildOrDmId threadRoute local =
                         NoThreadWithMessage messageId ->
                             noThreadHelper data.currentUserId messageId channel2
 
-                        ViewThreadWithMessage threadId messageId ->
+                        ViewThreadWithMessage _ _ ->
                             ( False, False )
 
                 Nothing ->
@@ -798,7 +809,7 @@ drawingCanUndoOrRedo guildOrDmId threadRoute local =
 
 {-| Shown in the channel header below the tab buttons while the drawing tab is selected.
 -}
-drawingTabView : Drawing.Model -> LocalState -> Element FrontendMsg
+drawingTabView : Model -> LocalState -> Element FrontendMsg
 drawingTabView model local =
     Ui.row
         [ Ui.paddingXY 16 12

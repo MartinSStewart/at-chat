@@ -1210,7 +1210,16 @@ routeRequest previousRoute newRoute model =
                     handleLocalChange
                         model.time
                         (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
-                        loggedIn
+                        { loggedIn
+                            | drawingMode =
+                                -- Closing the draw tab (or navigating elsewhere) also
+                                -- deselects the drawing anchor
+                                if Route.toChannelHeaderTab newRoute == Just Route.DmChannelHeaderTab_Draw then
+                                    loggedIn.drawingMode
+
+                                else
+                                    Drawing.init
+                        }
                         Command.none
                 )
                 { model | route = newRoute }

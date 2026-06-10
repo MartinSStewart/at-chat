@@ -29,7 +29,6 @@ module BackendExtra exposing
     , sendLoginEmail
     , shouldRateLimit
     , toBackendLog
-    , usersHaveSharedGuilds
     , validateAttachedFiles
     )
 
