@@ -14,6 +14,7 @@ module Drawing exposing
     , canRedo
     , canUndo
     , decodePickAnchor
+    , discordUserColor
     , emptyChannelDrawing
     , handleLocalChange
     , init
@@ -28,9 +29,11 @@ module Drawing exposing
     , timestampAnchorId
     , undoButtonId
     , undoRedoButton
+    , userColor
     , wrapMessageView
     )
 
+import Discord
 import Effect.Browser.Dom as Dom
 import FileStatus exposing (FileId)
 import Html
@@ -199,7 +202,7 @@ handleLocalChange userId change drawing =
                     { drawing
                         | inProgress = SeqDict.remove userId drawing.inProgress
                         , finished =
-                            { createdBy = userId, stroke = stroke }
+                            { createdBy = userId, anchor = stroke.anchor, points = stroke.points }
                                 :: drawing.finished
                                 |> List.take maxFinishedStrokes
                     }
@@ -216,7 +219,7 @@ handleLocalChange userId change drawing =
                             SeqDict.update
                                 userId
                                 (\maybe ->
-                                    undoneStroke.stroke
+                                    { anchor = undoneStroke.anchor, points = undoneStroke.points }
                                         :: Maybe.withDefault [] maybe
                                         |> Just
                                 )
@@ -230,7 +233,9 @@ handleLocalChange userId change drawing =
             case SeqDict.get userId drawing.undone of
                 Just (stroke :: rest) ->
                     { drawing
-                        | finished = { createdBy = userId, stroke = stroke } :: drawing.finished
+                        | finished =
+                            { createdBy = userId, anchor = stroke.anchor, points = stroke.points }
+                                :: drawing.finished
                         , undone = SeqDict.insert userId rest drawing.undone
                     }
 
@@ -409,14 +414,36 @@ userColor userId =
 
         index : Int
         index =
-            String.foldl (\char total -> total * 31 + Char.toCode char) 0 (Id.toString userId)
+            modBy (List.length colors) (Id.toInt userId * 31)
+    in
+    List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
+
+
+discordUserColor : Discord.Id Discord.UserId -> String
+discordUserColor userId =
+    let
+        colors : List String
+        colors =
+            [ "#ff5252"
+            , "#40c4ff"
+            , "#69f0ae"
+            , "#ffd740"
+            , "#e040fb"
+            , "#ffab40"
+            , "#64ffda"
+            , "#ff80ab"
+            ]
+
+        index : Int
+        index =
+            String.foldl (\char total -> total * 31 + Char.toCode char) 0 (Discord.idToString userId)
                 |> modBy (List.length colors)
     in
     List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
 
 
-wrapMessageView : ChannelDrawing userId -> List (Element msg)
-wrapMessageView drawings =
+wrapMessageView : (userId -> String) -> ChannelDrawing userId -> List (Ui.Attribute msg)
+wrapMessageView getColor drawings =
     if List.isEmpty drawings.finished && SeqDict.isEmpty drawings.inProgress then
         []
 
@@ -425,22 +452,26 @@ wrapMessageView drawings =
             (\{ createdBy, anchor, points } state ->
                 case anchor of
                     ProfileImageAnchor ->
-                        Ui.el
-                            [ Ui.width (Ui.px 0)
-                            , Ui.height (Ui.px 0)
-                            , MyUi.htmlStyle "pointer-events" "none"
-                            ]
-                            (messageOverlay points)
+                        Ui.inFront
+                            (Ui.el
+                                [ Ui.width (Ui.px 0)
+                                , Ui.height (Ui.px 0)
+                                , MyUi.htmlStyle "pointer-events" "none"
+                                ]
+                                (messageOverlay (getColor createdBy) points)
+                            )
                             :: state
 
                     TimestampAnchor ->
-                        Ui.el
-                            [ Ui.width (Ui.px 0)
-                            , Ui.height (Ui.px 0)
-                            , Ui.alignRight
-                            , MyUi.htmlStyle "pointer-events" "none"
-                            ]
-                            (messageOverlay points)
+                        Ui.inFront
+                            (Ui.el
+                                [ Ui.width (Ui.px 0)
+                                , Ui.height (Ui.px 0)
+                                , Ui.alignRight
+                                , MyUi.htmlStyle "pointer-events" "none"
+                                ]
+                                (messageOverlay (getColor createdBy) points)
+                            )
                             :: state
 
                     AttachmentAnchor fileId ->
@@ -450,17 +481,13 @@ wrapMessageView drawings =
             drawings.finished
 
 
-
---Ui.el [ Ui.inFront (messageOverlay strokes) ] element
-
-
 {-| Renders all strokes belonging to a single message. Positioned inFront of
 the message container so it moves together with the message when scrolling.
 The svg has no size of its own (overflow is visible) and ignores pointer
 events so it never blocks interactions with the message below it.
 -}
-messageOverlay : Id UserId -> Nonempty ( Float, Float ) -> Element msg
-messageOverlay userId points =
+messageOverlay : String -> Nonempty ( Float, Float ) -> Element msg
+messageOverlay color points =
     Svg.svg
         [ Svg.Attributes.width "1"
         , Svg.Attributes.height "1"
@@ -475,7 +502,7 @@ messageOverlay userId points =
                 |> String.join " "
                 |> Svg.Attributes.points
             , Svg.Attributes.fill "none"
-            , Svg.Attributes.stroke (userColor userId)
+            , Svg.Attributes.stroke color
             , Svg.Attributes.strokeWidth "3"
             , Svg.Attributes.strokeLinecap "round"
             , Svg.Attributes.strokeLinejoin "round"

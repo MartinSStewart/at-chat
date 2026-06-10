@@ -4,6 +4,7 @@ module ChannelHeader exposing
     , chattingWithYourself
     , discordChannel
     , discordThread
+    , drawingCanUndoOrRedo
     , headerBackButton
     , thread
     )
@@ -729,6 +730,72 @@ tabBodyView local loggedIn model =
             Nothing
 
 
+drawingCanUndoOrRedo : AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> ( Bool, Bool )
+drawingCanUndoOrRedo guildOrDmId threadRoute local =
+    let
+        noThreadHelper : userId -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
+        noThreadHelper userId messageId channel2 =
+            case DmChannel.getArray messageId channel2.messages of
+                Just (MessageLoaded message) ->
+                    let
+                        drawing : Drawing.ChannelDrawing userId
+                        drawing =
+                            Message.drawing message
+                    in
+                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                _ ->
+                    ( False, False )
+
+        helper userId channel2 =
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    noThreadHelper userId messageId channel2
+
+                ViewThreadWithMessage threadId messageId ->
+                    SeqDict.get threadId channel2.threads
+                        |> Maybe.withDefault Thread.frontendInit
+                        |> noThreadHelper userId messageId
+    in
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel2 ) ->
+                    helper local.localUser.session.userId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just channel2 ->
+                    helper local.localUser.session.userId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel2 ) ->
+                    helper currentUserId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just channel2 ->
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            noThreadHelper data.currentUserId messageId channel2
+
+                        ViewThreadWithMessage threadId messageId ->
+                            ( False, False )
+
+                Nothing ->
+                    ( False, False )
+
+
 {-| Shown in the channel header below the tab buttons while the drawing tab is selected.
 -}
 drawingTabView : Drawing.Model -> LocalState -> Element FrontendMsg
@@ -745,68 +812,8 @@ drawingTabView model local =
 
             SelectedAnchor selected ->
                 let
-                    noThreadHelper : userId -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
-                    noThreadHelper userId messageId channel2 =
-                        case DmChannel.getArray messageId channel2.messages of
-                            Just (MessageLoaded message) ->
-                                case Message.drawing message of
-                                    Just drawing ->
-                                        ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
-
-                                    Nothing ->
-                                        ( False, False )
-
-                            _ ->
-                                ( False, False )
-
-                    helper userId channel2 =
-                        case selected.threadRoute of
-                            NoThreadWithMessage messageId ->
-                                noThreadHelper userId messageId channel2
-
-                            ViewThreadWithMessage threadId messageId ->
-                                SeqDict.get threadId channel2.threads
-                                    |> Maybe.withDefault Thread.frontendInit
-                                    |> noThreadHelper userId messageId
-
                     ( canUndo, canRedo ) =
-                        case selected.guildOrDmId of
-                            GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                                case LocalState.getGuildAndChannel guildId channelId local of
-                                    Just ( _, channel2 ) ->
-                                        helper local.localUser.session.userId channel2
-
-                                    Nothing ->
-                                        ( False, False )
-
-                            GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                                case SeqDict.get otherUserId local.dmChannels of
-                                    Just channel2 ->
-                                        helper local.localUser.session.userId channel2
-
-                                    Nothing ->
-                                        ( False, False )
-
-                            DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                                case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                    Just ( _, channel2 ) ->
-                                        helper currentUserId channel2
-
-                                    Nothing ->
-                                        ( False, False )
-
-                            DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                                case SeqDict.get data.channelId local.discordDmChannels of
-                                    Just channel2 ->
-                                        case selected.threadRoute of
-                                            NoThreadWithMessage messageId ->
-                                                noThreadHelper data.currentUserId messageId channel2
-
-                                            ViewThreadWithMessage threadId messageId ->
-                                                ( False, False )
-
-                                    Nothing ->
-                                        ( False, False )
+                        drawingCanUndoOrRedo selected.guildOrDmId selected.threadRoute local
                 in
                 [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
                 , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo

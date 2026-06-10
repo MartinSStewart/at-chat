@@ -2845,7 +2845,13 @@ changeUpdate localMsg local =
                                                             (\maybe ->
                                                                 Maybe.withDefault DmChannel.frontendInit maybe
                                                                     |> LocalState.createChannelMessageFrontend
-                                                                        (CallStarted time Nothing local2.localUser.session.userId SeqDict.empty)
+                                                                        (CallStarted
+                                                                            time
+                                                                            Nothing
+                                                                            local2.localUser.session.userId
+                                                                            SeqDict.empty
+                                                                            Drawing.emptyChannelDrawing
+                                                                        )
                                                                     |> Just
                                                             )
                                                             local2.dmChannels
@@ -3897,7 +3903,12 @@ changeUpdate localMsg local =
                                             SeqDict.updateIfExists
                                                 channelId
                                                 (LocalState.createChannelMessageFrontend
-                                                    (UserJoinedMessage time userJoinedId SeqDict.empty)
+                                                    (UserJoinedMessage
+                                                        time
+                                                        userJoinedId
+                                                        SeqDict.empty
+                                                        Drawing.emptyChannelDrawing
+                                                    )
                                                 )
                                                 guild.channels
                                     }
@@ -3972,7 +3983,13 @@ changeUpdate localMsg local =
                                                         (\maybe ->
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted time Nothing (Tuple.first otherClientId) SeqDict.empty)
+                                                                    (CallStarted
+                                                                        time
+                                                                        Nothing
+                                                                        (Tuple.first otherClientId)
+                                                                        SeqDict.empty
+                                                                        Drawing.emptyChannelDrawing
+                                                                    )
                                                                 |> Just
                                                         )
                                                         local.dmChannels
@@ -4008,7 +4025,13 @@ changeUpdate localMsg local =
                                                     (\maybe ->
                                                         Maybe.withDefault DmChannel.frontendInit maybe
                                                             |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time Nothing local.localUser.session.userId SeqDict.empty)
+                                                                (CallStarted
+                                                                    time
+                                                                    Nothing
+                                                                    local.localUser.session.userId
+                                                                    SeqDict.empty
+                                                                    Drawing.emptyChannelDrawing
+                                                                )
                                                             |> Just
                                                     )
                                                     local.dmChannels
@@ -4029,15 +4052,8 @@ changeUpdate localMsg local =
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
 
-                Server_Drawing changeBy guildOrDmId drawingChange ->
-                    { local
-                        | drawings =
-                            Drawing.applyChange
-                                changeBy
-                                (Drawing.targetChannel guildOrDmId)
-                                drawingChange
-                                local.drawings
-                    }
+                Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
+                    LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
 goChangeUpdate :
@@ -4063,7 +4079,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyChannelDrawing)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId

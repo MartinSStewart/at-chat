@@ -866,7 +866,7 @@ type ServerChange
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
     | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
-    | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.LocalChange
+    | Server_Drawing (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Drawing.LocalChange
 
 
 type LocalChange

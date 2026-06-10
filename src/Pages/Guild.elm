@@ -1982,15 +1982,6 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
-
-        channelStrokes : SeqDict (Id ChannelMessageId) (List ( Id UserId, Drawing.Stroke ))
-        channelStrokes =
-            case SeqDict.get (Drawing.targetChannel (GuildOrDmId guildOrDmIdNoThread)) local.drawings of
-                Just drawing ->
-                    Drawing.strokesByMessage drawing
-
-                Nothing ->
-                    SeqDict.empty
     in
     Array.foldr
         (\messageState ( index, maybeLastDate, list ) ->
@@ -2169,8 +2160,6 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     message
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        |> Tuple.mapSecond
-                            (Drawing.wrapMessageView loggedIn.drawingAnchorOffsets (SeqDict.get messageId channelStrokes))
                         |> (\keyedMessage ->
                                 keyedMessage
                                     :: newMessageLine maybeLastDate date lastViewedIndex index messageId
@@ -2202,16 +2191,16 @@ maybeRepliedTo message channel =
                 Nothing ->
                     Nothing
 
-        UserJoinedMessage _ _ _ ->
+        UserJoinedMessage _ _ _ _ ->
             Nothing
 
         DeletedMessage _ ->
             Nothing
 
-        CallStarted _ _ _ _ ->
+        CallStarted _ _ _ _ _ ->
             Nothing
 
-        GoMatchStarted _ _ _ ->
+        GoMatchStarted _ _ _ _ ->
             Nothing
 
 
@@ -2279,15 +2268,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
-
-        channelStrokes : SeqDict (Id ChannelMessageId) (List ( Id UserId, Drawing.Stroke ))
-        channelStrokes =
-            case SeqDict.get (Drawing.targetChannel (DiscordGuildOrDmId guildOrDmIdNoThread)) local.drawings of
-                Just drawing ->
-                    Drawing.strokesByMessage drawing
-
-                Nothing ->
-                    SeqDict.empty
     in
     Array.foldr
         (\messageState ( index, maybeLastDate, list ) ->
@@ -2460,8 +2440,6 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     message
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        |> Tuple.mapSecond
-                            (Drawing.wrapMessageView loggedIn.drawingAnchorOffsets (SeqDict.get messageId channelStrokes))
                         |> (\keyedMessage ->
                                 keyedMessage
                                     :: newMessageLine maybeLastDate date lastViewedIndex index messageId
@@ -3250,16 +3228,16 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         UserTextMessage data ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
 
-                        UserJoinedMessage _ userId _ ->
+                        UserJoinedMessage _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                         DeletedMessage _ ->
                             Ui.none
 
-                        CallStarted _ _ userId _ ->
+                        CallStarted _ _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
-                        GoMatchStarted _ userId _ ->
+                        GoMatchStarted _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -3306,31 +3284,26 @@ replyToHeaderHelper onPress userId allUsers =
 First the user picks an anchor by clicking on a profile image, timestamp or
 attachment. After that an overlay captures mouse events for freehand drawing.
 -}
-drawingModeAttributes : AnyGuildOrDmId -> LoggedIn2 -> List (Ui.Attribute FrontendMsg)
-drawingModeAttributes guildOrDmId loggedIn =
+drawingModeAttributes : AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> List (Ui.Attribute FrontendMsg)
+drawingModeAttributes guildOrDmId threadRoute loggedIn =
     case loggedIn.drawingMode of
-        Just drawingMode ->
-            if drawingMode.channel == guildOrDmId then
-                case drawingMode.anchor of
-                    Nothing ->
-                        [ Ui.id (Dom.idToString Drawing.pickAreaId)
-                        , Ui.Events.on
-                            "click"
-                            (Json.Decode.map
-                                (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
-                                Drawing.decodePickAnchor
-                            )
-                        , Ui.inFront Drawing.anchorHighlightStyle
-                        ]
-
-                    Just selected ->
-                        [ Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg) ]
+        Drawing.SelectedAnchor drawingMode ->
+            if drawingMode.guildOrDmId == guildOrDmId && Id.threadRouteWithoutMessage drawingMode.threadRoute == threadRoute then
+                [ Ui.inFront (Drawing.inputOverlay (drawingMode.stroke /= Nothing) DrawingMsg) ]
 
             else
                 []
 
-        Nothing ->
-            []
+        Drawing.NoSelectedAnchor ->
+            [ Ui.id (Dom.idToString Drawing.pickAreaId)
+            , Ui.Events.on
+                "click"
+                (Json.Decode.map
+                    (\maybeAnchor -> Drawing.PickedAnchor maybeAnchor |> DrawingMsg)
+                    Drawing.decodePickAnchor
+                )
+            , Ui.inFront Drawing.anchorHighlightStyle
+            ]
 
 
 conversationView :
@@ -3397,7 +3370,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
              , Ui.heightMin 0
              , Ui.height Ui.fill
              ]
-                ++ drawingModeAttributes (GuildOrDmId guildOrDmIdNoThread) loggedIn
+                ++ drawingModeAttributes (GuildOrDmId guildOrDmIdNoThread) NoThread loggedIn
             )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
@@ -3569,7 +3542,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
              , Ui.heightMin 0
              , Ui.height Ui.fill
              ]
-                ++ drawingModeAttributes (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
+                ++ drawingModeAttributes (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread loggedIn
             )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
@@ -3820,16 +3793,18 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         ]
         [ ChannelHeader.thread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            [ emojiSelector
+            ([ emojiSelector
                 isMobile
                 local.localUser.user.availableCustomEmojis
                 local.localUser.user.availableStickers
                 local
                 loggedIn
                 model
-            , Ui.heightMin 0
-            , Ui.height Ui.fill
-            ]
+             , Ui.heightMin 0
+             , Ui.height Ui.fill
+             ]
+                ++ drawingModeAttributes (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn
+            )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
@@ -4005,10 +3980,12 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         ]
         [ ChannelHeader.discordThread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
-            , Ui.heightMin 0
-            , Ui.height Ui.fill
-            ]
+            ([ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
+             , Ui.heightMin 0
+             , Ui.height Ui.fill
+             ]
+                ++ drawingModeAttributes (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn
+            )
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
@@ -4974,6 +4951,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 data.reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor data.drawings)
                 (userTextMessageContent
                     (Dom.id "spoiler")
                     containerWidth
@@ -4988,7 +4966,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     data
                 )
 
-        UserJoinedMessage joinedAt userId reactions ->
+        UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5002,6 +4980,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     []
                     [ userJoinedContent userId allUsers
@@ -5024,6 +5003,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 SeqDict.empty
                 maybeThreadStarter
                 isHovered
+                []
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
         CallStarted time endedAt userId reactions drawings ->
@@ -5040,6 +5020,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard userId time endedAt allUsers
@@ -5048,7 +5029,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GoMatchStarted time userId reactions ->
+        GoMatchStarted time userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5062,6 +5043,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard messageId userId allUsers
@@ -5112,6 +5094,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 data.reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor data.drawings)
                 (discordUserTextMessageContent
                     (Dom.id "spoiler")
                     containerWidth
@@ -5125,7 +5108,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     data
                 )
 
-        UserJoinedMessage joinedAt userId reactions ->
+        UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5139,6 +5122,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row
                     []
                     [ userJoinedContent userId allUsers
@@ -5161,9 +5145,10 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 SeqDict.empty
                 maybeThreadStarter
                 isHovered
+                []
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time endedAt userId reactions ->
+        CallStarted time endedAt userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5177,6 +5162,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row
                     [ Ui.contentTop ]
                     [ callStartedCard userId time endedAt allUsers
@@ -5185,7 +5171,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GoMatchStarted time userId reactions ->
+        GoMatchStarted time userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5199,6 +5185,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 reactions
                 maybeThreadStarter
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row
                     [ Ui.contentTop ]
                     [ goMatchStartedCard messageId userId allUsers
@@ -5244,6 +5231,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 message2.reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor message2.drawings)
                 (userTextMessageContent
                     (Dom.id "threadSpoiler")
                     containerWidth
@@ -5258,7 +5246,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     message2
                 )
 
-        UserJoinedMessage joinedAt userId reactions ->
+        UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5268,6 +5256,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     []
                     [ userJoinedContent userId allUsers
@@ -5285,9 +5274,10 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 SeqDict.empty
                 localUser.customEmojis
                 isHovered
+                []
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time endedAt userId reactions ->
+        CallStarted time endedAt userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5297,6 +5287,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     []
                     [ callStartedCard userId time endedAt allUsers
@@ -5304,7 +5295,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GoMatchStarted time userId reactions ->
+        GoMatchStarted time userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5314,6 +5305,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.userColor drawings)
                 (Ui.row
                     []
                     [ goMatchStartedCard messageId userId allUsers
@@ -5357,6 +5349,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 message2.reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor message2.drawings)
                 (discordUserTextMessageContent
                     (Dom.id "threadSpoiler")
                     containerWidth
@@ -5370,7 +5363,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     message2
                 )
 
-        UserJoinedMessage joinedAt userId reactions ->
+        UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5380,6 +5373,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row
                     []
                     [ userJoinedContent userId allUsers
@@ -5397,9 +5391,10 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 SeqDict.empty
                 localUser.customEmojis
                 isHovered
+                []
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time endedAt userId reactions ->
+        CallStarted time endedAt userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5409,9 +5404,10 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row [] [ callStartedCard userId time endedAt allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
-        GoMatchStarted time userId reactions ->
+        GoMatchStarted time userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5421,6 +5417,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 reactions
                 localUser.customEmojis
                 isHovered
+                (Drawing.wrapMessageView Drawing.discordUserColor drawings)
                 (Ui.row
                     []
                     [ goMatchStartedCard messageId userId allUsers
@@ -5738,7 +5735,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                     repliedToData
                 )
 
-        Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
+        Just ( repliedToIndex, UserJoinedMessage _ userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
 
         Just ( repliedToIndex, DeletedMessage _ ) ->
@@ -5750,10 +5747,10 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                     (Ui.text LocalState.messageDeleted)
                 )
 
-        Just ( repliedToIndex, CallStarted startedAt endedAt userId _ ) ->
+        Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GoMatchStarted _ userId _ ) ->
+        Just ( repliedToIndex, GoMatchStarted _ userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
@@ -6004,10 +6001,10 @@ messageContainer :
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
     -> IsHovered
-    -> Drawing.ChannelDrawing userId
+    -> List (Ui.Attribute MessageViewMsg)
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent drawings =
+messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered drawings messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -6051,6 +6048,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
          , Ui.spacing 4
          , channelMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
          ]
+            ++ drawings
             ++ (case isHovered of
                     IsNotHovered ->
                         case highlight of
@@ -6119,9 +6117,10 @@ threadMessageContainer :
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> IsHovered
+    -> List (Ui.Attribute MessageViewMsg)
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions customEmojis isHovered messageContent =
+threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions customEmojis isHovered drawings messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -6165,6 +6164,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
          , Ui.spacing 4
          , threadMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
          ]
+            ++ drawings
             ++ (case isHovered of
                     IsNotHovered ->
                         case highlight of
@@ -6284,7 +6284,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                         }
                                         data.content
 
-                            UserJoinedMessage _ userId _ ->
+                            UserJoinedMessage _ userId _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -6298,7 +6298,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
 
-                            CallStarted _ endedAt userId _ ->
+                            CallStarted _ endedAt userId _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -6311,7 +6311,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GoMatchStarted _ userId _ ->
+                            GoMatchStarted _ userId _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -7400,17 +7400,17 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                     )
                                         ++ RichText.toString True allUsers a.content
 
-                                UserJoinedMessage _ userId _ ->
+                                UserJoinedMessage _ userId _ _ ->
                                     User.toString userId allUsers
                                         ++ " joined!"
 
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ ->
+                                CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ ->
+                                GoMatchStarted _ _ _ _ ->
                                     LocalState.goMatchStartedText
 
                         MessageUnloaded ->
@@ -7524,16 +7524,16 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                     )
                                         ++ RichText.toString True (LocalState.allDiscordUsers localUser) a.content
 
-                                UserJoinedMessage _ userId _ ->
+                                UserJoinedMessage _ userId _ _ ->
                                     User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"
 
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ ->
+                                CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ ->
+                                GoMatchStarted _ _ _ _ ->
                                     LocalState.goMatchStartedText
 
                         MessageUnloaded ->

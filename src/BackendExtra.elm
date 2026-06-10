@@ -1331,7 +1331,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                 , Broadcast.toGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_Drawing userId guildOrDmId drawingChange |> ServerChange)
+                                    (Server_Drawing userId guildOrDmId threadRoute drawingChange |> ServerChange)
                                     model
                                 ]
                             )
@@ -1368,6 +1368,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                 Server_Drawing
                                     session.userId
                                     (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                    threadRoute
                                     drawingChange
                             )
                             model
@@ -1408,7 +1409,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                 , Broadcast.toDiscordGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                                    (Server_Drawing session.userId guildOrDmId threadRoute drawingChange |> ServerChange)
                                     model
                                 ]
                             )
@@ -1446,7 +1447,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                         , Broadcast.toDiscordDmChannelExcludingOne
                             clientId
                             data.channelId
-                            (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                            (Server_Drawing session.userId guildOrDmId threadRoute drawingChange |> ServerChange)
                             model
                         ]
                     )

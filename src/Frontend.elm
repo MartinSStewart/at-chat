@@ -6,6 +6,7 @@ import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 import ChannelDescription
+import ChannelHeader
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -44,6 +45,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
+import Message exposing (MessageState(..))
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
@@ -4234,14 +4236,7 @@ updateDrawing drawingMsg model =
                     case result of
                         Ok elements ->
                             ( { loggedIn
-                                | drawingAnchorOffsets =
-                                    SeqDict.insert
-                                        anchor
-                                        ( elements.anchor.element.x - elements.container.element.x
-                                        , elements.anchor.element.y - elements.container.element.y
-                                        )
-                                        loggedIn.drawingAnchorOffsets
-                                , drawingMode =
+                                | drawingMode =
                                     Maybe.map
                                         (\drawingMode ->
                                             { drawingMode
@@ -4375,10 +4370,50 @@ updateDrawing drawingMsg model =
                             ( loggedIn, Command.none )
 
                 Drawing.PressedUndo ->
-                    undoOrRedoDrawing Drawing.UndoStroke Drawing.canUndo model loggedIn
+                    case loggedIn.drawingMode of
+                        Drawing.SelectedAnchor selected ->
+                            let
+                                ( canUndo, _ ) =
+                                    ChannelHeader.drawingCanUndoOrRedo
+                                        selected.guildOrDmId
+                                        selected.threadRoute
+                                        (Local.model loggedIn.localState)
+                            in
+                            if canUndo then
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_Drawing selected.guildOrDmId selected.threadRoute Drawing.UndoStroke |> Just)
+                                    loggedIn
+                                    Command.none
+
+                            else
+                                ( loggedIn, Command.none )
+
+                        Drawing.NoSelectedAnchor ->
+                            ( loggedIn, Command.none )
 
                 Drawing.PressedRedo ->
-                    undoOrRedoDrawing Drawing.RedoStroke Drawing.canRedo model loggedIn
+                    case loggedIn.drawingMode of
+                        Drawing.SelectedAnchor selected ->
+                            let
+                                ( _, canRedo ) =
+                                    ChannelHeader.drawingCanUndoOrRedo
+                                        selected.guildOrDmId
+                                        selected.threadRoute
+                                        (Local.model loggedIn.localState)
+                            in
+                            if canRedo then
+                                FrontendExtra.handleLocalChange
+                                    model.time
+                                    (Local_Drawing selected.guildOrDmId selected.threadRoute Drawing.UndoStroke |> Just)
+                                    loggedIn
+                                    Command.none
+
+                            else
+                                ( loggedIn, Command.none )
+
+                        Drawing.NoSelectedAnchor ->
+                            ( loggedIn, Command.none )
 
                 Drawing.MouseUp ->
                     case loggedIn.drawingMode of
@@ -4434,39 +4469,6 @@ updateDrawing drawingMsg model =
                             ( loggedIn, Command.none )
         )
         model
-
-
-undoOrRedoDrawing :
-    Drawing.LocalChange
-    -> (Id UserId -> Drawing.ChannelDrawing -> Bool)
-    -> LoadedFrontend
-    -> LoggedIn2
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
-undoOrRedoDrawing change isAllowed model loggedIn =
-    case loggedIn.drawingMode of
-        Just drawingMode ->
-            let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
-                drawing : Drawing.ChannelDrawing
-                drawing =
-                    SeqDict.get (Drawing.targetChannel drawingMode.channel) local.drawings
-                        |> Maybe.withDefault Drawing.emptyChannelDrawing
-            in
-            if isAllowed local.localUser.session.userId drawing then
-                FrontendExtra.handleLocalChange
-                    model.time
-                    (Local_Drawing drawingMode.channel change |> Just)
-                    loggedIn
-                    Command.none
-
-            else
-                ( loggedIn, Command.none )
-
-        Nothing ->
-            ( loggedIn, Command.none )
 
 
 measureDrawingAnchor : Drawing.Anchor -> Command FrontendOnly ToBackend FrontendMsg

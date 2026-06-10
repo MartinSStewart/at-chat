@@ -306,23 +306,23 @@ handleDrawingChange changeBy change message =
             GoMatchStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings)
 
 
-drawing : Message messageId userId -> Maybe (Drawing.ChannelDrawing userId)
+drawing : Message messageId userId -> Drawing.ChannelDrawing userId
 drawing message =
     case message of
         UserTextMessage data ->
-            Just data.drawings
+            data.drawings
 
         UserJoinedMessage time _ _ drawings ->
-            Just drawings
+            drawings
 
         DeletedMessage time ->
-            Nothing
+            Drawing.emptyChannelDrawing
 
         CallStarted time _ _ _ drawings ->
-            Just drawings
+            drawings
 
         GoMatchStarted time _ _ drawings ->
-            Just drawings
+            drawings
 
 
 createdAt : Message messageId userId -> Time.Posix
