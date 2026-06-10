@@ -728,6 +728,7 @@ discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
         , visibleMessages = VisibleMessages.init preloadMessages dmChannel
         , lastTypedAt = dmChannel.lastTypedAt
         , members = dmChannel.members
+        , dateDividerDrawings = dmChannel.dateDividerDrawings
         }
             |> Just
 

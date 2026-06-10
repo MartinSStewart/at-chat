@@ -25,7 +25,9 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Date exposing (Date)
 import Discord
+import Drawing
 import Go
 import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
@@ -43,6 +45,7 @@ type alias DmChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
     }
 
 
@@ -51,6 +54,7 @@ type alias DiscordDmChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
     }
 
 
@@ -59,6 +63,7 @@ type alias DiscordFrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
     }
 
 
@@ -68,6 +73,7 @@ type alias FrontendDmChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , goMatches : SeqDict (Id ChannelMessageId) Go.MatchData
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
     }
 
 
@@ -83,6 +89,7 @@ backendInit =
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     , goMatches = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -93,6 +100,7 @@ frontendInit =
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     , goMatches = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -120,6 +128,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
                 Go.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
             )
             dmChannel.goMatches
+    , dateDividerDrawings = dmChannel.dateDividerDrawings
     }
 
 

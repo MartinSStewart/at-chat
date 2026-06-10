@@ -741,8 +741,8 @@ tabBodyView local loggedIn model =
             Nothing
 
 
-drawingCanUndoOrRedo : AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> ( Bool, Bool )
-drawingCanUndoOrRedo guildOrDmId threadRoute local =
+drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
+drawingCanUndoOrRedo guildOrDmId anchorType local =
     let
         noThreadHelper : userId -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
         noThreadHelper userId messageId channel2 =
@@ -824,7 +824,7 @@ drawingTabView model local =
             SelectedAnchor selected ->
                 let
                     ( canUndo, canRedo ) =
-                        drawingCanUndoOrRedo selected.guildOrDmId selected.threadRoute local
+                        drawingCanUndoOrRedo selected.guildOrDmId selected.anchorType local
                 in
                 [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
                 , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo

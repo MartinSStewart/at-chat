@@ -50,9 +50,9 @@ import Ui.Font
 
 
 type AnchorType
-    = ProfileImageAnchor
-    | TimestampAnchor
-    | ImageAttachmentAnchor (Id FileId)
+    = ProfileImageAnchor ThreadRouteWithMessage
+    | TimestampAnchor ThreadRouteWithMessage
+    | ImageAttachmentAnchor ThreadRouteWithMessage (Id FileId)
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
@@ -104,7 +104,6 @@ type Model
 
 type alias SelectedAnchorData =
     { guildOrDmId : AnyGuildOrDmId
-    , threadRoute : ThreadRouteWithMessage
     , anchorType : AnchorType
     , -- Position of the anchor element in viewport coordinates, used to convert
       -- mouse positions into anchor relative points. Nothing while being measured.
@@ -124,10 +123,9 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : AnyGuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> Point2d CssPixels ScreenCoordinate -> SelectedAnchorData
-initialAnchorSelection guildOrDmId threadRoute anchorType position =
+initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> SelectedAnchorData
+initialAnchorSelection guildOrDmId anchorType position =
     { guildOrDmId = guildOrDmId
-    , threadRoute = threadRoute
     , anchorType = anchorType
     , position = position
     , stroke = Nothing
@@ -330,9 +328,9 @@ so they move together with the profile image. The svg has no size of its own
 (overflow is visible) and ignores pointer events so it never blocks
 interactions with the message below it.
 -}
-profileImageOverlay : (userId -> String) -> ChannelDrawing userId -> Ui.Attribute msg
-profileImageOverlay getColor drawing =
-    case strokesFor ProfileImageAnchor drawing of
+profileImageOverlay : ThreadRouteWithMessage -> (userId -> String) -> ChannelDrawing userId -> Ui.Attribute msg
+profileImageOverlay threadRoute getColor drawing =
+    case strokesFor (ProfileImageAnchor threadRoute) drawing of
         [] ->
             Ui.noAttr
 
@@ -352,18 +350,18 @@ profileImageOverlay getColor drawing =
 of the timestamp element (which is position:relative) so they move together
 with the timestamp.
 -}
-timestampOverlays : (userId -> String) -> ChannelDrawing userId -> List (Html msg)
-timestampOverlays getColor drawing =
+timestampOverlays : ThreadRouteWithMessage -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
+timestampOverlays threadRoute getColor drawing =
     List.map
         (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
-        (strokesFor TimestampAnchor drawing)
+        (strokesFor (TimestampAnchor threadRoute) drawing)
 
 
-imageAttachmentOverlays : Id FileId -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
-imageAttachmentOverlays fileId getColor drawing =
+imageAttachmentOverlays : ThreadRouteWithMessage -> Id FileId -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
+imageAttachmentOverlays threadRoute fileId getColor drawing =
     List.map
         (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
-        (strokesFor (ImageAttachmentAnchor fileId) drawing)
+        (strokesFor (ImageAttachmentAnchor threadRoute fileId) drawing)
 
 
 strokeSvg : String -> Nonempty ( Float, Float ) -> Html msg

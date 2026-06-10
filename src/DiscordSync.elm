@@ -2256,6 +2256,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , members = members
+                                                    , dateDividerDrawings = SeqDict.empty
                                                     }
                                                         |> Just
                                         )

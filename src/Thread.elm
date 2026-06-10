@@ -15,7 +15,9 @@ module Thread exposing
     )
 
 import Array exposing (Array)
+import Date exposing (Date)
 import Discord
+import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import Message exposing (Message, MessageState(..))
@@ -27,6 +29,7 @@ import VisibleMessages exposing (VisibleMessages)
 type alias BackendThread =
     { messages : Array (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
     }
 
 
@@ -34,6 +37,7 @@ type alias DiscordBackendThread =
     { messages : Array (Message ThreadMessageId (Discord.Id Discord.UserId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
     }
 
 
@@ -41,6 +45,7 @@ type alias FrontendGenericThread userId =
     { messages : Array (MessageState ThreadMessageId userId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing userId)
     }
 
 
@@ -48,6 +53,7 @@ type alias FrontendThread =
     { messages : Array (MessageState ThreadMessageId (Id UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
     }
 
 
@@ -55,6 +61,7 @@ type alias DiscordFrontendThread =
     { messages : Array (MessageState ThreadMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
+    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
     }
 
 
@@ -66,6 +73,7 @@ backendInit : BackendThread
 backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -74,6 +82,7 @@ frontendInit =
     { messages = Array.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -82,6 +91,7 @@ discordBackendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -90,6 +100,7 @@ discordFrontendInit =
     { messages = Array.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
+    , dateDividerDrawings = SeqDict.empty
     }
 
 
@@ -98,6 +109,7 @@ toFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
     , visibleMessages = VisibleMessages.init preloadMessages thread
     , lastTypedAt = thread.lastTypedAt
+    , dateDividerDrawings = thread.dateDividerDrawings
     }
 
 
@@ -106,6 +118,7 @@ discordToFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
     , visibleMessages = VisibleMessages.init preloadMessages thread
     , lastTypedAt = thread.lastTypedAt
+    , dateDividerDrawings = thread.dateDividerDrawings
     }
 
 

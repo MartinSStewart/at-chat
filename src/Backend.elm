@@ -886,6 +886,7 @@ update msg model =
                                                                             (\member dict -> NonemptyDict.insert member { messagesSent = 0 } dict)
                                                                             (NonemptyDict.singleton discordUserId { messagesSent = 0 })
                                                                             data.members
+                                                                    , dateDividerDrawings = SeqDict.empty
                                                                     }
                                                                         |> Just
                                                         )
