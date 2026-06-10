@@ -4227,76 +4227,34 @@ updateDrawing drawingMsg model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             case drawingMsg of
-                Drawing.GotAnchorElement anchor result ->
-                    case result of
-                        Ok elements ->
-                            ( { loggedIn
-                                | drawingMode =
-                                    Maybe.map
-                                        (\drawingMode ->
-                                            { drawingMode
-                                                | anchor =
-                                                    Maybe.map
-                                                        (\selected ->
-                                                            if selected.anchor == anchor then
-                                                                { selected
-                                                                    | position =
-                                                                        Just
-                                                                            ( elements.anchor.element.x
-                                                                            , elements.anchor.element.y
-                                                                            )
-                                                                }
-
-                                                            else
-                                                                selected
-                                                        )
-                                                        drawingMode.anchor
-                                            }
-                                        )
-                                        loggedIn.drawingMode
-                              }
-                            , Command.none
-                            )
-
-                        Err _ ->
-                            ( loggedIn, Command.none )
-
                 Drawing.MouseDown x y ->
                     case loggedIn.drawingMode of
-                        Just drawingMode ->
-                            case drawingMode.anchor of
-                                Just selected ->
-                                    case ( selected.position, selected.stroke ) of
-                                        ( Just ( anchorX, anchorY ), Nothing ) ->
-                                            FrontendExtra.handleLocalChange
-                                                model.time
-                                                (Local_Drawing
-                                                    drawingMode.channel
-                                                    (Drawing.StartStroke
-                                                        selected.anchor.messageId
-                                                        selected.anchor.anchorType
-                                                        ( x - anchorX, y - anchorY )
-                                                    )
-                                                    |> Just
-                                                )
-                                                { loggedIn
-                                                    | drawingMode =
-                                                        Just
-                                                            { drawingMode
-                                                                | anchor =
-                                                                    Just { selected | stroke = Just { unsent = [] } }
-                                                            }
-                                                }
-                                                Command.none
-
-                                        _ ->
-                                            ( loggedIn, Command.none )
-
+                        Drawing.SelectedAnchor drawingMode ->
+                            case drawingMode.stroke of
                                 Nothing ->
-                                    ( loggedIn, Command.none )
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_Drawing
+                                            drawingMode.channel
+                                            (Drawing.StartStroke
+                                                selected.anchor.messageId
+                                                selected.anchor.anchorType
+                                                ( x - anchorX, y - anchorY )
+                                            )
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | drawingMode =
+                                                Just
+                                                    { drawingMode
+                                                        | anchor =
+                                                            Just { selected | stroke = Just { unsent = [] } }
+                                                    }
+                                        }
+                                        Command.none
 
-                        Nothing ->
-                            ( loggedIn, Command.none )
+                                Just _ ->
+                                    ( loggedIn, Command.none )
 
                 Drawing.MouseMoved x y ->
                     case loggedIn.drawingMode of

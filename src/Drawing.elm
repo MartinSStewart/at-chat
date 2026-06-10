@@ -33,6 +33,7 @@ module Drawing exposing
     , wrapMessageView
     )
 
+import CssPixels exposing (CssPixels)
 import Discord
 import Effect.Browser.Dom as Dom
 import FileStatus exposing (FileId)
@@ -44,9 +45,11 @@ import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import Point2d exposing (Point2d)
 import SeqDict exposing (SeqDict)
 import Svg exposing (Svg)
 import Svg.Attributes
+import Touch exposing (ScreenCoordinate)
 import Ui exposing (Element)
 import Ui.Font
 
@@ -98,8 +101,7 @@ type LocalChange
 
 
 type Msg
-    = GotAnchorElement AnyGuildOrDmId ThreadRouteWithMessage AnchorType (Result Dom.Error { anchor : Dom.Element, container : Dom.Element })
-    | MouseDown Float Float
+    = MouseDown Float Float
     | MouseMoved Float Float
     | MouseUp
     | PressedUndo
@@ -117,7 +119,7 @@ type alias SelectedAnchorData =
     , anchorType : AnchorType
     , -- Position of the anchor element in viewport coordinates, used to convert
       -- mouse positions into anchor relative points. Nothing while being measured.
-      position : Maybe ( Float, Float )
+      position : Point2d CssPixels ScreenCoordinate
     , stroke : Maybe ActiveStroke
     }
 
@@ -133,12 +135,12 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : AnyGuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> SelectedAnchorData
-initialAnchorSelection guildOrDmId threadRoute anchorType =
+initialAnchorSelection : AnyGuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> Point2d CssPixels ScreenCoordinate -> SelectedAnchorData
+initialAnchorSelection guildOrDmId threadRoute anchorType position =
     { guildOrDmId = guildOrDmId
     , threadRoute = threadRoute
     , anchorType = anchorType
-    , position = Nothing
+    , position = position
     , stroke = Nothing
     }
 

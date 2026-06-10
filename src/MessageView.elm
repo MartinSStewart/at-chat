@@ -13,9 +13,10 @@ import Id exposing (CustomEmojiId, Id)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import Point2d exposing (Point2d)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (AnimationMode(..))
-import Touch exposing (Touch)
+import Touch exposing (ScreenCoordinate, Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -43,8 +44,8 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGoMatchStartedCard
-    | MessageView_PressedUserIcon (Coord CssPixels)
-    | MessageView_PressedTimestamp (Coord CssPixels)
+    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate)
 
 
 isPressMsg : MessageViewMsg -> Bool
