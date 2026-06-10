@@ -60,6 +60,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
 import PersonName exposing (PersonName)
+import Point2d exposing (Point2d)
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -70,7 +71,7 @@ import Sticker exposing (AnimationMode(..))
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
-import Touch
+import Touch exposing (ScreenCoordinate)
 import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -5690,7 +5691,7 @@ messagePreviewTimestamp createdAt timezone =
         [ MyUi.timestamp createdAt timezone |> Html.text ]
 
 
-decodeWithTargetScreenPosition : Json.Decode.Decoder (Coord CssPixels)
+decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
 decodeWithTargetScreenPosition =
     Debug.todo ""
 
