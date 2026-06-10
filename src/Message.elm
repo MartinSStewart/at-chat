@@ -255,7 +255,7 @@ type alias UserTextMessageData messageId userId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     , embeds : Array Embed
-    , drawings : Drawing.ChannelDrawing
+    , drawings : Drawing.ChannelDrawing userId
     }
 
 
@@ -280,8 +280,27 @@ type alias UserTextMessageDataNoReply userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
-    , drawings : Drawing.ChannelDrawing
+    , drawings : Drawing.ChannelDrawing userId
     }
+
+handleDrawingChange changeBy change message =
+    case message of
+        UserTextMessage data ->
+            Drawing.handleLocalChange changeBy change data.drawings
+
+        UserJoinedMessage posix userId seqDict ->
+
+
+        DeletedMessage posix ->
+
+
+        CallStarted posix userId seqDict ->
+
+
+        CallEnded posix seqDict ->
+
+
+        GoMatchStarted posix userId seqDict ->
 
 
 createdAt : Message messageId userId -> Time.Posix

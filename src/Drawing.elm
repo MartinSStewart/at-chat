@@ -15,6 +15,7 @@ module Drawing exposing
     , canUndo
     , decodePickAnchor
     , emptyChannelDrawing
+    , handleLocalChange
     , init
     , initialAnchorSelection
     , inputOverlay
@@ -36,6 +37,7 @@ import Html.Attributes
 import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute, ThreadRouteWithMessage, UserId)
 import Json.Decode
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import SeqDict exposing (SeqDict)
@@ -65,15 +67,15 @@ type alias Stroke =
     }
 
 
-type alias ChannelDrawing =
-    { finished : List { createdBy : Id UserId, stroke : Stroke }
-    , inProgress : SeqDict (Id UserId) Stroke
+type alias ChannelDrawing userId =
+    { finished : List { createdBy : userId, stroke : Stroke }
+    , inProgress : SeqDict userId Stroke
     , -- Per-user redo stacks, most recently undone stroke first
-      undone : SeqDict (Id UserId) (List Stroke)
+      undone : SeqDict userId (List Stroke)
     }
 
 
-emptyChannelDrawing : ChannelDrawing
+emptyChannelDrawing : ChannelDrawing userId
 emptyChannelDrawing =
     { finished = [], inProgress = SeqDict.empty, undone = SeqDict.empty }
 
@@ -153,12 +155,89 @@ resetAnchor model =
             SelectedAnchor { data | position = Nothing, stroke = Nothing }
 
 
-canUndo : Id UserId -> ChannelDrawing -> Bool
+handleLocalChange : userId -> LocalChange -> ChannelDrawing userId -> ChannelDrawing userId
+handleLocalChange userId change drawing =
+    case change of
+        StartStroke anchor point ->
+            { drawing
+                | inProgress =
+                    SeqDict.insert
+                        userId
+                        { anchor = anchor, points = Nonempty point [] }
+                        drawing.inProgress
+                , -- Starting a new stroke clears anything that could be redone
+                  undone = SeqDict.remove userId drawing.undone
+            }
+
+        ContinueStroke points ->
+            case SeqDict.get userId drawing.inProgress of
+                Just stroke ->
+                    { drawing
+                        | inProgress =
+                            SeqDict.insert
+                                userId
+                                { stroke
+                                    | points =
+                                        List.Nonempty.append stroke.points points
+                                            |> nonemptyTake maxPointsPerStroke
+                                }
+                                drawing.inProgress
+                    }
+
+                Nothing ->
+                    drawing
+
+        EndStroke ->
+            case SeqDict.get userId drawing.inProgress of
+                Just stroke ->
+                    { drawing
+                        | inProgress = SeqDict.remove userId drawing.inProgress
+                        , finished =
+                            { createdBy = userId, stroke = stroke }
+                                :: drawing.finished
+                                |> List.take maxFinishedStrokes
+                    }
+
+                Nothing ->
+                    drawing
+
+        UndoStroke ->
+            case List.Extra.splitWhen (\finished -> finished.createdBy == userId) drawing.finished of
+                Just ( before, undoneStroke :: after ) ->
+                    { drawing
+                        | finished = before ++ after
+                        , undone =
+                            SeqDict.update
+                                userId
+                                (\maybe ->
+                                    undoneStroke.stroke
+                                        :: Maybe.withDefault [] maybe
+                                        |> Just
+                                )
+                                drawing.undone
+                    }
+
+                _ ->
+                    drawing
+
+        RedoStroke ->
+            case SeqDict.get userId drawing.undone of
+                Just (stroke :: rest) ->
+                    { drawing
+                        | finished = { createdBy = userId, stroke = stroke } :: drawing.finished
+                        , undone = SeqDict.insert userId rest drawing.undone
+                    }
+
+                _ ->
+                    drawing
+
+
+canUndo : userId -> ChannelDrawing userId -> Bool
 canUndo userId drawing =
     List.any (\finished -> finished.createdBy == userId) drawing.finished
 
 
-canRedo : Id UserId -> ChannelDrawing -> Bool
+canRedo : userId -> ChannelDrawing userId -> Bool
 canRedo userId drawing =
     case SeqDict.get userId drawing.undone of
         Just (_ :: _) ->
