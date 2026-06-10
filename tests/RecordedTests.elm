@@ -1067,6 +1067,96 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "Edit guild message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                -- More than five messages, interleaved between both users, and the most recent
+                -- message overall is from the other user. Pressing up should still skip the other
+                -- user's messages and edit the admin's own most recent message.
+                [ RecordedTestExtra.writeMessage admin 100 "Admin message one"
+                , RecordedTestExtra.writeMessage user 100 "User message one"
+                , RecordedTestExtra.writeMessage admin 100 "Admin message two"
+                , RecordedTestExtra.writeMessage user 100 "User message two"
+                , RecordedTestExtra.writeMessage admin 100 "Admin message three"
+                , RecordedTestExtra.writeMessage user 100 "User message three"
+                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Admin message three" "Admin message three edited"
+
+                -- Only the admin's most recent message was edited; earlier messages are untouched.
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Admin message three" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin message one" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin message two" ])
+
+                -- The other user's messages, including the most recent one, are untouched.
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "User message three" ])
+
+                -- The edit is also visible to the other user.
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin message three edited" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Edit DM message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\admin ->
+                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                , RecordedTestExtra.inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , RecordedTestExtra.writeMessage user 100 "Hello from user"
+                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                        , RecordedTestExtra.writeMessage admin 100 "First DM"
+                        , RecordedTestExtra.writeMessage admin 100 "Second DM"
+                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
+
+                        -- Only the most recent message we wrote was edited.
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second DM" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "First DM" ])
+
+                        -- The other side of the DM sees the edit too.
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Second DM edited" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Edit thread message by pressing up arrow in channel input"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                -- More than five thread messages, interleaved, with the other user sending the
+                -- most recent message.
+                [ RecordedTestExtra.writeMessage admin 100 "Thread starter"
+                , RecordedTestExtra.createThread admin (Id.fromInt 1)
+                , RecordedTestExtra.writeMessage admin 100 "Admin thread one"
+                , user.click 100 (Dom.id "guild_threadStarterIndicator_1")
+                , RecordedTestExtra.writeMessage user 100 "User thread one"
+                , RecordedTestExtra.writeMessage admin 100 "Admin thread two"
+                , RecordedTestExtra.writeMessage user 100 "User thread two"
+                , RecordedTestExtra.writeMessage admin 100 "Admin thread three"
+                , RecordedTestExtra.writeMessage user 100 "User thread three"
+                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Admin thread three" "Admin thread three edited"
+
+                -- Only the admin's most recent thread message was edited; the earlier replies are untouched.
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Admin thread three" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Admin thread one" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "User thread three" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Change notification level"
         RecordedTestExtra.startTime
         normalConfig
@@ -2160,9 +2250,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.goMatchTest normalConfig
-    , RecordedTestExtra.goTurnNotificationDotTest normalConfig
-    , RecordedTestExtra.publicGoMatchViewTest normalConfig
+    , T.testGroup
+        "Go matches"
+        [ RecordedTestExtra.goMatchTest normalConfig
+        , RecordedTestExtra.goTurnNotificationDotTest normalConfig
+        , RecordedTestExtra.publicGoMatchViewTest normalConfig
+        ]
     ]
 
 

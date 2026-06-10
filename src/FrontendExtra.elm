@@ -6,6 +6,7 @@ module FrontendExtra exposing
     , gotFiles
     , handleEscapeKey
     , handleLocalChange
+    , handlePressedArrowUpInEmptyInput
     , initAdminData
     , isPressMsg
     , layout
@@ -52,12 +53,13 @@ import ImageEditor
 import ImageViewer
 import Json.Decode
 import Json.Decode.Extra
+import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Message(..), MessageState)
+import Message exposing (ChangeAttachments(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -2843,7 +2845,7 @@ changeUpdate localMsg local =
                                                             (\maybe ->
                                                                 Maybe.withDefault DmChannel.frontendInit maybe
                                                                     |> LocalState.createChannelMessageFrontend
-                                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                                        (CallStarted time Nothing local2.localUser.session.userId SeqDict.empty)
                                                                     |> Just
                                                             )
                                                             local2.dmChannels
@@ -3970,7 +3972,7 @@ changeUpdate localMsg local =
                                                         (\maybe ->
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted time (Tuple.first otherClientId) SeqDict.empty)
+                                                                    (CallStarted time Nothing (Tuple.first otherClientId) SeqDict.empty)
                                                                 |> Just
                                                         )
                                                         local.dmChannels
@@ -3997,7 +3999,7 @@ changeUpdate localMsg local =
                                                 , error = Nothing
                                             }
                                         , dmChannels =
-                                            if SeqDict.member connectionId.roomId calls.voiceChats then
+                                            if (calls.currentRoom == Just connectionId.roomId) || SeqDict.member connectionId.roomId calls.voiceChats then
                                                 local.dmChannels
 
                                             else
@@ -4006,7 +4008,7 @@ changeUpdate localMsg local =
                                                     (\maybe ->
                                                         Maybe.withDefault DmChannel.frontendInit maybe
                                                             |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time local.localUser.session.userId SeqDict.empty)
+                                                                (CallStarted time Nothing local.localUser.session.userId SeqDict.empty)
                                                             |> Just
                                                     )
                                                     local.dmChannels
@@ -4125,13 +4127,9 @@ otherUserLeaveCall time { roomId, otherClientId } local =
                         DmRoomId otherUserId ->
                             case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
                                 ( False, False ) ->
-                                    SeqDict.update
+                                    SeqDict.updateIfExists
                                         otherUserId
-                                        (\maybe ->
-                                            Maybe.withDefault DmChannel.frontendInit maybe
-                                                |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
-                                                |> Just
-                                        )
+                                        (LocalState.markCallMessageAsEndedFrontend time)
                                         local.dmChannels
 
                                 _ ->
@@ -4159,13 +4157,9 @@ leaveCall time local =
                                 local.dmChannels
 
                             else
-                                SeqDict.update
+                                SeqDict.updateIfExists
                                     otherUserId
-                                    (\maybe ->
-                                        Maybe.withDefault DmChannel.frontendInit maybe
-                                            |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
-                                            |> Just
-                                    )
+                                    (LocalState.markCallMessageAsEndedFrontend time)
                                     local.dmChannels
                     }
 
@@ -4881,3 +4875,190 @@ handleEscapeKeyHelper model loggedIn =
 
                 _ ->
                     ( { loggedIn2 | showEmojiSelector = Types.EmojiSelectorHidden }, Command.none )
+
+
+handlePressedArrowUpInEmptyInput :
+    LoadedFrontend
+    -> AnyGuildOrDmId
+    -> ThreadRoute
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+            in
+            case guildOrDmId of
+                GuildOrDmId guildOrDmId2 ->
+                    let
+                        maybeMessages : Maybe (Array (MessageStateNoReply (Id UserId)))
+                        maybeMessages =
+                            LocalState.guildOrDmIdToMessages ( guildOrDmId2, threadRoute ) local
+                    in
+                    case maybeMessages of
+                        Just messages ->
+                            let
+                                messageCount : Int
+                                messageCount =
+                                    Array.length messages
+
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Id UserId) )
+                                mostRecentMessage =
+                                    (if messageCount < 5 then
+                                        Array.toList messages
+                                            |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
+
+                                     else
+                                        Array.slice (messageCount - 5) messageCount messages
+                                            |> Array.toList
+                                            |> List.indexedMap
+                                                (\index message ->
+                                                    ( messageCount + index - 5 |> Id.fromInt, message )
+                                                )
+                                    )
+                                        |> List.reverse
+                                        |> List.Extra.findMap
+                                            (\( index, message ) ->
+                                                case message of
+                                                    MessageLoaded_NoReply message2 ->
+                                                        case message2 of
+                                                            UserTextMessage_NoReply data ->
+                                                                if local.localUser.session.userId == data.createdBy then
+                                                                    Just ( index, data )
+
+                                                                else
+                                                                    Nothing
+
+                                                            UserJoinedMessage_NoReply _ _ _ ->
+                                                                Nothing
+
+                                                            DeletedMessage_NoReply _ ->
+                                                                Nothing
+
+                                                            CallStarted_NoReply _ _ _ ->
+                                                                Nothing
+
+                                                            GoMatchStarted_NoReply _ _ ->
+                                                                Nothing
+
+                                                    MessageUnloaded_NoReply ->
+                                                        Nothing
+                                            )
+                            in
+                            case mostRecentMessage of
+                                Just ( index, message ) ->
+                                    ( { loggedIn
+                                        | editMessage =
+                                            SeqDict.insert
+                                                ( GuildOrDmId guildOrDmId2, threadRoute )
+                                                { messageIndex = index
+                                                , text =
+                                                    RichText.toString False (LocalState.allUsers local.localUser) message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                }
+                                                loggedIn.editMessage
+                                      }
+                                    , setFocus model MessageMenu.editMessageTextInputId
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+
+                DiscordGuildOrDmId guildOrDmId2 ->
+                    let
+                        maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id Discord.UserId)))
+                        maybeMessages =
+                            LocalState.discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
+                    in
+                    case maybeMessages of
+                        Just messages ->
+                            let
+                                currentUserId : Discord.Id Discord.UserId
+                                currentUserId =
+                                    case guildOrDmId2 of
+                                        DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
+                                            currentUserId2
+
+                                        DiscordGuildOrDmId_Dm data ->
+                                            data.currentUserId
+
+                                messageCount : Int
+                                messageCount =
+                                    Array.length messages
+
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id Discord.UserId) )
+                                mostRecentMessage =
+                                    (if messageCount < 5 then
+                                        Array.toList messages
+                                            |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
+
+                                     else
+                                        Array.slice (messageCount - 5) messageCount messages
+                                            |> Array.toList
+                                            |> List.indexedMap
+                                                (\index message ->
+                                                    ( messageCount + index - 5 |> Id.fromInt, message )
+                                                )
+                                    )
+                                        |> List.reverse
+                                        |> List.Extra.findMap
+                                            (\( index, message ) ->
+                                                case message of
+                                                    MessageLoaded_NoReply message2 ->
+                                                        case message2 of
+                                                            UserTextMessage_NoReply data ->
+                                                                if currentUserId == data.createdBy then
+                                                                    Just ( index, data )
+
+                                                                else
+                                                                    Nothing
+
+                                                            UserJoinedMessage_NoReply _ _ _ ->
+                                                                Nothing
+
+                                                            DeletedMessage_NoReply _ ->
+                                                                Nothing
+
+                                                            CallStarted_NoReply _ _ _ ->
+                                                                Nothing
+
+                                                            GoMatchStarted_NoReply _ _ ->
+                                                                Nothing
+
+                                                    MessageUnloaded_NoReply ->
+                                                        Nothing
+                                            )
+                            in
+                            case mostRecentMessage of
+                                Just ( index, message ) ->
+                                    ( { loggedIn
+                                        | editMessage =
+                                            SeqDict.insert
+                                                ( DiscordGuildOrDmId guildOrDmId2, threadRoute )
+                                                { messageIndex = index
+                                                , text =
+                                                    RichText.toString
+                                                        False
+                                                        (LocalState.allDiscordUsers local.localUser)
+                                                        message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                }
+                                                loggedIn.editMessage
+                                      }
+                                    , setFocus model MessageMenu.editMessageTextInputId
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+        )
+        model

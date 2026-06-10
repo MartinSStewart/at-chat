@@ -1164,10 +1164,7 @@ update msg model =
                                                                 DeletedMessage _ ->
                                                                     members
 
-                                                                CallStarted _ _ _ ->
-                                                                    members
-
-                                                                CallEnded _ _ ->
+                                                                CallStarted _ _ _ _ ->
                                                                     members
 
                                                                 GoMatchStarted _ _ _ ->
@@ -2057,15 +2054,7 @@ disconnectClient time sessionId clientId model =
                         model.dmChannels
 
                     else
-                        SeqDict.updateIfExists
-                            dmChannelId
-                            (\dmChannel ->
-                                LocalState.createChannelMessageBackend
-                                    (CallEnded time SeqDict.empty)
-                                    dmChannel
-                                    |> Tuple.second
-                            )
-                            model.dmChannels
+                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
 
                 model2 =
                     { model
@@ -2210,14 +2199,11 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
-                        CallStarted _ _ _ ->
-                            "Call started"
-
-                        CallEnded _ _ ->
-                            "Call ended"
+                        CallStarted _ endedAt _ _ ->
+                            LocalState.callStartedText endedAt
 
                         GoMatchStarted _ _ _ ->
-                            "Go match started"
+                            LocalState.goMatchStartedText
 
                 Nothing ->
                     "Thread"
@@ -5535,15 +5521,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                         model.dmChannels
 
                     else
-                        SeqDict.update
-                            dmChannelId
-                            (\maybe ->
-                                Maybe.withDefault DmChannel.backendInit maybe
-                                    |> LocalState.createChannelMessageBackend (CallEnded time SeqDict.empty)
-                                    |> Tuple.second
-                                    |> Just
-                            )
-                            model.dmChannels
+                        SeqDict.updateIfExists dmChannelId (LocalState.markCallMessageAsEndedBackend time) model.dmChannels
       }
     , Command.batch
         [ case maybeChangeId of
@@ -5627,14 +5605,20 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                 )
                                                 model2.connections
                                         , dmChannels =
-                                            SeqDict.insert
-                                                dmChannelId
-                                                (LocalState.createChannelMessageBackend
-                                                    (CallStarted time session.userId SeqDict.empty)
-                                                    dmChannel
-                                                    |> Tuple.second
-                                                )
+                                            -- Only the person who starts the call adds a "started a call"
+                                            -- message. Anyone joining an already ongoing call doesn't.
+                                            if isAnyoneElseInCall voiceChatId session.userId clientId model2 then
                                                 model2.dmChannels
+
+                                            else
+                                                SeqDict.insert
+                                                    dmChannelId
+                                                    (LocalState.createChannelMessageBackend
+                                                        (CallStarted time Nothing session.userId SeqDict.empty)
+                                                        dmChannel
+                                                        |> Tuple.second
+                                                    )
+                                                    model2.dmChannels
                                     }
                             in
                             ( model3
@@ -5724,6 +5708,38 @@ collectExistingPeers roomId currentUserId currentClientId model =
         )
         []
         model.connections
+
+
+{-| Is anyone other than the joining client already in (or connecting to) this
+call? Used to decide whether a join is starting a brand new call (and so should
+add a "started a call" message) or just joining an ongoing one.
+-}
+isAnyoneElseInCall : Call.CallId -> Id UserId -> ClientId -> BackendModel -> Bool
+isAnyoneElseInCall roomId currentUserId currentClientId model =
+    SeqDict.toList model.connections
+        |> List.any
+            (\( sessionId2, connections ) ->
+                case SeqDict.get sessionId2 model.sessions of
+                    Just session ->
+                        NonemptyDict.toList connections
+                            |> List.any
+                                (\( clientId2, connection ) ->
+                                    (clientId2 /= currentClientId)
+                                        && (case connection.call of
+                                                ConnectedToCall otherRoomId _ ->
+                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
+
+                                                ConnectingToCall otherRoomId ->
+                                                    isPeerInSameCall roomId currentUserId session.userId otherRoomId
+
+                                                NotInCall ->
+                                                    False
+                                           )
+                                )
+
+                    Nothing ->
+                        False
+            )
 
 
 {-| Given the joining user's room and the peer's call state, decide whether

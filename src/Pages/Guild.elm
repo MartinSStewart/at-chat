@@ -2208,10 +2208,7 @@ maybeRepliedTo message channel =
         DeletedMessage _ ->
             Nothing
 
-        CallStarted _ _ _ ->
-            Nothing
-
-        CallEnded _ _ ->
+        CallStarted _ _ _ _ ->
             Nothing
 
         GoMatchStarted _ _ _ ->
@@ -3259,11 +3256,8 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         DeletedMessage _ ->
                             Ui.none
 
-                        CallStarted _ userId _ ->
+                        CallStarted _ _ userId _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
-
-                        CallEnded _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) Nothing allUsers
 
                         GoMatchStarted _ userId _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
@@ -4574,10 +4568,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ ->
-            Ui.none
-
-        CallEnded _ _ ->
+        CallStarted _ _ _ _ ->
             Ui.none
 
         GoMatchStarted _ _ _ ->
@@ -4708,10 +4699,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ ->
-            Ui.none
-
-        CallEnded _ _ ->
+        CallStarted _ _ _ _ ->
             Ui.none
 
         GoMatchStarted _ _ _ ->
@@ -5038,7 +5026,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time userId reactions ->
+        CallStarted time endedAt userId reactions ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5054,29 +5042,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId allUsers
-                    , messageTimestamp time localUser.timezone |> Ui.html
-                    , messageIdView messageId
-                    ]
-                )
-
-        CallEnded time reactions ->
-            messageContainer
-                isThreadStarter
-                localUser.timezone
-                localUser.customEmojis
-                allUsers
-                highlight
-                messageId
-                False
-                currentUserId
-                localUser.user
-                reactions
-                maybeThreadStarter
-                isHovered
-                (Ui.row
-                    []
-                    [ callEnded
+                    [ callStartedCard userId time endedAt allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageId
                     ]
@@ -5197,7 +5163,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time userId reactions ->
+        CallStarted time endedAt userId reactions ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5213,29 +5179,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId allUsers
-                    , messageTimestamp time localUser.timezone |> Ui.html
-                    , messageIdView messageId
-                    ]
-                )
-
-        CallEnded time reactions ->
-            messageContainer
-                isThreadStarter
-                localUser.timezone
-                localUser.customEmojis
-                allUsers
-                highlight
-                messageId
-                False
-                currentUserId
-                localUser.user
-                reactions
-                maybeThreadStarter
-                isHovered
-                (Ui.row
-                    []
-                    [ callEnded
+                    [ callStartedCard userId time endedAt allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageId
                     ]
@@ -5343,7 +5287,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time userId reactions ->
+        CallStarted time endedAt userId reactions ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5353,19 +5297,12 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ callStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
-
-        CallEnded time reactions ->
-            threadMessageContainer
-                highlight
-                messageId
-                False
-                currentUserId
-                localUser.user
-                reactions
-                localUser.customEmojis
-                isHovered
-                (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row
+                    []
+                    [ callStartedCard userId time endedAt allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    ]
+                )
 
         GoMatchStarted time userId reactions ->
             threadMessageContainer
@@ -5377,7 +5314,12 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ goMatchStartedCard messageId userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row
+                    []
+                    [ goMatchStartedCard messageId userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    ]
+                )
 
 
 discordThreadMessageView :
@@ -5457,7 +5399,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
-        CallStarted time userId reactions ->
+        CallStarted time endedAt userId reactions ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5467,19 +5409,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ callStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
-
-        CallEnded time reactions ->
-            threadMessageContainer
-                highlight
-                messageId
-                False
-                currentUserId
-                localUser.user
-                reactions
-                localUser.customEmojis
-                isHovered
-                (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row [] [ callStartedCard userId time endedAt allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
         GoMatchStarted time userId reactions ->
             threadMessageContainer
@@ -5491,7 +5421,12 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ goMatchStartedCard messageId userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row
+                    []
+                    [ goMatchStartedCard messageId userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    ]
+                )
 
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
@@ -5815,11 +5750,8 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                     (Ui.text LocalState.messageDeleted)
                 )
 
-        Just ( repliedToIndex, CallStarted _ userId _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId allUsers)
-
-        Just ( repliedToIndex, CallEnded _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex callEnded
+        Just ( repliedToIndex, CallStarted startedAt endedAt userId _ ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
         Just ( repliedToIndex, GoMatchStarted _ userId _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
@@ -5898,17 +5830,25 @@ userJoinedContent userId allUsers =
         ]
 
 
-callStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
-callStarted userId allUsers =
+callStarted : userId -> Time.Posix -> Maybe Time.Posix -> SeqDict userId { a | name : PersonName } -> Element msg
+callStarted userId startedAt endedAt allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
         [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
-        , Ui.el
-            []
-            (Ui.text " started a call")
+        , " started a call" ++ eventDurationText startedAt endedAt |> Ui.text |> Ui.el []
         ]
+
+
+eventDurationText : Time.Posix -> Maybe Time.Posix -> String
+eventDurationText start end =
+    case end of
+        Just endedAt2 ->
+            ", lasted " ++ MyUi.timeElapsed start endedAt2
+
+        Nothing ->
+            ""
 
 
 goMatchStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
@@ -5918,20 +5858,18 @@ goMatchStarted userId allUsers =
         [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
-        , Ui.el
-            []
-            (Ui.text " started a Go match")
+        , Ui.text " started a Go match" |> Ui.el []
         ]
 
 
-callStartedCard : userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-callStartedCard userId allUsers =
+callStartedCard : userId -> Time.Posix -> Maybe Time.Posix -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
+callStartedCard userId startedAt endedAt allUsers =
     eventCard
         (Dom.id "guild_callStartedCard")
         MessageViewMsg_PressedCallStartedCard
         (Ui.html Icons.phone)
         (User.toString userId allUsers)
-        "started a call"
+        ("started a call" ++ eventDurationText startedAt endedAt)
 
 
 goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
@@ -5969,11 +5907,6 @@ eventCard htmlId onPress icon userName action =
                 ]
             ]
         )
-
-
-callEnded : Element msg
-callEnded =
-    Ui.Prose.paragraph [ Ui.paddingXY 0 4 ] [ Ui.el [] (Ui.text "Call ended") ]
 
 
 messagePaddingX : number
@@ -6364,16 +6297,18 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
 
-                            CallStarted _ userId _ ->
+                            CallStarted _ endedAt userId _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
-                                    , Html.text " started a call"
+                                    , case endedAt of
+                                        Just _ ->
+                                            Html.text "'s call ended"
+
+                                        Nothing ->
+                                            Html.text " started a call"
                                     ]
                                 ]
-
-                            CallEnded _ _ ->
-                                [ Html.text "Call ended" ]
 
                             GoMatchStarted _ userId _ ->
                                 [ Html.span
@@ -7471,14 +7406,11 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ _ _ ->
-                                    "Call started"
-
-                                CallEnded _ _ ->
-                                    "Call ended"
+                                CallStarted _ endedAt _ _ ->
+                                    LocalState.callStartedText endedAt
 
                                 GoMatchStarted _ _ _ ->
-                                    "Go match started"
+                                    LocalState.goMatchStartedText
 
                         MessageUnloaded ->
                             ""
@@ -7597,14 +7529,11 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ _ _ ->
-                                    "Call started"
-
-                                CallEnded _ _ ->
-                                    "Call ended"
+                                CallStarted _ endedAt _ _ ->
+                                    LocalState.callStartedText endedAt
 
                                 GoMatchStarted _ _ _ ->
-                                    "Go match started"
+                                    LocalState.goMatchStartedText
 
                         MessageUnloaded ->
                             ""
