@@ -6,6 +6,7 @@ module RichText exposing
     , HeadingLevel(..)
     , Language(..)
     , Modifiers(..)
+    , PressedImageData
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
@@ -14,6 +15,7 @@ module RichText exposing
     , bigEmojiFont
     , customEmojiIds
     , customEmojisFromDiscord
+    , decodeWithTargetScreenPosition
     , discordCharsLeft
     , domainToString
     , emptyPlaceholder
@@ -44,6 +46,7 @@ import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
+import Drawing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -54,18 +57,21 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
+import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
+import Point2d exposing (Point2d)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
+import Touch exposing (ScreenCoordinate)
 import UInt64
 import Url exposing (Protocol(..), Url)
 
@@ -2155,7 +2161,7 @@ view :
     -> Int
     -> (Url -> msg)
     -> (Int -> msg)
-    -> (String -> Coord CssPixels -> msg)
+    -> (PressedImageData -> msg)
     -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
@@ -2194,6 +2200,7 @@ preview onPressLink config nonempty =
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
+        , drawings = Drawing.emptyChannelDrawing
         }
         Array.empty
         0
@@ -2210,6 +2217,7 @@ type alias Config a userId =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
+    , drawings : Drawing.ChannelDrawing userId
     }
 
 
@@ -2242,11 +2250,19 @@ normalTextView text state =
     ]
 
 
+type alias PressedImageData =
+    { fileId : Id FileId
+    , fileUrl : String
+    , position : Point2d CssPixels ScreenCoordinate
+    , imageSize : Coord CssPixels
+    }
+
+
 viewHelper :
     Bool
     -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
-    -> Maybe (String -> Coord CssPixels -> msg)
+    -> Maybe (PressedImageData -> msg)
     -> (Url -> msg)
     -> Int
     -> RichTextState
@@ -2714,7 +2730,19 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                             Nothing ->
                                                                                 "image_" ++ Id.toString fileId
                                                                         )
-                                                                    , Html.Events.onClick (onPressImage fileUrl imageSize)
+                                                                    , Html.Events.on
+                                                                        "click"
+                                                                        (decodeWithTargetScreenPosition
+                                                                            |> Json.Decode.map
+                                                                                (\position ->
+                                                                                    onPressImage
+                                                                                        { fileId = fileId
+                                                                                        , fileUrl = fileUrl
+                                                                                        , imageSize = imageSize
+                                                                                        , position = position
+                                                                                        }
+                                                                                )
+                                                                        )
                                                                     ]
 
                                                             Nothing ->
@@ -2772,6 +2800,20 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
+decodeWithTargetScreenPosition =
+    Json.Decode.map4
+        (\clientX clientY offsetX offsetY ->
+            Point2d.xy
+                (CssPixels.cssPixels (clientX - offsetX))
+                (CssPixels.cssPixels (clientY - offsetY))
+        )
+        (Json.Decode.field "clientX" Json.Decode.float)
+        (Json.Decode.field "clientY" Json.Decode.float)
+        (Json.Decode.field "offsetX" Json.Decode.float)
+        (Json.Decode.field "offsetY" Json.Decode.float)
 
 
 embedContainerMaxWidth : number

@@ -2524,10 +2524,15 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedImage imageUrl imageSize ->
-                    ( { model | imageViewer = Just (ImageViewer.init { url = imageUrl, imageSize = imageSize }) }
-                    , Command.none
-                    )
+                MessageView.MessageView_PressedImage { fileId, fileUrl, imageSize, position } ->
+                    case Route.toChannelHeaderTab model.route of
+                        Just DmChannelHeaderTab_Draw ->
+                            selectDrawingAnchor guildOrDmId threadRoute (Drawing.ImageAttachmentAnchor fileId) position model
+
+                        _ ->
+                            ( { model | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
+                            , Command.none
+                            )
 
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
@@ -2613,10 +2618,20 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIcon elementPosition ->
-                    selectDrawingAnchor guildOrDmId threadRoute Drawing.ProfileImageAnchor elementPosition model
+                    case Route.toChannelHeaderTab model.route of
+                        Just DmChannelHeaderTab_Draw ->
+                            selectDrawingAnchor guildOrDmId threadRoute Drawing.ProfileImageAnchor elementPosition model
+
+                        _ ->
+                            ( model, Command.none )
 
                 MessageView.MessageView_PressedTimestamp elementPosition ->
-                    selectDrawingAnchor guildOrDmId threadRoute Drawing.TimestampAnchor elementPosition model
+                    case Route.toChannelHeaderTab model.route of
+                        Just DmChannelHeaderTab_Draw ->
+                            selectDrawingAnchor guildOrDmId threadRoute Drawing.TimestampAnchor elementPosition model
+
+                        _ ->
+                            ( model, Command.none )
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -4232,21 +4247,17 @@ selectDrawingAnchor :
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 selectDrawingAnchor guildOrDmId threadRoute anchorType elementPosition model =
-    if Route.toChannelHeaderTab model.route == Just DmChannelHeaderTab_Draw then
-        FrontendExtra.updateLoggedIn
-            (\loggedIn ->
-                ( { loggedIn
-                    | drawingMode =
-                        Drawing.initialAnchorSelection guildOrDmId threadRoute anchorType elementPosition
-                            |> Drawing.SelectedAnchor
-                  }
-                , Command.none
-                )
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | drawingMode =
+                    Drawing.initialAnchorSelection guildOrDmId threadRoute anchorType elementPosition
+                        |> Drawing.SelectedAnchor
+              }
+            , Command.none
             )
-            model
-
-    else
-        ( model, Command.none )
+        )
+        model
 
 
 updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

@@ -14,6 +14,7 @@ import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import Point2d exposing (Point2d)
+import RichText
 import SeqDict exposing (SeqDict)
 import Sticker exposing (AnimationMode(..))
 import Touch exposing (ScreenCoordinate, Touch)
@@ -27,7 +28,7 @@ import User exposing (FrontendCurrentUser)
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
     | MessageView_PressedNonWhitelistLink Url
-    | MessageView_PressedImage String (Coord CssPixels)
+    | MessageView_PressedImage RichText.PressedImageData
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
@@ -57,7 +58,7 @@ isPressMsg msg =
         MessageView_PressedNonWhitelistLink _ ->
             True
 
-        MessageView_PressedImage _ _ ->
+        MessageView_PressedImage _ ->
             True
 
         MessageView_MouseEnteredMessage ->

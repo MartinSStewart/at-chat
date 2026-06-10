@@ -5443,7 +5443,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 User.profileImage message2.createdBy Nothing
           )
             |> Ui.el
-                [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon decodeWithTargetScreenPosition)
+                [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon RichText.decodeWithTargetScreenPosition)
                 , Drawing.profileImageAnchorId spoilerHtmlId messageId |> Dom.idToString |> Ui.id
                 , Ui.width Ui.shrink
                 , Drawing.profileImageOverlay Drawing.userColor message2.drawings
@@ -5504,6 +5504,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
+                    , drawings = message2.drawings
                     }
                     message2.embeds
                     message2.content
@@ -5558,7 +5559,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                 User.discordProfileImage message2.createdBy Nothing
           )
             |> Ui.el
-                [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon decodeWithTargetScreenPosition)
+                [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon RichText.decodeWithTargetScreenPosition)
                 , Drawing.profileImageAnchorId spoilerHtmlId messageId |> Dom.idToString |> Ui.id
                 , Ui.width Ui.shrink
                 , Drawing.profileImageOverlay Drawing.discordUserColor message2.drawings
@@ -5619,6 +5620,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
+                    , drawings = message2.drawings
                     }
                     message2.embeds
                     message2.content
@@ -5687,7 +5689,7 @@ messageTimestamp drawingOverlays messageId createdAt timezone =
         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
         , -- Drawings anchored to the timestamp are positioned relative to it
           Html.Attributes.style "position" "relative"
-        , Html.Events.on "click" (Json.Decode.map MessageView_PressedTimestamp decodeWithTargetScreenPosition)
+        , Html.Events.on "click" (Json.Decode.map MessageView_PressedTimestamp RichText.decodeWithTargetScreenPosition)
         , Html.Attributes.id ("guild_messageTimestamp_" ++ Id.toString messageId)
         ]
         ((MyUi.timestamp createdAt timezone |> Html.text) :: drawingOverlays)
@@ -5700,24 +5702,6 @@ messagePreviewTimestamp createdAt timezone =
         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
         ]
         [ MyUi.timestamp createdAt timezone |> Html.text ]
-
-
-{-| The screen position of the element that was clicked on, derived from the
-mouse event itself (clientX/Y are relative to the viewport while offsetX/Y are
-relative to the clicked element) so no Dom.getElement round trip is needed.
--}
-decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
-decodeWithTargetScreenPosition =
-    Json.Decode.map4
-        (\clientX clientY offsetX offsetY ->
-            Point2d.xy
-                (Quantity.unsafe (clientX - offsetX))
-                (Quantity.unsafe (clientY - offsetY))
-        )
-        (Json.Decode.field "clientX" Json.Decode.float)
-        (Json.Decode.field "clientY" Json.Decode.float)
-        (Json.Decode.field "offsetX" Json.Decode.float)
-        (Json.Decode.field "offsetY" Json.Decode.float)
 
 
 replyToHeaderAboveMessage :

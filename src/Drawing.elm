@@ -13,6 +13,7 @@ module Drawing exposing
     , discordUserColor
     , emptyChannelDrawing
     , handleLocalChange
+    , imageAttachmentOverlays
     , init
     , initialAnchorSelection
     , inputOverlay
@@ -30,6 +31,7 @@ module Drawing exposing
 import CssPixels exposing (CssPixels)
 import Discord
 import Effect.Browser.Dom as Dom
+import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -50,6 +52,7 @@ import Ui.Font
 type AnchorType
     = ProfileImageAnchor
     | TimestampAnchor
+    | ImageAttachmentAnchor (Id FileId)
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
@@ -354,6 +357,13 @@ timestampOverlays getColor drawing =
     List.map
         (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
         (strokesFor TimestampAnchor drawing)
+
+
+imageAttachmentOverlays : Id FileId -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
+imageAttachmentOverlays fileId getColor drawing =
+    List.map
+        (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
+        (strokesFor (ImageAttachmentAnchor fileId) drawing)
 
 
 strokeSvg : String -> Nonempty ( Float, Float ) -> Html msg
