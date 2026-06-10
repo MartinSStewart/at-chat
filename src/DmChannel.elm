@@ -19,10 +19,12 @@ module DmChannel exposing
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
+    , updateArray
     , userIdsFromChannelId
     )
 
 import Array exposing (Array)
+import Array.Extra
 import Discord
 import Go
 import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
@@ -183,6 +185,11 @@ getArray id array =
 setArray : Id messageId -> a -> Array a -> Array a
 setArray id message array =
     Array.set (Id.toInt id) message array
+
+
+updateArray : Id messageId -> (a -> a) -> Array a -> Array a
+updateArray id message array =
+    Array.Extra.update (Id.toInt id) message array
 
 
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId

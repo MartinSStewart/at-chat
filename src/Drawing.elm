@@ -104,7 +104,7 @@ type Model
 
 
 type alias SelectedAnchorData =
-    { guildOrDmId : GuildOrDmId
+    { guildOrDmId : AnyGuildOrDmId
     , threadRoute : ThreadRouteWithMessage
     , anchorType : AnchorType
     , -- Position of the anchor element in viewport coordinates, used to convert
@@ -125,7 +125,7 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : GuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> SelectedAnchorData
+initialAnchorSelection : AnyGuildOrDmId -> ThreadRouteWithMessage -> AnchorType -> SelectedAnchorData
 initialAnchorSelection guildOrDmId threadRoute anchorType =
     { guildOrDmId = guildOrDmId
     , threadRoute = threadRoute

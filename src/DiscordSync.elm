@@ -1038,10 +1038,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 let
                                     message : Message messageId (Discord.Id Discord.UserId)
                                     message =
-                                        UserJoinedMessage
-                                            discordMessage.timestamp
-                                            discordMessage.author.id
-                                            SeqDict.empty
+                                        Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                     Ok ( _, channel4 ) ->

@@ -2892,7 +2892,7 @@ changeUpdate localMsg local =
                     goChangeUpdate local.localUser.session.userId otherUserId goChange local
 
                 Local_Drawing guildOrDmId threadRoute drawingChange ->
-                    LocalState.drawingHandleChange guildOrDmId threadRoute changedBy drawingChange local
+                    LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
 
         ServerChange serverChange ->
             case serverChange of

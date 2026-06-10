@@ -70,7 +70,9 @@ module LocalState exposing
     , discordGuildOrDmIdToMessage
     , discordGuildOrDmIdToMessages
     , discordTopicToDescription
-    , drawingHandleChange
+    , drawingHandleChangeFrontend
+    , drawingHandleChangeHelperBackend
+    , drawingHandleChangeNoThreadBackend
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -400,17 +402,17 @@ messageToString allUsers3 message =
         UserTextMessage a ->
             RichText.toString False allUsers3 a.content
 
-        UserJoinedMessage _ userId _ ->
+        UserJoinedMessage _ userId _ _ ->
             User.toString userId allUsers3
                 ++ " joined!"
 
         DeletedMessage _ ->
             messageDeleted
 
-        CallStarted _ endedAt _ _ ->
+        CallStarted _ endedAt _ _ _ ->
             callStartedText endedAt
 
-        GoMatchStarted _ _ _ ->
+        GoMatchStarted _ _ _ _ ->
             goMatchStartedText
 
 
@@ -872,16 +874,16 @@ createMessageBackend message channel =
                 UserTextMessage { createdBy } ->
                     SeqDict.remove createdBy channel.lastTypedAt
 
-                UserJoinedMessage _ _ _ ->
+                UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted _ _ _ _ ->
+                CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted _ _ _ ->
+                GoMatchStarted _ _ _ _ ->
                     channel.lastTypedAt
       }
     )
@@ -941,16 +943,16 @@ createDiscordDmChannelMessageBackend messageId message channel =
                     )
                         |> Ok
 
-                UserJoinedMessage _ _ _ ->
+                UserJoinedMessage _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
                 DeletedMessage _ ->
                     Ok ( messageId2, channel2 )
 
-                CallStarted _ _ _ _ ->
+                CallStarted _ _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
-                GoMatchStarted _ _ _ ->
+                GoMatchStarted _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -989,16 +991,16 @@ createDiscordMessageBackend messageId message channel =
                     UserTextMessage { createdBy } ->
                         SeqDict.remove createdBy channel.lastTypedAt
 
-                    UserJoinedMessage _ _ _ ->
+                    UserJoinedMessage _ _ _ _ ->
                         channel.lastTypedAt
 
                     DeletedMessage _ ->
                         channel.lastTypedAt
 
-                    CallStarted _ _ _ _ ->
+                    CallStarted _ _ _ _ _ ->
                         channel.lastTypedAt
 
-                    GoMatchStarted _ _ _ ->
+                    GoMatchStarted _ _ _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1079,16 +1081,16 @@ createMessageFrontend message channel =
                 UserTextMessage { createdBy } ->
                     SeqDict.remove createdBy channel.lastTypedAt
 
-                UserJoinedMessage _ _ _ ->
+                UserJoinedMessage _ _ _ _ ->
                     channel.lastTypedAt
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted _ _ _ _ ->
+                CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted _ _ _ ->
+                GoMatchStarted _ _ _ _ ->
                     channel.lastTypedAt
     }
 
@@ -1514,7 +1516,7 @@ addMemberBackend time userId guild =
                     SeqDict.updateIfExists
                         (announcementChannel guild)
                         (\channel ->
-                            createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty) channel
+                            createChannelMessageBackend (Message.userJoined time userId) channel
                                 |> Tuple.second
                         )
                         guild.channels
@@ -1534,7 +1536,7 @@ addMemberFrontend time userId guild =
                 , channels =
                     SeqDict.updateIfExists
                         (announcementChannel guild)
-                        (createChannelMessageFrontend (UserJoinedMessage time userId SeqDict.empty))
+                        (createChannelMessageFrontend (Message.userJoined time userId))
                         guild.channels
             }
                 |> Ok
@@ -2246,16 +2248,16 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (UserTextMessage data) ->
                                     [ data.createdBy ]
 
-                                Just (UserJoinedMessage _ userJoined _) ->
+                                Just (UserJoinedMessage _ userJoined _ _) ->
                                     [ userJoined ]
 
                                 Just (DeletedMessage _) ->
                                     []
 
-                                Just (CallStarted _ _ startedBy _) ->
+                                Just (CallStarted _ _ startedBy _ _) ->
                                     [ startedBy ]
 
-                                Just (GoMatchStarted _ startedBy _) ->
+                                Just (GoMatchStarted _ startedBy _ _) ->
                                     [ startedBy ]
 
                                 Nothing ->
@@ -2304,16 +2306,16 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 UserTextMessage data ->
                                     [ data.createdBy ]
 
-                                UserJoinedMessage _ userJoined _ ->
+                                UserJoinedMessage _ userJoined _ _ ->
                                     [ userJoined ]
 
                                 DeletedMessage _ ->
                                     []
 
-                                CallStarted _ _ startedBy _ ->
+                                CallStarted _ _ startedBy _ _ ->
                                     [ startedBy ]
 
-                                GoMatchStarted _ startedBy _ ->
+                                GoMatchStarted _ startedBy _ _ ->
                                     [ startedBy ]
 
                         _ ->
@@ -2336,16 +2338,16 @@ repliedToUserId maybeRepliedTo channel =
                         UserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
-                        UserJoinedMessage _ joinedUser _ ->
+                        UserJoinedMessage _ joinedUser _ _ ->
                             Just joinedUser
 
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted _ _ startedBy _ ->
+                        CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GoMatchStarted _ startedBy _ ->
+                        GoMatchStarted _ startedBy _ _ ->
                             Just startedBy
 
                 Nothing ->
@@ -2365,16 +2367,16 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         UserTextMessage repliedToData ->
                             Just repliedToData.createdBy
 
-                        UserJoinedMessage _ joinedUser _ ->
+                        UserJoinedMessage _ joinedUser _ _ ->
                             Just joinedUser
 
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted _ _ startedBy _ ->
+                        CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GoMatchStarted _ startedBy _ ->
+                        GoMatchStarted _ startedBy _ _ ->
                             Just startedBy
 
                 _ ->
@@ -2685,16 +2687,16 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                                 }
                                                     |> UserTextMessage_NoReply
 
-                                            UserJoinedMessage time userId reactions ->
+                                            UserJoinedMessage time userId reactions _ ->
                                                 UserJoinedMessage_NoReply time userId reactions
 
                                             DeletedMessage time ->
                                                 DeletedMessage_NoReply time
 
-                                            CallStarted time _ startedBy reactions ->
+                                            CallStarted time _ startedBy reactions _ ->
                                                 CallStarted_NoReply time startedBy reactions
 
-                                            GoMatchStarted time _ reactions ->
+                                            GoMatchStarted time _ reactions _ ->
                                                 GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
@@ -2721,16 +2723,16 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             }
                                                 |> UserTextMessage_NoReply
 
-                                        UserJoinedMessage time userId reactions ->
+                                        UserJoinedMessage time userId reactions _ ->
                                             UserJoinedMessage_NoReply time userId reactions
 
                                         DeletedMessage time ->
                                             DeletedMessage_NoReply time
 
-                                        CallStarted time _ startedBy reactions ->
+                                        CallStarted time _ startedBy reactions _ ->
                                             CallStarted_NoReply time startedBy reactions
 
-                                        GoMatchStarted time _ reactions ->
+                                        GoMatchStarted time _ reactions _ ->
                                             GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
@@ -2780,16 +2782,16 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                     }
                                         |> UserTextMessage_NoReply
 
-                                UserJoinedMessage time userId reactions ->
+                                UserJoinedMessage time userId reactions _ ->
                                     UserJoinedMessage_NoReply time userId reactions
 
                                 DeletedMessage time ->
                                     DeletedMessage_NoReply time
 
-                                CallStarted time _ startedBy reactions ->
+                                CallStarted time _ startedBy reactions _ ->
                                     CallStarted_NoReply time startedBy reactions
 
-                                GoMatchStarted time _ reactions ->
+                                GoMatchStarted time _ reactions _ ->
                                     GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply
@@ -2898,14 +2900,14 @@ discordGuildAvailableStickersAndCustomEmojis localUser guild =
     )
 
 
-drawingHandleChange :
+drawingHandleChangeFrontend :
     AnyGuildOrDmId
     -> ThreadRouteWithMessage
     -> Id UserId
     -> Drawing.LocalChange
     -> LocalState
     -> LocalState
-drawingHandleChange guildOrDmId threadRoute changedBy change local =
+drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
@@ -2914,15 +2916,146 @@ drawingHandleChange guildOrDmId threadRoute changedBy change local =
                         guildId
                         (updateChannel
                             (\channel ->
-                                channel
+                                case threadRoute of
+                                    NoThreadWithMessage messageId ->
+                                        drawingHandleChangeNoThreadFrontend changedBy change messageId channel
+
+                                    ViewThreadWithMessage threadId messageId ->
+                                        { channel
+                                            | threads =
+                                                SeqDict.updateIfExists
+                                                    threadId
+                                                    (drawingHandleChangeNoThreadFrontend changedBy change messageId)
+                                                    channel.threads
+                                        }
                             )
                             channelId
                         )
                         local.guilds
             }
 
-        DiscordGuildOrDmId discordGuildOrDmId ->
-            Debug.todo ""
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            { local
+                | dmChannels =
+                    SeqDict.updateIfExists
+                        otherUserId
+                        (drawingHandleChangeHelperFrontend changedBy change threadRoute)
+                        local.dmChannels
+            }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (updateChannel
+                            (drawingHandleChangeHelperFrontend currentUserId change threadRoute)
+                            channelId
+                        )
+                        local.discordGuilds
+            }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            { local
+                | discordDmChannels =
+                    SeqDict.updateIfExists
+                        data.channelId
+                        (\channel ->
+                            case threadRoute of
+                                NoThreadWithMessage messageId ->
+                                    drawingHandleChangeNoThreadFrontend data.currentUserId change messageId channel
+
+                                ViewThreadWithMessage _ _ ->
+                                    channel
+                        )
+                        local.discordDmChannels
+            }
+
+
+drawingHandleChangeHelperFrontend :
+    userId
+    -> Drawing.LocalChange
+    -> ThreadRouteWithMessage
+    -> { b | messages : Array (MessageState ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> { b | messages : Array (MessageState ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+drawingHandleChangeHelperFrontend changeBy change threadRoute channel =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            drawingHandleChangeNoThreadFrontend changeBy change messageId channel
+
+        ViewThreadWithMessage threadId messageId ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadId
+                        (drawingHandleChangeNoThreadFrontend changeBy change messageId)
+                        channel.threads
+            }
+
+
+drawingHandleChangeNoThreadFrontend :
+    userId
+    -> Drawing.LocalChange
+    -> Id messageId
+    -> { b | messages : Array (MessageState messageId userId) }
+    -> { b | messages : Array (MessageState messageId userId) }
+drawingHandleChangeNoThreadFrontend changedBy change messageId channel =
+    { channel
+        | messages =
+            DmChannel.updateArray
+                messageId
+                (\message ->
+                    case message of
+                        MessageLoaded message2 ->
+                            Message.handleDrawingChange changedBy change message2
+                                |> MessageLoaded
+
+                        MessageUnloaded ->
+                            message
+                )
+                channel.messages
+    }
+
+
+drawingHandleChangeHelperBackend :
+    userId
+    -> Drawing.LocalChange
+    -> ThreadRouteWithMessage
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
+drawingHandleChangeHelperBackend changeBy change threadRoute channel =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            drawingHandleChangeNoThreadBackend changeBy change messageId channel
+
+        ViewThreadWithMessage threadId messageId ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadId
+                        (drawingHandleChangeNoThreadBackend changeBy change messageId)
+                        channel.threads
+            }
+
+
+drawingHandleChangeNoThreadBackend :
+    userId
+    -> Drawing.LocalChange
+    -> Id messageId
+    -> { b | messages : Array (Message messageId userId) }
+    -> { b | messages : Array (Message messageId userId) }
+drawingHandleChangeNoThreadBackend changedBy change messageId channel =
+    { channel
+        | messages = DmChannel.updateArray messageId (Message.handleDrawingChange changedBy change) channel.messages
+    }
 
 
 arrayFindIndexRight : (a -> Bool) -> Array a -> Maybe ( Int, a )
@@ -2952,7 +3085,7 @@ markCallMessageAsEndedBackend time channel =
             arrayFindIndexRight
                 (\message ->
                     case message of
-                        CallStarted _ _ _ _ ->
+                        CallStarted _ _ _ _ _ ->
                             True
 
                         _ ->
@@ -2963,10 +3096,10 @@ markCallMessageAsEndedBackend time channel =
     case lastCallIndex of
         Just ( lastCallIndex2, message ) ->
             case message of
-                CallStarted a Nothing b c ->
+                CallStarted a Nothing b c d ->
                     { channel
                         | messages =
-                            Array.set lastCallIndex2 (CallStarted a (Just time) b c) channel.messages
+                            Array.set lastCallIndex2 (CallStarted a (Just time) b c d) channel.messages
                     }
 
                 _ ->
@@ -2984,7 +3117,7 @@ markCallMessageAsEndedFrontend time channel =
             arrayFindIndexRight
                 (\message ->
                     case message of
-                        MessageLoaded (CallStarted _ _ _ _) ->
+                        MessageLoaded (CallStarted _ _ _ _ _) ->
                             True
 
                         _ ->
@@ -2995,10 +3128,10 @@ markCallMessageAsEndedFrontend time channel =
     case lastCallIndex of
         Just ( lastCallIndex2, message ) ->
             case message of
-                MessageLoaded (CallStarted a Nothing b c) ->
+                MessageLoaded (CallStarted a Nothing b c d) ->
                     { channel
                         | messages =
-                            Array.set lastCallIndex2 (MessageLoaded (CallStarted a (Just time) b c)) channel.messages
+                            Array.set lastCallIndex2 (MessageLoaded (CallStarted a (Just time) b c d)) channel.messages
                     }
 
                 _ ->

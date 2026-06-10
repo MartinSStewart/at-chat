@@ -8,6 +8,7 @@ module ChannelHeader exposing
     , thread
     )
 
+import Array exposing (Array)
 import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
@@ -18,8 +19,20 @@ import Go
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id
+    exposing
+        ( AnyGuildOrDmId(..)
+        , ChannelMessageId
+        , DiscordGuildOrDmId(..)
+        , DiscordGuildOrDmId_DmData
+        , GuildOrDmId(..)
+        , Id
+        , ThreadRoute(..)
+        , ThreadRouteWithMessage(..)
+        , UserId
+        )
 import LocalState exposing (LocalState)
+import Message exposing (MessageState(..))
 import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
@@ -30,6 +43,7 @@ import SeqDictHelper
 import SeqSet
 import Svg
 import Svg.Attributes
+import Thread
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
@@ -719,28 +733,86 @@ tabBodyView local loggedIn model =
 -}
 drawingTabView : Drawing.Model -> LocalState -> Element FrontendMsg
 drawingTabView model local =
-    let
-        userId : Id UserId
-        userId =
-            local.localUser.session.userId
-    in
     Ui.row
         [ Ui.paddingXY 16 12
         , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 16
         ]
-        [ Ui.text
-            (case model of
-                NoSelectedAnchor ->
-                    "Click on a profile image, timestamp, or attachment to anchor your drawing to it."
+        (case model of
+            NoSelectedAnchor ->
+                [ Ui.text "Click on a profile image, timestamp, or attachment to anchor your drawing to it." ]
 
-                SelectedAnchor _ ->
-                    "Draw with the mouse. Press Escape or the pencil tab when you're done."
-            )
-        , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" (Drawing.canUndo userId drawing)
-        , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" (Drawing.canRedo userId drawing)
-        ]
+            SelectedAnchor selected ->
+                let
+                    noThreadHelper : userId -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
+                    noThreadHelper userId messageId channel2 =
+                        case DmChannel.getArray messageId channel2.messages of
+                            Just (MessageLoaded message) ->
+                                case Message.drawing message of
+                                    Just drawing ->
+                                        ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                                    Nothing ->
+                                        ( False, False )
+
+                            _ ->
+                                ( False, False )
+
+                    helper userId channel2 =
+                        case selected.threadRoute of
+                            NoThreadWithMessage messageId ->
+                                noThreadHelper userId messageId channel2
+
+                            ViewThreadWithMessage threadId messageId ->
+                                SeqDict.get threadId channel2.threads
+                                    |> Maybe.withDefault Thread.frontendInit
+                                    |> noThreadHelper userId messageId
+
+                    ( canUndo, canRedo ) =
+                        case selected.guildOrDmId of
+                            GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                                case LocalState.getGuildAndChannel guildId channelId local of
+                                    Just ( _, channel2 ) ->
+                                        helper local.localUser.session.userId channel2
+
+                                    Nothing ->
+                                        ( False, False )
+
+                            GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                                case SeqDict.get otherUserId local.dmChannels of
+                                    Just channel2 ->
+                                        helper local.localUser.session.userId channel2
+
+                                    Nothing ->
+                                        ( False, False )
+
+                            DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+                                case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                    Just ( _, channel2 ) ->
+                                        helper currentUserId channel2
+
+                                    Nothing ->
+                                        ( False, False )
+
+                            DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                                case SeqDict.get data.channelId local.discordDmChannels of
+                                    Just channel2 ->
+                                        case selected.threadRoute of
+                                            NoThreadWithMessage messageId ->
+                                                noThreadHelper data.currentUserId messageId channel2
+
+                                            ViewThreadWithMessage threadId messageId ->
+                                                ( False, False )
+
+                                    Nothing ->
+                                        ( False, False )
+                in
+                [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
+                , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
+                , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
+                ]
+        )
         |> Ui.map DrawingMsg
 
 

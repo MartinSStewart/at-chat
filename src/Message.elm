@@ -9,9 +9,12 @@ module Message exposing
     , addEmbed
     , addReactionEmoji
     , createdAt
+    , drawing
     , editUserTextMessage
+    , handleDrawingChange
     , reactionEmojis
     , removeReactionEmoji
+    , userJoined
     , userTextMessageBackend
     , userTextMessageFrontend
     , userTextMessageNoEmbeds
@@ -39,10 +42,10 @@ import Url exposing (Url)
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
-    | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
     | DeletedMessage Time.Posix
-    | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
-    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
+    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
 
 
 maxEmbeds : number
@@ -224,16 +227,16 @@ addEmbed ( url, result ) message =
                                 message2.embeds
                 }
 
-        UserJoinedMessage _ _ _ ->
+        UserJoinedMessage _ _ _ _ ->
             message
 
         DeletedMessage _ ->
             message
 
-        CallStarted _ _ _ _ ->
+        CallStarted _ _ _ _ _ ->
             message
 
-        GoMatchStarted _ _ _ ->
+        GoMatchStarted _ _ _ _ ->
             message
 
 
@@ -278,24 +281,48 @@ type alias UserTextMessageDataNoReply userId =
     , drawings : Drawing.ChannelDrawing userId
     }
 
+
+userJoined : Time.Posix -> userId -> Message messageId userId
+userJoined time userId =
+    UserJoinedMessage time userId SeqDict.empty Drawing.emptyChannelDrawing
+
+
+handleDrawingChange : userId -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
 handleDrawingChange changeBy change message =
     case message of
         UserTextMessage data ->
-            Drawing.handleLocalChange changeBy change data.drawings
+            UserTextMessage { data | drawings = Drawing.handleLocalChange changeBy change data.drawings }
 
-        UserJoinedMessage posix userId seqDict ->
+        UserJoinedMessage time userId reactions drawings ->
+            UserJoinedMessage time userId reactions drawings
+
+        DeletedMessage _ ->
+            message
+
+        CallStarted time endedAt userId reactions drawings ->
+            CallStarted time endedAt userId reactions (Drawing.handleLocalChange changeBy change drawings)
+
+        GoMatchStarted time userId reactions drawings ->
+            GoMatchStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings)
 
 
-        DeletedMessage posix ->
+drawing : Message messageId userId -> Maybe (Drawing.ChannelDrawing userId)
+drawing message =
+    case message of
+        UserTextMessage data ->
+            Just data.drawings
 
+        UserJoinedMessage time _ _ drawings ->
+            Just drawings
 
-        CallStarted posix userId seqDict ->
+        DeletedMessage time ->
+            Nothing
 
+        CallStarted time _ _ _ drawings ->
+            Just drawings
 
-        CallEnded posix seqDict ->
-
-
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted time _ _ drawings ->
+            Just drawings
 
 
 createdAt : Message messageId userId -> Time.Posix
@@ -304,16 +331,16 @@ createdAt message =
         UserTextMessage data ->
             data.createdAt
 
-        UserJoinedMessage time _ _ ->
+        UserJoinedMessage time _ _ _ ->
             time
 
         DeletedMessage time ->
             time
 
-        CallStarted time _ _ _ ->
+        CallStarted time _ _ _ _ ->
             time
 
-        GoMatchStarted time _ _ ->
+        GoMatchStarted time _ _ _ ->
             time
 
 
@@ -323,17 +350,17 @@ addReactionEmoji userId emoji message =
         UserTextMessage message2 ->
             { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
 
-        UserJoinedMessage time userJoined reactions ->
-            UserJoinedMessage time userJoined (addReactionEmojiHelper userId emoji reactions)
+        UserJoinedMessage time userJoinedId reactions drawings ->
+            UserJoinedMessage time userJoinedId (addReactionEmojiHelper userId emoji reactions) drawings
 
         DeletedMessage _ ->
             message
 
-        CallStarted time endedAt startedBy reactions ->
-            CallStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions)
+        CallStarted time endedAt startedBy reactions drawings ->
+            CallStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions) drawings
 
-        GoMatchStarted time startedBy reactions ->
-            GoMatchStarted time startedBy (addReactionEmojiHelper userId emoji reactions)
+        GoMatchStarted time startedBy reactions drawings ->
+            GoMatchStarted time startedBy (addReactionEmojiHelper userId emoji reactions) drawings
 
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -347,17 +374,17 @@ removeReactionEmoji userId emoji message =
         UserTextMessage message2 ->
             { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
 
-        UserJoinedMessage time userJoined reactions ->
-            UserJoinedMessage time userJoined (removeReactionEmojiHelper userId emoji reactions)
+        UserJoinedMessage time userJoinedId reactions drawings ->
+            UserJoinedMessage time userJoinedId (removeReactionEmojiHelper userId emoji reactions) drawings
 
         DeletedMessage _ ->
             message
 
-        CallStarted time endedAt startedBy reactions ->
-            CallStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions)
+        CallStarted time endedAt startedBy reactions drawings ->
+            CallStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
 
-        GoMatchStarted time startedBy reactions ->
-            GoMatchStarted time startedBy (removeReactionEmojiHelper userId emoji reactions)
+        GoMatchStarted time startedBy reactions drawings ->
+            GoMatchStarted time startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
 
 
 removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -383,14 +410,14 @@ reactionEmojis message =
         UserTextMessage data ->
             data.reactions
 
-        UserJoinedMessage _ _ reactions ->
+        UserJoinedMessage _ _ reactions _ ->
             reactions
 
         DeletedMessage _ ->
             SeqDict.empty
 
-        CallStarted _ _ _ reactions ->
+        CallStarted _ _ _ reactions _ ->
             reactions
 
-        GoMatchStarted _ _ reactions ->
+        GoMatchStarted _ _ reactions _ ->
             reactions
