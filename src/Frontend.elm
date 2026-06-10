@@ -2613,6 +2613,12 @@ updateLoaded msg model =
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
+                MessageView.MessageView_PressedUserIcon elementPosition ->
+                    Debug.todo ""
+
+                MessageView.MessageView_PressedTimestamp elementPosition ->
+                    Debug.todo ""
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -4213,18 +4219,7 @@ updateLoaded msg model =
                 model
 
         DrawingMsg drawingMsg ->
-            updateDrawing
-                drawingMsg
-                (case drawingMsg of
-                    Drawing.PickedMessageAnchor (Just _) ->
-                        -- Clicking an attached image normally opens the image viewer.
-                        -- When the click was used for picking a drawing anchor, close
-                        -- the viewer again (its message is handled before this one).
-                        { model | imageViewer = Nothing }
-
-                    _ ->
-                        model
-                )
+            updateDrawing drawingMsg model
 
 
 updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4265,27 +4260,6 @@ updateDrawing drawingMsg model =
 
                         Err _ ->
                             ( loggedIn, Command.none )
-
-                Drawing.PickedMessageAnchor guildOrDmId threadRoute maybeAnchor ->
-                    case maybeAnchor of
-                        Just { anchor, messageId } ->
-                            ( { loggedIn
-                                | drawingMode =
-                                    Drawing.SelectedAnchor
-                                        { guildOrDmId = guildOrDmId
-                                        , threadRoute = Id.threadRouteWithMessage messageId threadRoute
-                                        , anchorType = AnchorType
-                                        , position = Nothing
-                                        , stroke = Nothing
-                                        }
-
-                                --{ drawingMode | anchor = Just (Drawing.initialAnchorSelection anchor) }
-                              }
-                            , measureDrawingAnchor anchor
-                            )
-
-                        Nothing ->
-                            ( model, Command.none )
 
                 Drawing.MouseDown x y ->
                     case loggedIn.drawingMode of

@@ -43,6 +43,8 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGoMatchStartedCard
+    | MessageView_PressedUserIcon (Coord CssPixels)
+    | MessageView_PressedTimestamp (Coord CssPixels)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -103,6 +105,12 @@ isPressMsg msg =
             True
 
         MessageViewMsg_PressedGoMatchStartedCard ->
+            True
+
+        MessageView_PressedUserIcon _ ->
+            True
+
+        MessageView_PressedTimestamp _ ->
             True
 
 

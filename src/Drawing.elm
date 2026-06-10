@@ -98,8 +98,7 @@ type LocalChange
 
 
 type Msg
-    = PickedMessageAnchor AnyGuildOrDmId ThreadRouteWithMessage (Maybe AnchorType)
-    | GotAnchorElement AnyGuildOrDmId ThreadRouteWithMessage AnchorType (Result Dom.Error { anchor : Dom.Element, container : Dom.Element })
+    = GotAnchorElement AnyGuildOrDmId ThreadRouteWithMessage AnchorType (Result Dom.Error { anchor : Dom.Element, container : Dom.Element })
     | MouseDown Float Float
     | MouseMoved Float Float
     | MouseUp
