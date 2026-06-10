@@ -18,6 +18,7 @@ module BackendExtra exposing
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
+    , handleDrawingChange
     , invalidChangeResponse
     , loginEmailContent
     , loginEmailSubject
@@ -1292,47 +1293,8 @@ handleDrawingChange :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingChange model =
-    --case guildOrDmId of
-    --        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-    --
-    --
-    --        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-    --            { local
-    --                | dmChannels =
-    --                    SeqDict.updateIfExists
-    --                        otherUserId
-    --                        (drawingHandleChangeHelperBackend changedBy change threadRoute)
-    --                        local.dmChannels
-    --            }
-    --
-    --        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-    --            { local
-    --                | discordGuilds =
-    --                    SeqDict.updateIfExists
-    --                        guildId
-    --                        (updateChannel
-    --                            (drawingHandleChangeHelperBackend currentUserId change threadRoute)
-    --                            channelId
-    --                        )
-    --                        local.discordGuilds
-    --            }
-    --
-    --        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-    --            { local
-    --                | discordDmChannels =
-    --                    SeqDict.updateIfExists
-    --                        data.channelId
-    --                        (\channel ->
-    --                            case threadRoute of
-    --                                NoThreadWithMessage messageId ->
-    --                                    drawingHandleChangeNoThreadBackend data.currentUserId change messageId channel
-    --
-    --                                ViewThreadWithMessage _ _ ->
-    --                                    channel
-    --                        )
-    --                        local.discordDmChannels
-    --            }
     let
+        localMsg : LocalChange
         localMsg =
             Local_Drawing guildOrDmId threadRoute drawingChange
     in
@@ -1353,9 +1315,15 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                             | channels =
                                                 SeqDict.insert
                                                     channelId
-                                                    (LocalState.drawingHandleChangeHelperBackend userId drawingChange threadRoute)
+                                                    (LocalState.drawingHandleChangeHelperBackend
+                                                        userId
+                                                        drawingChange
+                                                        threadRoute
+                                                        channel
+                                                    )
                                                     guild.channels
                                         }
+                                        model.guilds
                               }
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
@@ -1377,14 +1345,17 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                 model
                 sessionId
                 { otherUserId = otherUserId }
-                (\session _ _ dmChannelId _ ->
+                (\session _ _ dmChannelId dmChannel ->
                     ( { model
-                        | drawings =
-                            Drawing.applyChange
-                                session.userId
-                                (Drawing.BackendDmChannel dmChannelId)
-                                drawingChange
-                                model.drawings
+                        | dmChannels =
+                            SeqDict.insert dmChannelId
+                                (LocalState.drawingHandleChangeHelperBackend
+                                    session.userId
+                                    drawingChange
+                                    threadRoute
+                                    dmChannel
+                                )
+                                model.dmChannels
                       }
                     , Command.batch
                         [ LocalChangeResponse changeId localMsg
@@ -1411,21 +1382,39 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                 guildId
                 currentDiscordUserId
                 (\session _ _ guild ->
-                    if SeqDict.member channelId guild.channels then
-                        ( LocalState.drawingHandleChangeBackend
-                        , Command.batch
-                            [ LocalChangeResponse changeId localMsg
-                                |> Lamdera.sendToFrontend clientId
-                            , Broadcast.toDiscordGuildExcludingOne
-                                clientId
-                                guildId
-                                (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
-                                model
-                            ]
-                        )
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    (LocalState.drawingHandleChangeHelperBackend
+                                                        currentDiscordUserId
+                                                        drawingChange
+                                                        threadRoute
+                                                        channel
+                                                    )
+                                                    guild.channels
+                                        }
+                                        model.discordGuilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toDiscordGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_Drawing session.userId guildOrDmId drawingChange |> ServerChange)
+                                    model
+                                ]
+                            )
 
-                    else
-                        ( model, invalidChangeResponse changeId clientId )
+                        Nothing ->
+                            ( model, invalidChangeResponse changeId clientId )
                 )
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
@@ -1433,14 +1422,23 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                 model
                 sessionId
                 data
-                (\session _ _ _ ->
+                (\session _ _ dmChannel ->
                     ( { model
-                        | drawings =
-                            Drawing.applyChange
-                                session.userId
-                                (Drawing.BackendDiscordDmChannel data.channelId)
-                                drawingChange
-                                model.drawings
+                        | discordDmChannels =
+                            SeqDict.insert
+                                data.channelId
+                                (case threadRoute of
+                                    NoThreadWithMessage messageId ->
+                                        LocalState.drawingHandleChangeNoThreadBackend
+                                            data.currentUserId
+                                            drawingChange
+                                            messageId
+                                            dmChannel
+
+                                    ViewThreadWithMessage _ _ ->
+                                        dmChannel
+                                )
+                                model.discordDmChannels
                       }
                     , Command.batch
                         [ LocalChangeResponse changeId localMsg
