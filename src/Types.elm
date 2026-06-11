@@ -706,10 +706,7 @@ type BackendMsg
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
     | GotCloudflareUsage Time.Posix (Result Http.Error Int)
     | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
-    | -- This is here for end-to-end test purposes. File uploads bypass the
-      -- ToBackend msg type in production (they use lamdera RPC) so tests need
-      -- another way of letting the backend know about an uploaded file.
-      RegisteredFileForEndToEndTest FileHash BackendFileData
+    | GotRustServerFileUpload FileHash Int (Maybe (Coord CssPixels))
 
 
 type MessageFromGuildOrDm

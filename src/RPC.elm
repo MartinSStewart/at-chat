@@ -10,11 +10,12 @@ import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SeqDict
 import SessionIdHash
+import Task
 import Toop exposing (T4(..))
-import Types exposing (BackendModel, BackendMsg)
+import Types exposing (BackendModel, BackendMsg(..))
 
 
-checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg )
+checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
 checkFileUpload _ model _ text =
     case String.split "," text of
         [ fileHash, fileSize, sessionId, width, height ] ->
@@ -31,21 +32,20 @@ checkFileUpload _ model _ text =
             of
                 T4 True (Just fileSize2) (Just width2) (Just height2) ->
                     ( Ok "valid"
-                    , { model
-                        | files =
-                            SeqDict.insert
+                    , model
+                    , Task.perform
+                        (\() ->
+                            GotRustServerFileUpload
                                 (FileStatus.fileHash fileHash)
-                                { fileSize = fileSize2
-                                , imageSize =
-                                    if width2 > 0 then
-                                        Just (Coord.xy width2 height2)
+                                fileSize2
+                                (if width2 > 0 then
+                                    Just (Coord.xy width2 height2)
 
-                                    else
-                                        Nothing
-                                }
-                                model.files
-                      }
-                    , Cmd.none
+                                 else
+                                    Nothing
+                                )
+                        )
+                        (Task.succeed ())
                     )
 
                 _ ->

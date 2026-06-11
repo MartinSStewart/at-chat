@@ -573,9 +573,6 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
-        RegisteredFileForEndToEndTest fileHash fileData ->
-            ( { model | files = SeqDict.insert fileHash fileData model.files }, Command.none )
-
         DiscordTypingIndicatorSent ->
             ( model, Command.none )
 
@@ -1853,6 +1850,17 @@ update msg model =
 
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToRegenerateServerSecret error) model responseCmd
+
+        GotRustServerFileUpload fileHash fileSize2 maybeImageSize ->
+            ( { model
+                | files =
+                    SeqDict.insert
+                        fileHash
+                        { fileSize = fileSize2, imageSize = maybeImageSize }
+                        model.files
+              }
+            , Command.none
+            )
 
 
 gotDiscordStickers :
