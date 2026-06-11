@@ -1934,7 +1934,7 @@ conversationViewHelper :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
-            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
+            , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
         }
     -> LoggedIn2
     -> LocalState
@@ -2224,6 +2224,7 @@ maybeRepliedTo message channel =
             Nothing
 
 
+drawingIsSelectingAnchor : LoggedIn2 -> LoadedFrontend -> Bool
 drawingIsSelectingAnchor loggedIn model =
     loggedIn.drawingMode == Drawing.NoSelectedAnchor && Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw
 
@@ -2239,7 +2240,7 @@ discordConversationViewHelper :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
-            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
+            , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
         }
     -> LoggedIn2
     -> LocalState
@@ -2497,7 +2498,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 newMessageLine :
     (userId -> String)
     -> Bool
-    -> SeqDict Date (Drawing.Drawing userId)
+    -> SeqDict Date (Drawing userId)
     -> Maybe Date
     -> Date
     -> Id messageId
@@ -3005,7 +3006,7 @@ unloadedMessageView index =
         (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
 
 
-dateDivider : (userId -> String) -> Bool -> SeqDict Date (Drawing.Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
+dateDivider : (userId -> String) -> Bool -> SeqDict Date (Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
 dateDivider userIdToColor isSelectingAnchor dateDividerDrawings laterDate newDate =
     Ui.inFront
         (Ui.column
@@ -3402,7 +3403,7 @@ conversationView :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
-            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
+            , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
         }
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
@@ -3575,7 +3576,7 @@ discordConversationView :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
-            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
+            , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
         }
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)

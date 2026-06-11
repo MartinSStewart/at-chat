@@ -1744,6 +1744,9 @@ discordUserAuth =
     }
 
 
+uploadImageAttachment :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 uploadImageAttachment user =
     T.group
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")

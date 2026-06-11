@@ -8,7 +8,6 @@ import Http
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
-import SeqDict
 import SessionIdHash
 import Task
 import Toop exposing (T4(..))

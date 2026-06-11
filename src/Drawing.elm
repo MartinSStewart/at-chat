@@ -255,7 +255,7 @@ nonemptyTake amount (Nonempty head rest) =
     Nonempty head (List.take (amount - 1) rest)
 
 
-profileImageAnchorId : Id messageId -> Dom.HtmlId
+profileImageAnchorId : Id messageId -> HtmlId
 profileImageAnchorId messageId =
     Dom.id ("drawAnchorProfile_" ++ Id.toString messageId)
 
@@ -363,17 +363,17 @@ strokeSvg color points =
         ]
 
 
-inputOverlayId : Dom.HtmlId
+inputOverlayId : HtmlId
 inputOverlayId =
     Dom.id "drawing_inputOverlay"
 
 
-undoButtonId : Dom.HtmlId
+undoButtonId : HtmlId
 undoButtonId =
     Dom.id "drawing_undo"
 
 
-redoButtonId : Dom.HtmlId
+redoButtonId : HtmlId
 redoButtonId =
     Dom.id "drawing_redo"
 
@@ -479,7 +479,7 @@ floatFieldWithDefault fieldName =
     Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.float, Json.Decode.succeed 0 ]
 
 
-undoRedoButton : Dom.HtmlId -> Msg -> String -> Bool -> Element Msg
+undoRedoButton : HtmlId -> Msg -> String -> Bool -> Element Msg
 undoRedoButton htmlId onPress label isEnabled =
     MyUi.elButton
         htmlId
