@@ -2993,19 +2993,21 @@ dateDivider drawingUserColor dateDividerDrawings laterDate newDate =
             , Ui.move { x = 0, y = -20, z = 0 }
             , Ui.rounded 4
             , Ui.paddingXY 4 0
-            , -- The divider is identified by the date of the day that starts below it
-              Ui.id ("guild_dateDivider_" ++ Date.toIsoString newDate)
-            , Ui.Events.on
-                "click"
-                (Json.Decode.map
-                    (MessageView_PressedDateDivider newDate)
-                    RichText.decodeWithTargetScreenPosition
-                )
             , SeqDict.get newDate dateDividerDrawings
                 |> Maybe.withDefault Drawing.emptyDrawing
                 |> Drawing.dateDividerOverlay drawingUserColor
             ]
-            [ Ui.text (MyUi.datestampDate laterDate)
+            [ Ui.el
+                [ -- The divider is identified by the date of the day that starts below it
+                  Ui.id ("guild_dateDivider_" ++ Date.toIsoString newDate)
+                , Ui.Events.on
+                    "click"
+                    (Json.Decode.map
+                        (MessageView_PressedDateDivider newDate)
+                        RichText.decodeWithTargetScreenPosition
+                    )
+                ]
+                (Ui.text (MyUi.datestampDate laterDate))
             , Ui.text (MyUi.datestampDate newDate)
             ]
         )

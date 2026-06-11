@@ -839,6 +839,7 @@ drawingTabView model local =
         , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 16
+        , Ui.height (Ui.px 80)
         ]
         (case model of
             NoSelectedAnchor ->
