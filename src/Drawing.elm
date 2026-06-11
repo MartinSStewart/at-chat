@@ -1,8 +1,9 @@
 module Drawing exposing
     ( ActiveStroke
     , AnchorType(..)
-    , ChannelDrawing
+    , Drawing
     , LocalChange(..)
+    , MessageAnchor(..)
     , Model(..)
     , Msg(..)
     , SelectedAnchorData
@@ -11,7 +12,7 @@ module Drawing exposing
     , canRedo
     , canUndo
     , discordUserColor
-    , emptyChannelDrawing
+    , emptyDrawing
     , handleLocalChange
     , imageAttachmentOverlays
     , init
@@ -19,23 +20,24 @@ module Drawing exposing
     , inputOverlay
     , inputOverlayId
     , profileImageAnchorId
-    , profileImageOverlay
     , redoButtonId
     , resetAnchor
     , timestampOverlays
     , undoButtonId
     , undoRedoButton
     , userColor
+    , userIconOverlay
     )
 
 import CssPixels exposing (CssPixels)
+import Date exposing (Date)
 import Discord
 import Effect.Browser.Dom as Dom
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId, Id, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, Id, ThreadRoute, ThreadRouteWithMessage, UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -50,24 +52,27 @@ import Ui.Font
 
 
 type AnchorType
-    = ProfileImageAnchor ThreadRouteWithMessage
-    | TimestampAnchor ThreadRouteWithMessage
-    | ImageAttachmentAnchor ThreadRouteWithMessage (Id FileId)
+    = MessageAnchor ThreadRouteWithMessage MessageAnchor
+    | DateDividerAnchor ThreadRoute Date
+
+
+type MessageAnchor
+    = UserIconAnchor
+    | TimestampAnchor
+    | ImageAttachmentAnchor (Id FileId)
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
 -}
 type alias Stroke =
-    { anchor : AnchorType
-    , points : Nonempty ( Float, Float )
+    { points : Nonempty ( Float, Float )
     }
 
 
-type alias ChannelDrawing userId =
+type alias Drawing userId =
     { finished :
         List
             { createdBy : userId
-            , anchor : AnchorType
             , points : Nonempty ( Float, Float )
             }
     , inProgress : SeqDict userId Stroke
@@ -76,13 +81,13 @@ type alias ChannelDrawing userId =
     }
 
 
-emptyChannelDrawing : ChannelDrawing userId
-emptyChannelDrawing =
+emptyDrawing : Drawing userId
+emptyDrawing =
     { finished = [], inProgress = SeqDict.empty, undone = SeqDict.empty }
 
 
 type LocalChange
-    = StartStroke AnchorType ( Float, Float )
+    = StartStroke ( Float, Float )
     | ContinueStroke (Nonempty ( Float, Float ))
     | EndStroke
     | UndoStroke
@@ -150,15 +155,15 @@ resetAnchor _ =
     NoSelectedAnchor
 
 
-handleLocalChange : userId -> LocalChange -> ChannelDrawing userId -> ChannelDrawing userId
+handleLocalChange : userId -> LocalChange -> Drawing userId -> Drawing userId
 handleLocalChange userId change drawing =
     case change of
-        StartStroke anchor point ->
+        StartStroke point ->
             { drawing
                 | inProgress =
                     SeqDict.insert
                         userId
-                        { anchor = anchor, points = Nonempty point [] }
+                        { points = Nonempty point [] }
                         drawing.inProgress
                 , -- Starting a new stroke clears anything that could be redone
                   undone = SeqDict.remove userId drawing.undone
@@ -188,7 +193,7 @@ handleLocalChange userId change drawing =
                     { drawing
                         | inProgress = SeqDict.remove userId drawing.inProgress
                         , finished =
-                            { createdBy = userId, anchor = stroke.anchor, points = stroke.points }
+                            { createdBy = userId, points = stroke.points }
                                 :: drawing.finished
                                 |> List.take maxFinishedStrokes
                     }
@@ -205,7 +210,7 @@ handleLocalChange userId change drawing =
                             SeqDict.update
                                 userId
                                 (\maybe ->
-                                    { anchor = undoneStroke.anchor, points = undoneStroke.points }
+                                    { points = undoneStroke.points }
                                         :: Maybe.withDefault [] maybe
                                         |> Just
                                 )
@@ -220,7 +225,7 @@ handleLocalChange userId change drawing =
                 Just (stroke :: rest) ->
                     { drawing
                         | finished =
-                            { createdBy = userId, anchor = stroke.anchor, points = stroke.points }
+                            { createdBy = userId, points = stroke.points }
                                 :: drawing.finished
                         , undone = SeqDict.insert userId rest drawing.undone
                     }
@@ -229,12 +234,12 @@ handleLocalChange userId change drawing =
                     drawing
 
 
-canUndo : userId -> ChannelDrawing userId -> Bool
+canUndo : userId -> Drawing userId -> Bool
 canUndo userId drawing =
     List.any (\finished -> finished.createdBy == userId) drawing.finished
 
 
-canRedo : userId -> ChannelDrawing userId -> Bool
+canRedo : userId -> Drawing userId -> Bool
 canRedo userId drawing =
     case SeqDict.get userId drawing.undone of
         Just (_ :: _) ->
@@ -301,26 +306,10 @@ discordUserColor userId =
 
 {-| Finished and in-progress strokes that are attached to the given anchor type.
 -}
-strokesFor : AnchorType -> ChannelDrawing userId -> List ( userId, Nonempty ( Float, Float ) )
-strokesFor anchorType drawing =
-    List.filterMap
-        (\finished ->
-            if finished.anchor == anchorType then
-                Just ( finished.createdBy, finished.points )
-
-            else
-                Nothing
-        )
-        drawing.finished
-        ++ List.filterMap
-            (\( createdBy, stroke ) ->
-                if stroke.anchor == anchorType then
-                    Just ( createdBy, stroke.points )
-
-                else
-                    Nothing
-            )
-            (SeqDict.toList drawing.inProgress)
+strokesFor : Drawing userId -> List ( userId, Nonempty ( Float, Float ) )
+strokesFor drawing =
+    List.map (\finished -> ( finished.createdBy, finished.points )) drawing.finished
+        ++ List.map (\( createdBy, stroke ) -> ( createdBy, stroke.points )) (SeqDict.toList drawing.inProgress)
 
 
 {-| Strokes anchored to the profile image of a message, placed in front of it
@@ -328,9 +317,9 @@ so they move together with the profile image. The svg has no size of its own
 (overflow is visible) and ignores pointer events so it never blocks
 interactions with the message below it.
 -}
-profileImageOverlay : ThreadRouteWithMessage -> (userId -> String) -> ChannelDrawing userId -> Ui.Attribute msg
-profileImageOverlay threadRoute getColor drawing =
-    case strokesFor (ProfileImageAnchor threadRoute) drawing of
+userIconOverlay : (userId -> String) -> Drawing userId -> Ui.Attribute msg
+userIconOverlay getColor drawing =
+    case strokesFor drawing of
         [] ->
             Ui.noAttr
 
@@ -350,18 +339,18 @@ profileImageOverlay threadRoute getColor drawing =
 of the timestamp element (which is position:relative) so they move together
 with the timestamp.
 -}
-timestampOverlays : ThreadRouteWithMessage -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
-timestampOverlays threadRoute getColor drawing =
+timestampOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
+timestampOverlays getColor drawing =
     List.map
         (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
-        (strokesFor (TimestampAnchor threadRoute) drawing)
+        (strokesFor drawing)
 
 
-imageAttachmentOverlays : ThreadRouteWithMessage -> Id FileId -> (userId -> String) -> ChannelDrawing userId -> List (Html msg)
-imageAttachmentOverlays threadRoute fileId getColor drawing =
+imageAttachmentOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
+imageAttachmentOverlays getColor drawing =
     List.map
         (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
-        (strokesFor (ImageAttachmentAnchor threadRoute fileId) drawing)
+        (strokesFor drawing)
 
 
 strokeSvg : String -> Nonempty ( Float, Float ) -> Html msg

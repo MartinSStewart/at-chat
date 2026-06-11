@@ -131,6 +131,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
+                        , dateDividerDrawings = SeqDict.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -142,6 +143,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
+                        , dateDividerDrawings = SeqDict.empty
                         }
                       )
                     ]
@@ -4886,7 +4888,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     createdAt
                                                     session.userId
                                                     SeqDict.empty
-                                                    Drawing.emptyChannelDrawing
+                                                    Drawing.emptyDrawing
                                                 )
                                                 dmChannel
                                     in
@@ -5017,8 +5019,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_Drawing guildOrDmId threadRoute drawingChange ->
-                    BackendExtra.handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingChange model
+                Local_Drawing guildOrDmId anchor drawingChange ->
+                    BackendExtra.handleDrawingChange sessionId clientId changeId guildOrDmId anchor drawingChange model
 
         TwoFactorToBackend toBackend2 ->
             BackendExtra.asUser
@@ -5507,7 +5509,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                             Nothing
                                                             session.userId
                                                             SeqDict.empty
-                                                            Drawing.emptyChannelDrawing
+                                                            Drawing.emptyDrawing
                                                         )
                                                         dmChannel
                                                         |> Tuple.second

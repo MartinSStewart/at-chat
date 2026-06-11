@@ -20,17 +20,7 @@ import Go
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id
-    exposing
-        ( AnyGuildOrDmId(..)
-        , ChannelMessageId
-        , DiscordGuildOrDmId(..)
-        , DiscordGuildOrDmId_DmData
-        , GuildOrDmId(..)
-        , Id
-        , ThreadRouteWithMessage(..)
-        , UserId
-        )
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (MessageState(..))
 import MyUi
@@ -742,16 +732,16 @@ tabBodyView local loggedIn model =
 
 
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
-drawingCanUndoOrRedo guildOrDmId anchorType local =
+drawingCanUndoOrRedo guildOrDmId anchor local =
     let
-        noThreadHelper : userId -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
-        noThreadHelper userId messageId channel2 =
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
+        noThreadHelper userId anchor2 messageId channel2 =
             case DmChannel.getArray messageId channel2.messages of
                 Just (MessageLoaded message) ->
                     let
-                        drawing : Drawing.ChannelDrawing userId
+                        drawing : Drawing.Drawing userId
                         drawing =
-                            Message.drawing message
+                            Message.drawing anchor2 message
                     in
                     ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
 
@@ -759,14 +749,39 @@ drawingCanUndoOrRedo guildOrDmId anchorType local =
                     ( False, False )
 
         helper userId channel2 =
-            case threadRoute of
-                NoThreadWithMessage messageId ->
-                    noThreadHelper userId messageId channel2
+            case anchor of
+                Drawing.MessageAnchor threadRoute anchor2 ->
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            noThreadHelper userId anchor2 messageId channel2
 
-                ViewThreadWithMessage threadId messageId ->
-                    SeqDict.get threadId channel2.threads
-                        |> Maybe.withDefault Thread.frontendInit
-                        |> noThreadHelper userId messageId
+                        ViewThreadWithMessage threadId messageId ->
+                            SeqDict.get threadId channel2.threads
+                                |> Maybe.withDefault Thread.frontendInit
+                                |> noThreadHelper userId anchor2 messageId
+
+                Drawing.DateDividerAnchor threadRoute date ->
+                    case threadRoute of
+                        NoThread ->
+                            case SeqDict.get date channel2.dateDividerDrawings of
+                                Just drawing ->
+                                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                                Nothing ->
+                                    ( False, False )
+
+                        ViewThread threadId ->
+                            case
+                                SeqDict.get threadId channel2.threads
+                                    |> Maybe.withDefault Thread.frontendInit
+                                    |> .dateDividerDrawings
+                                    |> SeqDict.get date
+                            of
+                                Just drawing ->
+                                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                                Nothing ->
+                                    ( False, False )
     in
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -796,11 +811,19 @@ drawingCanUndoOrRedo guildOrDmId anchorType local =
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
             case SeqDict.get data.channelId local.discordDmChannels of
                 Just channel2 ->
-                    case threadRoute of
-                        NoThreadWithMessage messageId ->
-                            noThreadHelper data.currentUserId messageId channel2
+                    case anchor of
+                        Drawing.MessageAnchor (NoThreadWithMessage messageId) anchor2 ->
+                            noThreadHelper data.currentUserId anchor2 messageId channel2
 
-                        ViewThreadWithMessage _ _ ->
+                        Drawing.DateDividerAnchor NoThread date ->
+                            case SeqDict.get date channel2.dateDividerDrawings of
+                                Just drawing ->
+                                    ( Drawing.canUndo data.currentUserId drawing, Drawing.canRedo data.currentUserId drawing )
+
+                                Nothing ->
+                                    ( False, False )
+
+                        _ ->
                             ( False, False )
 
                 Nothing ->

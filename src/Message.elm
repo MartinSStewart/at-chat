@@ -21,7 +21,7 @@ module Message exposing
     )
 
 import Array exposing (Array)
-import Drawing
+import Drawing exposing (Drawing)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
@@ -42,10 +42,10 @@ import Url exposing (Url)
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
-    | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
+    | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
-    | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
-    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing.ChannelDrawing userId)
+    | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
+    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
 
 
 maxEmbeds : number
@@ -69,7 +69,9 @@ userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
     , repliedTo = repliedTo
     , attachedFiles = attachedFiles
     , embeds = Array.empty
-    , drawings = Drawing.emptyChannelDrawing
+    , timestampDrawings = Drawing.emptyDrawing
+    , userIconDrawings = Drawing.emptyDrawing
+    , imageAttachmentDrawings = SeqDict.empty
     }
         |> UserTextMessage
 
@@ -97,7 +99,9 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
       , repliedTo = repliedTo
       , attachedFiles = attachedFiles
       , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
-      , drawings = Drawing.emptyChannelDrawing
+      , timestampDrawings = Drawing.emptyDrawing
+      , userIconDrawings = Drawing.emptyDrawing
+      , imageAttachmentDrawings = SeqDict.empty
       }
         |> UserTextMessage
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
@@ -141,7 +145,9 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     , repliedTo = repliedTo
     , attachedFiles = attachedFiles
     , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
-    , drawings = Drawing.emptyChannelDrawing
+    , timestampDrawings = Drawing.emptyDrawing
+    , userIconDrawings = Drawing.emptyDrawing
+    , imageAttachmentDrawings = SeqDict.empty
     }
         |> UserTextMessage
 
@@ -254,7 +260,9 @@ type alias UserTextMessageData messageId userId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     , embeds : Array Embed
-    , drawings : Drawing.ChannelDrawing userId
+    , timestampDrawings : Drawing userId
+    , userIconDrawings : Drawing userId
+    , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
     }
 
 
@@ -278,20 +286,38 @@ type alias UserTextMessageDataNoReply userId =
     , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
-    , drawings : Drawing.ChannelDrawing userId
     }
 
 
 userJoined : Time.Posix -> userId -> Message messageId userId
 userJoined time userId =
-    UserJoinedMessage time userId SeqDict.empty Drawing.emptyChannelDrawing
+    UserJoinedMessage time userId SeqDict.empty Drawing.emptyDrawing
 
 
-handleDrawingChange : userId -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
-handleDrawingChange changeBy change message =
+handleDrawingChange : userId -> Drawing.MessageAnchor -> Drawing.LocalChange -> Message messageId userId -> Message messageId userId
+handleDrawingChange changeBy anchorType change message =
     case message of
         UserTextMessage data ->
-            UserTextMessage { data | drawings = Drawing.handleLocalChange changeBy change data.drawings }
+            case anchorType of
+                Drawing.UserIconAnchor ->
+                    UserTextMessage { data | userIconDrawings = Drawing.handleLocalChange changeBy change data.userIconDrawings }
+
+                Drawing.TimestampAnchor ->
+                    UserTextMessage { data | timestampDrawings = Drawing.handleLocalChange changeBy change data.timestampDrawings }
+
+                Drawing.ImageAttachmentAnchor fileId ->
+                    UserTextMessage
+                        { data
+                            | imageAttachmentDrawings =
+                                SeqDict.update
+                                    fileId
+                                    (\maybe ->
+                                        Maybe.withDefault Drawing.emptyDrawing maybe
+                                            |> Drawing.handleLocalChange changeBy change
+                                            |> Just
+                                    )
+                                    data.imageAttachmentDrawings
+                        }
 
         UserJoinedMessage time userId reactions drawings ->
             UserJoinedMessage time userId reactions drawings
@@ -306,17 +332,25 @@ handleDrawingChange changeBy change message =
             GoMatchStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings)
 
 
-drawing : Message messageId userId -> Drawing.ChannelDrawing userId
-drawing message =
+drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
+drawing anchor message =
     case message of
         UserTextMessage data ->
-            data.drawings
+            case anchor of
+                Drawing.UserIconAnchor ->
+                    data.userIconDrawings
+
+                Drawing.TimestampAnchor ->
+                    data.timestampDrawings
+
+                Drawing.ImageAttachmentAnchor fileId ->
+                    SeqDict.get fileId data.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
 
         UserJoinedMessage _ _ _ drawings ->
             drawings
 
         DeletedMessage _ ->
-            Drawing.emptyChannelDrawing
+            Drawing.emptyDrawing
 
         CallStarted _ _ _ _ drawings ->
             drawings

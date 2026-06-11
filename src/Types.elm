@@ -866,7 +866,7 @@ type ServerChange
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
     | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
-    | Server_Drawing (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Drawing.LocalChange
+    | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
 
 
 type LocalChange
@@ -910,4 +910,4 @@ type LocalChange
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange
-    | Local_Drawing AnyGuildOrDmId ThreadRouteWithMessage Drawing.LocalChange
+    | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

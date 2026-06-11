@@ -5446,7 +5446,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon RichText.decodeWithTargetScreenPosition)
                 , Drawing.profileImageAnchorId spoilerHtmlId messageId |> Dom.idToString |> Ui.id
                 , Ui.width Ui.shrink
-                , Drawing.profileImageOverlay Drawing.userColor message2.drawings
+                , Drawing.userIconOverlay Drawing.userColor message2.userIconDrawings
                 ]
             |> Ui.el
                 [ Ui.paddingWith
@@ -5479,7 +5479,12 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , messageTimestamp (Drawing.timestampOverlays Drawing.userColor message2.drawings) messageId message2.createdAt localUser.timezone |> Ui.html
+                , messageTimestamp
+                    (Drawing.timestampOverlays Drawing.userColor message2.timestampDrawings)
+                    messageId
+                    message2.createdAt
+                    localUser.timezone
+                    |> Ui.html
                 , messageIdView messageId
                 ]
             , Html.div
@@ -5504,7 +5509,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
-                    , drawings = message2.drawings
+                    , drawings = message2.imageAttachmentDrawings
                     }
                     message2.embeds
                     message2.content
@@ -5562,7 +5567,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                 [ Ui.Events.on "click" (Json.Decode.map MessageView_PressedUserIcon RichText.decodeWithTargetScreenPosition)
                 , Drawing.profileImageAnchorId spoilerHtmlId messageId |> Dom.idToString |> Ui.id
                 , Ui.width Ui.shrink
-                , Drawing.profileImageOverlay Drawing.discordUserColor message2.drawings
+                , Drawing.userIconOverlay Drawing.discordUserColor message2.userIconDrawings
                 ]
             |> Ui.el
                 [ Ui.paddingWith
@@ -5595,7 +5600,12 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , messageTimestamp (Drawing.timestampOverlays Drawing.discordUserColor message2.drawings) messageId message2.createdAt localUser.timezone |> Ui.html
+                , messageTimestamp
+                    (Drawing.timestampOverlays Drawing.discordUserColor message2.timestampDrawings)
+                    messageId
+                    message2.createdAt
+                    localUser.timezone
+                    |> Ui.html
                 , messageIdView messageId
                 ]
             , Html.div
@@ -5620,7 +5630,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
-                    , drawings = message2.drawings
+                    , drawings = message2.imageAttachmentDrawings
                     }
                     message2.embeds
                     message2.content

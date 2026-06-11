@@ -2856,7 +2856,7 @@ changeUpdate localMsg local =
                                                                             Nothing
                                                                             local2.localUser.session.userId
                                                                             SeqDict.empty
-                                                                            Drawing.emptyChannelDrawing
+                                                                            Drawing.emptyDrawing
                                                                         )
                                                                     |> Just
                                                             )
@@ -3600,6 +3600,7 @@ changeUpdate localMsg local =
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
+                                                            , dateDividerDrawings = SeqDict.empty
                                                             }
                                                                 |> Just
                                                 )
@@ -3624,6 +3625,7 @@ changeUpdate localMsg local =
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members
+                                            , dateDividerDrawings = SeqDict.empty
                                             }
                                                 |> Just
                                 )
@@ -3913,7 +3915,7 @@ changeUpdate localMsg local =
                                                         time
                                                         userJoinedId
                                                         SeqDict.empty
-                                                        Drawing.emptyChannelDrawing
+                                                        Drawing.emptyDrawing
                                                     )
                                                 )
                                                 guild.channels
@@ -3994,7 +3996,7 @@ changeUpdate localMsg local =
                                                                         Nothing
                                                                         (Tuple.first otherClientId)
                                                                         SeqDict.empty
-                                                                        Drawing.emptyChannelDrawing
+                                                                        Drawing.emptyDrawing
                                                                     )
                                                                 |> Just
                                                         )
@@ -4036,7 +4038,7 @@ changeUpdate localMsg local =
                                                                     Nothing
                                                                     local.localUser.session.userId
                                                                     SeqDict.empty
-                                                                    Drawing.emptyChannelDrawing
+                                                                    Drawing.emptyDrawing
                                                                 )
                                                             |> Just
                                                     )
@@ -4085,7 +4087,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyChannelDrawing)
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId

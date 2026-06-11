@@ -46,7 +46,7 @@ import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
-import Drawing
+import Drawing exposing (Drawing)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -2200,7 +2200,7 @@ preview onPressLink config nonempty =
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
-        , drawings = Drawing.emptyChannelDrawing
+        , drawings = SeqDict.empty
         }
         Array.empty
         0
@@ -2217,7 +2217,7 @@ type alias Config a userId =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
-    , drawings : Drawing.ChannelDrawing userId
+    , drawings : SeqDict (Id FileId) (Drawing userId)
     }
 
 

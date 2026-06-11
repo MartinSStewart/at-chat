@@ -75,6 +75,7 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
@@ -1288,15 +1289,15 @@ handleDrawingChange :
     -> ClientId
     -> ChangeId
     -> AnyGuildOrDmId
-    -> ThreadRouteWithMessage
+    -> Drawing.AnchorType
     -> Drawing.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingChange model =
+handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model =
     let
         localMsg : LocalChange
         localMsg =
-            Local_Drawing guildOrDmId threadRoute drawingChange
+            Local_Drawing guildOrDmId anchor change
     in
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -1315,11 +1316,22 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                             | channels =
                                                 SeqDict.insert
                                                     channelId
-                                                    (LocalState.drawingHandleChangeHelperBackend
-                                                        userId
-                                                        drawingChange
-                                                        threadRoute
-                                                        channel
+                                                    (case anchor of
+                                                        Drawing.MessageAnchor threadRoute anchor2 ->
+                                                            LocalState.drawingHandleChangeHelperBackend
+                                                                userId
+                                                                change
+                                                                threadRoute
+                                                                anchor2
+                                                                channel
+
+                                                        Drawing.DateDividerAnchor threadRoute date ->
+                                                            LocalState.drawingHandleDateDivider
+                                                                threadRoute
+                                                                date
+                                                                userId
+                                                                change
+                                                                channel
                                                     )
                                                     guild.channels
                                         }
@@ -1331,7 +1343,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                 , Broadcast.toGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_Drawing userId guildOrDmId threadRoute drawingChange |> ServerChange)
+                                    (Server_Drawing userId guildOrDmId anchor change |> ServerChange)
                                     model
                                 ]
                             )
@@ -1349,11 +1361,22 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                     ( { model
                         | dmChannels =
                             SeqDict.insert dmChannelId
-                                (LocalState.drawingHandleChangeHelperBackend
-                                    session.userId
-                                    drawingChange
-                                    threadRoute
-                                    dmChannel
+                                (case anchor of
+                                    Drawing.MessageAnchor threadRoute anchor2 ->
+                                        LocalState.drawingHandleChangeHelperBackend
+                                            session.userId
+                                            change
+                                            threadRoute
+                                            anchor2
+                                            dmChannel
+
+                                    Drawing.DateDividerAnchor threadRoute date ->
+                                        LocalState.drawingHandleDateDivider
+                                            threadRoute
+                                            date
+                                            session.userId
+                                            change
+                                            dmChannel
                                 )
                                 model.dmChannels
                       }
@@ -1365,11 +1388,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                             session.userId
                             otherUserId
                             (\otherUserId2 ->
-                                Server_Drawing
-                                    session.userId
-                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
-                                    threadRoute
-                                    drawingChange
+                                Server_Drawing session.userId (GuildOrDmId (GuildOrDmId_Dm otherUserId2)) anchor change
                             )
                             model
                         ]
@@ -1393,11 +1412,22 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                             | channels =
                                                 SeqDict.insert
                                                     channelId
-                                                    (LocalState.drawingHandleChangeHelperBackend
-                                                        currentDiscordUserId
-                                                        drawingChange
-                                                        threadRoute
-                                                        channel
+                                                    (case anchor of
+                                                        Drawing.MessageAnchor threadRoute anchor2 ->
+                                                            LocalState.drawingHandleChangeHelperBackend
+                                                                currentDiscordUserId
+                                                                change
+                                                                threadRoute
+                                                                anchor2
+                                                                channel
+
+                                                        Drawing.DateDividerAnchor threadRoute date ->
+                                                            LocalState.drawingHandleDateDivider
+                                                                threadRoute
+                                                                date
+                                                                currentDiscordUserId
+                                                                change
+                                                                channel
                                                     )
                                                     guild.channels
                                         }
@@ -1409,7 +1439,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                                 , Broadcast.toDiscordGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_Drawing session.userId guildOrDmId threadRoute drawingChange |> ServerChange)
+                                    (Server_Drawing session.userId guildOrDmId anchor change |> ServerChange)
                                     model
                                 ]
                             )
@@ -1428,15 +1458,28 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                         | discordDmChannels =
                             SeqDict.insert
                                 data.channelId
-                                (case threadRoute of
-                                    NoThreadWithMessage messageId ->
+                                (case anchor of
+                                    Drawing.MessageAnchor (NoThreadWithMessage messageId) anchor2 ->
                                         LocalState.drawingHandleChangeNoThreadBackend
                                             data.currentUserId
-                                            drawingChange
+                                            anchor2
+                                            change
                                             messageId
                                             dmChannel
 
-                                    ViewThreadWithMessage _ _ ->
+                                    Drawing.DateDividerAnchor NoThread date ->
+                                        { dmChannel
+                                            | dateDividerDrawings =
+                                                SeqDictHelper.updateOrInsert
+                                                    date
+                                                    (\maybe ->
+                                                        Maybe.withDefault Drawing.emptyDrawing maybe
+                                                            |> Drawing.handleLocalChange data.currentUserId change
+                                                    )
+                                                    dmChannel.dateDividerDrawings
+                                        }
+
+                                    _ ->
                                         dmChannel
                                 )
                                 model.discordDmChannels
@@ -1447,7 +1490,7 @@ handleDrawingChange sessionId clientId changeId guildOrDmId threadRoute drawingC
                         , Broadcast.toDiscordDmChannelExcludingOne
                             clientId
                             data.channelId
-                            (Server_Drawing session.userId guildOrDmId threadRoute drawingChange |> ServerChange)
+                            (Server_Drawing session.userId guildOrDmId anchor change |> ServerChange)
                             model
                         ]
                     )

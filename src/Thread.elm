@@ -29,7 +29,7 @@ import VisibleMessages exposing (VisibleMessages)
 type alias BackendThread =
     { messages : Array (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
@@ -37,7 +37,7 @@ type alias DiscordBackendThread =
     { messages : Array (Message ThreadMessageId (Discord.Id Discord.UserId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
-    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
     }
 
 
@@ -45,7 +45,7 @@ type alias FrontendGenericThread userId =
     { messages : Array (MessageState ThreadMessageId userId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
-    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing userId)
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
     }
 
 
@@ -53,7 +53,7 @@ type alias FrontendThread =
     { messages : Array (MessageState ThreadMessageId (Id UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Id UserId))
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
@@ -61,7 +61,7 @@ type alias DiscordFrontendThread =
     { messages : Array (MessageState ThreadMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
-    , dateDividerDrawings : SeqDict Date (Drawing.ChannelDrawing (Discord.Id Discord.UserId))
+    , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
     }
 
 

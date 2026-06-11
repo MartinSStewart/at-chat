@@ -3476,7 +3476,7 @@ allAttackerLocalChanges =
     , Local_Drawing
         guildOrDmId_guild
         threadRouteWithMessage
-        (Drawing.StartStroke Drawing.ProfileImageAnchor ( 0, 0 ))
+        (Drawing.StartStroke Drawing.UserIconAnchor ( 0, 0 ))
     ]
 
 

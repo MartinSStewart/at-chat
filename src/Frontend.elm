@@ -2620,7 +2620,7 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedUserIcon elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
-                            selectDrawingAnchor guildOrDmId threadRoute Drawing.ProfileImageAnchor elementPosition model
+                            selectDrawingAnchor guildOrDmId threadRoute Drawing.UserIconAnchor elementPosition model
 
                         _ ->
                             ( model, Command.none )

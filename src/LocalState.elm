@@ -73,6 +73,7 @@ module LocalState exposing
     , drawingHandleChangeFrontend
     , drawingHandleChangeHelperBackend
     , drawingHandleChangeNoThreadBackend
+    , drawingHandleDateDivider
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -123,10 +124,11 @@ import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Cloudflare
+import Date exposing (Date)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannelId, FrontendDmChannel)
-import Drawing
+import Drawing exposing (Drawing)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
@@ -152,6 +154,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
@@ -305,6 +308,7 @@ type alias BackendChannel =
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
+    , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
 
@@ -316,6 +320,7 @@ type alias DiscordBackendChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+    , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     }
 
 
@@ -329,6 +334,7 @@ type alias FrontendChannel =
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
+    , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
 
@@ -339,6 +345,7 @@ type alias DiscordFrontendChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
+    , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
     }
 
 
@@ -456,6 +463,7 @@ channelToFrontend threadRoute channel =
                 SeqDict.map
                     (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
+            , dateDividerDrawings = channel.dateDividerDrawings
             }
                 |> Just
 
@@ -482,6 +490,7 @@ discordChannelToFrontend threadRoute channel =
                         SeqDict.map
                             (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
                             channel.threads
+                    , dateDividerDrawings = channel.dateDividerDrawings
                     }
             in
             channel2
@@ -1112,6 +1121,7 @@ createGuild time userId guildName =
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
+                , dateDividerDrawings = SeqDict.empty
                 }
               )
             ]
@@ -1144,6 +1154,7 @@ createChannel time userId channelName channelDescription guild =
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
+                , dateDividerDrawings = SeqDict.empty
                 }
                 guild.channels
     }
@@ -1177,6 +1188,7 @@ createChannelFrontend time userId channelName channelDescription guild =
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
+                , dateDividerDrawings = SeqDict.empty
                 }
                 guild.channels
     }
@@ -2549,7 +2561,6 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               , attachedFiles = data.attachedFiles
-                              , drawings = data.drawings
                               }
                             , ViewThreadWithMaybeMessage threadId data.repliedTo
                             )
@@ -2567,7 +2578,6 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                               , reactions = data.reactions
                               , editedAt = data.editedAt
                               , attachedFiles = data.attachedFiles
-                              , drawings = data.drawings
                               }
                             , NoThreadWithMaybeMessage data.repliedTo
                             )
@@ -2610,7 +2620,6 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                       , reactions = data.reactions
                       , editedAt = data.editedAt
                       , attachedFiles = data.attachedFiles
-                      , drawings = data.drawings
                       }
                     , NoThreadWithMaybeMessage data.repliedTo
                     )
@@ -2638,7 +2647,6 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                                       , reactions = data.reactions
                                       , editedAt = data.editedAt
                                       , attachedFiles = data.attachedFiles
-                                      , drawings = data.drawings
                                       }
                                     , ViewThreadWithMaybeMessage threadId data.repliedTo
                                     )
@@ -2683,7 +2691,6 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                                 , reactions = data.reactions
                                                 , editedAt = data.editedAt
                                                 , attachedFiles = data.attachedFiles
-                                                , drawings = data.drawings
                                                 }
                                                     |> UserTextMessage_NoReply
 
@@ -2719,7 +2726,6 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             , reactions = data.reactions
                                             , editedAt = data.editedAt
                                             , attachedFiles = data.attachedFiles
-                                            , drawings = data.drawings
                                             }
                                                 |> UserTextMessage_NoReply
 
@@ -2778,7 +2784,6 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                     , reactions = data.reactions
                                     , editedAt = data.editedAt
                                     , attachedFiles = data.attachedFiles
-                                    , drawings = data.drawings
                                     }
                                         |> UserTextMessage_NoReply
 
@@ -2902,12 +2907,12 @@ discordGuildAvailableStickersAndCustomEmojis localUser guild =
 
 drawingHandleChangeFrontend :
     AnyGuildOrDmId
-    -> ThreadRouteWithMessage
+    -> Drawing.AnchorType
     -> Id UserId
     -> Drawing.LocalChange
     -> LocalState
     -> LocalState
-drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
+drawingHandleChangeFrontend guildOrDmId anchor changedBy change local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
@@ -2916,18 +2921,23 @@ drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
                         guildId
                         (updateChannel
                             (\channel ->
-                                case threadRoute of
-                                    NoThreadWithMessage messageId ->
-                                        drawingHandleChangeNoThreadFrontend changedBy change messageId channel
+                                case anchor of
+                                    Drawing.MessageAnchor threadRoute anchor2 ->
+                                        case threadRoute of
+                                            NoThreadWithMessage messageId ->
+                                                drawingHandleChangeNoThreadFrontend changedBy anchor2 change messageId channel
 
-                                    ViewThreadWithMessage threadId messageId ->
-                                        { channel
-                                            | threads =
-                                                SeqDict.updateIfExists
-                                                    threadId
-                                                    (drawingHandleChangeNoThreadFrontend changedBy change messageId)
-                                                    channel.threads
-                                        }
+                                            ViewThreadWithMessage threadId messageId ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (drawingHandleChangeNoThreadFrontend changedBy anchor2 change messageId)
+                                                            channel.threads
+                                                }
+
+                                    Drawing.DateDividerAnchor threadRoute date ->
+                                        drawingHandleDateDivider threadRoute date changedBy change channel
                             )
                             channelId
                         )
@@ -2939,7 +2949,14 @@ drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
-                        (drawingHandleChangeHelperFrontend changedBy change threadRoute)
+                        (\dmChannel ->
+                            case anchor of
+                                Drawing.MessageAnchor threadRoute anchor2 ->
+                                    drawingHandleChangeHelperFrontend changedBy anchor2 change threadRoute dmChannel
+
+                                Drawing.DateDividerAnchor threadRoute date ->
+                                    drawingHandleDateDivider threadRoute date changedBy change dmChannel
+                        )
                         local.dmChannels
             }
 
@@ -2949,7 +2966,14 @@ drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
                     SeqDict.updateIfExists
                         guildId
                         (updateChannel
-                            (drawingHandleChangeHelperFrontend currentUserId change threadRoute)
+                            (\channel ->
+                                case anchor of
+                                    Drawing.MessageAnchor threadRoute anchor2 ->
+                                        drawingHandleChangeHelperFrontend currentUserId anchor2 change threadRoute channel
+
+                                    Drawing.DateDividerAnchor threadRoute date ->
+                                        drawingHandleDateDivider threadRoute date currentUserId change channel
+                            )
                             channelId
                         )
                         local.discordGuilds
@@ -2961,45 +2985,109 @@ drawingHandleChangeFrontend guildOrDmId threadRoute changedBy change local =
                     SeqDict.updateIfExists
                         data.channelId
                         (\channel ->
-                            case threadRoute of
-                                NoThreadWithMessage messageId ->
-                                    drawingHandleChangeNoThreadFrontend data.currentUserId change messageId channel
+                            case anchor of
+                                Drawing.MessageAnchor (NoThreadWithMessage messageId) anchor2 ->
+                                    drawingHandleChangeNoThreadFrontend data.currentUserId anchor2 change messageId channel
 
-                                ViewThreadWithMessage _ _ ->
+                                Drawing.DateDividerAnchor NoThread date ->
+                                    { channel
+                                        | dateDividerDrawings =
+                                            SeqDictHelper.updateOrInsert
+                                                date
+                                                (\maybe ->
+                                                    Maybe.withDefault Drawing.emptyDrawing maybe
+                                                        |> Drawing.handleLocalChange data.currentUserId change
+                                                )
+                                                channel.dateDividerDrawings
+                                    }
+
+                                _ ->
                                     channel
                         )
                         local.discordDmChannels
             }
 
 
+drawingHandleDateDivider :
+    ThreadRoute
+    -> Date
+    -> userId
+    -> Drawing.LocalChange
+    ->
+        { a
+            | dateDividerDrawings : SeqDict Date (Drawing userId)
+            , threads : SeqDict (Id ChannelMessageId) { d | dateDividerDrawings : SeqDict Date (Drawing userId) }
+        }
+    ->
+        { a
+            | dateDividerDrawings : SeqDict Date (Drawing userId)
+            , threads : SeqDict (Id ChannelMessageId) { d | dateDividerDrawings : SeqDict Date (Drawing userId) }
+        }
+drawingHandleDateDivider threadRoute date changedBy change channel =
+    case threadRoute of
+        NoThread ->
+            { channel
+                | dateDividerDrawings =
+                    SeqDictHelper.updateOrInsert
+                        date
+                        (\maybe ->
+                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                |> Drawing.handleLocalChange changedBy change
+                        )
+                        channel.dateDividerDrawings
+            }
+
+        ViewThread threadId ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadId
+                        (\thread ->
+                            { thread
+                                | dateDividerDrawings =
+                                    SeqDictHelper.updateOrInsert
+                                        date
+                                        (\maybe ->
+                                            Maybe.withDefault Drawing.emptyDrawing maybe
+                                                |> Drawing.handleLocalChange changedBy change
+                                        )
+                                        thread.dateDividerDrawings
+                            }
+                        )
+                        channel.threads
+            }
+
+
 drawingHandleChangeHelperFrontend :
     userId
+    -> Drawing.MessageAnchor
     -> Drawing.LocalChange
     -> ThreadRouteWithMessage
     -> { b | messages : Array (MessageState ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
     -> { b | messages : Array (MessageState ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
-drawingHandleChangeHelperFrontend changeBy change threadRoute channel =
+drawingHandleChangeHelperFrontend changeBy anchor change threadRoute channel =
     case threadRoute of
         NoThreadWithMessage messageId ->
-            drawingHandleChangeNoThreadFrontend changeBy change messageId channel
+            drawingHandleChangeNoThreadFrontend changeBy anchor change messageId channel
 
         ViewThreadWithMessage threadId messageId ->
             { channel
                 | threads =
                     SeqDict.updateIfExists
                         threadId
-                        (drawingHandleChangeNoThreadFrontend changeBy change messageId)
+                        (drawingHandleChangeNoThreadFrontend changeBy anchor change messageId)
                         channel.threads
             }
 
 
 drawingHandleChangeNoThreadFrontend :
     userId
+    -> Drawing.MessageAnchor
     -> Drawing.LocalChange
     -> Id messageId
     -> { b | messages : Array (MessageState messageId userId) }
     -> { b | messages : Array (MessageState messageId userId) }
-drawingHandleChangeNoThreadFrontend changedBy change messageId channel =
+drawingHandleChangeNoThreadFrontend changedBy anchor change messageId channel =
     { channel
         | messages =
             DmChannel.updateArray
@@ -3007,8 +3095,7 @@ drawingHandleChangeNoThreadFrontend changedBy change messageId channel =
                 (\message ->
                     case message of
                         MessageLoaded message2 ->
-                            Message.handleDrawingChange changedBy change message2
-                                |> MessageLoaded
+                            Message.handleDrawingChange changedBy anchor change message2 |> MessageLoaded
 
                         MessageUnloaded ->
                             message
@@ -3021,6 +3108,7 @@ drawingHandleChangeHelperBackend :
     userId
     -> Drawing.LocalChange
     -> ThreadRouteWithMessage
+    -> Drawing.MessageAnchor
     ->
         { b
             | messages : Array (Message ChannelMessageId userId)
@@ -3031,30 +3119,31 @@ drawingHandleChangeHelperBackend :
             | messages : Array (Message ChannelMessageId userId)
             , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
         }
-drawingHandleChangeHelperBackend changeBy change threadRoute channel =
+drawingHandleChangeHelperBackend changeBy change threadRoute anchor channel =
     case threadRoute of
         NoThreadWithMessage messageId ->
-            drawingHandleChangeNoThreadBackend changeBy change messageId channel
+            drawingHandleChangeNoThreadBackend changeBy anchor change messageId channel
 
         ViewThreadWithMessage threadId messageId ->
             { channel
                 | threads =
                     SeqDict.updateIfExists
                         threadId
-                        (drawingHandleChangeNoThreadBackend changeBy change messageId)
+                        (drawingHandleChangeNoThreadBackend changeBy anchor change messageId)
                         channel.threads
             }
 
 
 drawingHandleChangeNoThreadBackend :
     userId
+    -> Drawing.MessageAnchor
     -> Drawing.LocalChange
     -> Id messageId
     -> { b | messages : Array (Message messageId userId) }
     -> { b | messages : Array (Message messageId userId) }
-drawingHandleChangeNoThreadBackend changedBy change messageId channel =
+drawingHandleChangeNoThreadBackend changedBy anchor change messageId channel =
     { channel
-        | messages = DmChannel.updateArray messageId (Message.handleDrawingChange changedBy change) channel.messages
+        | messages = DmChannel.updateArray messageId (Message.handleDrawingChange changedBy anchor change) channel.messages
     }
 
 

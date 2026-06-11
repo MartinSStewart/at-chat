@@ -669,6 +669,7 @@ addDiscordChannel discordChannel =
         , lastTypedAt = SeqDict.empty
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
+        , dateDividerDrawings = SeqDict.empty
         }
             |> Just
 
@@ -2330,6 +2331,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
+                                                    , dateDividerDrawings = SeqDict.empty
                                                     }
                                                         |> Just
                                         )
