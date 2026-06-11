@@ -3475,8 +3475,8 @@ allAttackerLocalChanges =
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     , Local_Drawing
         guildOrDmId_guild
-        threadRouteWithMessage
-        (Drawing.StartStroke Drawing.UserIconAnchor ( 0, 0 ))
+        (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
+        (Drawing.StartStroke ( 0, 0 ))
     ]
 
 

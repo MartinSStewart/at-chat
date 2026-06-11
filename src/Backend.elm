@@ -573,6 +573,9 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
+        RegisteredFileForEndToEndTest fileHash fileData ->
+            ( { model | files = SeqDict.insert fileHash fileData model.files }, Command.none )
+
         DiscordTypingIndicatorSent ->
             ( model, Command.none )
 

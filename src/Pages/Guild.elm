@@ -25,7 +25,6 @@ import ChannelDescription
 import ChannelHeader
 import ChannelName exposing (ChannelName)
 import Coord
-import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
@@ -60,7 +59,6 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
 import PersonName exposing (PersonName)
-import Point2d exposing (Point2d)
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -71,7 +69,7 @@ import Sticker exposing (AnimationMode(..))
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
-import Touch exposing (ScreenCoordinate)
+import Touch
 import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -757,6 +755,7 @@ discordDmChannelView routeData loggedIn local model =
                 , visibleMessages = dmChannel.visibleMessages
                 , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
+                , dateDividerDrawings = dmChannel.dateDividerDrawings
                 }
                 SeqSet.empty
                 SeqSet.empty
@@ -1931,6 +1930,7 @@ conversationViewHelper :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
         }
     -> LoggedIn2
     -> LocalState
@@ -2164,7 +2164,17 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                       )
                         |> (\keyedMessage ->
                                 keyedMessage
-                                    :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                                    :: List.map
+                                        (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
+                                        (newMessageLine
+                                            Drawing.userColor
+                                            channel.dateDividerDrawings
+                                            maybeLastDate
+                                            date
+                                            lastViewedIndex
+                                            index
+                                            messageId
+                                        )
                                     ++ list
                            )
                     )
@@ -2217,6 +2227,7 @@ discordConversationViewHelper :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
+            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
         }
     -> LoggedIn2
     -> LocalState
@@ -2444,7 +2455,17 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                       )
                         |> (\keyedMessage ->
                                 keyedMessage
-                                    :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                                    :: List.map
+                                        (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
+                                        (newMessageLine
+                                            Drawing.discordUserColor
+                                            channel.dateDividerDrawings
+                                            maybeLastDate
+                                            date
+                                            lastViewedIndex
+                                            index
+                                            messageId
+                                        )
                                     ++ list
                            )
                     )
@@ -2457,8 +2478,16 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         |> (\( _, _, a ) -> a)
 
 
-newMessageLine : Maybe Date -> Date -> Id messageId -> Int -> Id messageId -> List ( String, Element msg )
-newMessageLine maybeLastDate date lastViewedIndex index messageId =
+newMessageLine :
+    (userId -> String)
+    -> SeqDict Date (Drawing.Drawing userId)
+    -> Maybe Date
+    -> Date
+    -> Id messageId
+    -> Int
+    -> Id messageId
+    -> List ( String, Element MessageViewMsg )
+newMessageLine drawingUserColor dateDividerDrawings maybeLastDate date lastViewedIndex index messageId =
     case maybeLastDate of
         Just lastDate ->
             case ( lastViewedIndex == messageId, date == lastDate ) of
@@ -2485,7 +2514,7 @@ newMessageLine maybeLastDate date lastViewedIndex index messageId =
                             (Ui.el
                                 [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
                                 , Ui.borderColor MyUi.font3
-                                , dateDivider date lastDate
+                                , dateDivider drawingUserColor dateDividerDrawings date lastDate
                                 ]
                                 Ui.none
                             )
@@ -2499,7 +2528,7 @@ newMessageLine maybeLastDate date lastViewedIndex index messageId =
                             (Ui.el
                                 ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
                                  , Ui.borderColor MyUi.alertColor
-                                 , dateDivider date lastDate
+                                 , dateDivider drawingUserColor dateDividerDrawings date lastDate
                                  ]
                                     ++ newContentLabel
                                 )
@@ -2706,7 +2735,17 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                        :: List.map
+                            (Tuple.mapSecond (Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)))
+                            (newMessageLine
+                                Drawing.userColor
+                                thread.dateDividerDrawings
+                                maybeLastDate
+                                date
+                                lastViewedIndex
+                                index
+                                messageId
+                            )
                         ++ list
                     )
 
@@ -2909,7 +2948,17 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             message
                                             |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
+                        :: List.map
+                            (Tuple.mapSecond (Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)))
+                            (newMessageLine
+                                Drawing.discordUserColor
+                                thread.dateDividerDrawings
+                                maybeLastDate
+                                date
+                                lastViewedIndex
+                                index
+                                messageId
+                            )
                         ++ list
                     )
 
@@ -2931,8 +2980,8 @@ unloadedMessageView index =
         (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
 
 
-dateDivider : Date -> Date -> Ui.Attribute msg
-dateDivider laterDate newDate =
+dateDivider : (userId -> String) -> SeqDict Date (Drawing.Drawing userId) -> Date -> Date -> Ui.Attribute MessageViewMsg
+dateDivider drawingUserColor dateDividerDrawings laterDate newDate =
     Ui.inFront
         (Ui.column
             [ Ui.Font.color MyUi.font3
@@ -2944,6 +2993,17 @@ dateDivider laterDate newDate =
             , Ui.move { x = 0, y = -20, z = 0 }
             , Ui.rounded 4
             , Ui.paddingXY 4 0
+            , -- The divider is identified by the date of the day that starts below it
+              Ui.id ("guild_dateDivider_" ++ Date.toIsoString newDate)
+            , Ui.Events.on
+                "click"
+                (Json.Decode.map
+                    (MessageView_PressedDateDivider newDate)
+                    RichText.decodeWithTargetScreenPosition
+                )
+            , SeqDict.get newDate dateDividerDrawings
+                |> Maybe.withDefault Drawing.emptyDrawing
+                |> Drawing.dateDividerOverlay drawingUserColor
             ]
             [ Ui.text (MyUi.datestampDate laterDate)
             , Ui.text (MyUi.datestampDate newDate)
@@ -3315,6 +3375,7 @@ conversationView :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
         }
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
@@ -3487,6 +3548,7 @@ discordConversationView :
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
+            , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
         }
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
@@ -5510,6 +5572,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , drawingUserColor = Drawing.userColor
                     }
                     message2.embeds
                     message2.content
@@ -5631,6 +5694,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , drawingUserColor = Drawing.discordUserColor
                     }
                     message2.embeds
                     message2.content

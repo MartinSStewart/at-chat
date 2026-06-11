@@ -2201,6 +2201,7 @@ preview onPressLink config nonempty =
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
         , drawings = SeqDict.empty
+        , drawingUserColor = always ""
         }
         Array.empty
         0
@@ -2218,6 +2219,7 @@ type alias Config a userId =
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
     , drawings : SeqDict (Id FileId) (Drawing userId)
+    , drawingUserColor : userId -> String
     }
 
 
@@ -2720,30 +2722,45 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         in
                                                         case maybeOnPressImage of
                                                             Just onPressImage ->
-                                                                imageElement
-                                                                    [ Html.Attributes.style "cursor" "pointer"
-                                                                    , Html.Attributes.id
-                                                                        (case maybePressedSpoiler of
-                                                                            Just ( htmlIdPrefix, _ ) ->
-                                                                                Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
-
-                                                                            Nothing ->
-                                                                                "image_" ++ Id.toString fileId
-                                                                        )
-                                                                    , Html.Events.on
-                                                                        "click"
-                                                                        (decodeWithTargetScreenPosition
-                                                                            |> Json.Decode.map
-                                                                                (\position ->
-                                                                                    onPressImage
-                                                                                        { fileId = fileId
-                                                                                        , fileUrl = fileUrl
-                                                                                        , imageSize = imageSize
-                                                                                        , position = position
-                                                                                        }
-                                                                                )
-                                                                        )
+                                                                Html.span
+                                                                    [ -- Drawings anchored to the image are positioned relative to it
+                                                                      Html.Attributes.style "position" "relative"
+                                                                    , Html.Attributes.style "display" "inline-block"
                                                                     ]
+                                                                    (imageElement
+                                                                        [ Html.Attributes.style "cursor" "pointer"
+                                                                        , Html.Attributes.id
+                                                                            (case maybePressedSpoiler of
+                                                                                Just ( htmlIdPrefix, _ ) ->
+                                                                                    Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
+
+                                                                                Nothing ->
+                                                                                    "image_" ++ Id.toString fileId
+                                                                            )
+                                                                        , Html.Events.on
+                                                                            "click"
+                                                                            (decodeWithTargetScreenPosition
+                                                                                |> Json.Decode.map
+                                                                                    (\position ->
+                                                                                        onPressImage
+                                                                                            { fileId = fileId
+                                                                                            , fileUrl = fileUrl
+                                                                                            , imageSize = imageSize
+                                                                                            , position = position
+                                                                                            }
+                                                                                    )
+                                                                            )
+                                                                        ]
+                                                                        :: (case SeqDict.get fileId config.drawings of
+                                                                                Just drawing ->
+                                                                                    Drawing.imageAttachmentOverlays
+                                                                                        config.drawingUserColor
+                                                                                        drawing
+
+                                                                                Nothing ->
+                                                                                    []
+                                                                           )
+                                                                    )
 
                                                             Nothing ->
                                                                 Html.a
@@ -2810,10 +2827,18 @@ decodeWithTargetScreenPosition =
                 (CssPixels.cssPixels (clientX - offsetX))
                 (CssPixels.cssPixels (clientY - offsetY))
         )
-        (Json.Decode.field "clientX" Json.Decode.float)
-        (Json.Decode.field "clientY" Json.Decode.float)
-        (Json.Decode.field "offsetX" Json.Decode.float)
-        (Json.Decode.field "offsetY" Json.Decode.float)
+        (floatFieldWithDefault "clientX")
+        (floatFieldWithDefault "clientY")
+        (floatFieldWithDefault "offsetX")
+        (floatFieldWithDefault "offsetY")
+
+
+{-| Real mouse events always include the position fields but simulated click
+events in tests might not.
+-}
+floatFieldWithDefault : String -> Json.Decode.Decoder Float
+floatFieldWithDefault fieldName =
+    Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.float, Json.Decode.succeed 0 ]
 
 
 embedContainerMaxWidth : number

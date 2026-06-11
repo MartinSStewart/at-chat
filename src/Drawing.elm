@@ -11,6 +11,7 @@ module Drawing exposing
     , anchorHighlightStyle
     , canRedo
     , canUndo
+    , dateDividerOverlay
     , discordUserColor
     , emptyDrawing
     , handleLocalChange
@@ -318,7 +319,19 @@ so they move together with the profile image. The svg has no size of its own
 interactions with the message below it.
 -}
 userIconOverlay : (userId -> String) -> Drawing userId -> Ui.Attribute msg
-userIconOverlay getColor drawing =
+userIconOverlay =
+    overlayAttribute
+
+
+{-| Strokes anchored to the date divider that is shown above the first message of a day.
+-}
+dateDividerOverlay : (userId -> String) -> Drawing userId -> Ui.Attribute msg
+dateDividerOverlay =
+    overlayAttribute
+
+
+overlayAttribute : (userId -> String) -> Drawing userId -> Ui.Attribute msg
+overlayAttribute getColor drawing =
     case strokesFor drawing of
         [] ->
             Ui.noAttr
@@ -451,7 +464,7 @@ anchorHighlightStyle =
         "style"
         []
         [ Html.text
-            ("[id*='drawAnchorProfile']:hover, [id^='guild_messageTimestamp']:hover {"
+            ("[id*='drawAnchorProfile']:hover, [id^='guild_messageTimestamp']:hover, [id^='spoiler_'][id*='_image_']:hover, [id^='guild_dateDivider']:hover {"
                 ++ "outline: 3px solid rgba(96, 165, 250, 0.8);"
                 ++ "outline-offset: 2px;"
                 ++ "background-color: rgba(96, 165, 250, 0.3);"

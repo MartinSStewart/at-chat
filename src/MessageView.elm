@@ -3,6 +3,7 @@ module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView, reactionE
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
+import Date exposing (Date)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -47,6 +48,7 @@ type MessageViewMsg
     | MessageViewMsg_PressedGoMatchStartedCard
     | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate)
     | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -113,6 +115,9 @@ isPressMsg msg =
             True
 
         MessageView_PressedTimestamp _ ->
+            True
+
+        MessageView_PressedDateDivider _ _ ->
             True
 
 

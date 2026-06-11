@@ -5,6 +5,7 @@ import Backend
 import Bytes exposing (Bytes)
 import Codec
 import Coord
+import Date
 import Dict
 import DiscordRecordedTests
 import Drawing
@@ -23,7 +24,9 @@ import Html.Attributes
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Json.Encode
+import List.Nonempty
 import Local exposing (ChangeId(..))
+import LocalState
 import LoginForm
 import MembersAndOwner
 import Message
@@ -42,6 +45,18 @@ import Test.Html.Selector
 import Time
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import VisibleMessages
+
+
+{-| The first channel of the most recently created guild.
+-}
+lastGuildChannel : BackendModel -> Maybe LocalState.BackendChannel
+lastGuildChannel backend =
+    case SeqDict.toList backend.guilds |> List.reverse |> List.head of
+        Just ( _, guild ) ->
+            SeqDict.get (Id.fromInt 0) guild.channels
+
+        Nothing ->
+            Nothing
 
 
 {-| The most recent message in the first channel of the most recently created guild.
@@ -64,6 +79,83 @@ lastGuildChannelMessage backend =
 
         Nothing ->
             Nothing
+
+
+lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel -> Maybe (Message.Message ChannelMessageId (Id UserId))
+lastGuildChannelMessageAt messageId backend =
+    case lastGuildChannel backend of
+        Just channel ->
+            Array.get (Id.toInt messageId) channel.messages
+
+        Nothing ->
+            Nothing
+
+
+{-| The first message with an image attached, in the first channel of the most recently created guild.
+-}
+findImageMessage : BackendModel -> Maybe ( Id ChannelMessageId, Id FileStatus.FileId )
+findImageMessage backend =
+    case lastGuildChannel backend of
+        Just channel ->
+            Array.toList channel.messages
+                |> List.indexedMap Tuple.pair
+                |> List.filterMap
+                    (\( index, message ) ->
+                        case message of
+                            Message.UserTextMessage data ->
+                                List.Nonempty.toList data.content
+                                    |> List.filterMap
+                                        (\part ->
+                                            case part of
+                                                RichText.AttachedFile fileId ->
+                                                    Just ( Id.fromInt index, fileId )
+
+                                                _ ->
+                                                    Nothing
+                                        )
+                                    |> List.head
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+
+        Nothing ->
+            Nothing
+
+
+{-| A click event on a drawing anchor. The clientX/Y and offsetX/Y fields are
+used to determine the anchor element's screen position.
+-}
+drawingAnchorClick : Float -> Float -> Json.Encode.Value
+drawingAnchorClick x y =
+    Json.Encode.object
+        [ ( "clientX", Json.Encode.float (x + 10) )
+        , ( "clientY", Json.Encode.float (y + 5) )
+        , ( "offsetX", Json.Encode.float 10 )
+        , ( "offsetY", Json.Encode.float 5 )
+        ]
+
+
+drawZigzagStroke :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+drawZigzagStroke client =
+    T.group
+        [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 80 60)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 110 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
+        , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+        ]
+
+
+expectPolylineCount : Int -> Test.Html.Query.Single msg -> Expect.Expectation
+expectPolylineCount count query =
+    Test.Html.Query.findAll [ Test.Html.Selector.tag "polyline" ] query
+        |> Test.Html.Query.count (Expect.equal count)
 
 
 drawingMouseEvent : Float -> Float -> Json.Encode.Value
@@ -247,23 +339,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleFileRequest
                 handleMultiFileUpload
                 RecordedTestExtra.domain
+
+        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        imageUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                handleNormalHttpRequests
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
-    , RecordedTestExtra.imageViewerTests
-        (T.Config
-            Frontend.app_
-            Backend.app_
-            handleNormalHttpRequests
-            RecordedTestExtra.handlePortToJs
-            handleFileRequest
-            (\_ ->
-                UploadMultipleFiles
-                    (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
-                    []
-            )
-            RecordedTestExtra.domain
-        )
+    , RecordedTestExtra.imageViewerTests imageUploadConfig
     , RecordedTestExtra.startTest
         "Admin can open admin page"
         RecordedTestExtra.startTime
@@ -485,11 +579,29 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , RecordedTestExtra.startTest
         "Draw on top of messages"
         RecordedTestExtra.startTime
-        normalConfig
+        imageUploadConfig
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
             (\admin user ->
                 [ RecordedTestExtra.writeMessage admin 100 "Draw on this message!"
+
+                -- Send a message with an image attached. Uploads reach the backend
+                -- via lamdera RPC in production which tests can't simulate, so the
+                -- uploaded file is registered on the backend directly (otherwise the
+                -- backend strips the attachment when the message is sent).
+                , admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , T.backendUpdate
+                    100
+                    (Types.RegisteredFileForEndToEndTest
+                        (FileStatus.fileHash "123123123")
+                        { fileSize = 1234, imageSize = Just (Coord.xy 128 128) }
+                    )
+                , RecordedTestExtra.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                -- A day later another message is written so that a date divider shows up
+                , T.fastForward (Duration.days 1)
+                , RecordedTestExtra.writeMessage admin 100 "A new day means a date divider!"
 
                 -- Open the drawing tab and check that the instructions show up
                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
@@ -500,8 +612,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.andThen
                     100
                     (\data ->
-                        case lastGuildChannelMessage data.backend of
-                            Just ( guildId, messageId, _ ) ->
+                        case ( lastGuildChannelMessage data.backend, findImageMessage data.backend ) of
+                            ( Just ( guildId, messageId, _ ), Just ( imageMessageId, fileId ) ) ->
+                                let
+                                    dividerDate : Date.Date
+                                    dividerDate =
+                                        Date.fromPosix Time.utc data.time
+                                in
                                 [ -- Click the message's profile image to use it as the drawing
                                   -- anchor. The anchor's screen position is part of the click
                                   -- event (clientX/Y minus offsetX/Y).
@@ -509,43 +626,24 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     100
                                     (Drawing.profileImageAnchorId (Dom.id "spoiler") messageId)
                                     "click"
-                                    (Json.Encode.object
-                                        [ ( "clientX", Json.Encode.float 30 )
-                                        , ( "clientY", Json.Encode.float 25 )
-                                        , ( "offsetX", Json.Encode.float 10 )
-                                        , ( "offsetY", Json.Encode.float 5 )
-                                        ]
-                                    )
+                                    (drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-
-                                -- Draw a zigzag stroke
-                                , admin.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
-                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 80 60)
-                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 110 30)
-                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
-                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
-                                , admin.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
-                                , admin.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+                                , drawZigzagStroke admin
 
                                 -- The stroke is visible for the user that drew it and, in
                                 -- realtime, for other users viewing the same channel
-                                , admin.checkView
-                                    100
-                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
-                                , user.checkView
-                                    100
-                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
-                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
 
-                                -- The stroke is also stored in the message on the backend
+                                -- The stroke is stored in the message on the backend
                                 , T.checkState
                                     100
                                     (\data2 ->
                                         case lastGuildChannelMessage data2.backend of
                                             Just ( _, _, message ) ->
-                                                if List.length (Message.drawing message).finished == 1 then
+                                                if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
                                                     Ok ()
 
                                                 else
@@ -557,19 +655,93 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                                 -- Undo removes the stroke for everyone, redo brings it back
                                 , admin.click 100 Drawing.undoButtonId
-                                , admin.checkView
-                                    100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.tag "polyline" ])
-                                , user.checkView
-                                    100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.tag "polyline" ])
+                                , admin.checkView 100 (expectPolylineCount 0)
+                                , user.checkView 100 (expectPolylineCount 0)
                                 , admin.click 100 Drawing.redoButtonId
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
+
+                                -- Draw on the image attachment. The input overlay blocks anchor
+                                -- clicks so the drawing tab is toggled to pick a new anchor.
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.custom
+                                    100
+                                    (Dom.id
+                                        ("spoiler_"
+                                            ++ Id.toString imageMessageId
+                                            ++ "_image_"
+                                            ++ Id.toString fileId
+                                        )
+                                    )
+                                    "click"
+                                    (drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
-                                , user.checkView
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 2)
+                                , user.checkView 100 (expectPolylineCount 2)
+                                , T.checkState
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                    (\data2 ->
+                                        case findImageMessage data2.backend of
+                                            Just _ ->
+                                                case lastGuildChannelMessageAt imageMessageId data2.backend of
+                                                    Just message ->
+                                                        if
+                                                            List.length
+                                                                (Message.drawing (Drawing.ImageAttachmentAnchor fileId) message).finished
+                                                                == 1
+                                                        then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Expected the image attachment to have exactly one finished stroke"
+
+                                                    Nothing ->
+                                                        Err "Image message not found on the backend"
+
+                                            Nothing ->
+                                                Err "Image message not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to an image attachment" }
+
+                                -- Draw on the date divider between yesterday's and today's messages
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.custom
+                                    100
+                                    (Dom.id ("guild_dateDivider_" ++ Date.toIsoString dividerDate))
+                                    "click"
+                                    (drawingAnchorClick 400 300)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 3)
+                                , user.checkView 100 (expectPolylineCount 3)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannel data2.backend of
+                                            Just channel ->
+                                                case SeqDict.get dividerDate channel.dateDividerDrawings of
+                                                    Just drawing ->
+                                                        if List.length drawing.finished == 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Expected the date divider to have exactly one finished stroke"
+
+                                                    Nothing ->
+                                                        Err "Expected the date divider to have drawings stored on the backend"
+
+                                            Nothing ->
+                                                Err "Channel not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a date divider" }
 
                                 -- Pressing the pencil tab again closes the drawing tab
                                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
@@ -577,7 +749,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
 
-                                -- The drawing is persisted so it survives loading the page again
+                                -- All three drawings are persisted so they survive loading the page again
                                 , T.connectFrontend
                                     100
                                     RecordedTestExtra.sessionId0
@@ -597,16 +769,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                             10
                                             "user_agent_from_js"
                                             (Json.Encode.string RecordedTestExtra.firefoxDesktop)
-                                        , -- Drawings are part of the message data so they render
+                                        , -- Drawings are part of the channel data so they render
                                           -- as soon as the messages are shown
-                                          admin2.checkView
-                                            2000
-                                            (Test.Html.Query.has [ Test.Html.Selector.tag "polyline" ])
+                                          admin2.checkView 2000 (expectPolylineCount 3)
                                         ]
                                     )
                                 ]
 
-                            Nothing ->
+                            _ ->
                                 [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
                     )
                 ]

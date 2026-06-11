@@ -2527,7 +2527,11 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedImage { fileId, fileUrl, imageSize, position } ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
-                            selectDrawingAnchor guildOrDmId threadRoute (Drawing.ImageAttachmentAnchor fileId) position model
+                            selectDrawingAnchor
+                                guildOrDmId
+                                (Drawing.MessageAnchor threadRoute (Drawing.ImageAttachmentAnchor fileId))
+                                position
+                                model
 
                         _ ->
                             ( { model | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
@@ -2620,7 +2624,11 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedUserIcon elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
-                            selectDrawingAnchor guildOrDmId threadRoute Drawing.UserIconAnchor elementPosition model
+                            selectDrawingAnchor
+                                guildOrDmId
+                                (Drawing.MessageAnchor threadRoute Drawing.UserIconAnchor)
+                                elementPosition
+                                model
 
                         _ ->
                             ( model, Command.none )
@@ -2628,7 +2636,23 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedTimestamp elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
-                            selectDrawingAnchor guildOrDmId threadRoute Drawing.TimestampAnchor elementPosition model
+                            selectDrawingAnchor
+                                guildOrDmId
+                                (Drawing.MessageAnchor threadRoute Drawing.TimestampAnchor)
+                                elementPosition
+                                model
+
+                        _ ->
+                            ( model, Command.none )
+
+                MessageView.MessageView_PressedDateDivider date elementPosition ->
+                    case Route.toChannelHeaderTab model.route of
+                        Just DmChannelHeaderTab_Draw ->
+                            selectDrawingAnchor
+                                guildOrDmId
+                                (Drawing.DateDividerAnchor (Id.threadRouteWithoutMessage threadRoute) date)
+                                elementPosition
+                                model
 
                         _ ->
                             ( model, Command.none )
@@ -4241,17 +4265,16 @@ they only select a drawing anchor while the drawing tab is open.
 -}
 selectDrawingAnchor :
     AnyGuildOrDmId
-    -> ThreadRouteWithMessage
     -> Drawing.AnchorType
     -> Point2d CssPixels ScreenCoordinate
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-selectDrawingAnchor guildOrDmId threadRoute anchorType elementPosition model =
+selectDrawingAnchor guildOrDmId anchorType elementPosition model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
                 | drawingMode =
-                    Drawing.initialAnchorSelection guildOrDmId threadRoute anchorType elementPosition
+                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition
                         |> Drawing.SelectedAnchor
               }
             , Command.none
@@ -4277,11 +4300,8 @@ updateDrawing drawingMsg model =
                                 model.time
                                 (Local_Drawing
                                     selected.guildOrDmId
-                                    selected.threadRoute
-                                    (Drawing.StartStroke
-                                        selected.anchorType
-                                        ( x - anchorPosition.x, y - anchorPosition.y )
-                                    )
+                                    selected.anchorType
+                                    (Drawing.StartStroke ( x - anchorPosition.x, y - anchorPosition.y ))
                                     |> Just
                                 )
                                 { loggedIn
@@ -4321,7 +4341,7 @@ updateDrawing drawingMsg model =
                                         Just points ->
                                             Local_Drawing
                                                 selected.guildOrDmId
-                                                selected.threadRoute
+                                                selected.anchorType
                                                 (Drawing.ContinueStroke points)
                                                 |> Just
 
@@ -4348,7 +4368,7 @@ updateDrawing drawingMsg model =
                                             Just points ->
                                                 Local_Drawing
                                                     selected.guildOrDmId
-                                                    selected.threadRoute
+                                                    selected.anchorType
                                                     (Drawing.ContinueStroke points)
                                                     |> Just
 
@@ -4363,7 +4383,7 @@ updateDrawing drawingMsg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_Drawing selected.guildOrDmId selected.threadRoute Drawing.EndStroke |> Just)
+                                (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.EndStroke |> Just)
                                 loggedIn2
                                 flushCmd
 
@@ -4375,13 +4395,13 @@ updateDrawing drawingMsg model =
                         ( canUndo, _ ) =
                             ChannelHeader.drawingCanUndoOrRedo
                                 selected.guildOrDmId
-                                selected.threadRoute
+                                selected.anchorType
                                 (Local.model loggedIn.localState)
                     in
                     if canUndo then
                         FrontendExtra.handleLocalChange
                             model.time
-                            (Local_Drawing selected.guildOrDmId selected.threadRoute Drawing.UndoStroke |> Just)
+                            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.UndoStroke |> Just)
                             loggedIn
                             Command.none
 
@@ -4393,13 +4413,13 @@ updateDrawing drawingMsg model =
                         ( _, canRedo ) =
                             ChannelHeader.drawingCanUndoOrRedo
                                 selected.guildOrDmId
-                                selected.threadRoute
+                                selected.anchorType
                                 (Local.model loggedIn.localState)
                     in
                     if canRedo then
                         FrontendExtra.handleLocalChange
                             model.time
-                            (Local_Drawing selected.guildOrDmId selected.threadRoute Drawing.RedoStroke |> Just)
+                            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.RedoStroke |> Just)
                             loggedIn
                             Command.none
 
