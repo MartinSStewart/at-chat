@@ -4183,7 +4183,7 @@ drawOnMessages imageUploadConfig =
                                   -- event (clientX/Y minus offsetX/Y).
                                   admin.custom
                                     100
-                                    (Drawing.profileImageAnchorId (Dom.id "spoiler") messageId)
+                                    (Drawing.profileImageAnchorId messageId)
                                     "click"
                                     (drawingAnchorClick 30 25)
                                 , admin.checkView

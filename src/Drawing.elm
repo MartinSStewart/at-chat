@@ -50,6 +50,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
+import Ui.Lazy
 
 
 type AnchorType
@@ -313,11 +314,11 @@ strokesFor drawing =
         ++ List.map (\( createdBy, stroke ) -> ( createdBy, stroke.points )) (SeqDict.toList drawing.inProgress)
 
 
-overlayAttribute : (userId -> String) -> Drawing userId -> Ui.Attribute msg
+overlayAttribute : (userId -> String) -> Drawing userId -> Element msg
 overlayAttribute getColor drawing =
     case strokesFor drawing of
         [] ->
-            Ui.noAttr
+            Ui.none
 
         strokes ->
             List.map (\( createdBy, points ) -> strokeSvg (getColor createdBy) points) strokes
@@ -328,7 +329,6 @@ overlayAttribute getColor drawing =
                     , Ui.height (Ui.px 0)
                     , MyUi.htmlStyle "pointer-events" "none"
                     ]
-                |> Ui.inFront
 
 
 imageAttachmentOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
@@ -437,7 +437,7 @@ anchorHighlight :
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
     [ Ui.Events.on "click" (Json.Decode.map onPress decodeWithTargetScreenPosition)
     , Dom.idToString htmlId |> Ui.id
-    , overlayAttribute userIdToColor drawings
+    , Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
     ]
         ++ (if isSelectingAnchor then

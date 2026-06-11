@@ -2721,11 +2721,20 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         in
                                                         case maybeOnPressImage of
                                                             Just onPressImage ->
-                                                                Html.span
-                                                                    [ Html.Attributes.style "position" "relative"
-                                                                    , Html.Attributes.style "display" "inline-block"
-                                                                    ]
-                                                                    (imageElement
+                                                                Html.div
+                                                                    []
+                                                                    [ Html.div
+                                                                        [ Html.Attributes.style "position" "relative" ]
+                                                                        (case SeqDict.get fileId config.drawings of
+                                                                            Just drawing ->
+                                                                                Drawing.imageAttachmentOverlays
+                                                                                    config.drawingUserColor
+                                                                                    drawing
+
+                                                                            Nothing ->
+                                                                                []
+                                                                        )
+                                                                    , imageElement
                                                                         [ Html.Attributes.style "cursor" "pointer"
                                                                         , Html.Attributes.id
                                                                             (case maybePressedSpoiler of
@@ -2749,16 +2758,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                                 Drawing.decodeWithTargetScreenPosition
                                                                             )
                                                                         ]
-                                                                        :: (case SeqDict.get fileId config.drawings of
-                                                                                Just drawing ->
-                                                                                    Drawing.imageAttachmentOverlays
-                                                                                        config.drawingUserColor
-                                                                                        drawing
-
-                                                                                Nothing ->
-                                                                                    []
-                                                                           )
-                                                                    )
+                                                                    ]
 
                                                             Nothing ->
                                                                 Html.a
