@@ -8,10 +8,10 @@ module Drawing exposing
     , Msg(..)
     , SelectedAnchorData
     , Stroke
-    , anchorHighlightStyle
+    , anchorHighlight
     , canRedo
     , canUndo
-    , dateDividerOverlay
+    , decodeWithTargetScreenPosition
     , discordUserColor
     , emptyDrawing
     , handleLocalChange
@@ -23,17 +23,15 @@ module Drawing exposing
     , profileImageAnchorId
     , redoButtonId
     , resetAnchor
-    , timestampOverlays
     , undoButtonId
     , undoRedoButton
     , userColor
-    , userIconOverlay
     )
 
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
 import Discord
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
@@ -49,6 +47,8 @@ import Svg
 import Svg.Attributes
 import Touch exposing (ScreenCoordinate)
 import Ui exposing (Element)
+import Ui.Anim
+import Ui.Events
 import Ui.Font
 
 
@@ -255,9 +255,9 @@ nonemptyTake amount (Nonempty head rest) =
     Nonempty head (List.take (amount - 1) rest)
 
 
-profileImageAnchorId : Dom.HtmlId -> Id messageId -> Dom.HtmlId
-profileImageAnchorId htmlIdPrefix messageId =
-    Dom.id (Dom.idToString htmlIdPrefix ++ "_drawAnchorProfile_" ++ Id.toString messageId)
+profileImageAnchorId : Id messageId -> Dom.HtmlId
+profileImageAnchorId messageId =
+    Dom.id ("drawAnchorProfile_" ++ Id.toString messageId)
 
 
 userColor : Id UserId -> String
@@ -313,23 +313,6 @@ strokesFor drawing =
         ++ List.map (\( createdBy, stroke ) -> ( createdBy, stroke.points )) (SeqDict.toList drawing.inProgress)
 
 
-{-| Strokes anchored to the profile image of a message, placed in front of it
-so they move together with the profile image. The svg has no size of its own
-(overflow is visible) and ignores pointer events so it never blocks
-interactions with the message below it.
--}
-userIconOverlay : (userId -> String) -> Drawing userId -> Ui.Attribute msg
-userIconOverlay =
-    overlayAttribute
-
-
-{-| Strokes anchored to the date divider that is shown above the first message of a day.
--}
-dateDividerOverlay : (userId -> String) -> Drawing userId -> Ui.Attribute msg
-dateDividerOverlay =
-    overlayAttribute
-
-
 overlayAttribute : (userId -> String) -> Drawing userId -> Ui.Attribute msg
 overlayAttribute getColor drawing =
     case strokesFor drawing of
@@ -346,17 +329,6 @@ overlayAttribute getColor drawing =
                     , MyUi.htmlStyle "pointer-events" "none"
                     ]
                 |> Ui.inFront
-
-
-{-| Strokes anchored to the timestamp of a message. These are added as children
-of the timestamp element (which is position:relative) so they move together
-with the timestamp.
--}
-timestampOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
-timestampOverlays getColor drawing =
-    List.map
-        (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
-        (strokesFor drawing)
 
 
 imageAttachmentOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
@@ -455,26 +427,56 @@ decodeMousePosition toMsg =
         (Json.Decode.field "clientY" Json.Decode.float)
 
 
-{-| While picking an anchor, highlights valid anchor elements when the cursor
-hovers over them.
+anchorHighlight :
+    HtmlId
+    -> (userId -> String)
+    -> (Point2d CssPixels ScreenCoordinate -> msg)
+    -> Bool
+    -> Drawing userId
+    -> List (Ui.Attribute msg)
+anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
+    [ Ui.Events.on "click" (Json.Decode.map onPress decodeWithTargetScreenPosition)
+    , Dom.idToString htmlId |> Ui.id
+    , overlayAttribute userIdToColor drawings
+    , Ui.width Ui.shrink
+    ]
+        ++ (if isSelectingAnchor then
+                [ Ui.Anim.hovered
+                    (Ui.Anim.ms 10)
+                    [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
+                    , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
+                    ]
+                , MyUi.htmlStyle "outline-style" "solid"
+                , MyUi.htmlStyle "outline-width" "2px"
+                , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
+                , Ui.pointer
+                ]
+
+            else
+                []
+           )
+
+
+decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
+decodeWithTargetScreenPosition =
+    Json.Decode.map4
+        (\clientX clientY offsetX offsetY ->
+            Point2d.xy
+                (CssPixels.cssPixels (clientX - offsetX))
+                (CssPixels.cssPixels (clientY - offsetY))
+        )
+        (floatFieldWithDefault "clientX")
+        (floatFieldWithDefault "clientY")
+        (floatFieldWithDefault "offsetX")
+        (floatFieldWithDefault "offsetY")
+
+
+{-| Real mouse events always include the position fields but simulated click
+events in tests might not.
 -}
-anchorHighlightStyle : Element msg
-anchorHighlightStyle =
-    Html.node
-        "style"
-        []
-        [ Html.text
-            ("[id*='drawAnchorProfile']:hover, [id^='guild_messageTimestamp']:hover, [id^='spoiler_'][id*='_image_']:hover, [id^='guild_dateDivider']:hover {"
-                ++ "outline: 3px solid rgba(96, 165, 250, 0.8);"
-                ++ "outline-offset: 2px;"
-                ++ "background-color: rgba(96, 165, 250, 0.3);"
-                ++ "border-radius: 4px;"
-                ++ "cursor: pointer;"
-                ++ "}"
-            )
-        ]
-        |> Ui.html
-        |> Ui.el [ Ui.width (Ui.px 0), Ui.height (Ui.px 0) ]
+floatFieldWithDefault : String -> Json.Decode.Decoder Float
+floatFieldWithDefault fieldName =
+    Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.float, Json.Decode.succeed 0 ]
 
 
 undoRedoButton : Dom.HtmlId -> Msg -> String -> Bool -> Element Msg

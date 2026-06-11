@@ -15,7 +15,6 @@ module RichText exposing
     , bigEmojiFont
     , customEmojiIds
     , customEmojisFromDiscord
-    , decodeWithTargetScreenPosition
     , discordCharsLeft
     , domainToString
     , emptyPlaceholder
@@ -2723,8 +2722,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         case maybeOnPressImage of
                                                             Just onPressImage ->
                                                                 Html.span
-                                                                    [ -- Drawings anchored to the image are positioned relative to it
-                                                                      Html.Attributes.style "position" "relative"
+                                                                    [ Html.Attributes.style "position" "relative"
                                                                     , Html.Attributes.style "display" "inline-block"
                                                                     ]
                                                                     (imageElement
@@ -2739,16 +2737,16 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                             )
                                                                         , Html.Events.on
                                                                             "click"
-                                                                            (decodeWithTargetScreenPosition
-                                                                                |> Json.Decode.map
-                                                                                    (\position ->
-                                                                                        onPressImage
-                                                                                            { fileId = fileId
-                                                                                            , fileUrl = fileUrl
-                                                                                            , imageSize = imageSize
-                                                                                            , position = position
-                                                                                            }
-                                                                                    )
+                                                                            (Json.Decode.map
+                                                                                (\position ->
+                                                                                    onPressImage
+                                                                                        { fileId = fileId
+                                                                                        , fileUrl = fileUrl
+                                                                                        , imageSize = imageSize
+                                                                                        , position = position
+                                                                                        }
+                                                                                )
+                                                                                Drawing.decodeWithTargetScreenPosition
                                                                             )
                                                                         ]
                                                                         :: (case SeqDict.get fileId config.drawings of
@@ -2817,28 +2815,6 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
-
-
-decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
-decodeWithTargetScreenPosition =
-    Json.Decode.map4
-        (\clientX clientY offsetX offsetY ->
-            Point2d.xy
-                (CssPixels.cssPixels (clientX - offsetX))
-                (CssPixels.cssPixels (clientY - offsetY))
-        )
-        (floatFieldWithDefault "clientX")
-        (floatFieldWithDefault "clientY")
-        (floatFieldWithDefault "offsetX")
-        (floatFieldWithDefault "offsetY")
-
-
-{-| Real mouse events always include the position fields but simulated click
-events in tests might not.
--}
-floatFieldWithDefault : String -> Json.Decode.Decoder Float
-floatFieldWithDefault fieldName =
-    Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.float, Json.Decode.succeed 0 ]
 
 
 embedContainerMaxWidth : number
