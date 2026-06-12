@@ -5623,10 +5623,6 @@ userTextMessageContent :
     -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
 userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
-    let
-        _ =
-            Debug.log "isHovered" isHovered
-    in
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -5707,7 +5703,9 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.userColor
+                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     }
                     message2.embeds
                     message2.content
@@ -5832,7 +5830,9 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.discordUserColor
+                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     }
                     message2.embeds
                     message2.content

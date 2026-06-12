@@ -9,6 +9,7 @@ module Drawing exposing
     , SelectedAnchorData
     , Stroke
     , anchorHighlight
+    , anchorHighlightHtmlClass
     , canRedo
     , canUndo
     , decodeWithTargetScreenPosition
@@ -62,6 +63,7 @@ type MessageAnchor
     = UserIconAnchor
     | TimestampAnchor
     | ImageAttachmentAnchor (Id FileId)
+    | EmbedImageAnchor Int
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor element.
@@ -455,6 +457,14 @@ anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
             else
                 []
            )
+
+
+{-| Same hover highlight as anchorHighlight but for elements rendered with plain
+Html instead of elm-ui. The matching CSS rules live in MyUi.css.
+-}
+anchorHighlightHtmlClass : Html.Attribute msg
+anchorHighlightHtmlClass =
+    Html.Attributes.class "drawing-anchor-select"
 
 
 decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)

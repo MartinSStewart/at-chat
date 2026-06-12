@@ -97,6 +97,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
+import Embed
 import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
@@ -4159,6 +4160,9 @@ drawOnMessages imageUploadConfig =
                 , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
 
+                -- A message with a hyperlink that loads an embed containing an image
+                , writeMessage admin 100 "Draw on https://elm.camp too!"
+
                 -- A day later another message is written so that a date divider shows up
                 , writeMessage admin (Duration.hours 0.05 |> Duration.inMilliseconds) "A new day means a date divider!"
 
@@ -4171,8 +4175,8 @@ drawOnMessages imageUploadConfig =
                 , T.andThen
                     100
                     (\data ->
-                        case ( lastGuildChannelMessage data.backend, findImageMessage data.backend ) of
-                            ( Just ( guildId, messageId, _ ), Just ( imageMessageId, fileId ) ) ->
+                        case ( lastGuildChannelMessage data.backend, findImageMessage data.backend, findEmbedImageMessage data.backend ) of
+                            ( Just ( guildId, messageId, _ ), Just ( imageMessageId, fileId ), Just embedMessageId ) ->
                                 let
                                     dividerDate : Date
                                     dividerDate =
@@ -4302,13 +4306,51 @@ drawOnMessages imageUploadConfig =
                                     )
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a date divider" }
 
+                                -- Draw on the embed image with a stroke that extends past
+                                -- both sides of the embed container. The container must not
+                                -- clip the stroke.
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.custom
+                                    100
+                                    (Dom.id ("spoiler_" ++ Id.toString embedMessageId ++ "_embedImage_0"))
+                                    "click"
+                                    (drawingAnchorClick 100 100)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawWideZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 4)
+                                , user.checkView 100 (expectPolylineCount 4)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannelMessageAt embedMessageId data2.backend of
+                                            Just message ->
+                                                if
+                                                    List.length
+                                                        (Message.drawing (Drawing.EmbedImageAnchor 0) message).finished
+                                                        == 1
+                                                then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected the embed image to have exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Embed message not found on the backend"
+                                    )
+                                , -- The whole conversation fits in the tall snapshot so the
+                                  -- embed and the stroke sticking out of it are both visible
+                                  tallSnapshot admin 100 { name = "Drawing stroke anchored to an embed image extends outside the embed" }
+
                                 -- Pressing the pencil tab again closes the drawing tab
                                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
 
-                                -- All three drawings are persisted so they survive loading the page again
+                                -- All four drawings are persisted so they survive loading the page again
                                 , T.connectFrontend
                                     100
                                     sessionId0
@@ -4330,7 +4372,7 @@ drawOnMessages imageUploadConfig =
                                             (startupDataJson firefoxDesktop)
                                         , -- Drawings are part of the channel data so they render
                                           -- as soon as the messages are shown
-                                          admin2.checkView 2000 (expectPolylineCount 3)
+                                          admin2.checkView 2000 (expectPolylineCount 4)
                                         ]
                                     )
                                 ]
@@ -4420,6 +4462,40 @@ findImageMessage backend =
             Nothing
 
 
+{-| The first message with a loaded embed that contains an image, in the first
+channel of the most recently created guild.
+-}
+findEmbedImageMessage : BackendModel -> Maybe (Id ChannelMessageId)
+findEmbedImageMessage backend =
+    case lastGuildChannel backend of
+        Just channel ->
+            Array.toList channel.messages
+                |> List.indexedMap Tuple.pair
+                |> List.filterMap
+                    (\( index, message ) ->
+                        case message of
+                            Message.UserTextMessage data ->
+                                case Array.get 0 data.embeds of
+                                    Just (Embed.EmbedLoaded embed) ->
+                                        case embed.image of
+                                            Just _ ->
+                                                Just (Id.fromInt index)
+
+                                            Nothing ->
+                                                Nothing
+
+                                    _ ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+
+        Nothing ->
+            Nothing
+
+
 {-| A click event on a drawing anchor. The clientX/Y and offsetX/Y fields are
 used to determine the anchor element's screen position.
 -}
@@ -4444,6 +4520,26 @@ drawZigzagStroke client =
         , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
         , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
         , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
+        , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+        ]
+
+
+{-| A zigzag much wider than the embed container. With the anchor position
+faked at (100, 100) by drawingAnchorClick, the stroke spans -60 to 520 on the
+x axis relative to the embed image, which goes well past both edges of the
+432px wide embed container.
+-}
+drawWideZigzagStroke :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+drawWideZigzagStroke client =
+    T.group
+        [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 40 130)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 220)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 300 130)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 430 220)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 560 130)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 620 220)
         , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
         ]
 

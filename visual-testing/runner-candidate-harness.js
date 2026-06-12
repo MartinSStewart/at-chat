@@ -95,9 +95,14 @@ server.listen(port, () => {
 
     var snapshot = { hasMore: true }
 
-    // This budget covers each executeAsync below, including waiting for web
-    // fonts to load before a screenshot.
-    await browser.setTimeout({ script: 10000 })
+    // The first advanceSnapshotRequested is special: the harness only responds
+    // once the test data files have loaded AND the entire test suite has been
+    // simulated (T.toSnapshots), which takes well over 10 seconds and grows as
+    // tests are added. If this call exceeds the script timeout, webdriverio
+    // SILENTLY RETRIES the command; the retry advances the harness to the next
+    // snapshot, so the first snapshot is skipped without any error. Give the
+    // first call a budget that comfortably covers the whole-suite simulation.
+    await browser.setTimeout({ script: 300000 })
 
     // Web fonts (e.g. the app's Montserrat @font-face, declared with
     // `font-display: swap`) are fetched lazily and can finish *after* the page
@@ -125,6 +130,11 @@ server.listen(port, () => {
     snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
       window.advanceSnapshotRequested(readyForSnapshotCallback)
     });
+
+    // Every later advance just steps to an already-simulated snapshot (a few
+    // milliseconds). This budget covers each executeAsync below, including
+    // waiting for web fonts to load before a screenshot.
+    await browser.setTimeout({ script: 10000 })
 
     var count = 0
 

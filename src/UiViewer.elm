@@ -82,7 +82,9 @@ main =
                     , animationMode = Sticker.LoopForever
                     , timezone = Time.utc
                     , drawings = SeqDict.empty
+                    , embedDrawings = SeqDict.empty
                     , drawingUserColor = \_ -> ""
+                    , isSelectingAnchor = False
                     }
                     Array.empty
                     (Nonempty
@@ -181,7 +183,9 @@ stickersSection =
             , animationMode = Sticker.LoopForever
             , timezone = Time.utc
             , drawings = SeqDict.empty
+            , embedDrawings = SeqDict.empty
             , drawingUserColor = \_ -> ""
+            , isSelectingAnchor = False
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -350,7 +354,9 @@ embedExamples whitelistedDomains =
                 , animationMode = Sticker.LoopForever
                 , timezone = Time.utc
                 , drawings = SeqDict.empty
+                , embedDrawings = SeqDict.empty
                 , drawingUserColor = \_ -> ""
+                , isSelectingAnchor = False
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)

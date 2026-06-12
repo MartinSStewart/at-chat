@@ -7,6 +7,7 @@ module RichText exposing
     , Language(..)
     , Modifiers(..)
     , PressedImageData
+    , PressedImageId(..)
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
@@ -2233,7 +2234,9 @@ preview onPressLink config nonempty =
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
         , drawings = SeqDict.empty
+        , embedDrawings = SeqDict.empty
         , drawingUserColor = always ""
+        , isSelectingAnchor = False
         }
         Array.empty
         0
@@ -2251,7 +2254,9 @@ type alias Config a userId =
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
     , drawings : SeqDict (Id FileId) (Drawing userId)
+    , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> String
+    , isSelectingAnchor : Bool
     }
 
 
@@ -2285,11 +2290,16 @@ normalTextView text state =
 
 
 type alias PressedImageData =
-    { fileId : Id FileId
+    { imageId : PressedImageId
     , fileUrl : String
     , position : Point2d CssPixels ScreenCoordinate
     , imageSize : Coord CssPixels
     }
+
+
+type PressedImageId
+    = PressedAttachedFileImage (Id FileId)
+    | PressedEmbedImage Int
 
 
 viewHelper :
@@ -2603,9 +2613,30 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                 embedView
                                                     config.timezone
                                                     onPressLink
+                                                    maybeOnPressImage
                                                     containerWidth
                                                     config.domainWhitelist
                                                     config.animationMode
+                                                    config.isSelectingAnchor
+                                                    embedIndex2
+                                                    (case maybePressedSpoiler of
+                                                        Just ( htmlIdPrefix, _ ) ->
+                                                            Dom.idToString htmlIdPrefix
+                                                                ++ "_embedImage_"
+                                                                ++ String.fromInt embedIndex2
+
+                                                        Nothing ->
+                                                            "embedImage_" ++ String.fromInt embedIndex2
+                                                    )
+                                                    (case SeqDict.get embedIndex2 config.embedDrawings of
+                                                        Just embedDrawing ->
+                                                            Drawing.imageAttachmentOverlays
+                                                                config.drawingUserColor
+                                                                embedDrawing
+
+                                                        Nothing ->
+                                                            []
+                                                    )
                                                     data
                                                     embed
 
@@ -2782,7 +2813,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                             (Json.Decode.map
                                                                                 (\position ->
                                                                                     onPressImage
-                                                                                        { fileId = fileId
+                                                                                        { imageId = PressedAttachedFileImage fileId
                                                                                         , fileUrl = fileUrl
                                                                                         , imageSize = imageSize
                                                                                         , position = position
@@ -2790,6 +2821,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                                 )
                                                                                 Drawing.decodeWithTargetScreenPosition
                                                                             )
+                                                                        , htmlAttrIf config.isSelectingAnchor Drawing.anchorHighlightHtmlClass
                                                                         ]
                                                                     ]
 
@@ -2871,13 +2903,12 @@ embedContainer contents =
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "max-width" (String.fromInt embedContainerMaxWidth ++ "px")
         , Html.Attributes.style "margin-top" "4px"
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Attributes.style "overflow" "hidden"
         ]
         [ Html.div
             [ Html.Attributes.style "width" (String.fromInt embedContainerLeftBorderWidth ++ "px")
             , Html.Attributes.style "flex-shrink" "0"
             , Html.Attributes.style "background-color" "rgb(80,120,200)"
+            , Html.Attributes.style "border-radius" "4px 0 0 4px"
             ]
             []
         , Html.div
@@ -2885,6 +2916,10 @@ embedContainer contents =
             , Html.Attributes.style "padding" ("8px " ++ String.fromInt embedContainerPaddingX ++ "px")
             , Html.Attributes.style "min-width" "0"
             , Html.Attributes.style "flex" "1"
+            , -- The corners are rounded per child instead of border-radius and
+              -- overflow hidden on the container, so that drawings anchored to
+              -- the embed image can extend outside of the container.
+              Html.Attributes.style "border-radius" "0 4px 4px 0"
             ]
             contents
         ]
@@ -2913,8 +2948,21 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             content
 
 
-embedView : Time.Zone -> (Url -> msg) -> Int -> SeqSet Domain -> Sticker.AnimationMode -> Url -> EmbedData -> Html msg
-embedView timezone onPressLink containerWidth domainWhitelist playAnimation url embed =
+embedView :
+    Time.Zone
+    -> (Url -> msg)
+    -> Maybe (PressedImageData -> msg)
+    -> Int
+    -> SeqSet Domain
+    -> Sticker.AnimationMode
+    -> Bool
+    -> Int
+    -> String
+    -> List (Html msg)
+    -> Url
+    -> EmbedData
+    -> Html msg
+embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist playAnimation isSelectingAnchor embedIndex htmlId drawingOverlays url embed =
     embedContainer
         (List.filterMap
             identity
@@ -2983,22 +3031,54 @@ embedView timezone onPressLink containerWidth domainWhitelist playAnimation url 
 
                                 Nothing ->
                                     False
-                    in
-                    if isAnimatedImage then
-                        Sticker.animatedImageView False width2 height2 Nothing imageData.url playAnimation |> Just
 
-                    else
-                        Html.img
-                            [ Html.Attributes.src imageData.url
-                            , Html.Attributes.style "width" width2
-                            , Html.Attributes.style "height" height2
-                            , Html.Attributes.style "border-radius" "4px"
-                            , Html.Attributes.style "margin-top" "8px"
-                            , Html.Attributes.style "display" "block"
-                            , Html.Attributes.attribute "data-image-url" imageData.url
-                            ]
-                            []
-                            |> Just
+                        image : Html msg
+                        image =
+                            if isAnimatedImage then
+                                Sticker.animatedImageView False width2 height2 Nothing imageData.url playAnimation
+
+                            else
+                                Html.img
+                                    [ Html.Attributes.src imageData.url
+                                    , Html.Attributes.style "width" width2
+                                    , Html.Attributes.style "height" height2
+                                    , Html.Attributes.style "border-radius" "4px"
+                                    , Html.Attributes.style "display" "block"
+                                    , Html.Attributes.attribute "data-image-url" imageData.url
+                                    ]
+                                    []
+                    in
+                    Html.div
+                        ([ Html.Attributes.style "position" "relative"
+                         , Html.Attributes.style "width" width2
+                         , htmlAttrIf (not isAnimatedImage) (Html.Attributes.style "margin-top" "8px")
+                         ]
+                            ++ (case maybeOnPressImage of
+                                    Just onPressImage ->
+                                        [ Html.Attributes.style "cursor" "pointer"
+                                        , Html.Attributes.id htmlId
+                                        , Html.Events.on
+                                            "click"
+                                            (Json.Decode.map
+                                                (\position ->
+                                                    onPressImage
+                                                        { imageId = PressedEmbedImage embedIndex
+                                                        , fileUrl = imageData.url
+                                                        , imageSize = imageData.imageSize
+                                                        , position = position
+                                                        }
+                                                )
+                                                Drawing.decodeWithTargetScreenPosition
+                                            )
+                                        , htmlAttrIf isSelectingAnchor Drawing.anchorHighlightHtmlClass
+                                        ]
+
+                                    Nothing ->
+                                        []
+                               )
+                        )
+                        (drawingOverlays ++ [ image ])
+                        |> Just
 
                 Nothing ->
                     Nothing

@@ -2516,12 +2516,21 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedImage { fileId, fileUrl, imageSize, position } ->
+                MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position } ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
-                                (Drawing.MessageAnchor threadRoute (Drawing.ImageAttachmentAnchor fileId))
+                                (Drawing.MessageAnchor
+                                    threadRoute
+                                    (case imageId of
+                                        RichText.PressedAttachedFileImage fileId ->
+                                            Drawing.ImageAttachmentAnchor fileId
+
+                                        RichText.PressedEmbedImage embedIndex ->
+                                            Drawing.EmbedImageAnchor embedIndex
+                                    )
+                                )
                                 position
                                 model
 
