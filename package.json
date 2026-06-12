@@ -8,7 +8,7 @@
     "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
     "end-to-end-tests": "lamdera make tests/EndToEndTestsRunner.elm --output tests/EndToEndTestsRunnerElm.js && cd tests && node EndToEndTestsRunner.js",
     "rust-server": "cd tests && cargo run --manifest-path ../rust-server/Cargo.toml",
-    "snapshot-tests": "cd visual-testing && ./run-snapshot-test.sh"
+    "snapshot-tests": "cd visual-testing && ./run-snapshot-test.sh --view"
   },
   "devDependencies": {
     "elm-codegen": "^0.5.3",
