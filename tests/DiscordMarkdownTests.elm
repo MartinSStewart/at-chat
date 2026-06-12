@@ -176,6 +176,11 @@ basicFormattingTests =
             (Nonempty (MarkdownLink (NonemptyString 'u' "rl has leading line break") (unsafeUrl "https://example.com/")) [])
         , fromNonemptyStringTest "https://a.com/abc]" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc")) [ NormalText ']' "" ])
         , fromNonemptyStringTest "https://a.com/abc]d" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc]d")) [])
+        , fromNonemptyStringTest "https://a.com/abc(123)" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc(123)")) [])
+        , fromNonemptyStringTest "(https://a.com/abc(123)" (Nonempty (NormalText '(' "") [ Hyperlink (unsafeUrl "https://a.com/abc(123)") ])
+        , fromNonemptyStringTest "(https://a.com/abc(123))" (Nonempty (NormalText '(' "") [ Hyperlink (unsafeUrl "https://a.com/abc(123)"), NormalText ')' "" ])
+        , fromNonemptyStringTest "https://a.com/abc123)" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc123")) [ NormalText ')' "" ])
+        , fromNonemptyStringTest "https://a.com/abc1(23))" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc1(23))")) [])
         ]
 
 
