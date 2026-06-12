@@ -65,7 +65,7 @@ module RecordedTestExtra exposing
     , sessionIdAttacker
     , startTest
     , startTime
-    , stringToJson
+    , startupDataJson
     , tallSnapshot
     , userEmail
     , voiceChatTest
@@ -148,9 +148,17 @@ domain =
     { protocol = Url.Http, host = "localhost", port_ = Just 8000, path = "", query = Nothing, fragment = Nothing }
 
 
-stringToJson : String -> Json.Encode.Value
-stringToJson json =
-    Result.withDefault Json.Encode.null (Json.Decode.decodeString Json.Decode.value json)
+{-| The data the app loads through the load\_startup\_data ports at startup. timeOrigin is 0 so that event timeStamps in tests are used as-is.
+-}
+startupDataJson : String -> Json.Encode.Value
+startupDataJson userAgent =
+    Json.Encode.object
+        [ ( "timeOrigin", Json.Encode.float 0 )
+        , ( "userAgent", Json.Encode.string userAgent )
+        , ( "scrollbarWidth", Json.Encode.int 20 )
+        , ( "isPwa", Json.Encode.bool False )
+        , ( "notificationPermission", Json.Encode.string "denied" )
+        ]
 
 
 handlePortToJs :
@@ -172,12 +180,6 @@ handlePortToJs requestAndData =
 
         "text_input_select_all_to_js" ->
             Nothing
-
-        "check_notification_permission_to_js" ->
-            Nothing
-
-        "check_pwa_status_to_js" ->
-            Just ( "check_pwa_status_from_js", Json.Encode.bool False )
 
         "load_sounds_to_js" ->
             Nothing
@@ -214,13 +216,8 @@ handlePortToJs requestAndData =
             )
                 |> Just
 
-        "scrollbar_width_to_js" ->
-            ( "scrollbar_width_from_js"
-            , Json.Encode.int 20
-            )
-                |> Just
-
-        "user_agent_to_js" ->
+        "load_startup_data_to_js" ->
+            -- Tests respond manually with startupDataJson so each test can control the user agent
             Nothing
 
         _ ->
@@ -345,7 +342,7 @@ handleLogin :
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 handleLogin userAgent emailAddress client =
-    [ client.portEvent 10 "user_agent_from_js" (Json.Encode.string userAgent)
+    [ client.portEvent 10 "load_startup_data_from_js" (startupDataJson userAgent)
     , client.click 100 Pages.Home.loginButtonId
     , handleLoginFromLoginPage emailAddress client
     ]
@@ -1389,7 +1386,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                 (dropPrefix Env.domain text)
                                 windowSize
                                 (\user ->
-                                    [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                    [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                     , handleLoginFromLoginPage userEmail user
                                     , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
                                     , user.click 100 (Dom.id "loginForm_submit")
@@ -2523,7 +2520,7 @@ linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready dis
         ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
         desktopWindow
         (\userA ->
-            [ userA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+            [ userA.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
             , handleLoginFromLoginPage emailAddress userA
             , if isNewAccount then
                 T.group
@@ -2595,7 +2592,7 @@ linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
         ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondAuth)
         desktopWindow
         (\userB ->
-            [ userB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+            [ userB.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
             , T.andThen
                 120
                 (\data ->
@@ -3567,7 +3564,7 @@ inviteUser admin continueWith =
                                     (String.dropLeft (String.length Env.domain) copyText)
                                     desktopWindow
                                     (\user ->
-                                        [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                        [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                         , handleLoginFromLoginPage userEmail user
                                         , user.input 100 (Dom.id "loginForm_name") "Sven"
                                         , user.click 100 (Dom.id "loginForm_submit")
@@ -3669,7 +3666,7 @@ inactiveThreadsAreHiddenTest config =
             "/"
             desktopWindow
             (\admin ->
-                [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                [ admin.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                 , admin.click 100 (Dom.id "guild_openGuild_0")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
                 , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
@@ -3727,7 +3724,7 @@ goMatchTest normalConfig =
                             "/"
                             tallDesktopWindow
                             (\user2 ->
-                                [ user2.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                [ user2.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGoMatch")
                                 , user2.input 100 (Dom.id "go_matchSwitcher") "0"
@@ -3872,7 +3869,7 @@ publicGoMatchViewTest normalConfig =
                             "/go-match/does-not-exist"
                             tallDesktopWindow
                             (\missingViewer ->
-                                [ missingViewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                [ missingViewer.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                 , missingViewer.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
@@ -3909,7 +3906,7 @@ publicGoMatchViewTest normalConfig =
                                                         (String.dropLeft (String.length Env.domain) shareUrl)
                                                         tallDesktopWindow
                                                         (\viewer ->
-                                                            [ viewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                                            [ viewer.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
@@ -3979,7 +3976,7 @@ loginTests isMobile normalConfig =
             "/"
             windowSize
             (\client ->
-                [ client.portEvent 10 "user_agent_from_js" (Json.Encode.string userAgent)
+                [ client.portEvent 10 "load_startup_data_from_js" (startupDataJson userAgent)
                 , client.snapshotView 100 { name = "homepage" }
                 , client.click 100 Pages.Home.loginButtonId
                 , client.snapshotView 100 { name = "login" }
@@ -4326,8 +4323,8 @@ drawOnMessages imageUploadConfig =
                                     (\admin2 ->
                                         [ admin2.portEvent
                                             10
-                                            "user_agent_from_js"
-                                            (Json.Encode.string firefoxDesktop)
+                                            "load_startup_data_from_js"
+                                            (startupDataJson firefoxDesktop)
                                         , -- Drawings are part of the channel data so they render
                                           -- as soon as the messages are shown
                                           admin2.checkView 2000 (expectPolylineCount 3)

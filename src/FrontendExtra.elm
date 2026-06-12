@@ -45,7 +45,6 @@ import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Go
 import Html exposing (Html)
-import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -287,7 +286,7 @@ layout model attributes child =
                 [ Html.Events.preventDefaultOn
                     "dragenter"
                     (Json.Decode.field "timeStamp" Json.Decode.float
-                        |> Json.Decode.map (\time -> ( round time |> Time.millisToPosix |> FileDragEnter, True ))
+                        |> Json.Decode.map (\time -> ( Duration.milliseconds time |> FileDragEnter, True ))
                     )
                     |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
@@ -422,13 +421,13 @@ layout model attributes child =
                     , Html.Events.on
                         "touchend"
                         (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                            |> Json.Decode.map (\time -> Duration.milliseconds time |> TouchEnd)
                         )
                         |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchcancel"
                         (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                            |> Json.Decode.map (\time -> Duration.milliseconds time |> TouchCancel)
                         )
                         |> Ui.htmlAttribute
                     ]
@@ -444,13 +443,13 @@ layout model attributes child =
                     , Html.Events.on
                         "pointerup"
                         (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                            |> Json.Decode.map (\time -> Duration.milliseconds time |> TouchEnd)
                         )
                         |> Ui.htmlAttribute
                     , Html.Events.on
                         "pointercancel"
                         (Json.Decode.field "timeStamp" Json.Decode.float
-                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                            |> Json.Decode.map (\time -> Duration.milliseconds time |> TouchCancel)
                         )
                         |> Ui.htmlAttribute
                     ]
@@ -644,7 +643,6 @@ fileDragOverlay loggedIn model =
                 [ Ui.height Ui.fill
                 , Ui.contentCenterX
                 , Ui.contentCenterY
-                , Ui.Font.color (Ui.rgba 0 0 0 0)
                 , Ui.Font.size 32
                 , Ui.Font.bold
                 , MyUi.htmlStyle "border" "8px dashed"
@@ -1696,9 +1694,6 @@ isPressMsg msg =
         CheckedNotificationPermission _ ->
             False
 
-        CheckedPwaStatus _ ->
-            False
-
         TouchStart _ _ _ ->
             False
 
@@ -1819,7 +1814,7 @@ isPressMsg msg =
         PressedGuildNotificationLevel _ _ ->
             True
 
-        GotScrollbarWidth _ ->
+        GotStartupData _ ->
             False
 
         PressedViewAttachedFileInfo _ _ ->
@@ -1836,9 +1831,6 @@ isPressMsg msg =
 
         PressedMemberListBack ->
             True
-
-        GotUserAgent _ ->
-            False
 
         PageHasFocusChanged _ ->
             False

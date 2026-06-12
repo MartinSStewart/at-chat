@@ -11,7 +11,6 @@ import Effect.Test as T
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
-import Json.Encode
 import MembersAndOwner
 import MessageInput
 import Pages.Guild
@@ -367,7 +366,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
             RecordedTestExtra.desktopWindow
             (\admin ->
-                [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                [ admin.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
@@ -460,7 +459,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec RecordedTestExtra.discordUserAuth)
                     RecordedTestExtra.desktopWindow
                     (\adminB ->
-                        [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                        [ adminB.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                         , adminA.checkView
                             200
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])

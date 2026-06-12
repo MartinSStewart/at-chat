@@ -132,11 +132,8 @@ type alias LoadingFrontend =
     , windowSize : Coord CssPixels
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
-    , notificationPermission : NotificationPermission
-    , pwaStatus : PwaStatus
     , timezone : Time.Zone
-    , scrollbarWidth : Int
-    , userAgent : Maybe UserAgent
+    , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
     }
 
@@ -165,6 +162,8 @@ type alias LoadedFrontend =
     , aiChatModel : AiChat.FrontendModel
     , scrollbarWidth : Int
     , userAgent : UserAgent
+    , -- performance.timeOrigin, used to convert event timeStamps (milliseconds since timeOrigin) into Time.Posix
+      timeOrigin : Time.Posix
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
@@ -457,11 +456,10 @@ type FrontendMsg
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
-    | CheckedPwaStatus PwaStatus
-    | TouchStart (Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
-    | TouchMoved Time.Posix (NonemptyDict Int Touch)
-    | TouchEnd Time.Posix
-    | TouchCancel Time.Posix
+    | TouchStart (Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )) Duration (NonemptyDict Int Touch)
+    | TouchMoved Duration (NonemptyDict Int Touch)
+    | TouchEnd Duration
+    | TouchCancel Duration
     | ChannelSidebarAnimated Duration
     | MessageMenuAnimated Duration
     | SetScrollToBottom
@@ -502,10 +500,9 @@ type FrontendMsg
     | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
-    | GotScrollbarWidth Int
+    | GotStartupData Ports.StartupData
     | PressedCloseImageInfo
     | PressedMemberListBack
-    | GotUserAgent UserAgent
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
@@ -537,7 +534,7 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
-    | FileDragEnter Time.Posix
+    | FileDragEnter Duration
     | FileDragLeave
     | FileDropped (List File)
     | PressedUnregisterServiceWorkers

@@ -4,8 +4,8 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Html.Attributes
@@ -32,7 +32,7 @@ type MessageViewMsg
     | MessageView_PressedImage RichText.PressedImageData
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
-    | MessageView_TouchStart Time.Posix Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
+    | MessageView_TouchStart Duration Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
     | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove EmojiOrCustomEmoji
     | MessageView_PressedReactionEmoji_Add EmojiOrCustomEmoji
