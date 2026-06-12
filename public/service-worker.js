@@ -59,6 +59,7 @@ self.addEventListener('push', function(event) {
             , icon: data.icon
             , data: data.data
             });
+        log("Push event: " + JSON.stringify(event.data.json()));
     }
     catch(error)
     {
