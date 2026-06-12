@@ -1168,11 +1168,12 @@ enterSidebarRoute sameGuild previousRoute viewCmd model =
 enterChannelRoute :
     ThreadRouteWithFriends
     -> Bool
+    -> Bool
     -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-enterChannelRoute threadRoute sameGuild previousRoute viewCmd model =
+enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model =
     let
         showMembers : ShowMembersTab
         showMembers =
@@ -1195,7 +1196,7 @@ enterChannelRoute threadRoute sameGuild previousRoute viewCmd model =
 
                     else
                         loggedIn
-            , Command.batch [ viewCmd, openChannelCmds threadRoute model ]
+            , Command.batch [ viewCmd, openChannelCmds sameChannel threadRoute loggedIn model ]
             )
         )
         model
@@ -1287,7 +1288,23 @@ routeRequest previousRoute newRoute model =
             in
             case channelRoute of
                 ChannelRoute _ threadRoute _ ->
-                    enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
+                    enterChannelRoute
+                        threadRoute
+                        sameGuild
+                        (if sameGuild then
+                            case previousRoute of
+                                Just (GuildRoute _ (ChannelRoute _ _ _)) ->
+                                    True
+
+                                _ ->
+                                    False
+
+                         else
+                            False
+                        )
+                        previousRoute
+                        viewCmd
+                        model3
 
                 NewChannelRoute ->
                     enterSidebarRoute sameGuild previousRoute viewCmd model3
@@ -1352,7 +1369,28 @@ routeRequest previousRoute newRoute model =
             in
             case channelRoute of
                 DiscordChannel_ChannelRoute _ threadRoute _ ->
-                    enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
+                    enterChannelRoute
+                        threadRoute
+                        sameGuild
+                        (if sameGuild then
+                            case previousRoute of
+                                Just (DiscordGuildRoute guildData) ->
+                                    case guildData.channelRoute of
+                                        DiscordChannel_ChannelRoute _ _ _ ->
+                                            True
+
+                                        _ ->
+                                            False
+
+                                _ ->
+                                    False
+
+                         else
+                            False
+                        )
+                        previousRoute
+                        viewCmd
+                        model3
 
                 DiscordChannel_NewChannelRoute ->
                     enterSidebarRoute sameGuild previousRoute viewCmd model3
@@ -1368,26 +1406,28 @@ routeRequest previousRoute newRoute model =
 
         DmRoute dmRoute ->
             let
-                model3 : LoadedFrontend
-                model3 =
+                sameDmRoute =
                     case previousRoute of
                         Just (DmRoute previousDmRoute) ->
-                            if dmRoute.channelId == previousDmRoute.channelId then
-                                model2
-
-                            else
-                                clearRevealedSpoilers model2
+                            dmRoute.channelId == previousDmRoute.channelId
 
                         _ ->
-                            clearRevealedSpoilers model2
+                            False
+
+                model3 : LoadedFrontend
+                model3 =
+                    if Debug.log "sameDmRoute" sameDmRoute then
+                        model2
+
+                    else
+                        clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
                     , Command.batch
                         [ viewCmd
-                        , openChannelCmds dmRoute.threadRoute model3
-                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                        , openChannelCmds sameDmRoute dmRoute.threadRoute loggedIn model3
                         ]
                     )
                 )
@@ -1395,16 +1435,32 @@ routeRequest previousRoute newRoute model =
 
         DiscordDmRoute routeData ->
             let
+                sameDmRoute =
+                    case previousRoute of
+                        Just (DiscordDmRoute previousDmRoute) ->
+                            routeData.channelId == previousDmRoute.channelId
+
+                        _ ->
+                            False
+
                 model3 : LoadedFrontend
                 model3 =
-                    clearRevealedSpoilers model2
+                    if sameDmRoute then
+                        model2
+
+                    else
+                        clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
                     , Command.batch
                         [ viewCmd
-                        , openChannelCmds (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab) model3
+                        , openChannelCmds
+                            sameDmRoute
+                            (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
+                            loggedIn
+                            model3
                         ]
                     )
                 )
@@ -1453,38 +1509,44 @@ updateLoggedIn updateFunc model =
 
 
 openChannelCmds :
-    ThreadRouteWithFriends
+    Bool
+    -> ThreadRouteWithFriends
+    -> LoggedIn2
     -> LoadedFrontend
     -> Command FrontendOnly ToBackend FrontendMsg
-openChannelCmds threadRoute model3 =
-    let
-        scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
-        scrollToBottom =
-            Process.sleep Duration.millisecond
-                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                |> Task.attempt (\_ -> SetScrollToBottom)
-    in
-    Command.batch
-        [ setFocus model3 Pages.Guild.channelTextInputId
-        , case threadRoute of
-            ViewThreadWithFriends _ maybeMessageIndex _ ->
-                case maybeMessageIndex of
-                    Just messageIndex ->
-                        Scroll.smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
-                            |> Task.attempt (\_ -> ScrolledToMessage)
+openChannelCmds sameChannel threadRoute loggedIn model3 =
+    if sameChannel then
+        Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
-                    Nothing ->
-                        scrollToBottom
+    else
+        let
+            scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+            scrollToBottom =
+                Process.sleep Duration.millisecond
+                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                    |> Task.attempt (\_ -> SetScrollToBottom)
+        in
+        Command.batch
+            [ setFocus model3 Pages.Guild.channelTextInputId
+            , case threadRoute of
+                ViewThreadWithFriends _ maybeMessageIndex _ ->
+                    case maybeMessageIndex of
+                        Just messageIndex ->
+                            Scroll.smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                                |> Task.attempt (\_ -> ScrolledToMessage)
 
-            NoThreadWithFriends maybeMessageIndex _ ->
-                case maybeMessageIndex of
-                    Just messageIndex ->
-                        Scroll.smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
-                            |> Task.attempt (\_ -> ScrolledToMessage)
+                        Nothing ->
+                            scrollToBottom
 
-                    Nothing ->
-                        scrollToBottom
-        ]
+                NoThreadWithFriends maybeMessageIndex _ ->
+                    case maybeMessageIndex of
+                        Just messageIndex ->
+                            Scroll.smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                                |> Task.attempt (\_ -> ScrolledToMessage)
+
+                        Nothing ->
+                            scrollToBottom
+            ]
 
 
 isPressMsg : FrontendMsg -> Bool
