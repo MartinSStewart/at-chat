@@ -1,3 +1,22 @@
+function log(text) {
+    let request = indexedDB.open("at-chat-db", 1);
+    request.onerror = (event) => {};
+    request.onupgradeneeded = function(event) {
+        let db = event.target.result;
+        let objectStore = db.createObjectStore("at-chat-object-store", { keyPath: "id" });
+    };
+    request.onsuccess = function(event) {
+        let db = event.target.result;
+        let transaction = db.transaction("at-chat-object-store", "readwrite");
+        let objectStore = transaction.objectStore("at-chat-object-store");
+
+        // Random suffix so two logs written in the same millisecond don't
+        // collide on the keyPath and get silently dropped by add().
+        let data = { id: Date.now().toString() + "_" + Math.random().toString(36).slice(2, 8), name: text };
+        objectStore.add(data);
+    };
+}
+
 // Activate a newer service-worker.js as soon as it finishes installing instead
 // of waiting for every tab to close, and immediately take over already-open
 // pages so the new version applies without a manual reload.
@@ -18,6 +37,7 @@ self.addEventListener('install', (event) => {
                 })
             );
         } catch (error) {
+            log("Install event error: " + error.message);
         }
         await self.skipWaiting();
     })());
@@ -42,40 +62,44 @@ self.addEventListener('push', function(event) {
     }
     catch(error)
     {
-        self.registration.showNotification("error", { body : error });
+        log("Push event error: " + error.message);
     }
 });
 
 self.addEventListener('notificationclick', function(event) {
-    // The URL to navigate to was stored as the notification's `data` (see the
-    // push payload built in Broadcast.elm). It's either a full URL string or
-    // null/undefined when the notification isn't tied to a specific route.
+
     const notificationData = event.notification.data || '/';
+    log("Notification clicked: " + JSON.stringify(notificationData));
 
-    event.notification.close();
+    try {
+        event.notification.close();
 
-    // Wrap the async work in waitUntil so the service worker isn't terminated
-    // before it finishes.
-    event.waitUntil(
-        clients.matchAll({ type: "window", includeUncontrolled: true })
-            .then((windowClients) => {
-                // If a window is already open, navigate it and bring it to the
-                // foreground.
-                for (const client of windowClients) {
-                    if ('focus' in client) {
-                        client.postMessage(notificationData);
-                        return client.focus();
+        // Wrap the async work in waitUntil so the service worker isn't terminated
+        // before it finishes.
+        event.waitUntil(
+            clients.matchAll({ type: "window", includeUncontrolled: true })
+                .then((windowClients) => {
+                    // If a window is already open, navigate it and bring it to the
+                    // foreground.
+                    for (const client of windowClients) {
+                        if ('focus' in client) {
+                            client.postMessage(notificationData);
+                            return client.focus();
+                        }
                     }
-                }
 
-                // No window open (the common case when the app is closed): open
-                // a new one. Previously this branch was commented out, so the
-                // notification closed without opening anything.
-                if (clients.openWindow) {
-                    return clients.openWindow(notificationData);
-                }
-            })
-    );
+                    // No window open (the common case when the app is closed): open
+                    // a new one. Previously this branch was commented out, so the
+                    // notification closed without opening anything.
+                    if (clients.openWindow) {
+                        return clients.openWindow(notificationData);
+                    }
+                })
+        );
+    }
+    catch (e) {
+        log("Notification clicked error: " + e.message);
+    }
 
 });
 
