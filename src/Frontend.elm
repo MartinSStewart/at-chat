@@ -74,7 +74,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -176,12 +176,11 @@ subscriptions model =
                                     []
                                     loggedIn.filesToUpload
                                     |> Subscription.batch
-                                , case loggedIn.fileDragOverCount of
-                                    Just _ ->
-                                        Effect.Browser.Events.onAnimationFrame GotTime
+                                , if FrontendExtra.fileDragOverlayOpacity loggedIn loaded <= 0 then
+                                    Subscription.none
 
-                                    Nothing ->
-                                        Subscription.none
+                                  else
+                                    Effect.Browser.Events.onAnimationFrame GotTime
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
@@ -433,7 +432,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
-            , fileDragOverCount = Nothing
+            , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             }
     in
@@ -4102,11 +4101,11 @@ updateLoaded msg model =
                     ( { loggedIn
                         | fileDragOverCount =
                             case loggedIn.fileDragOverCount of
-                                Just fileDrag ->
-                                    Just { fileDrag | count = OneOrGreater.increment fileDrag.count }
+                                FileDragging dragStart count ->
+                                    FileDragging dragStart (OneOrGreater.increment count)
 
-                                Nothing ->
-                                    Just { dragOverStart = Duration.addTo model.timeOrigin timeStamp, count = OneOrGreater.one }
+                                NoFileDrag _ ->
+                                    FileDragging (Duration.addTo model.timeOrigin timeStamp) OneOrGreater.one
                       }
                     , Command.none
                     )
@@ -4119,16 +4118,16 @@ updateLoaded msg model =
                     ( { loggedIn
                         | fileDragOverCount =
                             case loggedIn.fileDragOverCount of
-                                Just fileDrag ->
-                                    case OneOrGreater.toInt fileDrag.count - 1 |> OneOrGreater.fromInt of
-                                        Just count ->
-                                            Just { fileDrag | count = count }
+                                FileDragging dragStart count ->
+                                    case OneOrGreater.toInt count - 1 |> OneOrGreater.fromInt of
+                                        Just count2 ->
+                                            FileDragging dragStart count2
 
                                         Nothing ->
-                                            Nothing
+                                            NoFileDrag (Just model.time)
 
-                                Nothing ->
-                                    Nothing
+                                NoFileDrag _ ->
+                                    loggedIn.fileDragOverCount
                       }
                     , Command.none
                     )
@@ -4139,7 +4138,7 @@ updateLoaded msg model =
             let
                 modelReset =
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | fileDragOverCount = Nothing }, Command.none ))
+                        (\loggedIn -> ( { loggedIn | fileDragOverCount = NoFileDrag (Just model.time) }, Command.none ))
                         model
                         |> Tuple.first
             in

@@ -3,6 +3,7 @@ module FrontendExtra exposing
     , changeUpdate
     , editMessage_gotFiles
     , externalLinkWarning
+    , fileDragOverlayOpacity
     , gotFiles
     , handleEscapeKey
     , handleLocalChange
@@ -82,7 +83,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -621,50 +622,67 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
 
 fileDragOverlay : LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
 fileDragOverlay loggedIn model =
+    let
+        opacity =
+            fileDragOverlayOpacity loggedIn model
+    in
+    if opacity <= 0 then
+        Ui.none
+
+    else
+        let
+            canDrop : Bool
+            canDrop =
+                canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+
+            accentColor : Ui.Color
+            accentColor =
+                if canDrop then
+                    MyUi.font1
+
+                else
+                    MyUi.errorColor
+        in
+        Ui.el
+            [ Ui.height Ui.fill
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , Ui.Font.size 32
+            , Ui.Font.bold
+            , MyUi.htmlStyle "border" "8px dashed"
+            , MyUi.htmlStyle "box-sizing"
+                "border-box"
+            , MyUi.noPointerEvents
+
+            --, if Debug.log "isVisible" isVisible then
+            , Ui.background (Ui.rgba 0 0 0 0.6)
+            , Ui.Font.color accentColor
+            , Ui.borderColor accentColor
+            , Ui.opacity opacity
+            ]
+            (if canDrop then
+                Ui.text "Drop files anywhere to upload"
+
+             else
+                Ui.text "Nowhere to put this file here"
+            )
+
+
+fileDragOverlayOpacity : LoggedIn2 -> LoadedFrontend -> Float
+fileDragOverlayOpacity loggedIn model =
     case loggedIn.fileDragOverCount of
-        Just fileDrag ->
-            let
-                canDrop : Bool
-                canDrop =
-                    canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+        FileDragging dragStart _ ->
+            Duration.from dragStart model.time
+                |> Duration.inSeconds
+                |> (*) 10
+                -- AnimationFrame sub doesn't start until opacity is greater than 0 so we make sure it's always greater than 0
+                |> clamp 0.01 1
 
-                accentColor : Ui.Color
-                accentColor =
-                    if canDrop then
-                        MyUi.font1
+        NoFileDrag (Just lastDrag) ->
+            1 - (Duration.inSeconds (Duration.from lastDrag model.time) * 10) |> clamp 0 1
 
-                    else
-                        MyUi.errorColor
-
-                _ =
-                    Debug.log "asdf" ( fileDrag.dragOverStart, model.time )
-            in
-            Ui.el
-                [ Ui.height Ui.fill
-                , Ui.contentCenterX
-                , Ui.contentCenterY
-                , Ui.Font.size 32
-                , Ui.Font.bold
-                , MyUi.htmlStyle "border" "8px dashed"
-                , MyUi.htmlStyle "box-sizing"
-                    "border-box"
-                , MyUi.noPointerEvents
-
-                --, if Debug.log "isVisible" isVisible then
-                , Ui.background (Ui.rgba 0 0 0 0.6)
-                , Ui.Font.color accentColor
-                , Ui.borderColor accentColor
-                , Ui.opacity (Duration.from fileDrag.dragOverStart model.time |> Duration.inSeconds |> clamp 0 1)
-                ]
-                (if canDrop then
-                    Ui.text "Drop files anywhere to upload"
-
-                 else
-                    Ui.text "Nowhere to put this file here"
-                )
-
-        Nothing ->
-            Ui.none
+        NoFileDrag Nothing ->
+            0
 
 
 gotFiles :

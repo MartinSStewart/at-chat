@@ -12,6 +12,7 @@ module Types exposing
     , EmojiSelector(..)
     , ExportState
     , ExportStateProgress
+    , FileDrag(..)
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
@@ -239,9 +240,14 @@ type alias LoggedIn2 =
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
-    , fileDragOverCount : Maybe { dragOverStart : Time.Posix, count : OneOrGreater }
+    , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     }
+
+
+type FileDrag
+    = NoFileDrag (Maybe Time.Posix)
+    | FileDragging Time.Posix OneOrGreater
 
 
 type alias UserOptionsModel =
