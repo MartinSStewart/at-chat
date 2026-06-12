@@ -98,6 +98,53 @@ exports.init = async function init(app)
                 result.installedAt = "Error: " + e.toString();
             }
 
+            // The service worker writes its log entries to IndexedDB (see
+            // log() in public/service-worker.js) because that's the only
+            // persistent storage both the worker and the page can read.
+            try {
+                result.serviceWorkerLogs = await new Promise((resolve, reject) => {
+                    const openRequest = indexedDB.open("at-chat-db", 1);
+                    openRequest.onerror = () => reject(openRequest.error);
+                    openRequest.onupgradeneeded = (event) => {
+                        // Same schema as the service worker's log() creates, in
+                        // case the page opens the database before the worker has
+                        // logged anything.
+                        event.target.result.createObjectStore("at-chat-object-store", { keyPath: "id" });
+                    };
+                    openRequest.onsuccess = (event) => {
+                        const db = event.target.result;
+                        let getAllRequest;
+                        try {
+                            getAllRequest = db
+                                .transaction("at-chat-object-store", "readonly")
+                                .objectStore("at-chat-object-store")
+                                .getAll();
+                        } catch (e) {
+                            db.close();
+                            reject(e);
+                            return;
+                        }
+                        getAllRequest.onerror = () => { db.close(); reject(getAllRequest.error); };
+                        getAllRequest.onsuccess = () => {
+                            db.close();
+                            // Ids are "<Date.now()>_<random>" (older entries are
+                            // just "<Date.now()>").
+                            const entries = getAllRequest.result.map((entry) => {
+                                const time = Number(String(entry.id).split("_")[0]);
+                                return {
+                                    time: time,
+                                    text: (isNaN(time) ? String(entry.id) : new Date(time).toISOString()) + " " + entry.name
+                                };
+                            });
+                            entries.sort((a, b) => a.time - b.time);
+                            resolve(entries.map((entry) => entry.text));
+                        };
+                    };
+                });
+            } catch (e) {
+                result.serviceWorkerLogs = "Error: " + e.toString();
+            }
+
             const registration = await navigator.serviceWorker.getRegistration(serviceWorkerJs);
             result.registration = describeRegistration(registration);
 

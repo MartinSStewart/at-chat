@@ -10,7 +10,9 @@ function log(text) {
         let transaction = db.transaction("at-chat-object-store", "readwrite");
         let objectStore = transaction.objectStore("at-chat-object-store");
 
-        let data = { id: Date.now().toString(), name: text };
+        // Random suffix so two logs written in the same millisecond don't
+        // collide on the keyPath and get silently dropped by add().
+        let data = { id: Date.now().toString() + "_" + Math.random().toString(36).slice(2, 8), name: text };
         objectStore.add(data);
     };
 }
