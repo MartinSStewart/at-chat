@@ -5707,7 +5707,9 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.userColor
+                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     }
                     message2.embeds
                     message2.content
@@ -5832,7 +5834,9 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
                     , drawings = message2.imageAttachmentDrawings
+                    , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.discordUserColor
+                    , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     }
                     message2.embeds
                     message2.content

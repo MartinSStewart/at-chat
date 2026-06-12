@@ -895,6 +895,14 @@ body {
 .file-drag-overlay-visible {
   opacity: 1;
 }
+.drawing-anchor-select {
+  cursor: pointer;
+  outline: rgba(0,0,0,0) solid 2px;
+}
+.drawing-anchor-select:hover {
+  outline-color: rgb(96,165,250);
+  background-color: rgba(96,165,250,0.3);
+}
 """
             )
         ]

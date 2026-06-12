@@ -72,6 +72,7 @@ userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
     , timestampDrawings = Drawing.emptyDrawing
     , userIconDrawings = Drawing.emptyDrawing
     , imageAttachmentDrawings = SeqDict.empty
+    , embedDrawings = SeqDict.empty
     }
         |> UserTextMessage
 
@@ -102,6 +103,7 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
       , timestampDrawings = Drawing.emptyDrawing
       , userIconDrawings = Drawing.emptyDrawing
       , imageAttachmentDrawings = SeqDict.empty
+      , embedDrawings = SeqDict.empty
       }
         |> UserTextMessage
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
@@ -148,6 +150,7 @@ userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
     , timestampDrawings = Drawing.emptyDrawing
     , userIconDrawings = Drawing.emptyDrawing
     , imageAttachmentDrawings = SeqDict.empty
+    , embedDrawings = SeqDict.empty
     }
         |> UserTextMessage
 
@@ -263,6 +266,8 @@ type alias UserTextMessageData messageId userId =
     , timestampDrawings : Drawing userId
     , userIconDrawings : Drawing userId
     , imageAttachmentDrawings : SeqDict (Id FileId) (Drawing userId)
+    , -- Keyed by the index of the embed the drawing is attached to
+      embedDrawings : SeqDict Int (Drawing userId)
     }
 
 
@@ -319,6 +324,20 @@ handleDrawingChange changeBy anchorType change message =
                                     data.imageAttachmentDrawings
                         }
 
+                Drawing.EmbedImageAnchor embedIndex ->
+                    UserTextMessage
+                        { data
+                            | embedDrawings =
+                                SeqDict.update
+                                    embedIndex
+                                    (\maybe ->
+                                        Maybe.withDefault Drawing.emptyDrawing maybe
+                                            |> Drawing.handleLocalChange changeBy change
+                                            |> Just
+                                    )
+                                    data.embedDrawings
+                        }
+
         UserJoinedMessage time userId reactions drawings ->
             UserJoinedMessage time userId reactions drawings
 
@@ -345,6 +364,9 @@ drawing anchor message =
 
                 Drawing.ImageAttachmentAnchor fileId ->
                     SeqDict.get fileId data.imageAttachmentDrawings |> Maybe.withDefault Drawing.emptyDrawing
+
+                Drawing.EmbedImageAnchor embedIndex ->
+                    SeqDict.get embedIndex data.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
 
         UserJoinedMessage _ _ _ drawings ->
             drawings
