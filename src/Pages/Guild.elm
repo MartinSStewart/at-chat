@@ -7,7 +7,6 @@ module Pages.Guild exposing
     , conversationContainerId
     , decodeMessageView
     , discordGuildView
-    , drawingIsSelectingAnchor
     , dropdownButtonId
     , encodeMessageView
     , guildView
