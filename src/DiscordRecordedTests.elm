@@ -5,6 +5,7 @@ import Backend
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
+import Drawing
 import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -12,6 +13,7 @@ import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
 import MembersAndOwner
+import Message
 import MessageInput
 import Pages.Guild
 import PersonName
@@ -23,6 +25,7 @@ import Test.Html.Query
 import Test.Html.Selector
 import Time
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Unsafe
 import User
 
 
@@ -967,6 +970,79 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "Draw on top of messages in Discord DM"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , T.websocketSendString 100 connection (discordDmMessage "221" "Draw on this Discord DM message!")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Draw on this Discord DM message!" ])
+
+                        -- Open the drawing tab and check that the instructions show up
+                        , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                        , T.andThen
+                            100
+                            (\data ->
+                                case lastDiscordDmMessage data.backend of
+                                    Just ( messageId, _ ) ->
+                                        [ -- Click the message's profile image to use it as the drawing anchor
+                                          admin.custom
+                                            100
+                                            (Drawing.profileImageAnchorId messageId)
+                                            "click"
+                                            (RecordedTestExtra.drawingAnchorClick 30 25)
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                        , RecordedTestExtra.drawZigzagStroke admin
+                                        , admin.checkView 100 (RecordedTestExtra.expectPolylineCount 1)
+
+                                        -- The stroke is stored on the backend in the Discord DM channel
+                                        , T.checkState
+                                            100
+                                            (\data2 ->
+                                                case lastDiscordDmMessage data2.backend of
+                                                    Just ( _, message ) ->
+                                                        if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Expected the message to contain exactly one finished stroke"
+
+                                                    Nothing ->
+                                                        Err "Message not found on the backend"
+                                            )
+
+                                        -- Pressing the pencil tab again closes the drawing tab
+                                        , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                        ]
+
+                                    Nothing ->
+                                        [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
@@ -1070,3 +1146,27 @@ that other user. `seq` must be unique per message.
 discordDmMessage : String -> String -> String
 discordDmMessage seq content =
     "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"14912202028794" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}"
+
+
+{-| The Discord DM channel `discordDmMessage` sends messages to.
+-}
+discordDmChannelId : Discord.Id Discord.PrivateChannelId
+discordDmChannelId =
+    Unsafe.uint64 "1472236476401057854" |> Discord.idFromUInt64
+
+
+{-| The most recent message in the Discord DM channel used by `discordDmMessage`.
+-}
+lastDiscordDmMessage : BackendModel -> Maybe ( Id.Id Id.ChannelMessageId, Message.Message Id.ChannelMessageId (Discord.Id Discord.UserId) )
+lastDiscordDmMessage backend =
+    case SeqDict.get discordDmChannelId backend.discordDmChannels of
+        Just channel ->
+            case Array.get (Array.length channel.messages - 1) channel.messages of
+                Just message ->
+                    Just ( Id.fromInt (Array.length channel.messages - 1), message )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing

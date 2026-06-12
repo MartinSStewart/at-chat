@@ -21,8 +21,11 @@ module RecordedTestExtra exposing
     , discordUserAuth
     , domain
     , drawOnMessages
+    , drawZigzagStroke
+    , drawingAnchorClick
     , editMostRecentMessageViaArrowUp
     , enableNotifications
+    , expectPolylineCount
     , firefoxDesktop
     , focusEvent
     , goMatchTest

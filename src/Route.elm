@@ -636,13 +636,13 @@ encode route =
                             , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
-                DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab } ->
+                DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab, tab } ->
                     ( [ "dd"
                       , Discord.idToString currentDiscordUserId
                       , Discord.idToString channelId
                       ]
                         ++ maybeMessageIdToString viewingMessage
-                    , encodeShowMembers showMembersTab
+                    , encodeShowMembers showMembersTab ++ encodeChannelHeaderTab tab
                     )
 
                 SlackOAuthRedirect _ ->
