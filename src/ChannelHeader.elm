@@ -238,6 +238,12 @@ channelHeader isMobile2 includeShowMembers content tabContent =
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
+        , case tabContent of
+            Just tabContent2 ->
+                Ui.below tabContent2
+
+            Nothing ->
+                Ui.noAttr
         ]
         [ Ui.row
             [ Ui.contentCenterY
@@ -272,12 +278,6 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                     content
                 ]
             )
-        , case tabContent of
-            Just tabContent2 ->
-                tabContent2
-
-            Nothing ->
-                Ui.none
         ]
 
 
@@ -840,6 +840,8 @@ drawingTabView model local =
         , Ui.Font.color MyUi.font2
         , Ui.spacing 16
         , Ui.height (Ui.px 80)
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
         ]
         (case model of
             NoSelectedAnchor ->
@@ -865,6 +867,8 @@ channelDescriptionView channelName description =
         , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 8
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
         ]
         [ case channelName of
             Just channelName2 ->
