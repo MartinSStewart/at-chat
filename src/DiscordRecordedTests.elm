@@ -1043,6 +1043,40 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "Discord DM channel description"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , T.websocketSendString 100 connection (discordDmMessage "231" "Hello!")
+
+                        -- Clicking the channel name in the header opens the channel description tab
+                        , admin.click 100 (Dom.id "guild_openDescription")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "A Discord DM channel for you and" ])
+                        , admin.snapshotView 100 { name = "Discord DM channel description" }
+
+                        -- Clicking the channel name again closes the tab
+                        , admin.click 100 (Dom.id "guild_openDescription")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "A Discord DM channel for you and" ])
+                        ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
