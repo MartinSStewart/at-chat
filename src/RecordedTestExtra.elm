@@ -23,6 +23,7 @@ module RecordedTestExtra exposing
     , drawOnMessages
     , drawZigzagStroke
     , drawingAnchorClick
+    , drawingScalesWithImages
     , editMostRecentMessageViaArrowUp
     , enableNotifications
     , expectPolylineCount
@@ -133,6 +134,7 @@ import SeqDict
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
+import Svg.Attributes
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -4383,6 +4385,169 @@ drawOnMessages imageUploadConfig =
                 ]
             )
         ]
+
+
+{-| Drawings anchored to an image must stay aligned with the image when it's
+displayed scaled down to fit a smaller screen. Stroke points are stored in the
+image's full resolution coordinates and scaled back to css pixels when the
+image is rendered.
+-}
+drawingScalesWithImages : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+drawingScalesWithImages imageUploadConfig =
+    let
+        -- The image attachment is 800 pixels wide while the conversation area
+        -- is only 457 css pixels wide in the 1000px desktop window and 316 css
+        -- pixels in the 400px mobile window (window width minus the columns and
+        -- padding around the conversation, see Pages.Guild.conversationWidth).
+        -- The image is short enough to not be limited by max image height, so
+        -- it's displayed at the conversation width on both screens.
+        imageWidth : Float
+        imageWidth =
+            800
+
+        desktopDisplayWidth : Float
+        desktopDisplayWidth =
+            457
+
+        mobileDisplayWidth : Float
+        mobileDisplayWidth =
+            316
+    in
+    startTest
+        "Drawings scale along with images"
+        startTime
+        imageUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin user ->
+                [ -- Upload an 800x100 image and post it
+                  admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , T.backendUpdate
+                    100
+                    (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 800 100)))
+                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case ( findImageMessage data.backend, lastGuildChannelMessage data.backend ) of
+                            ( Just ( imageMessageId, fileId ), Just ( guildId, _, _ ) ) ->
+                                [ admin.custom
+                                    100
+                                    (Dom.id
+                                        ("spoiler_"
+                                            ++ Id.toString imageMessageId
+                                            ++ "_image_"
+                                            ++ Id.toString fileId
+                                        )
+                                    )
+                                    "click"
+                                    (drawingAnchorClick 100 50)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
+
+                                -- The stroke is stored in the image's full resolution
+                                -- coordinates: mouse positions relative to the image's top
+                                -- left corner at (100, 50), multiplied by how much the image
+                                -- was scaled down on the screen it was drawn on
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannelMessageAt imageMessageId data2.backend of
+                                            Just message ->
+                                                case (Message.drawing (Drawing.ImageAttachmentAnchor fileId) message).finished of
+                                                    [ stroke ] ->
+                                                        expectPointsCloseTo
+                                                            (List.map
+                                                                (\( x, y ) ->
+                                                                    ( x * (imageWidth / desktopDisplayWidth)
+                                                                    , y * (imageWidth / desktopDisplayWidth)
+                                                                    )
+                                                                )
+                                                                [ ( -50, -20 ), ( -20, 10 ), ( 10, -20 ), ( 40, 10 ), ( 70, -20 ), ( 100, 10 ) ]
+                                                            )
+                                                            (List.Nonempty.toList stroke.points)
+
+                                                    _ ->
+                                                        Err "Expected the image attachment to have exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Image message not found on the backend"
+                                    )
+
+                                -- Both desktop clients render the stroke scaled back down to
+                                -- the size the image is displayed at
+                                , admin.checkView 100 (expectPolylineScale (desktopDisplayWidth / imageWidth))
+                                , user.checkView 100 (expectPolylineScale (desktopDisplayWidth / imageWidth))
+
+                                -- On a mobile sized window the image is displayed smaller
+                                -- and the drawing scales down along with it
+                                , T.connectFrontend
+                                    100
+                                    sessionId1
+                                    (Route.encode
+                                        (Route.GuildRoute
+                                            guildId
+                                            (Route.ChannelRoute
+                                                (Id.fromInt 0)
+                                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                Nothing
+                                            )
+                                        )
+                                    )
+                                    mobileWindow
+                                    (\userMobile ->
+                                        [ userMobile.portEvent
+                                            10
+                                            "load_startup_data_from_js"
+                                            (startupDataJson firefoxDesktop)
+                                        , userMobile.checkView 2000 (expectPolylineCount 1)
+                                        , userMobile.checkView 100 (expectPolylineScale (mobileDisplayWidth / imageWidth))
+                                        , userMobile.snapshotView 100 { name = "Drawing scaled down along with the image on a small screen" }
+                                        ]
+                                    )
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "No image message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| Checks that the single polyline in the view is scaled by the given amount.
+-}
+expectPolylineScale : Float -> Test.Html.Query.Single msg -> Expect.Expectation
+expectPolylineScale scale query =
+    Test.Html.Query.find [ Test.Html.Selector.tag "polyline" ] query
+        |> Test.Html.Query.has
+            [ Test.Html.Selector.attribute
+                (Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")"))
+            ]
+
+
+expectPointsCloseTo : List ( Float, Float ) -> List ( Float, Float ) -> Result String ()
+expectPointsCloseTo expected actual =
+    if
+        (List.length expected == List.length actual)
+            && List.all
+                identity
+                (List.map2
+                    (\( x1, y1 ) ( x2, y2 ) -> abs (x1 - x2) < 0.001 && abs (y1 - y2) < 0.001)
+                    expected
+                    actual
+                )
+    then
+        Ok ()
+
+    else
+        Err ("Expected stroke points " ++ Debug.toString expected ++ " but got " ++ Debug.toString actual)
 
 
 {-| The first channel of the most recently created guild.

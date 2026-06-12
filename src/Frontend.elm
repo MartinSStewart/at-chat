@@ -2516,7 +2516,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position } ->
+                MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position, displayWidth } ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
@@ -2532,6 +2532,15 @@ updateLoaded msg model =
                                     )
                                 )
                                 position
+                                -- Strokes on images are stored in the image's full resolution
+                                -- coordinates so they stay aligned when the image is scaled
+                                -- down to fit smaller screens
+                                (if displayWidth > 0 then
+                                    toFloat (Coord.xRaw imageSize) / displayWidth
+
+                                 else
+                                    1
+                                )
                                 model
 
                         _ ->
@@ -2629,6 +2638,7 @@ updateLoaded msg model =
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.UserIconAnchor)
                                 elementPosition
+                                1
                                 model
 
                         _ ->
@@ -2641,6 +2651,7 @@ updateLoaded msg model =
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.TimestampAnchor)
                                 elementPosition
+                                1
                                 model
 
                         _ ->
@@ -2653,6 +2664,7 @@ updateLoaded msg model =
                                 guildOrDmId
                                 (Drawing.DateDividerAnchor (Id.threadRouteWithoutMessage threadRoute) date)
                                 elementPosition
+                                1
                                 model
 
                         _ ->
@@ -4294,14 +4306,15 @@ selectDrawingAnchor :
     AnyGuildOrDmId
     -> Drawing.AnchorType
     -> Point2d CssPixels ScreenCoordinate
+    -> Float
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-selectDrawingAnchor guildOrDmId anchorType elementPosition model =
+selectDrawingAnchor guildOrDmId anchorType elementPosition pointScale model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
                 | drawingMode =
-                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition
+                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition pointScale
                         |> Drawing.SelectedAnchor
               }
             , Command.none
@@ -4328,7 +4341,11 @@ updateDrawing drawingMsg model =
                                 (Local_Drawing
                                     selected.guildOrDmId
                                     selected.anchorType
-                                    (Drawing.StartStroke ( x - anchorPosition.x, y - anchorPosition.y ))
+                                    (Drawing.StartStroke
+                                        ( (x - anchorPosition.x) * selected.pointScale
+                                        , (y - anchorPosition.y) * selected.pointScale
+                                        )
+                                    )
                                     |> Just
                                 )
                                 { loggedIn
@@ -4350,7 +4367,10 @@ updateDrawing drawingMsg model =
 
                                 unsent : List ( Float, Float )
                                 unsent =
-                                    ( x - anchorPosition.x, y - anchorPosition.y ) :: stroke.unsent
+                                    ( (x - anchorPosition.x) * selected.pointScale
+                                    , (y - anchorPosition.y) * selected.pointScale
+                                    )
+                                        :: stroke.unsent
 
                                 setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
                                 setStroke newStroke =
@@ -4387,32 +4407,19 @@ updateDrawing drawingMsg model =
                 ( Drawing.MouseUp, Drawing.SelectedAnchor selected ) ->
                     case selected.stroke of
                         Just stroke ->
-                            let
-                                ( loggedIn2, flushCmd ) =
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (case List.Nonempty.fromList (List.reverse stroke.unsent) of
-                                            Just points ->
-                                                Local_Drawing
-                                                    selected.guildOrDmId
-                                                    selected.anchorType
-                                                    (Drawing.ContinueStroke points)
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-                                        )
-                                        { loggedIn
-                                            | drawingMode =
-                                                Drawing.SelectedAnchor { selected | stroke = Nothing }
-                                        }
-                                        Command.none
-                            in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.EndStroke |> Just)
-                                loggedIn2
-                                flushCmd
+                                (Local_Drawing
+                                    selected.guildOrDmId
+                                    selected.anchorType
+                                    (Drawing.EndStroke (List.reverse stroke.unsent))
+                                    |> Just
+                                )
+                                { loggedIn
+                                    | drawingMode =
+                                        Drawing.SelectedAnchor { selected | stroke = Nothing }
+                                }
+                                Command.none
 
                         Nothing ->
                             ( loggedIn, Command.none )

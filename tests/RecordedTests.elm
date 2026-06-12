@@ -67,7 +67,10 @@ tests :
 tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
         handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-        handleNormalHttpRequests ({ currentRequest } as httpRequests) =
+        handleNormalHttpRequests =
+            handleHttpRequestsWithUploadedImageSize (Coord.xy 128 128)
+
+        handleHttpRequestsWithUploadedImageSize uploadedImageSize ({ currentRequest } as httpRequests) =
             case String.split "/" currentRequest.url of
                 [ "", "_i" ] ->
                     RecordedTestExtra.httpBasic currentRequest.url 200 RecordedTestExtra.infoEndpointResponse
@@ -99,7 +102,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     FileStatus.uploadResponseCodec
                                     { fileHash = FileStatus.fileHash "123123123"
                                     , imageSize =
-                                        { imageSize = Coord.xy 128 128
+                                        { imageSize = uploadedImageSize
                                         , orientation = Nothing
                                         , gpsLocation = Nothing
                                         , cameraOwner = Nothing
@@ -221,6 +224,23 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 handleNormalHttpRequests
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
+
+        -- Same as imageUploadConfig except the uploaded image is reported as
+        -- being 800x100 pixels, wide enough to get scaled down to fit the screen
+        wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        wideImageUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleHttpRequestsWithUploadedImageSize (Coord.xy 800 100))
                 RecordedTestExtra.handlePortToJs
                 handleFileRequest
                 (\_ ->
@@ -452,6 +472,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.drawOnMessages imageUploadConfig
+    , RecordedTestExtra.drawingScalesWithImages wideImageUploadConfig
     , RecordedTestExtra.startTest
         "Friend label shows typing indicator"
         RecordedTestExtra.startTime

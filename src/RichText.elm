@@ -2294,6 +2294,9 @@ type alias PressedImageData =
     , fileUrl : String
     , position : Point2d CssPixels ScreenCoordinate
     , imageSize : Coord CssPixels
+    , -- The width the image is displayed at in css pixels. Smaller than the
+      -- width in imageSize when the image is scaled down to fit the screen.
+      displayWidth : Float
     }
 
 
@@ -2630,12 +2633,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                     )
                                                     (case SeqDict.get embedIndex2 config.embedDrawings of
                                                         Just embedDrawing ->
-                                                            Drawing.imageAttachmentOverlays
-                                                                config.drawingUserColor
-                                                                embedDrawing
+                                                            \scale ->
+                                                                Drawing.imageAttachmentOverlays
+                                                                    scale
+                                                                    config.drawingUserColor
+                                                                    embedDrawing
 
                                                         Nothing ->
-                                                            []
+                                                            \_ -> []
                                                     )
                                                     data
                                                     embed
@@ -2792,6 +2797,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                         (case SeqDict.get fileId config.drawings of
                                                                             Just drawing ->
                                                                                 Drawing.imageAttachmentOverlays
+                                                                                    (width / toFloat (max 1 (Coord.xRaw imageSize)))
                                                                                     config.drawingUserColor
                                                                                     drawing
 
@@ -2816,6 +2822,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                                         { imageId = PressedAttachedFileImage fileId
                                                                                         , fileUrl = fileUrl
                                                                                         , imageSize = imageSize
+                                                                                        , displayWidth = width
                                                                                         , position = position
                                                                                         }
                                                                                 )
@@ -2958,7 +2965,7 @@ embedView :
     -> Bool
     -> Int
     -> String
-    -> List (Html msg)
+    -> (Float -> List (Html msg))
     -> Url
     -> EmbedData
     -> Html msg
@@ -3065,6 +3072,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                                                         { imageId = PressedEmbedImage embedIndex
                                                         , fileUrl = imageData.url
                                                         , imageSize = imageData.imageSize
+                                                        , displayWidth = width
                                                         , position = position
                                                         }
                                                 )
@@ -3077,7 +3085,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                                         []
                                )
                         )
-                        (drawingOverlays ++ [ image ])
+                        (drawingOverlays (width / toFloat (max 1 (Coord.xRaw imageData.imageSize))) ++ [ image ])
                         |> Just
 
                 Nothing ->

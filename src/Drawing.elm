@@ -66,7 +66,10 @@ type MessageAnchor
     | EmbedImageAnchor Int
 
 
-{-| Points are in css pixels, relative to the top left corner of the anchor element.
+{-| Points are in css pixels, relative to the top left corner of the anchor
+element. Image anchors are an exception: there the points are in the image's
+full resolution coordinate space so that drawings stay aligned when the image
+is scaled down to fit smaller screens.
 -}
 type alias Stroke =
     { points : Nonempty ( Float, Float )
@@ -93,7 +96,10 @@ emptyDrawing =
 type LocalChange
     = StartStroke ( Float, Float )
     | ContinueStroke (Nonempty ( Float, Float ))
-    | EndStroke
+    | -- Carries the points that weren't sent in a ContinueStroke batch yet.
+      -- They can't be sent as a separate ContinueStroke because two messages
+      -- sent in the same frontend update aren't guaranteed to arrive in order.
+      EndStroke (List ( Float, Float ))
     | UndoStroke
     | RedoStroke
 
@@ -117,6 +123,10 @@ type alias SelectedAnchorData =
     , -- Position of the anchor element in viewport coordinates, used to convert
       -- mouse positions into anchor relative points. Nothing while being measured.
       position : Point2d CssPixels ScreenCoordinate
+    , -- How many anchor coordinate units one css pixel covers. This is 1 for most
+      -- anchors but image anchors store points in the image's full resolution
+      -- coordinates while the image might be displayed scaled down.
+      pointScale : Float
     , stroke : Maybe ActiveStroke
     }
 
@@ -132,11 +142,12 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> SelectedAnchorData
-initialAnchorSelection guildOrDmId anchorType position =
+initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> Float -> SelectedAnchorData
+initialAnchorSelection guildOrDmId anchorType position pointScale =
     { guildOrDmId = guildOrDmId
     , anchorType = anchorType
     , position = position
+    , pointScale = pointScale
     , stroke = Nothing
     }
 
@@ -191,13 +202,22 @@ handleLocalChange userId change drawing =
                 Nothing ->
                     drawing
 
-        EndStroke ->
+        EndStroke remainingPoints ->
             case SeqDict.get userId drawing.inProgress of
                 Just stroke ->
                     { drawing
                         | inProgress = SeqDict.remove userId drawing.inProgress
                         , finished =
-                            { createdBy = userId, points = stroke.points }
+                            { createdBy = userId
+                            , points =
+                                case List.Nonempty.fromList remainingPoints of
+                                    Just remaining ->
+                                        List.Nonempty.append stroke.points remaining
+                                            |> nonemptyTake maxPointsPerStroke
+
+                                    Nothing ->
+                                        stroke.points
+                            }
                                 :: drawing.finished
                                 |> List.take maxFinishedStrokes
                     }
@@ -323,7 +343,7 @@ overlayAttribute getColor drawing =
             Ui.none
 
         strokes ->
-            List.map (\( createdBy, points ) -> strokeSvg (getColor createdBy) points) strokes
+            List.map (\( createdBy, points ) -> strokeSvg 1 (getColor createdBy) points) strokes
                 |> Html.div []
                 |> Ui.html
                 |> Ui.el
@@ -333,15 +353,20 @@ overlayAttribute getColor drawing =
                     ]
 
 
-imageAttachmentOverlays : (userId -> String) -> Drawing userId -> List (Html msg)
-imageAttachmentOverlays getColor drawing =
+{-| scale converts the stored stroke points into css pixels. For image anchors
+the points are stored in the image's full resolution coordinates so this is
+displayedWidth / fullResolutionWidth, which keeps drawings aligned with the
+image when it's scaled down to fit smaller screens.
+-}
+imageAttachmentOverlays : Float -> (userId -> String) -> Drawing userId -> List (Html msg)
+imageAttachmentOverlays scale getColor drawing =
     List.map
-        (\( createdBy, points ) -> strokeSvg (getColor createdBy) points)
+        (\( createdBy, points ) -> strokeSvg scale (getColor createdBy) points)
         (strokesFor drawing)
 
 
-strokeSvg : String -> Nonempty ( Float, Float ) -> Html msg
-strokeSvg color points =
+strokeSvg : Float -> String -> Nonempty ( Float, Float ) -> Html msg
+strokeSvg scale color points =
     Svg.svg
         [ Svg.Attributes.width "1"
         , Svg.Attributes.height "1"
@@ -355,6 +380,10 @@ strokeSvg color points =
                     )
                 |> String.join " "
                 |> Svg.Attributes.points
+            , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
+            , -- Keep the stroke 3 css pixels wide regardless of how much the
+              -- points are scaled
+              Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
             , Svg.Attributes.fill "none"
             , Svg.Attributes.stroke color
             , Svg.Attributes.strokeWidth "3"
