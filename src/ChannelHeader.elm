@@ -131,10 +131,10 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                 Ui.row
                     [ Ui.height Ui.fill ]
                     [ if chattingWithYourself data local then
-                        privateChatWithYourself isMobile Nothing local
+                        privateChatWithYourself isMobile currentChannelHeaderTab local
 
                       else
-                        discordPrivateChatWith name
+                        discordPrivateChatWith isMobile currentChannelHeaderTab name
                     , drawButton isMobile currentChannelHeaderTab
                     ]
 
@@ -167,10 +167,10 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
-                    privateChatWithYourself isMobile Nothing local
+                    privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
 
                 else
-                    discordPrivateChatWith name
+                    discordPrivateChatWith isMobile (Route.toChannelHeaderTab model.route) name
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
@@ -582,18 +582,16 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         ]
 
 
-discordPrivateChatWith : String -> Element FrontendMsg
-discordPrivateChatWith name =
+discordPrivateChatWith : Bool -> Maybe DmChannelHeaderTab -> String -> Element FrontendMsg
+discordPrivateChatWith isMobile currentTab name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
-        [ Ui.el
-            [ Ui.Font.color MyUi.font3
-            , Ui.width Ui.shrink
-            , Ui.Font.exactWhitespace
-            , Ui.clipWithEllipsis
-            ]
-            (Ui.text "Chat with ")
-        , Ui.text name
+        [ channelHeaderTab
+            isMobile
+            (Dom.id "guild_openDescription")
+            DmChannelHeaderTab_ChannelDescription
+            currentTab
+            (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
         ]
 
 
@@ -719,6 +717,36 @@ tabBodyView local loggedIn model =
 
         DiscordDmRoute routeData ->
             case routeData.tab of
+                Just DmChannelHeaderTab_ChannelDescription ->
+                    channelDescriptionView
+                        Nothing
+                        (if
+                            chattingWithYourself
+                                { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                                local
+                         then
+                            "A channel where you can write things down you want to remember."
+
+                         else
+                            case SeqDict.get routeData.channelId local.discordDmChannels of
+                                Just channel2 ->
+                                    "A private channel for just you and "
+                                        ++ (NonemptyDict.toSeqDict channel2.members
+                                                |> SeqDict.remove routeData.currentDiscordUserId
+                                                |> SeqDict.toList
+                                                |> List.filterMap
+                                                    (\( userId, _ ) ->
+                                                        User.getDiscordUser userId local.localUser
+                                                            |> Maybe.map (\user -> PersonName.toString user.name)
+                                                    )
+                                                |> String.join ", "
+                                           )
+
+                                Nothing ->
+                                    ""
+                        )
+                        |> Just
+
                 Just DmChannelHeaderTab_Draw ->
                     drawingTabView loggedIn.drawingMode local |> Just
 
