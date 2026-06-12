@@ -51,6 +51,7 @@ import MessageView
 import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
+import OneOrGreater
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
@@ -177,6 +178,12 @@ subscriptions model =
                                     []
                                     loggedIn.filesToUpload
                                     |> Subscription.batch
+                                , case loggedIn.fileDragOverCount of
+                                    Just _ ->
+                                        Effect.Browser.Events.onAnimationFrame GotTime
+
+                                    Nothing ->
+                                        Subscription.none
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
@@ -433,7 +440,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
-            , fileDragOverCount = 0
+            , fileDragOverCount = Nothing
             , drawingMode = Drawing.init
             }
     in
@@ -4098,10 +4105,18 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
-        FileDragEnter ->
+        FileDragEnter time ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | fileDragOverCount = loggedIn.fileDragOverCount + 1 }
+                    ( { loggedIn
+                        | fileDragOverCount =
+                            case loggedIn.fileDragOverCount of
+                                Just fileDrag ->
+                                    Just { fileDrag | count = OneOrGreater.increment fileDrag.count }
+
+                                Nothing ->
+                                    Just { dragOverStart = time, count = OneOrGreater.one }
+                      }
                     , Command.none
                     )
                 )
@@ -4110,7 +4125,20 @@ updateLoaded msg model =
         FileDragLeave ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | fileDragOverCount = max 0 (loggedIn.fileDragOverCount - 1) }
+                    ( { loggedIn
+                        | fileDragOverCount =
+                            case loggedIn.fileDragOverCount of
+                                Just fileDrag ->
+                                    case OneOrGreater.toInt fileDrag.count - 1 |> OneOrGreater.fromInt of
+                                        Just count ->
+                                            Just { fileDrag | count = count }
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+                      }
                     , Command.none
                     )
                 )
@@ -4120,7 +4148,7 @@ updateLoaded msg model =
             let
                 modelReset =
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | fileDragOverCount = 0 }, Command.none ))
+                        (\loggedIn -> ( { loggedIn | fileDragOverCount = Nothing }, Command.none ))
                         model
                         |> Tuple.first
             in

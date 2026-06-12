@@ -284,7 +284,12 @@ layout model attributes child =
                     maybeMessageId =
                         Route.toGuildOrDmId local.localUser.session.userId model.route
                 in
-                [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True )) |> Ui.htmlAttribute
+                [ Html.Events.preventDefaultOn
+                    "dragenter"
+                    (Json.Decode.field "timeStamp" Json.Decode.float
+                        |> Json.Decode.map (\time -> ( round time |> Time.millisToPosix |> FileDragEnter, True ))
+                    )
+                    |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "drop"
@@ -292,7 +297,7 @@ layout model attributes child =
                         |> Json.Decode.map (\list -> ( FileDropped list, True ))
                     )
                     |> Ui.htmlAttribute
-                , Ui.inFront (fileDragOverlay (loggedIn.fileDragOverCount > 0) model)
+                , Ui.inFront (fileDragOverlay loggedIn model)
                 , Local.networkError
                     (\change ->
                         case change of
@@ -615,54 +620,53 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
             ( model, Command.none )
 
 
-fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
-fileDragOverlay isVisible model =
-    let
-        canDrop : Bool
-        canDrop =
-            case model.loginStatus of
-                LoggedIn loggedIn ->
+fileDragOverlay : LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+fileDragOverlay loggedIn model =
+    case loggedIn.fileDragOverCount of
+        Just fileDrag ->
+            let
+                canDrop : Bool
+                canDrop =
                     canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
 
-                _ ->
-                    False
+                accentColor : Ui.Color
+                accentColor =
+                    if canDrop then
+                        MyUi.font1
 
-        accentColor : Ui.Color
-        accentColor =
-            if canDrop then
-                MyUi.font1
+                    else
+                        MyUi.errorColor
 
-            else
-                MyUi.errorColor
+                _ =
+                    Debug.log "asdf" ( fileDrag.dragOverStart, model.time )
+            in
+            Ui.el
+                [ Ui.height Ui.fill
+                , Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.Font.color (Ui.rgba 0 0 0 0)
+                , Ui.Font.size 32
+                , Ui.Font.bold
+                , MyUi.htmlStyle "border" "8px dashed"
+                , MyUi.htmlStyle "box-sizing"
+                    "border-box"
+                , MyUi.noPointerEvents
 
-        className : String
-        className =
-            if isVisible then
-                "file-drag-overlay file-drag-overlay-visible"
+                --, if Debug.log "isVisible" isVisible then
+                , Ui.background (Ui.rgba 0 0 0 0.6)
+                , Ui.Font.color accentColor
+                , Ui.borderColor accentColor
+                , Ui.opacity (Duration.from fileDrag.dragOverStart model.time |> Duration.inSeconds |> clamp 0 1)
+                ]
+                (if canDrop then
+                    Ui.text "Drop files anywhere to upload"
 
-            else
-                "file-drag-overlay"
-    in
-    Ui.el
-        [ Ui.background (Ui.rgba 0 0 0 0.6)
-        , Ui.height Ui.fill
-        , Ui.contentCenterX
-        , Ui.contentCenterY
-        , Ui.Font.color accentColor
-        , Ui.Font.size 32
-        , Ui.Font.bold
-        , Ui.borderColor accentColor
-        , MyUi.htmlStyle "border" "8px dashed"
-        , MyUi.htmlStyle "box-sizing" "border-box"
-        , MyUi.htmlStyle "pointer-events" "none"
-        , Ui.htmlAttribute (Html.Attributes.class className)
-        ]
-        (if canDrop then
-            Ui.text "Drop files anywhere to upload"
+                 else
+                    Ui.text "Nowhere to put this file here"
+                )
 
-         else
-            Ui.text "Nowhere to put this file here"
-        )
+        Nothing ->
+            Ui.none
 
 
 gotFiles :
@@ -1938,7 +1942,7 @@ isPressMsg msg =
         PressedChannelHeaderTab _ ->
             True
 
-        FileDragEnter ->
+        FileDragEnter _ ->
             False
 
         FileDragLeave ->

@@ -91,6 +91,7 @@ import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneOrGreater exposing (OneOrGreater)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
@@ -239,7 +240,7 @@ type alias LoggedIn2 =
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
-    , fileDragOverCount : Int
+    , fileDragOverCount : Maybe { dragOverStart : Time.Posix, count : OneOrGreater }
     , drawingMode : Drawing.Model
     }
 
@@ -536,7 +537,7 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
-    | FileDragEnter
+    | FileDragEnter Time.Posix
     | FileDragLeave
     | FileDropped (List File)
     | PressedUnregisterServiceWorkers
