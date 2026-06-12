@@ -72,7 +72,7 @@ main =
                     800
                     (\_ -> ())
                     (\_ -> ())
-                    (\_ _ -> ())
+                    (\_ -> ())
                     { domainWhitelist = SeqSet.empty
                     , revealedSpoilers = SeqSet.fromList [ 1, 3, 5, 7 ]
                     , users = SeqDict.empty
@@ -81,6 +81,8 @@ main =
                     , customEmojis = SeqDict.empty
                     , animationMode = Sticker.LoopForever
                     , timezone = Time.utc
+                    , drawings = SeqDict.empty
+                    , drawingUserColor = \_ -> ""
                     }
                     Array.empty
                     (Nonempty
@@ -169,7 +171,7 @@ stickersSection =
             800
             (\_ -> ())
             (\_ -> ())
-            (\_ _ -> ())
+            (\_ -> ())
             { domainWhitelist = SeqSet.empty
             , revealedSpoilers = SeqSet.empty
             , users = SeqDict.empty
@@ -178,6 +180,8 @@ stickersSection =
             , customEmojis = SeqDict.empty
             , animationMode = Sticker.LoopForever
             , timezone = Time.utc
+            , drawings = SeqDict.empty
+            , drawingUserColor = \_ -> ""
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -336,7 +340,7 @@ embedExamples whitelistedDomains =
                 800
                 (\_ -> ())
                 (\_ -> ())
-                (\_ _ -> ())
+                (\_ -> ())
                 { domainWhitelist = whitelistedDomains
                 , revealedSpoilers = SeqSet.empty
                 , users = SeqDict.empty
@@ -345,6 +349,8 @@ embedExamples whitelistedDomains =
                 , stickers = SeqDict.empty
                 , animationMode = Sticker.LoopForever
                 , timezone = Time.utc
+                , drawings = SeqDict.empty
+                , drawingUserColor = \_ -> ""
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)
