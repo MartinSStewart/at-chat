@@ -2619,6 +2619,15 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                     config.animationMode
                                                     config.isSelectingAnchor
                                                     embedIndex2
+                                                    (case maybePressedSpoiler of
+                                                        Just ( htmlIdPrefix, _ ) ->
+                                                            Dom.idToString htmlIdPrefix
+                                                                ++ "_embedImage_"
+                                                                ++ String.fromInt embedIndex2
+
+                                                        Nothing ->
+                                                            "embedImage_" ++ String.fromInt embedIndex2
+                                                    )
                                                     (case SeqDict.get embedIndex2 config.embedDrawings of
                                                         Just embedDrawing ->
                                                             Drawing.imageAttachmentOverlays
@@ -2894,13 +2903,12 @@ embedContainer contents =
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "max-width" (String.fromInt embedContainerMaxWidth ++ "px")
         , Html.Attributes.style "margin-top" "4px"
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Attributes.style "overflow" "hidden"
         ]
         [ Html.div
             [ Html.Attributes.style "width" (String.fromInt embedContainerLeftBorderWidth ++ "px")
             , Html.Attributes.style "flex-shrink" "0"
             , Html.Attributes.style "background-color" "rgb(80,120,200)"
+            , Html.Attributes.style "border-radius" "4px 0 0 4px"
             ]
             []
         , Html.div
@@ -2908,6 +2916,10 @@ embedContainer contents =
             , Html.Attributes.style "padding" ("8px " ++ String.fromInt embedContainerPaddingX ++ "px")
             , Html.Attributes.style "min-width" "0"
             , Html.Attributes.style "flex" "1"
+            , -- The corners are rounded per child instead of border-radius and
+              -- overflow hidden on the container, so that drawings anchored to
+              -- the embed image can extend outside of the container.
+              Html.Attributes.style "border-radius" "0 4px 4px 0"
             ]
             contents
         ]
@@ -2945,11 +2957,12 @@ embedView :
     -> Sticker.AnimationMode
     -> Bool
     -> Int
+    -> String
     -> List (Html msg)
     -> Url
     -> EmbedData
     -> Html msg
-embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist playAnimation isSelectingAnchor embedIndex drawingOverlays url embed =
+embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist playAnimation isSelectingAnchor embedIndex htmlId drawingOverlays url embed =
     embedContainer
         (List.filterMap
             identity
@@ -3043,6 +3056,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                             ++ (case maybeOnPressImage of
                                     Just onPressImage ->
                                         [ Html.Attributes.style "cursor" "pointer"
+                                        , Html.Attributes.id htmlId
                                         , Html.Events.on
                                             "click"
                                             (Json.Decode.map
