@@ -1813,22 +1813,55 @@ parseUrlBody startedWithAngleBracket modifierToString modifiers index source =
                 modifierChars =
                     List.map (\modifier -> modifierToString modifier |> String.Nonempty.head) modifiers |> Set.fromList
 
-                ( trimIdx, _ ) =
-                    String.foldr
-                        (\char ( idx, stop ) ->
-                            if stop then
-                                ( idx, True )
+                ( openParenCount, closeParenCount ) =
+                    String.foldl
+                        (\char ( opens, closes ) ->
+                            if char == '(' then
+                                ( opens + 1, closes )
 
-                            else if char == '.' || char == ')' || char == ']' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
-                                ( idx - 1, False )
-
-                            else if startedWithAngleBracket && char == '>' then
-                                ( idx - 1, True )
+                            else if char == ')' then
+                                ( opens, closes + 1 )
 
                             else
-                                ( idx, True )
+                                ( opens, closes )
                         )
-                        ( urlBodyLen, False )
+                        ( 0, 0 )
+                        urlBody
+
+                -- A url containing ( keeps trailing ) instead of treating it as surrounding punctuation, unless the url itself is wrapped in parens, in which case only the surplus ) is trimmed
+                allowedParenTrims =
+                    if openParenCount == 0 then
+                        closeParenCount
+
+                    else if String.slice (index - 1) index source == "(" then
+                        max 0 (closeParenCount - openParenCount)
+
+                    else
+                        0
+
+                ( trimIdx, _, _ ) =
+                    String.foldr
+                        (\char ( idx, parenTrims, stop ) ->
+                            if stop then
+                                ( idx, parenTrims, True )
+
+                            else if char == ')' then
+                                if parenTrims > 0 then
+                                    ( idx - 1, parenTrims - 1, False )
+
+                                else
+                                    ( idx, parenTrims, True )
+
+                            else if char == '.' || char == ']' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
+                                ( idx - 1, parenTrims, False )
+
+                            else if startedWithAngleBracket && char == '>' then
+                                ( idx - 1, parenTrims, True )
+
+                            else
+                                ( idx, parenTrims, True )
+                        )
+                        ( urlBodyLen, allowedParenTrims, False )
                         urlBody
 
                 protocolStr =
