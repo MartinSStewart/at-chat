@@ -298,7 +298,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             RecordedTestExtra.linkDiscordUrl
             RecordedTestExtra.desktopWindow
             (\user ->
-                [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                 , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail user
                 , user.input 100 (Dom.id "loginForm_name") "Joe"
                 , user.click 100 (Dom.id "loginForm_submit")
@@ -1024,7 +1024,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --                (Route.encode Route.HomePageRoute)
     --                RecordedTestExtra.desktopWindow
     --                (\userReload ->
-    --                    [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+    --                    [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
     --                    , userReload.click 100 (Dom.id "guild_openGuild_1")
     --                    , hasExactText user [ "3" ]
     --                    , userReload.click 100 (Dom.id "guildIcon_showFriends")
@@ -1060,7 +1060,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     RecordedTestExtra.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
@@ -1108,7 +1108,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     RecordedTestExtra.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
                         , RecordedTestExtra.writeMessage userReload 100 "Another message"
                         , userReload.checkView
@@ -1221,7 +1221,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     RecordedTestExtra.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot
@@ -1307,7 +1307,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     tooManyIncorrectAttempts =
                         [ Test.Html.Selector.text "Too many incorrect attempts." ]
                 in
-                [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                 , openLoginAndSubmitEmail 100
                 , List.range 0 9
                     |> List.map
@@ -1382,11 +1382,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             { width = 1887, height = 770 }
             (\tabA ->
                 [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                , tabA.portEvent 1 "check_pwa_status_from_js" (RecordedTestExtra.stringToJson "false")
                 , tabA.portEvent
-                    1
-                    "user_agent_from_js"
-                    (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
+                    2
+                    "load_startup_data_from_js"
+                    (RecordedTestExtra.startupDataJson "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
@@ -1395,7 +1394,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     { width = 1887, height = 674 }
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                        , tabB.portEvent 0 "check_pwa_status_from_js" (RecordedTestExtra.stringToJson "false")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
                         , RecordedTestExtra.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" RecordedTestExtra.adminEmail tabB
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
@@ -1474,7 +1472,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             { width = 1615, height = 820 }
             (\tabA ->
                 [ tabA.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                , tabA.portEvent 1 "check_pwa_status_from_js" (RecordedTestExtra.stringToJson "false")
                 , tabA.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
                 , RecordedTestExtra.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" RecordedTestExtra.adminEmail tabA
                 , tabA.click 17660 (Dom.id "guild_openGuild_0")
@@ -1820,7 +1817,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                             urlPath
                                             RecordedTestExtra.desktopWindow
                                             (\secondUser ->
-                                                [ secondUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                [ secondUser.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                                                 , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.userEmail secondUser
                                                 , secondUser.input 100 (Dom.id "loginForm_name") "Sven"
                                                 , secondUser.click 100 (Dom.id "loginForm_submit")
@@ -1860,7 +1857,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                     urlPath
                                                     RecordedTestExtra.desktopWindow
                                                     (\thirdUser ->
-                                                        [ thirdUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                        [ thirdUser.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
                                                         , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail thirdUser
                                                         , thirdUser.input 100 (Dom.id "loginForm_name") "Joe"
                                                         , thirdUser.click 100 (Dom.id "loginForm_submit")

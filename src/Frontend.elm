@@ -51,6 +51,7 @@ import MessageView
 import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
+import OneOrGreater
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
@@ -73,7 +74,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -127,11 +128,9 @@ subscriptions model =
         , Time.every (Duration.seconds 2) GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
-        , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
-        , Ports.scrollbarWidthSub GotScrollbarWidth
+        , Ports.startupDataSub GotStartupData
         , Ports.pageHasFocus PageHasFocusChanged
-        , Ports.userAgentSub GotUserAgent
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
         , Ports.visualViewportResized VisualViewportResized
@@ -177,6 +176,11 @@ subscriptions model =
                                     []
                                     loggedIn.filesToUpload
                                     |> Subscription.batch
+                                , if FrontendExtra.fileDragOverlayOpacity loggedIn loaded <= 0 then
+                                    Subscription.none
+
+                                  else
+                                    Effect.Browser.Events.onAnimationFrame GotTime
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
@@ -253,10 +257,7 @@ init url key =
         , time = Nothing
         , timezone = Time.utc
         , loginStatus = LoadingData
-        , notificationPermission = Ports.Denied
-        , pwaStatus = Ports.BrowserView
-        , scrollbarWidth = 0
-        , userAgent = Nothing
+        , startupData = Nothing
         , publicGoMatch =
             case route of
                 PublicGoMatchRoute _ ->
@@ -278,11 +279,8 @@ init url key =
             _ ->
                 Command.none
         , Ports.loadSounds
-        , Ports.checkNotificationPermission
-        , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
-        , Ports.getScrollbarWidth
-        , Ports.getUserAgent
+        , Ports.loadStartupData
         ]
     )
 
@@ -291,15 +289,15 @@ initLoadedFrontend :
     LoadingFrontend
     -> ClientId
     -> Time.Posix
-    -> UserAgent
+    -> Ports.StartupData
     -> Result () LoginData
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-initLoadedFrontend loading clientId time userAgent loginResult =
+initLoadedFrontend loading clientId time startupData loginResult =
     let
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper loading.timezone userAgent loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper loading.timezone startupData.userAgent loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -325,13 +323,14 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
-            , notificationPermission = loading.notificationPermission
-            , pwaStatus = loading.pwaStatus
+            , notificationPermission = startupData.notificationPermission
+            , pwaStatus = startupData.pwaStatus
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , scrollbarWidth = loading.scrollbarWidth
-            , userAgent = userAgent
+            , scrollbarWidth = startupData.scrollbarWidth
+            , userAgent = startupData.userAgent
+            , timeOrigin = startupData.timeOrigin
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
@@ -433,7 +432,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
-            , fileDragOverCount = 0
+            , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             }
     in
@@ -510,9 +509,9 @@ tryInitLoadedFrontend loading =
                 LoadError ->
                     Just (Err ())
     in
-    case T4 loading.clientId loading.time maybeLoginStatus loading.userAgent of
-        T4 (Just clientId) (Just time) (Just loginStatus) (Just userAgent) ->
-            initLoadedFrontend loading clientId time userAgent loginStatus |> Tuple.mapFirst Loaded
+    case T4 loading.clientId loading.time maybeLoginStatus loading.startupData of
+        T4 (Just clientId) (Just time) (Just loginStatus) (Just startupData) ->
+            initLoadedFrontend loading clientId time startupData loginStatus |> Tuple.mapFirst Loaded
 
         _ ->
             ( Loading loading, Command.none )
@@ -529,20 +528,11 @@ update msg model =
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = Coord.xy width height }, Command.none )
 
-                CheckedNotificationPermission permission ->
-                    ( Loading { loading | notificationPermission = permission }, Command.none )
-
-                CheckedPwaStatus pwaStatus ->
-                    ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
-
                 GotTimezone timezone ->
                     ( Loading { loading | timezone = timezone }, Command.none )
 
-                GotScrollbarWidth width ->
-                    ( Loading { loading | scrollbarWidth = width }, Command.none )
-
-                GotUserAgent userAgent ->
-                    tryInitLoadedFrontend { loading | userAgent = Just userAgent }
+                GotStartupData startupData ->
+                    tryInitLoadedFrontend { loading | startupData = Just startupData }
 
                 _ ->
                     ( model, Command.none )
@@ -1401,13 +1391,15 @@ updateLoaded msg model =
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
 
-        CheckedPwaStatus pwaStatus ->
-            ( { model | pwaStatus = pwaStatus }, Command.none )
+        TouchStart maybeGuildOrDmIdAndMessageIndex timeStamp touches ->
+            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing (Duration.addTo model.timeOrigin timeStamp) touches model
 
-        TouchStart maybeGuildOrDmIdAndMessageIndex time touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing time touches model
-
-        TouchMoved time newTouches ->
+        TouchMoved timeStamp newTouches ->
+            let
+                time : Time.Posix
+                time =
+                    Duration.addTo model.timeOrigin timeStamp
+            in
             case model.drag of
                 Dragging dragging ->
                     FrontendExtra.updateLoggedIn
@@ -1546,11 +1538,11 @@ updateLoaded msg model =
                         Nothing ->
                             ( model, Command.none )
 
-        TouchEnd time ->
-            handleTouchEnd time model
+        TouchEnd timeStamp ->
+            handleTouchEnd (Duration.addTo model.timeOrigin timeStamp) model
 
-        TouchCancel time ->
-            handleTouchEnd time model
+        TouchCancel timeStamp ->
+            handleTouchEnd (Duration.addTo model.timeOrigin timeStamp) model
 
         ChannelSidebarAnimated elapsedTime ->
             let
@@ -2255,8 +2247,8 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time isThreadStarter maybeImageUrl maybeLinkUrl touches ->
-                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl time touches model
+                MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl touches ->
+                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl (Duration.addTo model.timeOrigin timeStamp) touches model
 
                 MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
@@ -2770,11 +2762,16 @@ updateLoaded msg model =
                 )
                 model
 
-        GotScrollbarWidth width ->
-            ( { model | scrollbarWidth = width }, Command.none )
-
-        GotUserAgent userAgent ->
-            ( { model | userAgent = userAgent }, Command.none )
+        GotStartupData startupData ->
+            ( { model
+                | scrollbarWidth = startupData.scrollbarWidth
+                , userAgent = startupData.userAgent
+                , pwaStatus = startupData.pwaStatus
+                , notificationPermission = startupData.notificationPermission
+                , timeOrigin = startupData.timeOrigin
+              }
+            , Command.none
+            )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model
@@ -4098,10 +4095,18 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
-        FileDragEnter ->
+        FileDragEnter timeStamp ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | fileDragOverCount = loggedIn.fileDragOverCount + 1 }
+                    ( { loggedIn
+                        | fileDragOverCount =
+                            case loggedIn.fileDragOverCount of
+                                FileDragging dragStart count ->
+                                    FileDragging dragStart (OneOrGreater.increment count)
+
+                                NoFileDrag _ ->
+                                    FileDragging (Duration.addTo model.timeOrigin timeStamp) OneOrGreater.one
+                      }
                     , Command.none
                     )
                 )
@@ -4110,7 +4115,20 @@ updateLoaded msg model =
         FileDragLeave ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | fileDragOverCount = max 0 (loggedIn.fileDragOverCount - 1) }
+                    ( { loggedIn
+                        | fileDragOverCount =
+                            case loggedIn.fileDragOverCount of
+                                FileDragging dragStart count ->
+                                    case OneOrGreater.toInt count - 1 |> OneOrGreater.fromInt of
+                                        Just count2 ->
+                                            FileDragging dragStart count2
+
+                                        Nothing ->
+                                            NoFileDrag (Just model.time)
+
+                                NoFileDrag _ ->
+                                    loggedIn.fileDragOverCount
+                      }
                     , Command.none
                     )
                 )
@@ -4120,7 +4138,7 @@ updateLoaded msg model =
             let
                 modelReset =
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | fileDragOverCount = 0 }, Command.none ))
+                        (\loggedIn -> ( { loggedIn | fileDragOverCount = NoFileDrag (Just model.time) }, Command.none ))
                         model
                         |> Tuple.first
             in

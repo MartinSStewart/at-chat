@@ -6,12 +6,10 @@ port module Ports exposing
     , NotificationPermission(..)
     , PwaStatus(..)
     , RegisterPushSubscription(..)
+    , StartupData
     , SubscribeData
     , SubscribeKeys
-    , checkNotificationPermission
     , checkNotificationPermissionResponse
-    , checkPwaStatus
-    , checkPwaStatusResponse
     , closeNotifications
     , copyImageToClipboard
     , copyToClipboard
@@ -20,18 +18,16 @@ port module Ports exposing
     , execCommand
     , fixCursorPosition
     , focusChanged
-    , getScrollbarWidth
-    , getUserAgent
     , hapticFeedback
     , loadServiceWorkerData
     , loadSounds
+    , loadStartupData
     , pageHasFocus
     , playSound
     , registerPushSubscription
     , registerPushSubscriptionToJs
     , registerServiceWorker
     , requestNotificationPermission
-    , scrollbarWidthSub
     , selectionChanged
     , serviceWorkerData
     , serviceWorkerMessage
@@ -40,10 +36,10 @@ port module Ports exposing
     , shiftScrollByElementDelta
     , showNotification
     , smoothScrollBy
+    , startupDataSub
     , subscribeDataCodec
     , textInputSelectAll
     , unregisterServiceWorker
-    , userAgentSub
     , visualViewportResized
     )
 
@@ -83,19 +79,10 @@ port text_input_select_all_to_js : Json.Encode.Value -> Cmd msg
 port show_notification : Json.Encode.Value -> Cmd msg
 
 
-port check_notification_permission_to_js : Json.Encode.Value -> Cmd msg
-
-
 port check_notification_permission_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port request_notification_permission : Json.Encode.Value -> Cmd msg
-
-
-port check_pwa_status_to_js : Json.Encode.Value -> Cmd msg
-
-
-port check_pwa_status_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
@@ -104,16 +91,10 @@ port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 port haptic_feedback : Json.Encode.Value -> Cmd msg
 
 
-port scrollbar_width_to_js : Json.Encode.Value -> Cmd msg
+port load_startup_data_to_js : Json.Encode.Value -> Cmd msg
 
 
-port scrollbar_width_from_js : (Json.Encode.Value -> msg) -> Sub msg
-
-
-port user_agent_to_js : Json.Encode.Value -> Cmd msg
-
-
-port user_agent_from_js : (Json.Encode.Value -> msg) -> Sub msg
+port load_startup_data_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
@@ -265,36 +246,73 @@ serviceWorkerData msg =
         )
 
 
-getScrollbarWidth : Command FrontendOnly toMsg msg
-getScrollbarWidth =
-    Command.sendToJs "scrollbar_width_to_js" scrollbar_width_to_js Json.Encode.null
+{-| Data loaded from JS once at app startup. `timeOrigin` is `performance.timeOrigin`, needed to convert event timeStamps (which are milliseconds since timeOrigin) into a Time.Posix.
+-}
+type alias StartupData =
+    { timeOrigin : Time.Posix
+    , userAgent : UserAgent
+    , scrollbarWidth : Int
+    , pwaStatus : PwaStatus
+    , notificationPermission : NotificationPermission
+    }
 
 
-scrollbarWidthSub : (Int -> value) -> Subscription FrontendOnly value
-scrollbarWidthSub msg =
+loadStartupData : Command FrontendOnly toMsg msg
+loadStartupData =
+    Command.sendToJs "load_startup_data_to_js" load_startup_data_to_js Json.Encode.null
+
+
+startupDataSub : (StartupData -> value) -> Subscription FrontendOnly value
+startupDataSub msg =
     Subscription.fromJs
-        "scrollbar_width_from_js"
-        scrollbar_width_from_js
+        "load_startup_data_from_js"
+        load_startup_data_from_js
         (\json ->
-            Json.Decode.decodeValue (Json.Decode.map msg Json.Decode.int) json
-                |> Result.withDefault (msg 0)
+            Json.Decode.decodeValue decodeStartupData json
+                |> Result.withDefault
+                    { timeOrigin = Time.millisToPosix 0
+                    , userAgent = UserAgent.init
+                    , scrollbarWidth = 0
+                    , pwaStatus = BrowserView
+                    , notificationPermission = NotAsked
+                    }
+                |> msg
         )
 
 
-getUserAgent : Command FrontendOnly toMsg msg
-getUserAgent =
-    Command.sendToJs "user_agent_to_js" user_agent_to_js Json.Encode.null
+decodeStartupData : Json.Decode.Decoder StartupData
+decodeStartupData =
+    Json.Decode.map5 StartupData
+        (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
+        (Json.Decode.field "scrollbarWidth" Json.Decode.int)
+        (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
+        (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
 
 
-userAgentSub : (UserAgent -> value) -> Subscription FrontendOnly value
-userAgentSub msg =
-    Subscription.fromJs
-        "user_agent_from_js"
-        user_agent_from_js
-        (\json ->
-            Json.Decode.decodeValue (Json.Decode.map (\text -> UserAgent.parseUserAgent text |> msg) Json.Decode.string) json
-                |> Result.withDefault (msg UserAgent.init)
-        )
+pwaStatusFromBool : Bool -> PwaStatus
+pwaStatusFromBool isPwa =
+    if isPwa then
+        InstalledPwa
+
+    else
+        BrowserView
+
+
+notificationPermissionFromString : String -> NotificationPermission
+notificationPermissionFromString text =
+    case text of
+        "granted" ->
+            Granted
+
+        "denied" ->
+            Denied
+
+        "unsupported" ->
+            Unsupported
+
+        _ ->
+            NotAsked
 
 
 setFavicon : String -> Command FrontendOnly toMsg msg
@@ -498,11 +516,6 @@ requestNotificationPermission =
     Command.sendToJs "request_notification_permission" request_notification_permission Json.Encode.null
 
 
-checkNotificationPermission : Command FrontendOnly toMsg msg
-checkNotificationPermission =
-    Command.sendToJs "check_notification_permission_to_js" check_notification_permission_to_js Json.Encode.null
-
-
 type NotificationPermission
     = NotAsked
     | Denied
@@ -517,23 +530,7 @@ checkNotificationPermissionResponse msg =
         check_notification_permission_from_js
         (\json ->
             Json.Decode.decodeValue
-                (Json.Decode.map
-                    (\text ->
-                        case text of
-                            "granted" ->
-                                Granted
-
-                            "denied" ->
-                                Denied
-
-                            "unsupported" ->
-                                Unsupported
-
-                            _ ->
-                                NotAsked
-                    )
-                    Json.Decode.string
-                )
+                (Json.Decode.map notificationPermissionFromString Json.Decode.string)
                 json
                 |> Result.withDefault NotAsked
                 |> msg
@@ -543,34 +540,6 @@ checkNotificationPermissionResponse msg =
 type PwaStatus
     = InstalledPwa
     | BrowserView
-
-
-checkPwaStatus : Command FrontendOnly toMsg msg
-checkPwaStatus =
-    Command.sendToJs "check_pwa_status_to_js" check_pwa_status_to_js Json.Encode.null
-
-
-checkPwaStatusResponse : (PwaStatus -> msg) -> Subscription FrontendOnly msg
-checkPwaStatusResponse msg =
-    Subscription.fromJs
-        "check_pwa_status_from_js"
-        check_pwa_status_from_js
-        (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map
-                    (\isPwa ->
-                        if isPwa then
-                            InstalledPwa
-
-                        else
-                            BrowserView
-                    )
-                    Json.Decode.bool
-                )
-                json
-                |> Result.withDefault BrowserView
-                |> msg
-        )
 
 
 showNotification : String -> String -> Command FrontendOnly toMsg msg

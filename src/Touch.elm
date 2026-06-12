@@ -1,12 +1,12 @@
 module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, decodeTouchEvent, decoderPointerEvent)
 
 import CssPixels exposing (CssPixels)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Json.Decode exposing (Decoder)
 import NonemptyDict exposing (NonemptyDict)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity)
-import Time
 import Vector2d exposing (Vector2d)
 
 
@@ -20,7 +20,9 @@ type ScreenCoordinate
     = ScreenCoordinate Never
 
 
-decodeTouchEvent : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
+{-| The event's timeStamp is a DOMHighResTimeStamp: the time elapsed since `performance.timeOrigin`, not a unix timestamp. Offset it by the timeOrigin loaded at startup to get a Time.Posix.
+-}
+decodeTouchEvent : (Duration -> NonemptyDict Int Touch -> msg) -> Decoder msg
 decodeTouchEvent msg =
     Json.Decode.map2
         Tuple.pair
@@ -30,19 +32,19 @@ decodeTouchEvent msg =
             (\( list, time ) ->
                 case NonemptyDict.fromList list of
                     Just nonempty ->
-                        msg (round time |> Time.millisToPosix) nonempty |> Json.Decode.succeed
+                        msg (Duration.milliseconds time) nonempty |> Json.Decode.succeed
 
                     Nothing ->
                         Json.Decode.fail ""
             )
 
 
-decoderPointerEvent : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
+decoderPointerEvent : (Duration -> NonemptyDict Int Touch -> msg) -> Decoder msg
 decoderPointerEvent msg =
     Json.Decode.map4
         (\identifier clientX clientY time ->
             msg
-                (round time |> Time.millisToPosix)
+                (Duration.milliseconds time)
                 (NonemptyDict.singleton identifier { client = Point2d.xy clientX clientY, target = Nothing })
         )
         (Json.Decode.field "pointerId" Json.Decode.int)

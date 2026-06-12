@@ -402,7 +402,7 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.scrollbar_width_to_js.subscribe((a) => {
+    app.ports.load_startup_data_to_js.subscribe((a) => {
         // original code found here https://stackoverflow.com/a/13382873
         // Creating invisible container
         const outer = document.createElement('div');
@@ -421,10 +421,20 @@ exports.init = async function init(app)
         // Removing temporary elements from the DOM
         outer.parentNode.removeChild(outer);
 
-        app.ports.scrollbar_width_from_js.send(scrollbarWidth);
-    });
+        // Check if the app is running as an installed PWA
+        const isPwa = window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            document.referrer.includes('android-app://');
 
-    app.ports.user_agent_to_js.subscribe(() => { app.ports.user_agent_from_js.send(window.navigator.userAgent); });
+        app.ports.load_startup_data_from_js.send({
+            // Event timeStamps are milliseconds since timeOrigin, not since the unix epoch
+            timeOrigin: performance.timeOrigin,
+            userAgent: window.navigator.userAgent,
+            scrollbarWidth: scrollbarWidth,
+            isPwa: isPwa,
+            notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported"
+        });
+    });
 
     app.ports.shift_scroll_by_element_delta_to_js.subscribe((data) => {
         const element = document.getElementById(data.elementId);
@@ -532,28 +542,11 @@ exports.init = async function init(app)
         }
     })
 
-    app.ports.check_notification_permission_to_js.subscribe((a) => {
-        if ("Notification" in window) {
-            app.ports.check_notification_permission_from_js.send(Notification.permission);
-        } else {
-            app.ports.check_notification_permission_from_js.send("unsupported");
-        }
-    });
-
     app.ports.show_notification.subscribe((a) => {
         if ("Notification" in window) {
             const notification = new Notification(a.title, { body: a.body });
             activeNotifications.push(notification);
         }
-    });
-
-    app.ports.check_pwa_status_to_js.subscribe((a) => {
-        // Check if the app is running as an installed PWA
-        const isPwa = window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true ||
-            document.referrer.includes('android-app://');
-
-        app.ports.check_pwa_status_from_js.send(isPwa);
     });
 
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
