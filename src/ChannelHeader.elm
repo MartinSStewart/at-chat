@@ -730,17 +730,36 @@ tabBodyView local loggedIn model =
                          else
                             case SeqDict.get routeData.channelId local.discordDmChannels of
                                 Just channel2 ->
-                                    "A private channel for just you and "
-                                        ++ (NonemptyDict.toSeqDict channel2.members
-                                                |> SeqDict.remove routeData.currentDiscordUserId
-                                                |> SeqDict.toList
-                                                |> List.filterMap
-                                                    (\( userId, _ ) ->
-                                                        User.getDiscordUser userId local.localUser
-                                                            |> Maybe.map (\user -> PersonName.toString user.name)
+                                    case
+                                        NonemptyDict.toSeqDict channel2.members
+                                            |> SeqDict.remove routeData.currentDiscordUserId
+                                            |> SeqDict.toList
+                                    of
+                                        [ ( single, _ ) ] ->
+                                            "A Discord DM channel for you and "
+                                                ++ (case User.getDiscordUser single local.localUser of
+                                                        Just user ->
+                                                            PersonName.toString user.name
+
+                                                        Nothing ->
+                                                            "<missing>"
+                                                   )
+
+                                        many ->
+                                            "A Discord group channel for "
+                                                ++ String.join ", "
+                                                    (List.map
+                                                        (\( userId, _ ) ->
+                                                            case User.getDiscordUser userId local.localUser of
+                                                                Just user ->
+                                                                    PersonName.toString user.name
+
+                                                                Nothing ->
+                                                                    "<missing>"
+                                                        )
+                                                        many
                                                     )
-                                                |> String.join ", "
-                                           )
+                                                ++ " and you."
 
                                 Nothing ->
                                     ""
