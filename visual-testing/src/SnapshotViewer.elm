@@ -78,20 +78,20 @@ init =
     ( Loading
     , Http.get
         { url = "/manifest.json"
-        , expect = Http.expectJson GotManifest manifestDecoder
+        , expect = Http.expectJson GotManifest decodeManifest
         }
     )
 
 
-manifestDecoder : Decoder Manifest
-manifestDecoder =
+decodeManifest : Decoder Manifest
+decodeManifest =
     Json.Decode.map2 Manifest
         (Json.Decode.field "baselineName" Json.Decode.string)
-        (Json.Decode.field "snapshots" (Json.Decode.list snapshotEntryDecoder))
+        (Json.Decode.field "snapshots" (Json.Decode.list decodeSnapshotEntry))
 
 
-snapshotEntryDecoder : Decoder SnapshotEntry
-snapshotEntryDecoder =
+decodeSnapshotEntry : Decoder SnapshotEntry
+decodeSnapshotEntry =
     Json.Decode.map4 SnapshotEntry
         (Json.Decode.field "name" Json.Decode.string)
         (Json.Decode.field "inBaseline" Json.Decode.bool)
