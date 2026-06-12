@@ -5623,10 +5623,6 @@ userTextMessageContent :
     -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
 userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
-    let
-        _ =
-            Debug.log "isHovered" isHovered
-    in
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of

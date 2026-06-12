@@ -653,8 +653,6 @@ fileDragOverlay loggedIn model =
             , MyUi.htmlStyle "box-sizing"
                 "border-box"
             , MyUi.noPointerEvents
-
-            --, if Debug.log "isVisible" isVisible then
             , Ui.background (Ui.rgba 0 0 0 0.6)
             , Ui.Font.color accentColor
             , Ui.borderColor accentColor
