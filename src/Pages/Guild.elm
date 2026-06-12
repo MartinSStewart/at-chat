@@ -3459,7 +3459,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
-                , Ui.paddingXY 0 16
+                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
                 , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
@@ -3632,7 +3632,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
-                , Ui.paddingXY 0 16
+                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
                 , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
@@ -3893,7 +3893,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
-                , Ui.paddingXY 0 16
+                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
                 , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
@@ -4074,7 +4074,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             (Ui.Keyed.column
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
-                , Ui.paddingXY 0 16
+                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
                 , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)

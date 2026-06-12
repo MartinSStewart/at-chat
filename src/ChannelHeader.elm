@@ -238,6 +238,22 @@ channelHeader isMobile2 includeShowMembers content tabContent =
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
+        , case tabContent of
+            Just tabContent2 ->
+                -- Drawn over the conversation view rather than pushing it down.
+                -- Ui.below is avoided here since Chrome and Firefox disagree on
+                -- how to position its height:0 wrapper. The z-index keeps the tab
+                -- body above positioned elements inside the conversation view.
+                Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 0, y = MyUi.channelHeaderHeight + 1, z = 0 }
+                        , MyUi.htmlStyle "z-index" "20"
+                        ]
+                        tabContent2
+                    )
+
+            Nothing ->
+                Ui.noAttr
         ]
         [ Ui.row
             [ Ui.contentCenterY
@@ -272,12 +288,6 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                     content
                 ]
             )
-        , case tabContent of
-            Just tabContent2 ->
-                tabContent2
-
-            Nothing ->
-                Ui.none
         ]
 
 
@@ -840,6 +850,8 @@ drawingTabView model local =
         , Ui.Font.color MyUi.font2
         , Ui.spacing 16
         , Ui.height (Ui.px 80)
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
         ]
         (case model of
             NoSelectedAnchor ->
@@ -865,6 +877,8 @@ channelDescriptionView channelName description =
         , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 8
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
         ]
         [ case channelName of
             Just channelName2 ->
