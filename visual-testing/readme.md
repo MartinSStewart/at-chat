@@ -75,3 +75,22 @@ baseline-2460e7e…/   current/   diff/
 
 It compiles the Elm app via `lamdera` (falling back to `npx lamdera` when
 lamdera isn't on your `PATH`), esbuilds the harness, then renders.
+
+### Viewing the results
+
+```bash
+./view-snapshots.sh        # or: ./run-snapshot-test.sh --view
+```
+
+Starts a viewer at <http://localhost:8878> (override with
+`SNAPSHOT_VIEWER_PORT`) that shows every snapshot with its baseline, current
+and diff images side by side — no folder digging needed. Changed snapshots are
+listed first; the diff column overlays the odiff mask on the current image so
+you can see *where* the change is, and clicking any image opens the raw PNG.
+Unchanged snapshots are hidden by default (toggle in the header, along with an
+image-size slider).
+
+The viewer itself is an Elm app (`src/SnapshotViewer.elm`) compiled by the
+script and served by `view-snapshots.js`. The snapshot list is re-read from
+disk on every page load, so you can leave it running, re-run the snapshot
+test, and just refresh the browser.
