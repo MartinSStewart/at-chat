@@ -240,7 +240,17 @@ channelHeader isMobile2 includeShowMembers content tabContent =
         , Ui.background MyUi.background3
         , case tabContent of
             Just tabContent2 ->
-                Ui.below tabContent2
+                -- Drawn over the conversation view rather than pushing it down.
+                -- Ui.below is avoided here since Chrome and Firefox disagree on
+                -- how to position its height:0 wrapper. The z-index keeps the tab
+                -- body above positioned elements inside the conversation view.
+                Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 0, y = MyUi.channelHeaderHeight, z = 0 }
+                        , MyUi.htmlStyle "z-index" "20"
+                        ]
+                        tabContent2
+                    )
 
             Nothing ->
                 Ui.noAttr
