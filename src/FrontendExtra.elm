@@ -412,8 +412,6 @@ layout model attributes child =
             :: attributes
             ++ (if MyUi.isMobile model then
                     [ Ui.clip
-                    , MyUi.htmlStyle "user-select" "none"
-                    , MyUi.htmlStyle "-webkit-user-select" "none"
                     , Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
@@ -451,26 +449,42 @@ layout model attributes child =
                         )
                         |> Ui.htmlAttribute
                     ]
-                        ++ (case model.drag of
-                                NoDrag ->
-                                    []
+               )
+            ++ (if disableTextSelect isMobile model then
+                    [ MyUi.htmlStyle "user-select" "none"
+                    , MyUi.htmlStyle "-webkit-user-select" "none"
+                    ]
 
-                                DragStart _ _ ->
-                                    []
-
-                                Dragging dragging ->
-                                    case dragging.target of
-                                        Drag_CallThumbnail ->
-                                            [ MyUi.htmlStyle "user-select" "none"
-                                            , MyUi.htmlStyle "-webkit-user-select" "none"
-                                            ]
-
-                                        Drag_Channel ->
-                                            []
-                           )
+                else
+                    []
                )
         )
         child
+
+
+disableTextSelect : Bool -> LoadedFrontend -> Bool
+disableTextSelect isMobile model =
+    if isMobile then
+        True
+
+    else if Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw then
+        True
+
+    else
+        case model.drag of
+            NoDrag ->
+                False
+
+            DragStart _ _ ->
+                False
+
+            Dragging dragging ->
+                case dragging.target of
+                    Drag_CallThumbnail ->
+                        True
+
+                    Drag_Channel ->
+                        False
 
 
 canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
