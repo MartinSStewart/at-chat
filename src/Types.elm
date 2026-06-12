@@ -73,6 +73,7 @@ import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
+import FileEater exposing (EatingFile)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Go
 import GuildName exposing (GuildName)
@@ -241,13 +242,14 @@ type alias LoggedIn2 =
     , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : FileDrag
+    , eatingFile : Maybe EatingFile
     , drawingMode : Drawing.Model
     }
 
 
 type FileDrag
     = NoFileDrag (Maybe Time.Posix)
-    | FileDragging Time.Posix OneOrGreater
+    | FileDragging Time.Posix OneOrGreater (Coord CssPixels)
 
 
 type alias UserOptionsModel =
@@ -540,7 +542,8 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
-    | FileDragEnter Duration
+    | FileDragEnter Duration (Coord CssPixels)
+    | FileDragOver (Coord CssPixels)
     | FileDragLeave
     | FileDropped (List File)
     | PressedUnregisterServiceWorkers

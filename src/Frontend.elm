@@ -29,6 +29,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import FileEater
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Go
@@ -176,7 +177,7 @@ subscriptions model =
                                     []
                                     loggedIn.filesToUpload
                                     |> Subscription.batch
-                                , if FrontendExtra.fileDragOverlayOpacity loggedIn loaded <= 0 then
+                                , if FrontendExtra.fileDragOverlayOpacity loggedIn loaded <= 0 && loggedIn.eatingFile == Nothing then
                                     Subscription.none
 
                                   else
@@ -433,6 +434,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
+            , eatingFile = Nothing
             , drawingMode = Drawing.init
             }
     in
@@ -612,7 +614,22 @@ updateLoaded msg model =
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
-            ( { model | time = time }, Command.none )
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( case loggedIn.eatingFile of
+                        Just eating ->
+                            if FileEater.isFinished time eating then
+                                { loggedIn | eatingFile = Nothing }
+
+                            else
+                                loggedIn
+
+                        Nothing ->
+                            loggedIn
+                    , Command.none
+                    )
+                )
+                { model | time = time }
 
         GotWindowSize width height ->
             FrontendExtra.updateLoggedIn
@@ -4095,18 +4112,32 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
-        FileDragEnter timeStamp ->
+        FileDragEnter timeStamp mousePosition ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | fileDragOverCount =
                             case loggedIn.fileDragOverCount of
-                                FileDragging dragStart count ->
-                                    FileDragging dragStart (OneOrGreater.increment count)
+                                FileDragging dragStart count _ ->
+                                    FileDragging dragStart (OneOrGreater.increment count) mousePosition
 
                                 NoFileDrag _ ->
-                                    FileDragging (Duration.addTo model.timeOrigin timeStamp) OneOrGreater.one
+                                    FileDragging (Duration.addTo model.timeOrigin timeStamp) OneOrGreater.one mousePosition
                       }
+                    , Command.none
+                    )
+                )
+                model
+
+        FileDragOver mousePosition ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( case loggedIn.fileDragOverCount of
+                        FileDragging dragStart count _ ->
+                            { loggedIn | fileDragOverCount = FileDragging dragStart count mousePosition }
+
+                        NoFileDrag _ ->
+                            loggedIn
                     , Command.none
                     )
                 )
@@ -4118,10 +4149,10 @@ updateLoaded msg model =
                     ( { loggedIn
                         | fileDragOverCount =
                             case loggedIn.fileDragOverCount of
-                                FileDragging dragStart count ->
+                                FileDragging dragStart count mousePosition ->
                                     case OneOrGreater.toInt count - 1 |> OneOrGreater.fromInt of
                                         Just count2 ->
-                                            FileDragging dragStart count2
+                                            FileDragging dragStart count2 mousePosition
 
                                         Nothing ->
                                             NoFileDrag (Just model.time)
@@ -4138,7 +4169,32 @@ updateLoaded msg model =
             let
                 modelReset =
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | fileDragOverCount = NoFileDrag (Just model.time) }, Command.none ))
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | fileDragOverCount = NoFileDrag (Just model.time)
+                                , eatingFile =
+                                    case loggedIn.fileDragOverCount of
+                                        FileDragging dragStart _ mousePosition ->
+                                            -- The file eater only appears after a long enough drag, and only a visible eater gets to eat
+                                            if
+                                                Duration.from dragStart model.time
+                                                    |> Quantity.greaterThanOrEqualTo FileEater.fadeInDelay
+                                            then
+                                                Just
+                                                    { start = model.time
+                                                    , dropPosition = mousePosition
+                                                    , eaterPosition = FileEater.position model.windowSize mousePosition
+                                                    }
+
+                                            else
+                                                Nothing
+
+                                        NoFileDrag _ ->
+                                            Nothing
+                              }
+                            , Command.none
+                            )
+                        )
                         model
                         |> Tuple.first
             in

@@ -27,6 +27,8 @@ import Array exposing (Array)
 import Call exposing (CallId(..), ChannelSidebarMode(..))
 import ChannelDescription
 import ChannelName
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
@@ -42,6 +44,7 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
+import FileEater
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Go
@@ -286,11 +289,16 @@ layout model attributes child =
                 in
                 [ Html.Events.preventDefaultOn
                     "dragenter"
-                    (Json.Decode.field "timeStamp" Json.Decode.float
-                        |> Json.Decode.map (\time -> ( Duration.milliseconds time |> FileDragEnter, True ))
+                    (Json.Decode.map2
+                        (\time mousePosition -> ( FileDragEnter (Duration.milliseconds time) mousePosition, True ))
+                        (Json.Decode.field "timeStamp" Json.Decode.float)
+                        decodeMousePosition
                     )
                     |> Ui.htmlAttribute
-                , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
+                , Html.Events.preventDefaultOn
+                    "dragover"
+                    (Json.Decode.map (\mousePosition -> ( FileDragOver mousePosition, True )) decodeMousePosition)
+                    |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "drop"
                     (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
@@ -298,6 +306,7 @@ layout model attributes child =
                     )
                     |> Ui.htmlAttribute
                 , Ui.inFront (fileDragOverlay loggedIn model)
+                , Ui.inFront (fileEaterOverlay loggedIn model)
                 , Local.networkError
                     (\change ->
                         case change of
@@ -668,10 +677,34 @@ fileDragOverlay loggedIn model =
             )
 
 
+decodeMousePosition : Json.Decode.Decoder (Coord CssPixels)
+decodeMousePosition =
+    Json.Decode.map2
+        (\x y -> Coord.xy (round x) (round y))
+        (Json.Decode.field "clientX" Json.Decode.float)
+        (Json.Decode.field "clientY" Json.Decode.float)
+
+
+fileEaterOverlay : LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+fileEaterOverlay loggedIn model =
+    case ( loggedIn.eatingFile, loggedIn.fileDragOverCount ) of
+        ( Just eating, _ ) ->
+            FileEater.eatingView model.time eating
+
+        ( Nothing, FileDragging dragStart _ mousePosition ) ->
+            FileEater.draggingView
+                model.time
+                model.windowSize
+                { dragOverStart = dragStart, mousePosition = mousePosition }
+
+        ( Nothing, NoFileDrag _ ) ->
+            Ui.none
+
+
 fileDragOverlayOpacity : LoggedIn2 -> LoadedFrontend -> Float
 fileDragOverlayOpacity loggedIn model =
     case loggedIn.fileDragOverCount of
-        FileDragging dragStart _ ->
+        FileDragging dragStart _ _ ->
             Duration.from dragStart model.time
                 |> Duration.inSeconds
                 |> (*) 10
@@ -1952,7 +1985,10 @@ isPressMsg msg =
         PressedChannelHeaderTab _ ->
             True
 
-        FileDragEnter _ ->
+        FileDragEnter _ _ ->
+            False
+
+        FileDragOver _ ->
             False
 
         FileDragLeave ->
