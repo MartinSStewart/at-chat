@@ -888,13 +888,6 @@ body {
                 ++ colorToStyle font1
                 ++ """ transparent
 }
-.file-drag-overlay {
-  opacity: 0;
-  transition: opacity 0.15s ease-in;
-}
-.file-drag-overlay-visible {
-  opacity: 1;
-}
 .drawing-anchor-select {
   cursor: pointer;
   outline: rgba(0,0,0,0) solid 2px;
