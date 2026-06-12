@@ -9,6 +9,8 @@
 # 4. The worktree is removed, leaving you exactly where you started.
 # 5. Diff current vs baseline and list which snapshots don't match.
 #
+# Pass --view to open the result viewer (view-snapshots.sh) when done.
+#
 # Baselines are cached per base commit in snapshots/baseline-<sha>/, so steps
 # 3 and 4 are skipped when that folder already exists.
 set -e
@@ -145,4 +147,14 @@ fi
 echo ""
 echo "🔍 Comparing current branch against baseline..."
 safe_rmrf "$diff_dir"
-node compare-snapshots.js "$baseline_dir" "$current_dir" "$diff_dir"
+compare_status=0
+node compare-snapshots.js "$baseline_dir" "$current_dir" "$diff_dir" || compare_status=$?
+
+# --- 6. Optionally start the result viewer ----------------------------------
+if [ "${1:-}" = "--view" ]; then
+  ./view-snapshots.sh
+else
+  echo ""
+  echo "👀 Run ./view-snapshots.sh (or re-run with --view) to browse the images in a browser."
+fi
+exit $compare_status

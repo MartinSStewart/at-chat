@@ -695,6 +695,8 @@ profileImage userId maybeFileHash =
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 , Ui.clip
+                , -- We need no pointer events here so drawing anchoring gets the offset of the parent
+                  MyUi.noPointerEvents
                 ]
                 { source = FileStatus.fileUrl FileStatus.pngContent fileHash
                 , description = ""

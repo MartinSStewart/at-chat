@@ -4,21 +4,25 @@ module ChannelHeader exposing
     , chattingWithYourself
     , discordChannel
     , discordThread
+    , drawingCanUndoOrRedo
     , headerBackButton
     , thread
     )
 
+import Array exposing (Array)
 import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
+import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Go
 import GuildIcon
 import Html.Attributes
 import Icons
-import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
+import Message exposing (MessageState(..))
 import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
@@ -29,6 +33,7 @@ import SeqDictHelper
 import SeqSet
 import Svg
 import Svg.Attributes
+import Thread
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
@@ -49,11 +54,15 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile currentChannelHeaderTab local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if otherUserId == local.localUser.session.userId then
+                        privateChatWithYourself isMobile currentChannelHeaderTab local
 
-                else
-                    privateChatWith isMobile currentChannelHeaderTab otherUserId local name
+                      else
+                        privateChatWith isMobile currentChannelHeaderTab otherUserId local name
+                    , drawButton isMobile currentChannelHeaderTab
+                    ]
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
@@ -66,7 +75,11 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile currentChannelHeaderTab
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -79,18 +92,26 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                if otherUserId == local.localUser.session.userId then
-                    privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if otherUserId == local.localUser.session.userId then
+                        privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
 
-                else
-                    privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
+                      else
+                        privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
+                    , drawButton isMobile (Route.toChannelHeaderTab model.route)
+                    ]
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -107,11 +128,15 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
-                if chattingWithYourself data local then
-                    privateChatWithYourself isMobile Nothing local
+                Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ if chattingWithYourself data local then
+                        privateChatWithYourself isMobile Nothing local
 
-                else
-                    discordPrivateChatWith name
+                      else
+                        discordPrivateChatWith name
+                    , drawButton isMobile currentChannelHeaderTab
+                    ]
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
@@ -124,7 +149,11 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile currentChannelHeaderTab
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -148,7 +177,11 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
-                    , showFilesButton
+                    , Ui.row
+                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        , showFilesButton
+                        ]
                     ]
         )
         (tabBodyView local loggedIn model)
@@ -164,6 +197,26 @@ chattingWithYourself data local =
             False
 
 
+{-| Toggles a mode where the user can draw freehand on top of messages.
+Only available on non-mobile since it requires a mouse.
+-}
+drawButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
+drawButton isMobile currentTab =
+    if isMobile then
+        Ui.none
+
+    else
+        channelHeaderTab
+            isMobile
+            (Dom.id "channelHeader_drawOnMessages")
+            DmChannelHeaderTab_Draw
+            currentTab
+            (Ui.el
+                [ Ui.width (Ui.px 24), Ui.Accessibility.description "Draw on top of messages" ]
+                (Ui.html Icons.paintbrush)
+            )
+
+
 showFilesButton : Element FrontendMsg
 showFilesButton =
     MyUi.elButton
@@ -173,6 +226,8 @@ showFilesButton =
         , Ui.width (Ui.px 32)
         , Ui.paddingXY 4 0
         , Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.Font.color MyUi.font3
         ]
         (Ui.html Icons.document)
 
@@ -553,6 +608,9 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_Go _ ->
                             Nothing
 
+                        DmChannelHeaderTab_Draw ->
+                            drawingTabView loggedIn.drawingMode local |> Just
+
                 ChannelRoute _ _ _ ->
                     Nothing
 
@@ -601,6 +659,9 @@ tabBodyView local loggedIn model =
                                 )
                                 |> Just
 
+                        Just DmChannelHeaderTab_Draw ->
+                            drawingTabView loggedIn.drawingMode local |> Just
+
                         Nothing ->
                             Nothing
 
@@ -631,6 +692,9 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_Go _ ->
                             Nothing
 
+                        DmChannelHeaderTab_Draw ->
+                            drawingTabView loggedIn.drawingMode local |> Just
+
                 DiscordChannel_ChannelRoute _ _ _ ->
                     Nothing
 
@@ -643,8 +707,13 @@ tabBodyView local loggedIn model =
                 DiscordChannel_GuildSettingsRoute ->
                     Nothing
 
-        DiscordDmRoute _ ->
-            Nothing
+        DiscordDmRoute routeData ->
+            case routeData.tab of
+                Just DmChannelHeaderTab_Draw ->
+                    drawingTabView loggedIn.drawingMode local |> Just
+
+                _ ->
+                    Nothing
 
         AiChatRoute ->
             Nothing
@@ -660,6 +729,133 @@ tabBodyView local loggedIn model =
 
         PublicGoMatchRoute _ ->
             Nothing
+
+
+drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
+drawingCanUndoOrRedo guildOrDmId anchor local =
+    let
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
+        noThreadHelper userId anchor2 messageId channel2 =
+            case DmChannel.getArray messageId channel2.messages of
+                Just (MessageLoaded message) ->
+                    let
+                        drawing : Drawing.Drawing userId
+                        drawing =
+                            Message.drawing anchor2 message
+                    in
+                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                _ ->
+                    ( False, False )
+
+        helper userId channel2 =
+            case anchor of
+                Drawing.MessageAnchor threadRoute anchor2 ->
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            noThreadHelper userId anchor2 messageId channel2
+
+                        ViewThreadWithMessage threadId messageId ->
+                            SeqDict.get threadId channel2.threads
+                                |> Maybe.withDefault Thread.frontendInit
+                                |> noThreadHelper userId anchor2 messageId
+
+                Drawing.DateDividerAnchor threadRoute date ->
+                    case threadRoute of
+                        NoThread ->
+                            case SeqDict.get date channel2.dateDividerDrawings of
+                                Just drawing ->
+                                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                                Nothing ->
+                                    ( False, False )
+
+                        ViewThread threadId ->
+                            case
+                                SeqDict.get threadId channel2.threads
+                                    |> Maybe.withDefault Thread.frontendInit
+                                    |> .dateDividerDrawings
+                                    |> SeqDict.get date
+                            of
+                                Just drawing ->
+                                    ( Drawing.canUndo userId drawing, Drawing.canRedo userId drawing )
+
+                                Nothing ->
+                                    ( False, False )
+    in
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel2 ) ->
+                    helper local.localUser.session.userId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just channel2 ->
+                    helper local.localUser.session.userId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel2 ) ->
+                    helper currentUserId channel2
+
+                Nothing ->
+                    ( False, False )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just channel2 ->
+                    case anchor of
+                        Drawing.MessageAnchor (NoThreadWithMessage messageId) anchor2 ->
+                            noThreadHelper data.currentUserId anchor2 messageId channel2
+
+                        Drawing.DateDividerAnchor NoThread date ->
+                            case SeqDict.get date channel2.dateDividerDrawings of
+                                Just drawing ->
+                                    ( Drawing.canUndo data.currentUserId drawing, Drawing.canRedo data.currentUserId drawing )
+
+                                Nothing ->
+                                    ( False, False )
+
+                        _ ->
+                            ( False, False )
+
+                Nothing ->
+                    ( False, False )
+
+
+{-| Shown in the channel header below the tab buttons while the drawing tab is selected.
+-}
+drawingTabView : Model -> LocalState -> Element FrontendMsg
+drawingTabView model local =
+    Ui.row
+        [ Ui.paddingXY 16 12
+        , Ui.background MyUi.tabBackground
+        , Ui.Font.color MyUi.font2
+        , Ui.spacing 16
+        , Ui.height (Ui.px 80)
+        ]
+        (case model of
+            NoSelectedAnchor ->
+                [ Ui.text "Click on a profile image, timestamp, or attachment to anchor your drawing to it." ]
+
+            SelectedAnchor selected ->
+                let
+                    ( canUndo, canRedo ) =
+                        drawingCanUndoOrRedo selected.guildOrDmId selected.anchorType local
+                in
+                [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
+                , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
+                , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
+                ]
+        )
+        |> Ui.map DrawingMsg
 
 
 channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg

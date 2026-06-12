@@ -20,6 +20,7 @@ module RecordedTestExtra exposing
     , desktopWindow
     , discordUserAuth
     , domain
+    , drawOnMessages
     , editMostRecentMessageViaArrowUp
     , enableNotifications
     , firefoxDesktop
@@ -83,8 +84,10 @@ import Cloudflare
 import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Date exposing (Date)
 import Dict
 import Discord
+import Drawing
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
@@ -108,6 +111,7 @@ import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import Log
 import LoginForm
+import Message
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -118,6 +122,7 @@ import PersonName
 import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RichText exposing (Domain(..))
+import Route
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
@@ -1739,6 +1744,18 @@ discordUserAuth =
     }
 
 
+uploadImageAttachment :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+uploadImageAttachment user =
+    T.group
+        [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+        , T.backendUpdate
+            100
+            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+        ]
+
+
 imageViewerTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -1752,9 +1769,7 @@ imageViewerTests imageUploadConfig =
             [ connectTwoUsersAndJoinNewGuild
                 desktopWindow
                 (\admin _ ->
-                    [ -- Attach an image to the message, wait for the upload to
-                      -- finish, then send the message.
-                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView
@@ -1895,8 +1910,7 @@ imageViewerTests imageUploadConfig =
                                     points
                             }
                     in
-                    [ -- Attach an image and send the message.
-                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView
                         0
@@ -1981,7 +1995,7 @@ imageViewerTests imageUploadConfig =
                                     points
                             }
                     in
-                    [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
                     , admin.click 0 (Dom.id "spoiler_1_image_1")
@@ -2031,7 +2045,7 @@ imageViewerTests imageUploadConfig =
             [ connectTwoUsersAndJoinNewGuild
                 desktopWindow
                 (\admin _ ->
-                    [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
@@ -2112,7 +2126,7 @@ imageViewerTests imageUploadConfig =
             [ connectTwoUsersAndJoinNewGuild
                 desktopWindow
                 (\admin _ ->
-                    [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
@@ -2152,8 +2166,7 @@ imageViewerTests imageUploadConfig =
                         linkUrl =
                             "https://example.com/some-page"
                     in
-                    [ -- Attach an image to the message and send it.
-                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView
@@ -2381,8 +2394,7 @@ imageViewerTests imageUploadConfig =
                         touchEnd =
                             Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ]
                     in
-                    [ -- Attach an image and send the message.
-                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    [ uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView
                         0
@@ -3074,6 +3086,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Go _ _ ->
                     True
 
+                Local_Drawing _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -3262,6 +3277,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetGuildIcon _ _ ->
+                            True
+
+                        Types.Server_Drawing _ _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3466,6 +3484,10 @@ allAttackerLocalChanges =
         { otherUserId = Broadcast.adminUserId }
         (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
+    , Local_Drawing
+        guildOrDmId_guild
+        (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
+        (Drawing.StartStroke ( 0, 0 ))
     ]
 
 
@@ -4121,3 +4143,321 @@ loginTests isMobile normalConfig =
             )
         ]
     ]
+
+
+drawOnMessages : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+drawOnMessages imageUploadConfig =
+    startTest
+        "Draw on top of messages"
+        (Duration.addTo startTime (Duration.hours 23.96))
+        imageUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin user ->
+                [ writeMessage admin 100 "Draw on this message!"
+                , uploadImageAttachment admin
+                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                -- A day later another message is written so that a date divider shows up
+                , writeMessage admin (Duration.hours 0.05 |> Duration.inMilliseconds) "A new day means a date divider!"
+
+                -- Open the drawing tab and check that the instructions show up
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                , admin.snapshotView 100 { name = "Drawing tab waiting for an anchor to be picked" }
+                , T.andThen
+                    100
+                    (\data ->
+                        case ( lastGuildChannelMessage data.backend, findImageMessage data.backend ) of
+                            ( Just ( guildId, messageId, _ ), Just ( imageMessageId, fileId ) ) ->
+                                let
+                                    dividerDate : Date
+                                    dividerDate =
+                                        Date.fromPosix Time.utc data.time
+                                in
+                                [ -- Click the message's profile image to use it as the drawing
+                                  -- anchor. The anchor's screen position is part of the click
+                                  -- event (clientX/Y minus offsetX/Y).
+                                  admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+
+                                -- The stroke is visible for the user that drew it and, in
+                                -- realtime, for other users viewing the same channel
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
+
+                                -- The stroke is stored in the message on the backend
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected the message to contain exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Message not found on the backend"
+                                    )
+
+                                -- Undo removes the stroke for everyone, redo brings it back
+                                , admin.click 100 Drawing.undoButtonId
+                                , admin.checkView 100 (expectPolylineCount 0)
+                                , user.checkView 100 (expectPolylineCount 0)
+                                , admin.click 100 Drawing.redoButtonId
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
+
+                                -- Draw on the image attachment. The input overlay blocks anchor
+                                -- clicks so the drawing tab is toggled to pick a new anchor.
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.custom
+                                    100
+                                    (Dom.id
+                                        ("spoiler_"
+                                            ++ Id.toString imageMessageId
+                                            ++ "_image_"
+                                            ++ Id.toString fileId
+                                        )
+                                    )
+                                    "click"
+                                    (drawingAnchorClick 100 50)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 2)
+                                , user.checkView 100 (expectPolylineCount 2)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case findImageMessage data2.backend of
+                                            Just _ ->
+                                                case lastGuildChannelMessageAt imageMessageId data2.backend of
+                                                    Just message ->
+                                                        if
+                                                            List.length
+                                                                (Message.drawing (Drawing.ImageAttachmentAnchor fileId) message).finished
+                                                                == 1
+                                                        then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Expected the image attachment to have exactly one finished stroke"
+
+                                                    Nothing ->
+                                                        Err "Image message not found on the backend"
+
+                                            Nothing ->
+                                                Err "Image message not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to an image attachment" }
+
+                                -- Draw on the date divider between yesterday's and today's messages
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.custom
+                                    100
+                                    (Dom.id ("guild_dateDivider_" ++ Date.toIsoString dividerDate))
+                                    "click"
+                                    (drawingAnchorClick 400 300)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 3)
+                                , user.checkView 100 (expectPolylineCount 3)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannel data2.backend of
+                                            Just channel ->
+                                                case SeqDict.get dividerDate channel.dateDividerDrawings of
+                                                    Just drawing ->
+                                                        if List.length drawing.finished == 1 then
+                                                            Ok ()
+
+                                                        else
+                                                            Err "Expected the date divider to have exactly one finished stroke"
+
+                                                    Nothing ->
+                                                        Err "Expected the date divider to have drawings stored on the backend"
+
+                                            Nothing ->
+                                                Err "Channel not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke anchored to a date divider" }
+
+                                -- Pressing the pencil tab again closes the drawing tab
+                                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+
+                                -- All three drawings are persisted so they survive loading the page again
+                                , T.connectFrontend
+                                    100
+                                    sessionId0
+                                    (Route.encode
+                                        (Route.GuildRoute
+                                            guildId
+                                            (Route.ChannelRoute
+                                                (Id.fromInt 0)
+                                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                Nothing
+                                            )
+                                        )
+                                    )
+                                    desktopWindow
+                                    (\admin2 ->
+                                        [ admin2.portEvent
+                                            10
+                                            "user_agent_from_js"
+                                            (Json.Encode.string firefoxDesktop)
+                                        , -- Drawings are part of the channel data so they render
+                                          -- as soon as the messages are shown
+                                          admin2.checkView 2000 (expectPolylineCount 3)
+                                        ]
+                                    )
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The first channel of the most recently created guild.
+-}
+lastGuildChannel : BackendModel -> Maybe LocalState.BackendChannel
+lastGuildChannel backend =
+    case SeqDict.toList backend.guilds |> List.reverse |> List.head of
+        Just ( _, guild ) ->
+            SeqDict.get (Id.fromInt 0) guild.channels
+
+        Nothing ->
+            Nothing
+
+
+{-| The most recent message in the first channel of the most recently created guild.
+-}
+lastGuildChannelMessage : BackendModel -> Maybe ( Id GuildId, Id ChannelMessageId, Message.Message ChannelMessageId (Id UserId) )
+lastGuildChannelMessage backend =
+    case SeqDict.toList backend.guilds |> List.reverse |> List.head of
+        Just ( guildId, guild ) ->
+            case SeqDict.get (Id.fromInt 0) guild.channels of
+                Just channel ->
+                    case Array.get (Array.length channel.messages - 1) channel.messages of
+                        Just message ->
+                            Just ( guildId, Id.fromInt (Array.length channel.messages - 1), message )
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel -> Maybe (Message.Message ChannelMessageId (Id UserId))
+lastGuildChannelMessageAt messageId backend =
+    case lastGuildChannel backend of
+        Just channel ->
+            Array.get (Id.toInt messageId) channel.messages
+
+        Nothing ->
+            Nothing
+
+
+{-| The first message with an image attached, in the first channel of the most recently created guild.
+-}
+findImageMessage : BackendModel -> Maybe ( Id ChannelMessageId, Id FileStatus.FileId )
+findImageMessage backend =
+    case lastGuildChannel backend of
+        Just channel ->
+            Array.toList channel.messages
+                |> List.indexedMap Tuple.pair
+                |> List.filterMap
+                    (\( index, message ) ->
+                        case message of
+                            Message.UserTextMessage data ->
+                                List.Nonempty.toList data.content
+                                    |> List.filterMap
+                                        (\part ->
+                                            case part of
+                                                RichText.AttachedFile fileId ->
+                                                    Just ( Id.fromInt index, fileId )
+
+                                                _ ->
+                                                    Nothing
+                                        )
+                                    |> List.head
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+
+        Nothing ->
+            Nothing
+
+
+{-| A click event on a drawing anchor. The clientX/Y and offsetX/Y fields are
+used to determine the anchor element's screen position.
+-}
+drawingAnchorClick : Float -> Float -> Json.Encode.Value
+drawingAnchorClick x y =
+    Json.Encode.object
+        [ ( "clientX", Json.Encode.float (x + 10) )
+        , ( "clientY", Json.Encode.float (y + 5) )
+        , ( "offsetX", Json.Encode.float 10 )
+        , ( "offsetY", Json.Encode.float 5 )
+        ]
+
+
+drawZigzagStroke :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+drawZigzagStroke client =
+    T.group
+        [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 80 60)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 110 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
+        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
+        , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+        ]
+
+
+expectPolylineCount : Int -> Test.Html.Query.Single msg -> Expect.Expectation
+expectPolylineCount count query =
+    Test.Html.Query.findAll [ Test.Html.Selector.tag "polyline" ] query
+        |> Test.Html.Query.count (Expect.equal count)
+
+
+drawingMouseEvent : Float -> Float -> Json.Encode.Value
+drawingMouseEvent x y =
+    Json.Encode.object
+        [ ( "button", Json.Encode.int 0 )
+        , ( "clientX", Json.Encode.float x )
+        , ( "clientY", Json.Encode.float y )
+        ]

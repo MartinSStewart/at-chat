@@ -17,6 +17,7 @@ module Ui.Anim exposing
     , onHover, onFocus, onActive
     , Timeline, onTimeline, onTimelineWith
     , mapAttribute
+    , outlineColor
     )
 
 {-|
@@ -426,6 +427,12 @@ fontColor clr =
 backgroundColor : Color -> Animated
 backgroundColor clr =
     Animator.color "background-color" clr
+
+
+{-| -}
+outlineColor : Color -> Animated
+outlineColor clr =
+    Animator.color "outline-color" clr
 
 
 {-| -}

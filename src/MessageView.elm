@@ -3,6 +3,7 @@ module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView, reactionE
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
+import Date exposing (Date)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -13,9 +14,11 @@ import Id exposing (CustomEmojiId, Id)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import Point2d exposing (Point2d)
+import RichText
 import SeqDict exposing (SeqDict)
 import Sticker exposing (AnimationMode(..))
-import Touch exposing (Touch)
+import Touch exposing (ScreenCoordinate, Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -26,7 +29,7 @@ import User exposing (FrontendCurrentUser)
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
     | MessageView_PressedNonWhitelistLink Url
-    | MessageView_PressedImage String (Coord CssPixels)
+    | MessageView_PressedImage RichText.PressedImageData
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (Maybe String) (Maybe String) (NonemptyDict Int Touch)
@@ -43,6 +46,9 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGoMatchStartedCard
+    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -54,7 +60,7 @@ isPressMsg msg =
         MessageView_PressedNonWhitelistLink _ ->
             True
 
-        MessageView_PressedImage _ _ ->
+        MessageView_PressedImage _ ->
             True
 
         MessageView_MouseEnteredMessage ->
@@ -103,6 +109,15 @@ isPressMsg msg =
             True
 
         MessageViewMsg_PressedGoMatchStartedCard ->
+            True
+
+        MessageView_PressedUserIcon _ ->
+            True
+
+        MessageView_PressedTimestamp _ ->
+            True
+
+        MessageView_PressedDateDivider _ _ ->
             True
 
 

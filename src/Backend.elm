@@ -22,8 +22,9 @@ import Date exposing (Date)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
-import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
+import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
+import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -38,7 +39,7 @@ import Env
 import FileStatus exposing (FileData, FileId)
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
@@ -47,7 +48,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
-import MembersAndOwner exposing (IsMember(..))
+import MembersAndOwner
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
@@ -130,6 +131,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
+                        , dateDividerDrawings = SeqDict.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -141,6 +143,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
+                        , dateDividerDrawings = SeqDict.empty
                         }
                       )
                     ]
@@ -885,6 +888,7 @@ update msg model =
                                                                             (\member dict -> NonemptyDict.insert member { messagesSent = 0 } dict)
                                                                             (NonemptyDict.singleton discordUserId { messagesSent = 0 })
                                                                             data.members
+                                                                    , dateDividerDrawings = SeqDict.empty
                                                                     }
                                                                         |> Just
                                                         )
@@ -1157,16 +1161,16 @@ update msg model =
                                                                         (\a -> { a | messagesSent = a.messagesSent + 1 })
                                                                         members
 
-                                                                UserJoinedMessage _ _ _ ->
+                                                                UserJoinedMessage _ _ _ _ ->
                                                                     members
 
                                                                 DeletedMessage _ ->
                                                                     members
 
-                                                                CallStarted _ _ _ _ ->
+                                                                CallStarted _ _ _ _ _ ->
                                                                     members
 
-                                                                GoMatchStarted _ _ _ ->
+                                                                GoMatchStarted _ _ _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -1847,6 +1851,17 @@ update msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToRegenerateServerSecret error) model responseCmd
 
+        GotRustServerFileUpload fileHash fileSize2 maybeImageSize ->
+            ( { model
+                | files =
+                    SeqDict.insert
+                        fileHash
+                        { fileSize = fileSize2, imageSize = maybeImageSize }
+                        model.files
+              }
+            , Command.none
+            )
+
 
 gotDiscordStickers :
     List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )
@@ -2181,7 +2196,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         UserTextMessage a ->
                             RichText.toStringWithGetter DiscordUserData.username True model.discordUsers a.content
 
-                        UserJoinedMessage _ userId _ ->
+                        UserJoinedMessage _ userId _ _ ->
                             case SeqDict.get userId model.discordUsers of
                                 Just (FullData user2) ->
                                     user2.user.username ++ " joined!"
@@ -2198,10 +2213,10 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
-                        CallStarted _ endedAt _ _ ->
+                        CallStarted _ endedAt _ _ _ ->
                             LocalState.callStartedText endedAt
 
-                        GoMatchStarted _ _ _ ->
+                        GoMatchStarted _ _ _ _ ->
                             LocalState.goMatchStartedText
 
                 Nothing ->
@@ -2463,13 +2478,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model, Command.none )
 
         AdminToBackend adminToBackend ->
-            asAdmin
+            BackendExtra.asAdmin
                 model
                 sessionId
                 (\_ _ -> updateFromFrontendAdmin clientId adminToBackend model)
 
         LogOutRequest ->
-            asUser
+            BackendExtra.asUser
                 model
                 sessionId
                 (\session _ ->
@@ -2492,7 +2507,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_Admin adminChange ->
-                    asAdmin
+                    BackendExtra.asAdmin
                         model
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model time)
@@ -2504,7 +2519,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     else
                         case guildOrDmId of
                             GuildOrDmId_Guild guildId channelId ->
-                                asGuildMember
+                                BackendExtra.asGuildMember
                                     model
                                     sessionId
                                     guildId
@@ -2521,7 +2536,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                             GuildOrDmId_Dm otherUserId ->
-                                asDmUser
+                                BackendExtra.asDmUser
                                     model
                                     sessionId
                                     { otherUserId = otherUserId }
@@ -2539,7 +2554,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -2675,7 +2690,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId_Dm data ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -2743,7 +2758,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                 Local_NewChannel _ guildId channelName channelDescription ->
-                    asGuildOwner
+                    BackendExtra.asGuildOwner
                         model
                         sessionId
                         guildId
@@ -2769,7 +2784,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_EditChannel guildId channelId channelName channelDescription ->
-                    asGuildOwner
+                    BackendExtra.asGuildOwner
                         model
                         sessionId
                         guildId
@@ -2794,7 +2809,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_DeleteChannel guildId channelId ->
-                    asGuildOwner
+                    BackendExtra.asGuildOwner
                         model
                         sessionId
                         guildId
@@ -2819,7 +2834,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_DeleteGuild guildId ->
-                    asGuildOwner
+                    BackendExtra.asGuildOwner
                         model
                         sessionId
                         guildId
@@ -2845,7 +2860,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_NewInviteLink _ guildId _ ->
-                    asGuildMember
+                    BackendExtra.asGuildMember
                         model
                         sessionId
                         guildId
@@ -2875,7 +2890,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_DeleteInviteLink guildId inviteLinkId ->
-                    asGuildOwner
+                    BackendExtra.asGuildOwner
                         model
                         sessionId
                         guildId
@@ -2900,7 +2915,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_NewGuild _ guildName _ ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\{ userId } _ ->
@@ -2929,7 +2944,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_MemberTyping _ ( guildOrDmId, threadRoute ) ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -2965,7 +2980,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -2994,7 +3009,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3071,7 +3086,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -3106,7 +3121,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3130,7 +3145,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -3162,7 +3177,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3226,7 +3241,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -3284,7 +3299,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3320,7 +3335,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -3351,7 +3366,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3419,7 +3434,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -3485,7 +3500,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         in
                         case guildOrDmId of
                             GuildOrDmId_Guild guildId channelId ->
-                                asGuildMember
+                                BackendExtra.asGuildMember
                                     model
                                     sessionId
                                     guildId
@@ -3505,7 +3520,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                             GuildOrDmId_Dm otherUserId ->
-                                asDmUser
+                                BackendExtra.asDmUser
                                     model
                                     sessionId
                                     { otherUserId = otherUserId }
@@ -3567,7 +3582,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                 Local_Discord_SendEditGuildMessage _ currentUserId guildId channelId threadRoute newContent ->
-                    asDiscordGuildMember
+                    BackendExtra.asDiscordGuildMember
                         model
                         sessionId
                         guildId
@@ -3660,7 +3675,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_Discord_SendEditDmMessage _ dmData messageId newContent ->
-                    asDiscordDmUser
+                    BackendExtra.asDiscordDmUser
                         model
                         sessionId
                         dmData
@@ -3728,7 +3743,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3757,7 +3772,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -3794,7 +3809,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3824,7 +3839,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -3909,17 +3924,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     in
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId _) ->
-                            asGuildMember model sessionId guildId (\session user _ -> helper session user)
+                            BackendExtra.asGuildMember model sessionId guildId (\session user _ -> helper session user)
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
                                 (\session user _ _ _ -> helper session user)
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild userId guildId _) ->
-                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 guildId
@@ -3927,7 +3942,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\session _ user _ -> helper session user)
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 data
@@ -3936,7 +3951,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -3963,7 +3978,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -3995,7 +4010,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4042,7 +4057,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                            asDiscordDmUser
+                            BackendExtra.asDiscordDmUser
                                 model
                                 sessionId
                                 data
@@ -4121,7 +4136,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     in
                     case viewing of
                         ViewDm otherUserId _ ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -4146,7 +4161,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDmThread otherUserId threadId _ ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -4177,7 +4192,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordDm currentUserId dmChannelId _ ->
-                            asDiscordDmUser_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 { currentUserId = currentUserId, channelId = dmChannelId }
@@ -4202,7 +4217,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewChannel guildId channelId _ ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4234,7 +4249,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewChannelThread guildId channelId threadId _ ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4281,7 +4296,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         StopViewingChannel ->
-                            asUser
+                            BackendExtra.asUser
                                 model
                                 sessionId
                                 (\session _ ->
@@ -4293,7 +4308,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordChannel guildId channelId currentDiscordUserId _ ->
-                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 guildId
@@ -4326,7 +4341,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId _ ->
-                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 guildId
@@ -4375,7 +4390,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                 Local_SetName name ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\{ userId } user ->
@@ -4396,7 +4411,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4415,7 +4430,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId_Dm otherUserId ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -4431,7 +4446,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
-                            asGuildMember
+                            BackendExtra.asGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4452,7 +4467,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         GuildOrDmId_Dm otherUserId ->
-                            asDmUser
+                            BackendExtra.asDmUser
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
@@ -4470,7 +4485,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
-                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 guildId
@@ -4490,7 +4505,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId_Dm data ->
-                            asDiscordDmUser_AllowUserThatNeedsAuthAgain
+                            BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
                                 data
@@ -4506,7 +4521,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
-                            asDiscordGuildMember
+                            BackendExtra.asDiscordGuildMember
                                 model
                                 sessionId
                                 guildId
@@ -4531,7 +4546,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_SetGuildNotificationLevel guildId notificationLevel ->
-                    asGuildMember
+                    BackendExtra.asGuildMember
                         model
                         sessionId
                         guildId
@@ -4557,7 +4572,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetDiscordGuildNotificationLevel userId guildId notificationLevel ->
-                    asDiscordGuildMember
+                    BackendExtra.asDiscordGuildMember
                         model
                         sessionId
                         guildId
@@ -4584,7 +4599,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetNotificationMode notificationMode ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session _ ->
@@ -4600,7 +4615,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_RegisterPushSubscription _ pushSubscription ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session _ ->
@@ -4643,7 +4658,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_TextEditor localChange ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session _ ->
@@ -4660,7 +4675,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_UnlinkDiscordUser discordUserId ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session _ ->
@@ -4726,7 +4741,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_StartReloadingDiscordUser _ discordUserId ->
-                    asDiscordUser
+                    BackendExtra.asDiscordUser
                         model
                         sessionId
                         discordUserId
@@ -4776,7 +4791,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_LinkDiscordAcknowledgementIsChecked isChecked ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
@@ -4792,7 +4807,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetDomainWhitelist enable domain ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
@@ -4808,7 +4823,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetEmojiCategory category ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
@@ -4824,7 +4839,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetEmojiSkinTone maybeSkinTone ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
@@ -4840,7 +4855,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_AddCustomEmojisToUser customEmojiIds ->
-                    asUser
+                    BackendExtra.asUser
                         model
                         sessionId
                         (\session user ->
@@ -4866,7 +4881,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     handleVoiceChatChange time changeId clientId sessionId voiceChatLocalChange model
 
                 Local_Go otherUserId goChange ->
-                    asDmUser
+                    BackendExtra.asDmUser
                         model
                         sessionId
                         otherUserId
@@ -4880,7 +4895,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         ( messageId, dmChannel2 ) =
                                             LocalState.createChannelMessageBackend
-                                                (GoMatchStarted createdAt session.userId SeqDict.empty)
+                                                (GoMatchStarted
+                                                    createdAt
+                                                    session.userId
+                                                    SeqDict.empty
+                                                    Drawing.emptyDrawing
+                                                )
                                                 dmChannel
                                     in
                                     ( { model
@@ -5010,8 +5030,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
+                Local_Drawing guildOrDmId anchor drawingChange ->
+                    BackendExtra.handleDrawingChange sessionId clientId changeId guildOrDmId anchor drawingChange model
+
         TwoFactorToBackend toBackend2 ->
-            asUser
+            BackendExtra.asUser
                 model
                 sessionId
                 (twoFactorAuthenticationUpdateFromFrontend clientId time toBackend2 model)
@@ -5025,7 +5048,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
-            asUser
+            BackendExtra.asUser
                 model
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model)
@@ -5060,7 +5083,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model, Command.none )
 
         LinkDiscordRequest data ->
-            asUser
+            BackendExtra.asUser
                 model
                 sessionId
                 (\session _ ->
@@ -5080,7 +5103,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
         ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest fileHash) ->
-            asUser
+            BackendExtra.asUser
                 model
                 sessionId
                 (\session user ->
@@ -5103,7 +5126,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
         ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest guildId fileHash) ->
-            asGuildOwner
+            BackendExtra.asGuildOwner
                 model
                 sessionId
                 guildId
@@ -5125,7 +5148,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
         AdminDataRequest logPage ->
-            asAdmin
+            BackendExtra.asAdmin
                 model
                 sessionId
                 (\_ user ->
@@ -5239,29 +5262,29 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_Join _ voiceChatId _ ->
             case voiceChatId of
                 Call.DmRoomId otherUserId ->
-                    asDmUser
+                    BackendExtra.asDmUser
                         model
                         sessionId
                         { otherUserId = otherUserId }
                         (joinDmVoiceChat sessionId clientId time changeId otherUserId model)
 
         Call.Local_Leave _ ->
-            asUser model sessionId (leaveVoice sessionId clientId time changeId model)
+            BackendExtra.asUser model sessionId (leaveVoice sessionId clientId time changeId model)
 
         Call.Local_PublishTracks offerSdp mids _ ->
-            asUser model sessionId (handlePublishTracks sessionId clientId changeId time offerSdp mids model)
+            BackendExtra.asUser model sessionId (handlePublishTracks sessionId clientId changeId time offerSdp mids model)
 
         Call.Local_PublishConnected ->
-            asUser model sessionId (handlePublishConnected time sessionId clientId changeId model)
+            BackendExtra.asUser model sessionId (handlePublishConnected time sessionId clientId changeId model)
 
         Call.Local_PullTracks connectionId remoteSessionId trackNames _ ->
-            asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
+            BackendExtra.asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
 
         Call.Local_RenegotiateAnswer answerSdp _ ->
-            asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
+            BackendExtra.asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
 
         Call.Local_SetRemoteCallData remoteCallData ->
-            asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
+            BackendExtra.asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
 
 
 {-| Apply a "set audio/video input enabled" change: update the stored state for
@@ -5492,7 +5515,13 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                 SeqDict.insert
                                                     dmChannelId
                                                     (LocalState.createChannelMessageBackend
-                                                        (CallStarted time Nothing session.userId SeqDict.empty)
+                                                        (CallStarted
+                                                            time
+                                                            Nothing
+                                                            session.userId
+                                                            SeqDict.empty
+                                                            Drawing.emptyDrawing
+                                                        )
                                                         dmChannel
                                                         |> Tuple.second
                                                     )
@@ -7037,360 +7066,3 @@ handleExportBackendStep exportState =
                                     ( Pages.Admin.ExportingFinalStep exportedBytes
                                     , Nothing
                                     )
-
-
-asUser :
-    BackendModel
-    -> SessionId
-    -> (UserSession -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asUser model sessionId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case NonemptyDict.get session.userId model.users of
-                Just user ->
-                    func session user
-
-                Nothing ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asDmUser :
-    BackendModel
-    -> SessionId
-    -> { otherUserId : Id UserId }
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDmUser model sessionId { otherUserId } func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            let
-                dmChannelId =
-                    DmChannel.channelIdFromUserIds session.userId otherUserId
-            in
-            case
-                ( NonemptyDict.get session.userId model.users
-                , NonemptyDict.get otherUserId model.users
-                , SeqDict.get dmChannelId model.dmChannels
-                )
-            of
-                ( Just user, Just otherUser, Just dmChannel ) ->
-                    func session user otherUser dmChannelId dmChannel
-
-                ( Just user, Just otherUser, Nothing ) ->
-                    if usersHaveSharedGuilds session.userId otherUserId model then
-                        func session user otherUser dmChannelId DmChannel.backendInit
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-usersHaveSharedGuilds : Id UserId -> Id UserId -> BackendModel -> Bool
-usersHaveSharedGuilds userIdA userIdB model =
-    SeqDict.foldl
-        (\_ guild haveShared ->
-            haveShared
-                || (MembersAndOwner.isMember userIdA guild.membersAndOwner /= IsNotMember)
-                && (MembersAndOwner.isMember userIdB guild.membersAndOwner /= IsNotMember)
-        )
-        False
-        model.guilds
-
-
-asDiscordUser :
-    BackendModel
-    -> SessionId
-    -> Discord.Id Discord.UserId
-    ->
-        (UserSession
-         -> DiscordFullUserData
-         -> BackendUser
-         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-        )
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordUser model sessionId discordUserId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case ( NonemptyDict.get session.userId model.users, SeqDict.get discordUserId model.discordUsers ) of
-                ( Just user, Just (FullData discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        func session discordUser user
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asDiscordDmUser :
-    BackendModel
-    -> SessionId
-    -> DiscordGuildOrDmId_DmData
-    ->
-        (UserSession
-         -> DiscordFullUserData
-         -> BackendUser
-         -> DiscordDmChannel
-         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-        )
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordDmUser model sessionId { currentUserId, channelId } func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case
-                ( NonemptyDict.get session.userId model.users
-                , SeqDict.get currentUserId model.discordUsers
-                , SeqDict.get channelId model.discordDmChannels
-                )
-            of
-                ( Just user, Just (FullData discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
-                        func session discordUser user dmChannel
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asDiscordDmUser_AllowUserThatNeedsAuthAgain :
-    BackendModel
-    -> SessionId
-    -> DiscordGuildOrDmId_DmData
-    ->
-        (UserSession
-         -> NeedsAuthAgainData
-         -> BackendUser
-         -> DiscordDmChannel
-         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-        )
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, channelId } func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case
-                ( NonemptyDict.get session.userId model.users
-                , SeqDict.get currentUserId model.discordUsers
-                , SeqDict.get channelId model.discordDmChannels
-                )
-            of
-                ( Just user, Just (FullData discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
-                        func
-                            session
-                            { user = discordUser.user
-                            , linkedTo = discordUser.linkedTo
-                            , icon = discordUser.icon
-                            , linkedAt = discordUser.linkedAt
-                            }
-                            user
-                            dmChannel
-
-                    else
-                        ( model, Command.none )
-
-                ( Just user, Just (NeedsAuthAgain discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
-                        func session discordUser user dmChannel
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asGuildMember :
-    BackendModel
-    -> SessionId
-    -> Id GuildId
-    -> (UserSession -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asGuildMember model sessionId guildId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
-                ( Just user, Just guild ) ->
-                    case MembersAndOwner.isMember session.userId guild.membersAndOwner of
-                        IsNotMember ->
-                            ( model, Command.none )
-
-                        IsMember ->
-                            func session user guild
-
-                        IsOwner ->
-                            func session user guild
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asDiscordGuildMember :
-    BackendModel
-    -> SessionId
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.UserId
-    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildMember model sessionId guildId discordUserId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case
-                ( NonemptyDict.get session.userId model.users
-                , SeqDict.get guildId model.discordGuilds
-                , SeqDict.get discordUserId model.discordUsers
-                )
-            of
-                ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
-                            IsNotMember ->
-                                ( model, Command.none )
-
-                            IsMember ->
-                                func session discordUser user guild
-
-                            IsOwner ->
-                                func session discordUser user guild
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asDiscordGuildMember_AllowUserThatNeedsAuthAgain :
-    BackendModel
-    -> SessionId
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.UserId
-    -> (UserSession -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discordUserId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
-            case
-                ( NonemptyDict.get session.userId model.users
-                , SeqDict.get guildId model.discordGuilds
-                , SeqDict.get discordUserId model.discordUsers
-                )
-            of
-                ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
-                            IsNotMember ->
-                                ( model, Command.none )
-
-                            IsMember ->
-                                func
-                                    session
-                                    { user = discordUser.user
-                                    , linkedTo = discordUser.linkedTo
-                                    , icon = discordUser.icon
-                                    , linkedAt = discordUser.linkedAt
-                                    }
-                                    user
-                                    guild
-
-                            IsOwner ->
-                                func
-                                    session
-                                    { user = discordUser.user
-                                    , linkedTo = discordUser.linkedTo
-                                    , icon = discordUser.icon
-                                    , linkedAt = discordUser.linkedAt
-                                    }
-                                    user
-                                    guild
-
-                    else
-                        ( model, Command.none )
-
-                ( Just user, Just guild, Just (NeedsAuthAgain discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
-                            IsNotMember ->
-                                ( model, Command.none )
-
-                            IsMember ->
-                                func session discordUser user guild
-
-                            IsOwner ->
-                                func session discordUser user guild
-
-                    else
-                        ( model, Command.none )
-
-                _ ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
-
-
-asGuildOwner :
-    BackendModel
-    -> SessionId
-    -> Id GuildId
-    -> (Id UserId -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asGuildOwner model sessionId guildId func =
-    asGuildMember model
-        sessionId
-        guildId
-        (\session user guild ->
-            case MembersAndOwner.isMember session.userId guild.membersAndOwner of
-                IsOwner ->
-                    func session.userId user guild
-
-                IsMember ->
-                    ( model, Command.none )
-
-                IsNotMember ->
-                    ( model, Command.none )
-        )
-
-
-asAdmin :
-    BackendModel
-    -> SessionId
-    -> (Id UserId -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asAdmin model sessionId func =
-    asUser
-        model
-        sessionId
-        (\{ userId } user ->
-            if user.isAdmin then
-                func userId user
-
-            else
-                ( model, Command.none )
-        )

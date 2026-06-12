@@ -669,6 +669,7 @@ addDiscordChannel discordChannel =
         , lastTypedAt = SeqDict.empty
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
+        , dateDividerDrawings = SeqDict.empty
         }
             |> Just
 
@@ -1038,10 +1039,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 let
                                     message : Message messageId (Discord.Id Discord.UserId)
                                     message =
-                                        UserJoinedMessage
-                                            discordMessage.timestamp
-                                            discordMessage.author.id
-                                            SeqDict.empty
+                                        Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                     Ok ( _, channel4 ) ->
@@ -2259,6 +2257,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , members = members
+                                                    , dateDividerDrawings = SeqDict.empty
                                                     }
                                                         |> Just
                                         )
@@ -2332,6 +2331,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
+                                                    , dateDividerDrawings = SeqDict.empty
                                                     }
                                                         |> Just
                                         )

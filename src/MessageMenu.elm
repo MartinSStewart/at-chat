@@ -843,16 +843,16 @@ messageCustomEmojiIds message =
         UserTextMessage data ->
             RichText.customEmojiIds data.content ++ reactionIds data.reactions
 
-        UserJoinedMessage _ _ reactions ->
+        UserJoinedMessage _ _ reactions _ ->
             reactionIds reactions
 
         DeletedMessage _ ->
             []
 
-        CallStarted _ _ _ reactions ->
+        CallStarted _ _ _ reactions _ ->
             reactionIds reactions
 
-        GoMatchStarted _ _ reactions ->
+        GoMatchStarted _ _ reactions _ ->
             reactionIds reactions
 
 

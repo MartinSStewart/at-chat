@@ -6,6 +6,7 @@ module RichText exposing
     , HeadingLevel(..)
     , Language(..)
     , Modifiers(..)
+    , PressedImageData
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
@@ -44,6 +45,7 @@ import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
+import Drawing exposing (Drawing)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -54,18 +56,21 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
+import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
+import Point2d exposing (Point2d)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
+import Touch exposing (ScreenCoordinate)
 import UInt64
 import Url exposing (Protocol(..), Url)
 
@@ -2188,7 +2193,7 @@ view :
     -> Int
     -> (Url -> msg)
     -> (Int -> msg)
-    -> (String -> Coord CssPixels -> msg)
+    -> (PressedImageData -> msg)
     -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
@@ -2227,6 +2232,8 @@ preview onPressLink config nonempty =
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
+        , drawings = SeqDict.empty
+        , drawingUserColor = always ""
         }
         Array.empty
         0
@@ -2243,6 +2250,8 @@ type alias Config a userId =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
+    , drawings : SeqDict (Id FileId) (Drawing userId)
+    , drawingUserColor : userId -> String
     }
 
 
@@ -2275,11 +2284,19 @@ normalTextView text state =
     ]
 
 
+type alias PressedImageData =
+    { fileId : Id FileId
+    , fileUrl : String
+    , position : Point2d CssPixels ScreenCoordinate
+    , imageSize : Coord CssPixels
+    }
+
+
 viewHelper :
     Bool
     -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
-    -> Maybe (String -> Coord CssPixels -> msg)
+    -> Maybe (PressedImageData -> msg)
     -> (Url -> msg)
     -> Int
     -> RichTextState
@@ -2737,17 +2754,43 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         in
                                                         case maybeOnPressImage of
                                                             Just onPressImage ->
-                                                                imageElement
-                                                                    [ Html.Attributes.style "cursor" "pointer"
-                                                                    , Html.Attributes.id
-                                                                        (case maybePressedSpoiler of
-                                                                            Just ( htmlIdPrefix, _ ) ->
-                                                                                Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
+                                                                Html.div
+                                                                    []
+                                                                    [ Html.div
+                                                                        [ Html.Attributes.style "position" "relative" ]
+                                                                        (case SeqDict.get fileId config.drawings of
+                                                                            Just drawing ->
+                                                                                Drawing.imageAttachmentOverlays
+                                                                                    config.drawingUserColor
+                                                                                    drawing
 
                                                                             Nothing ->
-                                                                                "image_" ++ Id.toString fileId
+                                                                                []
                                                                         )
-                                                                    , Html.Events.onClick (onPressImage fileUrl imageSize)
+                                                                    , imageElement
+                                                                        [ Html.Attributes.style "cursor" "pointer"
+                                                                        , Html.Attributes.id
+                                                                            (case maybePressedSpoiler of
+                                                                                Just ( htmlIdPrefix, _ ) ->
+                                                                                    Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
+
+                                                                                Nothing ->
+                                                                                    "image_" ++ Id.toString fileId
+                                                                            )
+                                                                        , Html.Events.on
+                                                                            "click"
+                                                                            (Json.Decode.map
+                                                                                (\position ->
+                                                                                    onPressImage
+                                                                                        { fileId = fileId
+                                                                                        , fileUrl = fileUrl
+                                                                                        , imageSize = imageSize
+                                                                                        , position = position
+                                                                                        }
+                                                                                )
+                                                                                Drawing.decodeWithTargetScreenPosition
+                                                                            )
+                                                                        ]
                                                                     ]
 
                                                             Nothing ->
@@ -2761,7 +2804,19 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                     [ imageElement [] ]
 
                                                 _ ->
-                                                    fileDownloadView state.spoiler fileData
+                                                    fileDownloadView
+                                                        (case maybePressedSpoiler of
+                                                            Just ( htmlIdPrefix, _ ) ->
+                                                                Dom.idToString htmlIdPrefix
+                                                                    ++ "_file_"
+                                                                    ++ Id.toString fileId
+                                                                    |> Just
+
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        state.spoiler
+                                                        fileData
                                            ]
 
                                 Nothing ->
@@ -3158,14 +3213,20 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
-fileDownloadView : Bool -> FileData -> Html msg
-fileDownloadView isSpoilered fileData =
+fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
+fileDownloadView maybeHtmlId isSpoilered fileData =
     let
         fileUrl =
             FileStatus.fileUrl fileData.contentType fileData.fileHash
     in
     Html.a
-        [ Html.Attributes.style "max-width" "284px"
+        [ case maybeHtmlId of
+            Just htmlId ->
+                Html.Attributes.id htmlId
+
+            Nothing ->
+                Html.Attributes.class ""
+        , Html.Attributes.style "max-width" "284px"
         , Html.Attributes.style
             "background-color"
             (if isSpoilered then

@@ -214,23 +214,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleFileRequest
                 handleMultiFileUpload
                 RecordedTestExtra.domain
+
+        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        imageUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                handleNormalHttpRequests
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
-    , RecordedTestExtra.imageViewerTests
-        (T.Config
-            Frontend.app_
-            Backend.app_
-            handleNormalHttpRequests
-            RecordedTestExtra.handlePortToJs
-            handleFileRequest
-            (\_ ->
-                UploadMultipleFiles
-                    (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
-                    []
-            )
-            RecordedTestExtra.domain
-        )
+    , RecordedTestExtra.imageViewerTests imageUploadConfig
     , RecordedTestExtra.startTest
         "Admin can open admin page"
         RecordedTestExtra.startTime
@@ -449,6 +451,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.drawOnMessages imageUploadConfig
     , RecordedTestExtra.startTest
         "Friend label shows typing indicator"
         RecordedTestExtra.startTime

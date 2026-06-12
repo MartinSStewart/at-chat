@@ -29,6 +29,7 @@ import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import Drawing
 import Duration
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -256,6 +257,9 @@ pendingChangesText localChange =
 
                 Go.CreatePublicLink _ _ ->
                     "Shared Go match"
+
+        Local_Drawing _ _ _ ->
+            "Drew on a message"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1206,7 +1210,16 @@ routeRequest previousRoute newRoute model =
                     handleLocalChange
                         model.time
                         (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
-                        loggedIn
+                        { loggedIn
+                            | drawingMode =
+                                -- Closing the draw tab (or navigating elsewhere) also
+                                -- deselects the drawing anchor
+                                if Route.toChannelHeaderTab newRoute == Just Route.DmChannelHeaderTab_Draw then
+                                    loggedIn.drawingMode
+
+                                else
+                                    Drawing.init
+                        }
                         Command.none
                 )
                 { model | route = newRoute }
@@ -1877,6 +1890,17 @@ isPressMsg msg =
 
         GotServiceWorkerData _ ->
             False
+
+        DrawingMsg drawingMsg ->
+            case drawingMsg of
+                Drawing.PressedUndo ->
+                    True
+
+                Drawing.PressedRedo ->
+                    True
+
+                _ ->
+                    False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -2827,7 +2851,13 @@ changeUpdate localMsg local =
                                                             (\maybe ->
                                                                 Maybe.withDefault DmChannel.frontendInit maybe
                                                                     |> LocalState.createChannelMessageFrontend
-                                                                        (CallStarted time Nothing local2.localUser.session.userId SeqDict.empty)
+                                                                        (CallStarted
+                                                                            time
+                                                                            Nothing
+                                                                            local2.localUser.session.userId
+                                                                            SeqDict.empty
+                                                                            Drawing.emptyDrawing
+                                                                        )
                                                                     |> Just
                                                             )
                                                             local2.dmChannels
@@ -2872,6 +2902,9 @@ changeUpdate localMsg local =
 
                 Local_Go { otherUserId } goChange ->
                     goChangeUpdate local.localUser.session.userId otherUserId goChange local
+
+                Local_Drawing guildOrDmId threadRoute drawingChange ->
+                    LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3567,6 +3600,7 @@ changeUpdate localMsg local =
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
+                                                            , dateDividerDrawings = SeqDict.empty
                                                             }
                                                                 |> Just
                                                 )
@@ -3591,6 +3625,7 @@ changeUpdate localMsg local =
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members
+                                            , dateDividerDrawings = SeqDict.empty
                                             }
                                                 |> Just
                                 )
@@ -3876,7 +3911,12 @@ changeUpdate localMsg local =
                                             SeqDict.updateIfExists
                                                 channelId
                                                 (LocalState.createChannelMessageFrontend
-                                                    (UserJoinedMessage time userJoinedId SeqDict.empty)
+                                                    (UserJoinedMessage
+                                                        time
+                                                        userJoinedId
+                                                        SeqDict.empty
+                                                        Drawing.emptyDrawing
+                                                    )
                                                 )
                                                 guild.channels
                                     }
@@ -3951,7 +3991,13 @@ changeUpdate localMsg local =
                                                         (\maybe ->
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted time Nothing (Tuple.first otherClientId) SeqDict.empty)
+                                                                    (CallStarted
+                                                                        time
+                                                                        Nothing
+                                                                        (Tuple.first otherClientId)
+                                                                        SeqDict.empty
+                                                                        Drawing.emptyDrawing
+                                                                    )
                                                                 |> Just
                                                         )
                                                         local.dmChannels
@@ -3987,7 +4033,13 @@ changeUpdate localMsg local =
                                                     (\maybe ->
                                                         Maybe.withDefault DmChannel.frontendInit maybe
                                                             |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time Nothing local.localUser.session.userId SeqDict.empty)
+                                                                (CallStarted
+                                                                    time
+                                                                    Nothing
+                                                                    local.localUser.session.userId
+                                                                    SeqDict.empty
+                                                                    Drawing.emptyDrawing
+                                                                )
                                                             |> Just
                                                     )
                                                     local.dmChannels
@@ -4007,6 +4059,9 @@ changeUpdate localMsg local =
 
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
+
+                Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
+                    LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
 goChangeUpdate :
@@ -4032,7 +4087,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId
@@ -4730,114 +4785,120 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        loggedIn2 =
-                            MessageMenu.close model loggedIn
+            if Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw then
+                -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
+                routePush model (Route.setChannelHeaderTab Nothing model.route)
 
-                        isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
-                        isPingUserDropdownOpen =
-                            case loggedIn2.textInputFocus of
-                                Just textInputFocus ->
-                                    if textInputFocus.htmlId == Emoji.searchInputId then
-                                        ( { loggedIn2
-                                            | emojiSelector = Emoji.setSearch "" loggedIn2.emojiSelector
-                                          }
-                                        , Dom.blur Emoji.searchInputId
-                                            |> Task.attempt
-                                                (\result ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "result" result
-                                                    in
-                                                    RemoveFocus
-                                                )
-                                        )
+            else
+                updateLoggedIn (handleEscapeKeyHelper model) model
+
+
+handleEscapeKeyHelper : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+handleEscapeKeyHelper model loggedIn =
+    let
+        loggedIn2 =
+            MessageMenu.close model loggedIn
+
+        isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
+        isPingUserDropdownOpen =
+            case loggedIn2.textInputFocus of
+                Just textInputFocus ->
+                    if textInputFocus.htmlId == Emoji.searchInputId then
+                        ( { loggedIn2
+                            | emojiSelector = Emoji.setSearch "" loggedIn2.emojiSelector
+                          }
+                        , Dom.blur Emoji.searchInputId
+                            |> Task.attempt
+                                (\result ->
+                                    let
+                                        _ =
+                                            Debug.log "result" result
+                                    in
+                                    RemoveFocus
+                                )
+                        )
+                            |> Just
+
+                    else
+                        case textInputFocus.dropdown of
+                            Just _ ->
+                                ( { loggedIn2
+                                    | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                    , previousTextInputFocus = loggedIn2.textInputFocus
+                                    , showEmojiSelector = EmojiSelectorHidden
+                                  }
+                                , Command.none
+                                )
+                                    |> Just
+
+                            Nothing ->
+                                Nothing
+
+                Nothing ->
+                    Nothing
+    in
+    case isPingUserDropdownOpen of
+        Just a ->
+            a
+
+        Nothing ->
+            case loggedIn2.showEmojiSelector of
+                Types.EmojiSelectorHidden ->
+                    let
+                        local =
+                            Local.model loggedIn2.localState
+                    in
+                    case Route.toGuildOrDmId local.localUser.session.userId model.route of
+                        Just ( guildOrDmId, threadRoute ) ->
+                            handleLocalChange
+                                model.time
+                                (case
+                                    LocalState.guildOrDmIdToMessagesCount
+                                        guildOrDmId
+                                        threadRoute
+                                        local
+                                 of
+                                    Just messages ->
+                                        Local_SetLastViewed
+                                            guildOrDmId
+                                            (case threadRoute of
+                                                ViewThread threadId ->
+                                                    ViewThreadWithMessage
+                                                        threadId
+                                                        (messages - 1 |> Id.fromInt)
+
+                                                NoThread ->
+                                                    NoThreadWithMessage
+                                                        (messages - 1 |> Id.fromInt)
+                                            )
                                             |> Just
 
-                                    else
-                                        case textInputFocus.dropdown of
-                                            Just _ ->
-                                                ( { loggedIn2
-                                                    | textInputFocus = Just { textInputFocus | dropdown = Nothing }
-                                                    , previousTextInputFocus = loggedIn2.textInputFocus
-                                                    , showEmojiSelector = EmojiSelectorHidden
-                                                  }
-                                                , Command.none
-                                                )
-                                                    |> Just
+                                    Nothing ->
+                                        Nothing
+                                )
+                                (if
+                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
+                                 then
+                                    { loggedIn2
+                                        | editMessage =
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                                |> SeqDict.remove ( guildOrDmId, NoThread )
+                                    }
 
-                                            Nothing ->
-                                                Nothing
-
-                                Nothing ->
-                                    Nothing
-                    in
-                    case isPingUserDropdownOpen of
-                        Just a ->
-                            a
+                                 else
+                                    { loggedIn2
+                                        | replyTo =
+                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
+                                    }
+                                )
+                                (setFocus model Pages.Guild.channelTextInputId)
 
                         Nothing ->
-                            case loggedIn2.showEmojiSelector of
-                                Types.EmojiSelectorHidden ->
-                                    let
-                                        local =
-                                            Local.model loggedIn2.localState
-                                    in
-                                    case Route.toGuildOrDmId local.localUser.session.userId model.route of
-                                        Just ( guildOrDmId, threadRoute ) ->
-                                            handleLocalChange
-                                                model.time
-                                                (case
-                                                    LocalState.guildOrDmIdToMessagesCount
-                                                        guildOrDmId
-                                                        threadRoute
-                                                        local
-                                                 of
-                                                    Just messages ->
-                                                        Local_SetLastViewed
-                                                            guildOrDmId
-                                                            (case threadRoute of
-                                                                ViewThread threadId ->
-                                                                    ViewThreadWithMessage
-                                                                        threadId
-                                                                        (messages - 1 |> Id.fromInt)
+                            ( loggedIn2, Command.none )
 
-                                                                NoThread ->
-                                                                    NoThreadWithMessage
-                                                                        (messages - 1 |> Id.fromInt)
-                                                            )
-                                                            |> Just
-
-                                                    Nothing ->
-                                                        Nothing
-                                                )
-                                                (if
-                                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
-                                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
-                                                 then
-                                                    { loggedIn2
-                                                        | editMessage =
-                                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
-                                                                |> SeqDict.remove ( guildOrDmId, NoThread )
-                                                    }
-
-                                                 else
-                                                    { loggedIn2
-                                                        | replyTo =
-                                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
-                                                    }
-                                                )
-                                                (setFocus model Pages.Guild.channelTextInputId)
-
-                                        Nothing ->
-                                            ( loggedIn2, Command.none )
-
-                                _ ->
-                                    ( { loggedIn2 | showEmojiSelector = Types.EmojiSelectorHidden }, Command.none )
-                )
-                model
+                _ ->
+                    ( { loggedIn2 | showEmojiSelector = Types.EmojiSelectorHidden }, Command.none )
 
 
 handlePressedArrowUpInEmptyInput :

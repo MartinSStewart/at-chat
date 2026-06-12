@@ -1,10 +1,15 @@
-module SeqDictHelper exposing (addToDict, addToList, addToSet, increment)
+module SeqDictHelper exposing (addToDict, addToList, addToSet, increment, updateOrInsert)
 
 import List.Nonempty exposing (Nonempty)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import SeqDict exposing (SeqDict)
+
+
+updateOrInsert : a -> (Maybe b -> b) -> SeqDict a b -> SeqDict a b
+updateOrInsert a updateOrInsertFunc dict =
+    SeqDict.update a (\maybe -> updateOrInsertFunc maybe |> Just) dict
 
 
 increment : a -> SeqDict a OneOrGreater -> SeqDict a OneOrGreater

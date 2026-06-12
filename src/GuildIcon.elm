@@ -182,6 +182,8 @@ defaultUser centerX size2 rounded userId =
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
         , Ui.Font.color (Ui.rgb 20 20 20)
+        , -- We need no pointer events here so drawing anchoring gets the offset of the parent
+          MyUi.noPointerEvents
         ]
         (Ui.html Icons.person)
 
