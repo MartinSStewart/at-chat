@@ -246,7 +246,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                 -- body above positioned elements inside the conversation view.
                 Ui.inFront
                     (Ui.el
-                        [ Ui.move { x = 0, y = MyUi.channelHeaderHeight, z = 0 }
+                        [ Ui.move { x = 0, y = MyUi.channelHeaderHeight + 1, z = 0 }
                         , MyUi.htmlStyle "z-index" "20"
                         ]
                         tabContent2
