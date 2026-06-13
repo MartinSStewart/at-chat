@@ -108,10 +108,6 @@ self.addEventListener('notificationclick', function(event) {
 // Establish a cache name
 const cacheName = 'resource_cache_v1';
 
-// Separate cache that only ever holds the current frontend bundle. The bundle
-// is served at https://at-chat.app/frontend.<random alphanumeric string>.js and
-// the random part changes every deploy, so we key on the full URL: a different
-// hash means a new version and the old one gets evicted (see below).
 const frontendCacheName = 'frontend_cache_v1';
 
 self.addEventListener('fetch', (event) => {
