@@ -1325,14 +1325,14 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                ChannelRoute _ threadRoute _ ->
+                ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
                         threadRoute
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
-                                Just (GuildRoute _ (ChannelRoute _ _ _)) ->
-                                    True
+                                Just (GuildRoute _ (ChannelRoute previousChannelId _ _)) ->
+                                    channelId == previousChannelId
 
                                 _ ->
                                     False
@@ -1406,7 +1406,7 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                DiscordChannel_ChannelRoute _ threadRoute _ ->
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
                         threadRoute
                         sameGuild
@@ -1414,8 +1414,8 @@ routeRequest previousRoute newRoute model =
                             case previousRoute of
                                 Just (DiscordGuildRoute guildData) ->
                                     case guildData.channelRoute of
-                                        DiscordChannel_ChannelRoute _ _ _ ->
-                                            True
+                                        DiscordChannel_ChannelRoute previousChannelId _ _ ->
+                                            channelId == previousChannelId
 
                                         _ ->
                                             False
