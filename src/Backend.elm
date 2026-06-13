@@ -897,50 +897,50 @@ update msg model =
                                                 model.discordDmChannels
                                                 dmData
                                     }
-
-                                ( otherDiscordUsers, linkedDiscordUsers ) =
-                                    BackendExtra.getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
                             in
                             ( model2
-                            , Broadcast.toUser
-                                Nothing
-                                Nothing
+                            , Broadcast.toUserAlt
                                 discordUser.linkedTo
-                                (Server_DiscordUserLoadingDataIsDone
-                                    discordUserId
-                                    (Ok
-                                        { discordGuilds =
-                                            SeqDict.filterMap
-                                                (\guildId _ ->
-                                                    case SeqDict.get guildId model2.discordGuilds of
-                                                        Just guild ->
-                                                            BackendExtra.discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
+                                (\session ->
+                                    let
+                                        ( otherDiscordUsers, linkedDiscordUsers ) =
+                                            BackendExtra.getLinkedDiscordUsersAndOtherUsers session model2
+                                    in
+                                    Server_DiscordUserLoadingDataIsDone
+                                        discordUserId
+                                        (Ok
+                                            { discordGuilds =
+                                                SeqDict.filterMap
+                                                    (\guildId _ ->
+                                                        case SeqDict.get guildId model2.discordGuilds of
+                                                            Just guild ->
+                                                                BackendExtra.discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
 
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                guildDataDict
-                                        , discordDms =
-                                            List.filterMap
-                                                (\data ->
-                                                    case SeqDict.get data.dmChannelId model2.discordDmChannels of
-                                                        Just dmChannel ->
-                                                            case BackendExtra.discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
-                                                                Just dmChannel2 ->
-                                                                    Just ( data.dmChannelId, dmChannel2 )
+                                                            Nothing ->
+                                                                Nothing
+                                                    )
+                                                    guildDataDict
+                                            , discordDms =
+                                                List.filterMap
+                                                    (\data ->
+                                                        case SeqDict.get data.dmChannelId model2.discordDmChannels of
+                                                            Just dmChannel ->
+                                                                case BackendExtra.discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
+                                                                    Just dmChannel2 ->
+                                                                        Just ( data.dmChannelId, dmChannel2 )
 
-                                                                Nothing ->
-                                                                    Nothing
+                                                                    Nothing ->
+                                                                        Nothing
 
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                dmData
-                                                |> SeqDict.fromList
-                                        , discordUsers = otherDiscordUsers
-                                        }
-                                    )
-                                    |> ServerChange
+                                                            Nothing ->
+                                                                Nothing
+                                                    )
+                                                    dmData
+                                                    |> SeqDict.fromList
+                                            , discordUsers = otherDiscordUsers
+                                            }
+                                        )
+                                        |> ServerChange
                                 )
                                 model2
                             )
