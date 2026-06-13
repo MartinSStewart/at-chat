@@ -292,8 +292,16 @@ layout model attributes child =
                 in
                 [ Html.Events.preventDefaultOn
                     "dragenter"
-                    (Json.Decode.field "timeStamp" Json.Decode.float
-                        |> Json.Decode.map (\time -> ( Duration.milliseconds time |> FileDragEnter, True ))
+                    (Json.Decode.map2
+                        (\time types ->
+                            if List.member "Files" types then
+                                ( Duration.milliseconds time |> FileDragEnter, True )
+
+                            else
+                                ( FrontendNoOp, False )
+                        )
+                        (Json.Decode.field "timeStamp" Json.Decode.float)
+                        (Json.Decode.at [ "dataTransfer", "types" ] (Json.Decode.list Json.Decode.string))
                     )
                     |> Ui.htmlAttribute
                 , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
