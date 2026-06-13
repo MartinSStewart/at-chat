@@ -6,7 +6,6 @@ import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 import ChannelDescription
-import ChannelHeader
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -126,7 +125,16 @@ subscriptions model =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
         , Time.every (Duration.seconds 2) GotTime
-        , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
+        , Effect.Browser.Events.onKeyDown
+            (Json.Decode.map4
+                (\ctrlKey metaKey shiftKey key ->
+                    KeyDown { ctrlKey = ctrlKey, metaKey = metaKey, shiftKey = shiftKey, key = key }
+                )
+                (Json.Decode.field "ctrlKey" Json.Decode.bool)
+                (Json.Decode.field "metaKey" Json.Decode.bool)
+                (Json.Decode.field "shiftKey" Json.Decode.bool)
+                (Json.Decode.field "key" Json.Decode.string)
+            )
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
@@ -1113,10 +1121,23 @@ updateLoaded msg model =
         RemoveFocus ->
             ( model, Command.none )
 
-        KeyDown key ->
-            case key of
-                "Escape" ->
+        KeyDown { ctrlKey, metaKey, shiftKey, key } ->
+            let
+                ctrlOrMeta =
+                    ctrlKey || metaKey
+            in
+            case ( ctrlOrMeta, shiftKey, key ) of
+                ( _, _, "Escape" ) ->
                     FrontendExtra.handleEscapeKey model
+
+                ( True, False, "z" ) ->
+                    FrontendExtra.handleUndo model
+
+                ( True, True, "z" ) ->
+                    FrontendExtra.handleRedo model
+
+                ( True, _, "y" ) ->
+                    FrontendExtra.handleRedo model
 
                 _ ->
                     case model.route of
@@ -3085,7 +3106,7 @@ updateLoaded msg model =
         EditMessage_MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
                 MessageInput.PressedTextInput ->
-                    ( { model | virtualKeyboardOpen = True }, Command.none )
+                    FrontendExtra.handlePressedTextInput model
 
                 MessageInput.TypedMessage text ->
                     FrontendExtra.updateLoggedIn
@@ -3435,7 +3456,7 @@ updateLoaded msg model =
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
                 MessageInput.PressedTextInput ->
-                    ( { model | virtualKeyboardOpen = True }, Command.none )
+                    FrontendExtra.handlePressedTextInput model
 
                 MessageInput.TypedMessage text ->
                     FrontendExtra.updateLoggedIn
@@ -4425,40 +4446,10 @@ updateDrawing drawingMsg model =
                             ( loggedIn, Command.none )
 
                 ( Drawing.PressedUndo, Drawing.SelectedAnchor selected ) ->
-                    let
-                        ( canUndo, _ ) =
-                            ChannelHeader.drawingCanUndoOrRedo
-                                selected.guildOrDmId
-                                selected.anchorType
-                                (Local.model loggedIn.localState)
-                    in
-                    if canUndo then
-                        FrontendExtra.handleLocalChange
-                            model.time
-                            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.UndoStroke |> Just)
-                            loggedIn
-                            Command.none
-
-                    else
-                        ( loggedIn, Command.none )
+                    FrontendExtra.drawingUndo selected loggedIn model
 
                 ( Drawing.PressedRedo, Drawing.SelectedAnchor selected ) ->
-                    let
-                        ( _, canRedo ) =
-                            ChannelHeader.drawingCanUndoOrRedo
-                                selected.guildOrDmId
-                                selected.anchorType
-                                (Local.model loggedIn.localState)
-                    in
-                    if canRedo then
-                        FrontendExtra.handleLocalChange
-                            model.time
-                            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.RedoStroke |> Just)
-                            loggedIn
-                            Command.none
-
-                    else
-                        ( loggedIn, Command.none )
+                    FrontendExtra.drawingRedo selected loggedIn model
 
                 ( _, Drawing.NoSelectedAnchor ) ->
                     ( loggedIn, Command.none )
@@ -4994,6 +4985,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                 , dropdown = Nothing
                                                 }
                                 , previousTextInputFocus = loggedIn.textInputFocus
+                                , drawingMode = Drawing.NoSelectedAnchor
                             }
                                 |> LoggedIn
                       }

@@ -1,6 +1,8 @@
 module FrontendExtra exposing
     ( canDropFiles
     , changeUpdate
+    , drawingRedo
+    , drawingUndo
     , editMessage_gotFiles
     , externalLinkWarning
     , fileDragOverlayOpacity
@@ -8,6 +10,9 @@ module FrontendExtra exposing
     , handleEscapeKey
     , handleLocalChange
     , handlePressedArrowUpInEmptyInput
+    , handlePressedTextInput
+    , handleRedo
+    , handleUndo
     , initAdminData
     , isPressMsg
     , layout
@@ -26,6 +31,7 @@ import AiChat
 import Array exposing (Array)
 import Call exposing (CallId(..), ChannelSidebarMode(..))
 import ChannelDescription
+import ChannelHeader
 import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
@@ -4864,6 +4870,81 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
     else
         Nothing
+
+
+handleUndo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleUndo model =
+    updateLoggedIn
+        (\loggedIn ->
+            case loggedIn.drawingMode of
+                Drawing.NoSelectedAnchor ->
+                    ( loggedIn, Command.none )
+
+                Drawing.SelectedAnchor selected ->
+                    drawingUndo selected loggedIn model
+        )
+        model
+
+
+drawingUndo : Drawing.SelectedAnchorData -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend msg )
+drawingUndo selected loggedIn model =
+    let
+        ( canUndo, _ ) =
+            ChannelHeader.drawingCanUndoOrRedo
+                selected.guildOrDmId
+                selected.anchorType
+                (Local.model loggedIn.localState)
+    in
+    if canUndo then
+        handleLocalChange
+            model.time
+            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.UndoStroke |> Just)
+            loggedIn
+            Command.none
+
+    else
+        ( loggedIn, Command.none )
+
+
+handlePressedTextInput : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handlePressedTextInput model =
+    updateLoggedIn
+        (\loggedIn -> ( { loggedIn | drawingMode = Drawing.NoSelectedAnchor }, Command.none ))
+        { model | virtualKeyboardOpen = True }
+
+
+drawingRedo : Drawing.SelectedAnchorData -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend msg )
+drawingRedo selected loggedIn model =
+    let
+        ( _, canRedo ) =
+            ChannelHeader.drawingCanUndoOrRedo
+                selected.guildOrDmId
+                selected.anchorType
+                (Local.model loggedIn.localState)
+    in
+    if canRedo then
+        handleLocalChange
+            model.time
+            (Local_Drawing selected.guildOrDmId selected.anchorType Drawing.RedoStroke |> Just)
+            loggedIn
+            Command.none
+
+    else
+        ( loggedIn, Command.none )
+
+
+handleRedo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleRedo model =
+    updateLoggedIn
+        (\loggedIn ->
+            case loggedIn.drawingMode of
+                Drawing.NoSelectedAnchor ->
+                    ( loggedIn, Command.none )
+
+                Drawing.SelectedAnchor selected ->
+                    drawingRedo selected loggedIn model
+        )
+        model
 
 
 handleEscapeKey : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
