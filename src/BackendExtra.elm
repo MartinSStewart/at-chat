@@ -467,7 +467,7 @@ getLoginData :
 getLoginData sessionId clientId session user requestMessagesFor model =
     let
         ( otherDiscordUsers, linkedDiscordUsers ) =
-            getLinkedDiscordUsersAndOtherUsers session.userId model
+            getLinkedDiscordUsersAndOtherUsers session model
     in
     { session = session
     , adminData =
@@ -738,60 +738,97 @@ discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
 
 
 getLinkedDiscordUsersAndOtherUsers :
-    Id UserId
+    UserSession
     -> BackendModel
     ->
         ( SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         , SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
         )
-getLinkedDiscordUsersAndOtherUsers userId model =
-    SeqDict.foldl
-        (\discordUserId userData ( otherDiscordUsers2, linkedDiscordUsers2 ) ->
-            case userData of
-                FullData data ->
-                    if data.linkedTo == userId then
-                        ( otherDiscordUsers2
-                        , SeqDict.insert
-                            discordUserId
-                            (User.discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
+getLinkedDiscordUsersAndOtherUsers session model =
+    let
+        linkedUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
+        linkedUsers =
+            SeqDict.foldl
+                (\discordUserId userData linkedDiscordUsers2 ->
+                    case userData of
+                        FullData data ->
+                            if data.linkedTo == session.userId then
+                                SeqDict.insert
+                                    discordUserId
+                                    (User.discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
+                                    linkedDiscordUsers2
+
+                            else
+                                linkedDiscordUsers2
+
+                        BasicData data ->
                             linkedDiscordUsers2
-                        )
+
+                        NeedsAuthAgain data ->
+                            if data.linkedTo == session.userId then
+                                SeqDict.insert
+                                    discordUserId
+                                    (User.discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
+                                    linkedDiscordUsers2
+
+                            else
+                                linkedDiscordUsers2
+                )
+                SeqDict.empty
+                model.discordUsers
+
+        linkedUserIds =
+            SeqDict.keys linkedUsers
+
+        isMember : DiscordDmChannel -> Bool
+        isMember dmChannel =
+            List.any (\linkedUserId -> NonemptyDict.member linkedUserId dmChannel.members) linkedUserIds
+
+        visibleDmUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+        visibleDmUsers =
+            SeqDict.foldl
+                (\_ dmChannel dict ->
+                    if isMember dmChannel then
+                        NonemptyDict.foldl
+                            (\memberId _ dict2 ->
+                                case SeqDict.get memberId model.discordUsers of
+                                    Just discordUser ->
+                                        SeqDict.insert
+                                            memberId
+                                            (User.discordUserDataToFrontendUser discordUser)
+                                            dict2
+
+                                    Nothing ->
+                                        dict2
+                            )
+                            dict
+                            dmChannel.members
 
                     else
-                        ( SeqDict.insert
-                            discordUserId
-                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                            otherDiscordUsers2
-                        , linkedDiscordUsers2
-                        )
+                        dict
+                )
+                SeqDict.empty
+                model.discordDmChannels
+    in
+    ( case session.currentlyViewing of
+        Just ( guildOrDmId, _ ) ->
+            case guildOrDmId of
+                GuildOrDmId (GuildOrDmId_Guild guildId _) ->
+                    0
 
-                BasicData data ->
-                    ( SeqDict.insert
-                        discordUserId
-                        { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                        otherDiscordUsers2
-                    , linkedDiscordUsers2
-                    )
+                GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                    0
 
-                NeedsAuthAgain data ->
-                    if data.linkedTo == userId then
-                        ( otherDiscordUsers2
-                        , SeqDict.insert
-                            discordUserId
-                            (User.discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
-                            linkedDiscordUsers2
-                        )
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
+                    0
 
-                    else
-                        ( SeqDict.insert
-                            discordUserId
-                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                            otherDiscordUsers2
-                        , linkedDiscordUsers2
-                        )
-        )
-        ( SeqDict.empty, SeqDict.empty )
-        model.discordUsers
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+                    SeqDict.empty
+
+        Nothing ->
+            visibleDmUsers
+    , linkedUsers
+    )
 
 
 adminData : BackendModel -> Id PageId -> InitAdminData

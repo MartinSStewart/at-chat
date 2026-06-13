@@ -20,6 +20,7 @@ module User exposing
     , discordCurrentUserToFrontend
     , discordFullDataUserToFrontendCurrentUser
     , discordProfileImage
+    , discordUserDataToFrontendUser
     , getDiscordUser
     , getUser
     , init
@@ -49,7 +50,7 @@ import Base64
 import Codec exposing (Codec)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
-import DiscordUserData exposing (DiscordUserLoadingData)
+import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
@@ -546,6 +547,25 @@ type alias DiscordFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
     }
+
+
+discordUserDataToFrontendUser : DiscordUserData -> DiscordFrontendUser
+discordUserDataToFrontendUser discordUserData =
+    case discordUserData of
+        DiscordUserData.BasicData data ->
+            { name = PersonName.fromStringLossy data.user.username
+            , icon = data.icon
+            }
+
+        DiscordUserData.FullData data ->
+            { name = PersonName.fromStringLossy data.user.username
+            , icon = data.icon
+            }
+
+        DiscordUserData.NeedsAuthAgain data ->
+            { name = PersonName.fromStringLossy data.user.username
+            , icon = data.icon
+            }
 
 
 type alias DiscordFrontendCurrentUser =
