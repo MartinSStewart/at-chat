@@ -803,31 +803,29 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
 
         visibleDmUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         visibleDmUsers =
-            SeqDict.empty
+            SeqDict.foldl
+                (\_ dmChannel dict ->
+                    if isDmMember dmChannel then
+                        NonemptyDict.foldl
+                            (\memberId _ dict2 ->
+                                case SeqDict.get memberId model.discordUsers of
+                                    Just discordUser ->
+                                        SeqDict.insert
+                                            memberId
+                                            (User.discordUserDataToFrontendUser discordUser)
+                                            dict2
 
-        --SeqDict.foldl
-        --    (\_ dmChannel dict ->
-        --        if isDmMember dmChannel then
-        --            NonemptyDict.foldl
-        --                (\memberId _ dict2 ->
-        --                    case SeqDict.get memberId model.discordUsers of
-        --                        Just discordUser ->
-        --                            SeqDict.insert
-        --                                memberId
-        --                                (User.discordUserDataToFrontendUser discordUser)
-        --                                dict2
-        --
-        --                        Nothing ->
-        --                            dict2
-        --                )
-        --                dict
-        --                dmChannel.members
-        --
-        --        else
-        --            dict
-        --    )
-        --    SeqDict.empty
-        --    model.discordDmChannels
+                                    Nothing ->
+                                        dict2
+                            )
+                            dict
+                            dmChannel.members
+
+                    else
+                        dict
+                )
+                SeqDict.empty
+                model.discordDmChannels
     in
     ( case Debug.log "session.currentlyViewing" currentlyViewing of
         Just ( guildOrDmId, _ ) ->
