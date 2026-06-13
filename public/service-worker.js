@@ -108,14 +108,40 @@ self.addEventListener('notificationclick', function(event) {
 // Establish a cache name
 const cacheName = 'resource_cache_v1';
 
+const frontendCacheName = 'frontend_cache_v1';
+
 self.addEventListener('fetch', (event) => {
     // Check if this is a request for an image
     const url = event.request.url;
 
     const domain = 'https://at-chat.app/';
 
-    if (//url.startsWith(domain + 'frontend.') Disabled because it might be messing up deploys
-        url.startsWith(domain + 'file/t/')
+    // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
+    if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
+        event.respondWith(caches.open(frontendCacheName).then(async (cache) => {
+            // Cache first: if this exact version is already cached, serve it
+            // straight from disk so the site loads faster.
+            const cachedResponse = await cache.match(url);
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+
+            // Cache miss means the hash differs from what we have stored, i.e. a
+            // new version was deployed. Fetch it, then delete every previously
+            // cached frontend bundle before storing the new one so only the
+            // current version is ever kept.
+            const fetchedResponse = await fetch(event.request);
+            if (fetchedResponse.ok) {
+                const keys = await cache.keys();
+                await Promise.all(keys.map((key) => cache.delete(key)));
+                await cache.put(event.request, fetchedResponse.clone());
+            }
+            return fetchedResponse;
+        }));
+        return;
+    }
+
+    if (url.startsWith(domain + 'file/t/')
         || url.startsWith(domain + 'file/0')
         || url.startsWith(domain + 'file/1')
         || url.startsWith(domain + 'file/2')
@@ -140,7 +166,7 @@ self.addEventListener('fetch', (event) => {
                 return fetch(event.request).then((fetchedResponse) => {
 
                     const size = Number(fetchedResponse.headers.get("content-length"));
-                    const isValid = url.startsWith(domain + 'frontend.') || size < 1000 * 1000;
+                    const isValid = size < 1000 * 1000;
 
                     if (fetchedResponse.ok && isValid) {
                         cache.put(event.request, fetchedResponse.clone());
