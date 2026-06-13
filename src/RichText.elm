@@ -3020,10 +3020,10 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                         ( width, height ) =
                             actualImageSize embedImageMaxHeight insideWidth imageData.imageSize
 
-                        width2 =
+                        widthText =
                             String.fromFloat width ++ "px"
 
-                        height2 =
+                        heightText =
                             String.fromFloat height ++ "px"
 
                         isAnimatedImage =
@@ -3042,13 +3042,13 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                         image : Html msg
                         image =
                             if isAnimatedImage then
-                                Sticker.animatedImageView False width2 height2 Nothing imageData.url playAnimation
+                                Sticker.animatedImageView False widthText heightText Nothing imageData.url playAnimation
 
                             else
                                 Html.img
                                     [ Html.Attributes.src imageData.url
-                                    , Html.Attributes.style "width" width2
-                                    , Html.Attributes.style "height" height2
+                                    , Html.Attributes.style "width" widthText
+                                    , Html.Attributes.style "height" heightText
                                     , Html.Attributes.style "border-radius" "4px"
                                     , Html.Attributes.style "display" "block"
                                     , Html.Attributes.attribute "data-image-url" imageData.url
@@ -3057,7 +3057,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                     in
                     Html.div
                         ([ Html.Attributes.style "position" "relative"
-                         , Html.Attributes.style "width" width2
+                         , Html.Attributes.style "width" widthText
                          , htmlAttrIf (not isAnimatedImage) (Html.Attributes.style "margin-top" "8px")
                          ]
                             ++ (case maybeOnPressImage of

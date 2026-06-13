@@ -4557,7 +4557,7 @@ expectPointsCloseTo expected actual =
             && List.all
                 identity
                 (List.map2
-                    (\( x1, y1 ) ( x2, y2 ) -> abs (x1 - x2) < 0.001 && abs (y1 - y2) < 0.001)
+                    (\( xA, yA ) ( xB, yB ) -> abs (xA - xB) < 0.001 && abs (yA - yB) < 0.001)
                     expected
                     actual
                 )
@@ -4565,7 +4565,13 @@ expectPointsCloseTo expected actual =
         Ok ()
 
     else
-        Err ("Expected stroke points " ++ Debug.toString expected ++ " but got " ++ Debug.toString actual)
+        Err ("Expected stroke points " ++ pointsToString expected ++ " but got " ++ pointsToString actual)
+
+
+pointsToString : List ( Float, Float ) -> String
+pointsToString list =
+    List.map (\( x, y ) -> "(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")") list
+        |> String.join ", "
 
 
 {-| The first channel of the most recently created guild.
