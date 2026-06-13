@@ -904,7 +904,10 @@ update msg model =
                                 (\session ->
                                     let
                                         ( otherDiscordUsers, linkedDiscordUsers ) =
-                                            BackendExtra.getLinkedDiscordUsersAndOtherUsers session model2
+                                            BackendExtra.getLinkedDiscordUsersAndOtherUsers
+                                                session.userId
+                                                session.currentlyViewing
+                                                model2
                                     in
                                     Server_DiscordUserLoadingDataIsDone
                                         discordUserId
@@ -2238,27 +2241,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
     case msg of
         CheckLoginRequest requestMessagesFor ->
             let
-                cmd : Command BackendOnly ToFrontend backendMsg
-                cmd =
+                ( model2, cmd ) =
                     case Broadcast.getUserFromSessionId sessionId model of
                         Just ( session, user ) ->
-                            BackendExtra.getLoginData sessionId clientId session user requestMessagesFor model
+                            let
+                                session2 : UserSession
+                                session2 =
+                                    UserSession.setCurrentlyViewing
+                                        (BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor)
+                                        session
+                            in
+                            ( { model | sessions = SeqDict.insert sessionId session2 model.sessions }
+                            , BackendExtra.getLoginData sessionId clientId session2 user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
+                            )
 
                         Nothing ->
-                            CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
+                            ( model, CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId )
             in
-            if model.isInitialized then
-                ( model, cmd )
+            if model2.isInitialized then
+                ( model2, cmd )
 
             else
-                ( { model | isInitialized = True }
+                ( { model2 | isInitialized = True }
                 , Command.batch
                     [ Http.request
                         { method = "GET"
-                        , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
+                        , headers = [ FileStatus.secretKeyHeader model2.serverSecret ]
                         , url = FileStatus.domain ++ "/file/internal/vapid"
                         , body = Http.emptyBody
                         , expect = Http.expectString GotVapidKeys
@@ -2266,7 +2277,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         , tracker = Nothing
                         }
                     , Discord.getStickerPacksPayload
-                        |> DiscordSync.http model.serverSecret
+                        |> DiscordSync.http model2.serverSecret
                         |> Task.attempt (GotDiscordStandardStickerPacks time)
                     , cmd
                     ]
@@ -5054,17 +5065,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model)
 
         ReloadDataRequest requestMessagesFor ->
-            ( model
-            , case Broadcast.getUserFromSessionId sessionId model of
-                Just ( userId, user ) ->
-                    BackendExtra.getLoginData sessionId clientId userId user requestMessagesFor model
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session user ->
+                    let
+                        session2 : UserSession
+                        session2 =
+                            UserSession.setCurrentlyViewing
+                                (BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor)
+                                session
+                    in
+                    ( { model | sessions = SeqDict.insert sessionId session2 model.sessions }
+                    , BackendExtra.getLoginData sessionId clientId session2 user requestMessagesFor model
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
-
-                Nothing ->
-                    Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
-            )
+                    )
+                )
 
         LinkSlackOAuthCode oAuthCode sessionId2 ->
             case Broadcast.getSessionFromSessionIdHash sessionId2 model of
