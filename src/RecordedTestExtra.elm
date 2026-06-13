@@ -4225,7 +4225,25 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 Drawing.redoButtonId
                                 , admin.checkView 100 (expectPolylineCount 1)
                                 , user.checkView 100 (expectPolylineCount 1)
+
+                                -- The Ctrl+Z and Ctrl+Shift+Z hotkeys undo and redo the stroke too
+                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" })
+                                , admin.checkView 100 (expectPolylineCount 0)
+                                , user.checkView 100 (expectPolylineCount 0)
+                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" })
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , user.checkView 100 (expectPolylineCount 1)
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
+
+                                -- Clicking the channel text input stops drawing by deselecting the
+                                -- anchor, so the drawing tab goes back to asking for an anchor
+                                , admin.click 100 Pages.Guild.channelTextInputId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
 
                                 -- Draw on the image attachment. The input overlay blocks anchor
                                 -- clicks so the drawing tab is toggled to pick a new anchor.

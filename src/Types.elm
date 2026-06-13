@@ -452,7 +452,7 @@ type FrontendMsg
     | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
     | SetFocus
     | RemoveFocus
-    | KeyDown String
+    | KeyDown { ctrlKey : Bool, metaKey : Bool, shiftKey : Bool, key : String }
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
