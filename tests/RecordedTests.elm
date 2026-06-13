@@ -1261,6 +1261,32 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "Thread starter isn't notified for unrelated thread replies"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled and is viewing the guild channel (not the
+                -- thread). `user` writes the message that the thread is started from, so `user` is
+                -- the thread's root message creator.
+                [ RecordedTestExtra.writeMessage user 100 "Message that becomes a thread"
+
+                -- `admin` starts a thread on `user`'s message and posts the first reply. Because
+                -- this is the first message in the thread (someone "moving the conversation to a
+                -- thread"), `user` should be notified.
+                , RecordedTestExtra.createThread admin (Id.fromInt 1)
+                , RecordedTestExtra.writeMessage admin 100 "First reply in the thread"
+                , RecordedTestExtra.checkNotification "First reply in the thread"
+
+                -- `admin` posts another message in the thread that doesn't mention or reply to
+                -- `user`. `user` should NOT be notified, since they weren't the one being replied to.
+                , RecordedTestExtra.writeMessage admin 100 "Unrelated follow-up in the thread"
+                , RecordedTestExtra.checkNoNotification "Unrelated follow-up in the thread"
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "No DM push notification while viewing the channel"
         RecordedTestExtra.startTime
         normalConfig

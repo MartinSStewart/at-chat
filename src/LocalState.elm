@@ -2256,24 +2256,28 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                         Nothing ->
                             []
                     )
-                        ++ (case DmChannel.getArray threadId channel.messages of
-                                Just (UserTextMessage data) ->
-                                    [ data.createdBy ]
+                        ++ (if threadIsBeingStarted threadId channel then
+                                case DmChannel.getArray threadId channel.messages of
+                                    Just (UserTextMessage data) ->
+                                        [ data.createdBy ]
 
-                                Just (UserJoinedMessage _ userJoined _ _) ->
-                                    [ userJoined ]
+                                    Just (UserJoinedMessage _ userJoined _ _) ->
+                                        [ userJoined ]
 
-                                Just (DeletedMessage _) ->
-                                    []
+                                    Just (DeletedMessage _) ->
+                                        []
 
-                                Just (CallStarted _ _ startedBy _ _) ->
-                                    [ startedBy ]
+                                    Just (CallStarted _ _ startedBy _ _) ->
+                                        [ startedBy ]
 
-                                Just (GoMatchStarted _ startedBy _ _) ->
-                                    [ startedBy ]
+                                    Just (GoMatchStarted _ startedBy _ _) ->
+                                        [ startedBy ]
 
-                                Nothing ->
-                                    []
+                                    Nothing ->
+                                        []
+
+                            else
+                                []
                            )
 
                 NoThreadWithMaybeMessage maybeRepliedTo ->
@@ -2312,32 +2316,56 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                 Nothing ->
                     []
             )
-                ++ (case DmChannel.getArray threadId channel.messages of
-                        Just (MessageLoaded message) ->
-                            case message of
-                                UserTextMessage data ->
-                                    [ data.createdBy ]
+                ++ (if threadIsBeingStarted threadId channel then
+                        case DmChannel.getArray threadId channel.messages of
+                            Just (MessageLoaded message) ->
+                                case message of
+                                    UserTextMessage data ->
+                                        [ data.createdBy ]
 
-                                UserJoinedMessage _ userJoined _ _ ->
-                                    [ userJoined ]
+                                    UserJoinedMessage _ userJoined _ _ ->
+                                        [ userJoined ]
 
-                                DeletedMessage _ ->
-                                    []
+                                    DeletedMessage _ ->
+                                        []
 
-                                CallStarted _ _ startedBy _ _ ->
-                                    [ startedBy ]
+                                    CallStarted _ _ startedBy _ _ ->
+                                        [ startedBy ]
 
-                                GoMatchStarted _ startedBy _ _ ->
-                                    [ startedBy ]
+                                    GoMatchStarted _ startedBy _ _ ->
+                                        [ startedBy ]
 
-                        _ ->
-                            []
+                            _ ->
+                                []
+
+                    else
+                        []
                    )
 
         NoThreadWithMaybeMessage maybeRepliedTo ->
             repliedToUserIdFrontend maybeRepliedTo channel |> Maybe.Extra.toList
     )
         |> List.foldl SeqSet.insert (RichText.mentionsUser content)
+
+
+{-| True if no messages exist in this thread yet, meaning the message currently being sent is the
+first one and is therefore starting the thread. We only notify the thread's root message creator when
+the thread is being started (i.e. when someone "moves the conversation to a thread"). For subsequent
+messages they should only be notified if they were actually mentioned or replied to, otherwise every
+message in a thread spawned from their message would notify them even when it wasn't directed at them.
+
+Note: this relies on being passed the channel state from _before_ the new message is inserted into the
+thread, which is how all the call sites currently use it.
+
+-}
+threadIsBeingStarted : threadId -> { a | threads : SeqDict threadId { b | messages : Array c } } -> Bool
+threadIsBeingStarted threadId channel =
+    case SeqDict.get threadId channel.threads of
+        Just thread ->
+            Array.isEmpty thread.messages
+
+        Nothing ->
+            True
 
 
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId userId) } -> Maybe userId

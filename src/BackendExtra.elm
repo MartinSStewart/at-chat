@@ -1052,11 +1052,14 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
 
                 usersMentioned : SeqSet (Id UserId)
                 usersMentioned =
+                    -- Note: `channel` (before the new message is inserted) is used here, not
+                    -- `channel2`, so that `threadIsBeingStarted` can tell whether this message is the
+                    -- first one in the thread.
                     LocalState.usersMentionedOrRepliedToBackend
                         threadRouteWithMaybeReplyTo
                         richText
                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                        channel2
+                        channel
 
                 users2 : NonemptyDict (Id UserId) BackendUser
                 users2 =
