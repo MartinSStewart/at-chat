@@ -1248,6 +1248,19 @@ enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model 
         model
 
 
+sameThread : ThreadRouteWithFriends -> ThreadRouteWithFriends -> Bool
+sameThread threadRoute previousThreadRoute =
+    case ( threadRoute, previousThreadRoute ) of
+        ( NoThreadWithFriends _ _, NoThreadWithFriends _ _ ) ->
+            True
+
+        ( ViewThreadWithFriends threadId _ _, ViewThreadWithFriends previousThreadId _ _ ) ->
+            threadId == previousThreadId
+
+        _ ->
+            False
+
+
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routeRequest previousRoute newRoute model =
     let
@@ -1339,8 +1352,12 @@ routeRequest previousRoute newRoute model =
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
-                                Just (GuildRoute _ (ChannelRoute previousChannelId _ _)) ->
-                                    channelId == previousChannelId
+                                Just (GuildRoute _ (ChannelRoute previousChannelId previousThreadRoute _)) ->
+                                    if channelId == previousChannelId then
+                                        sameThread threadRoute previousThreadRoute
+
+                                    else
+                                        False
 
                                 _ ->
                                     False
@@ -1422,8 +1439,12 @@ routeRequest previousRoute newRoute model =
                             case previousRoute of
                                 Just (DiscordGuildRoute guildData) ->
                                     case guildData.channelRoute of
-                                        DiscordChannel_ChannelRoute previousChannelId _ _ ->
-                                            channelId == previousChannelId
+                                        DiscordChannel_ChannelRoute previousChannelId previousThreadRoute _ ->
+                                            if channelId == previousChannelId then
+                                                sameThread threadRoute previousThreadRoute
+
+                                            else
+                                                False
 
                                         _ ->
                                             False
