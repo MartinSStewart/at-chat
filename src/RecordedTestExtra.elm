@@ -4247,9 +4247,9 @@ drawOnMessages imageUploadConfig =
 
                                 -- A stroke drawn while zoomed in is mapped back through the zoom so
                                 -- the points are placed more precisely (the same mouse movement
-                                -- covers less of the anchor's coordinate space than at 1x zoom).
-                                -- The user icon zooms in from the left edge of the conversation,
-                                -- which the test container reports at x = 0 with the anchor at x = 30.
+                                -- covers less of the anchor's coordinate space than at 1x zoom). The
+                                -- zoom keeps the anchor centered in the container, which the test
+                                -- reports as 100x100 at the origin with the anchor at (30, 25).
                                 , drawZigzagStroke admin
                                 , admin.checkView 100 (expectPolylineCount 2)
                                 , T.checkState
@@ -4260,7 +4260,7 @@ drawOnMessages imageUploadConfig =
                                                 case (Message.drawing Drawing.UserIconAnchor message).finished of
                                                     zoomedStroke :: _ ->
                                                         expectPointsCloseTo
-                                                            [ ( -10, 14 ), ( 2, 26 ), ( 14, 14 ), ( 26, 26 ), ( 38, 14 ), ( 50, 26 ) ]
+                                                            [ ( 0, -8 ), ( 12, 4 ), ( 24, -8 ), ( 36, 4 ), ( 48, -8 ), ( 60, 4 ) ]
                                                             (List.Nonempty.toList zoomedStroke.points)
 
                                                     [] ->
@@ -4739,9 +4739,6 @@ drawingAnchorClick x y =
         , ( "clientY", Json.Encode.float (y + 5) )
         , ( "offsetX", Json.Encode.float 10 )
         , ( "offsetY", Json.Encode.float 5 )
-        , -- The displayed size of the anchor element. Only used to zoom in on the
-          -- center of the anchor, it has no effect on drawing while not zoomed in.
-          ( "currentTarget", Json.Encode.object [ ( "offsetWidth", Json.Encode.float 40 ), ( "offsetHeight", Json.Encode.float 40 ) ] )
         ]
 
 

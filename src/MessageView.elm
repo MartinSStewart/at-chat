@@ -46,9 +46,9 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGoMatchStartedCard
-    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate) ( Float, Float )
-    | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate) ( Float, Float )
-    | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate)
+    | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -111,13 +111,13 @@ isPressMsg msg =
         MessageViewMsg_PressedGoMatchStartedCard ->
             True
 
-        MessageView_PressedUserIcon _ _ ->
+        MessageView_PressedUserIcon _ ->
             True
 
-        MessageView_PressedTimestamp _ _ ->
+        MessageView_PressedTimestamp _ ->
             True
 
-        MessageView_PressedDateDivider _ _ _ ->
+        MessageView_PressedDateDivider _ _ ->
             True
 
 

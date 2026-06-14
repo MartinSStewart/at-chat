@@ -2540,15 +2540,6 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position, displayWidth } ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
-                            let
-                                displayHeight : Float
-                                displayHeight =
-                                    if Coord.xRaw imageSize > 0 then
-                                        displayWidth * toFloat (Coord.yRaw imageSize) / toFloat (Coord.xRaw imageSize)
-
-                                    else
-                                        displayWidth
-                            in
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor
@@ -2562,7 +2553,6 @@ updateLoaded msg model =
                                     )
                                 )
                                 position
-                                ( displayWidth / 2, displayHeight / 2 )
                                 -- Strokes on images are stored in the image's full resolution
                                 -- coordinates so they stay aligned when the image is scaled
                                 -- down to fit smaller screens
@@ -2662,42 +2652,39 @@ updateLoaded msg model =
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIcon elementPosition anchorHalfSize ->
+                MessageView.MessageView_PressedUserIcon elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.UserIconAnchor)
                                 elementPosition
-                                anchorHalfSize
                                 1
                                 model
 
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedTimestamp elementPosition anchorHalfSize ->
+                MessageView.MessageView_PressedTimestamp elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.TimestampAnchor)
                                 elementPosition
-                                anchorHalfSize
                                 1
                                 model
 
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedDateDivider date elementPosition anchorHalfSize ->
+                MessageView.MessageView_PressedDateDivider date elementPosition ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.DateDividerAnchor (Id.threadRouteWithoutMessage threadRoute) date)
                                 elementPosition
-                                anchorHalfSize
                                 1
                                 model
 
@@ -4340,16 +4327,15 @@ selectDrawingAnchor :
     AnyGuildOrDmId
     -> Drawing.AnchorType
     -> Point2d CssPixels ScreenCoordinate
-    -> ( Float, Float )
     -> Float
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-selectDrawingAnchor guildOrDmId anchorType elementPosition anchorHalfSize pointScale model =
+selectDrawingAnchor guildOrDmId anchorType elementPosition pointScale model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
                 | drawingMode =
-                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition anchorHalfSize pointScale
+                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition pointScale
                         |> Drawing.SelectedAnchor
               }
             , Command.none
@@ -4485,7 +4471,7 @@ updateDrawing drawingMsg model =
                                 (\result ->
                                     (case result of
                                         Ok { element } ->
-                                            Just { x = element.x, y = element.y, width = element.width }
+                                            Just { x = element.x, y = element.y, width = element.width, height = element.height }
 
                                         Err _ ->
                                             Nothing
