@@ -912,6 +912,16 @@ drawingTabView model local =
                 [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
                 , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
                 , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
+                , Drawing.undoRedoButton
+                    Drawing.zoomButtonId
+                    Drawing.PressedZoom
+                    (if selected.zoom == 1 then
+                        "Zoom in"
+
+                     else
+                        "Zoom out"
+                    )
+                    True
                 ]
         )
         |> Ui.map DrawingMsg

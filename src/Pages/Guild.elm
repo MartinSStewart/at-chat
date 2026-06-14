@@ -3383,10 +3383,40 @@ drawingModeAttributes route drawingMode =
                 []
 
             Drawing.SelectedAnchor selected ->
-                [ Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg) ]
+                Ui.inFront (Drawing.inputOverlay (selected.stroke /= Nothing) DrawingMsg)
+                    :: (if selected.zoom /= 1 then
+                            -- Keep the magnified conversation clipped to its normal
+                            -- area so zooming in doesn't push the rest of the page around.
+                            [ Ui.clip ]
+
+                        else
+                            []
+                       )
 
     else
         []
+
+
+{-| Css transform applied to the conversation container so the area around the
+selected anchor is magnified for more precise drawing.
+-}
+drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg)
+drawingZoomAttributes route drawingMode =
+    case ( Route.toChannelHeaderTab route, drawingMode ) of
+        ( Just Route.DmChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
+            case ( selected.zoom /= 1, Drawing.zoomCssOrigin selected ) of
+                ( True, Just ( originX, originY ) ) ->
+                    [ MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat selected.zoom ++ ")")
+                    , MyUi.htmlStyle
+                        "transform-origin"
+                        (String.fromFloat originX ++ "px " ++ String.fromFloat originY ++ "px")
+                    ]
+
+                _ ->
+                    []
+
+        _ ->
+            []
 
 
 conversationView :
@@ -3457,19 +3487,21 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 ++ drawingModeAttributes model.route loggedIn.drawingMode
             )
             (Ui.Keyed.column
-                [ Ui.height Ui.fill
-                , Ui.width Ui.fill
-                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                , scrollable (canScroll model.drag)
-                , MyUi.htmlStyle "overflow-wrap" "break-word"
-                , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on
+                ([ Ui.height Ui.fill
+                 , Ui.width Ui.fill
+                 , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
+                 , scrollable (canScroll model.drag)
+                 , MyUi.htmlStyle "overflow-wrap" "break-word"
+                 , Ui.id (Dom.idToString conversationContainerId)
+                 , Ui.Events.on
                     "scroll"
                     (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
-                , Ui.heightMin 0
-                , bounceScroll isMobile
-                , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                ]
+                 , Ui.heightMin 0
+                 , bounceScroll isMobile
+                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 ]
+                    ++ drawingZoomAttributes model.route loggedIn.drawingMode
+                )
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
@@ -3630,19 +3662,21 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 ++ drawingModeAttributes model.route loggedIn.drawingMode
             )
             (Ui.Keyed.column
-                [ Ui.height Ui.fill
-                , Ui.width Ui.fill
-                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                , scrollable (canScroll model.drag)
-                , MyUi.htmlStyle "overflow-wrap" "break-word"
-                , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on
+                ([ Ui.height Ui.fill
+                 , Ui.width Ui.fill
+                 , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
+                 , scrollable (canScroll model.drag)
+                 , MyUi.htmlStyle "overflow-wrap" "break-word"
+                 , Ui.id (Dom.idToString conversationContainerId)
+                 , Ui.Events.on
                     "scroll"
                     (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
-                , Ui.heightMin 0
-                , bounceScroll isMobile
-                , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                ]
+                 , Ui.heightMin 0
+                 , bounceScroll isMobile
+                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 ]
+                    ++ drawingZoomAttributes model.route loggedIn.drawingMode
+                )
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
@@ -3891,19 +3925,21 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 ++ drawingModeAttributes model.route loggedIn.drawingMode
             )
             (Ui.Keyed.column
-                [ Ui.height Ui.fill
-                , Ui.width Ui.fill
-                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                , scrollable (canScroll model.drag)
-                , MyUi.htmlStyle "overflow-wrap" "break-word"
-                , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on
+                ([ Ui.height Ui.fill
+                 , Ui.width Ui.fill
+                 , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
+                 , scrollable (canScroll model.drag)
+                 , MyUi.htmlStyle "overflow-wrap" "break-word"
+                 , Ui.id (Dom.idToString conversationContainerId)
+                 , Ui.Events.on
                     "scroll"
                     (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
-                , Ui.heightMin 0
-                , bounceScroll isMobile
-                , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                ]
+                 , Ui.heightMin 0
+                 , bounceScroll isMobile
+                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 ]
+                    ++ drawingZoomAttributes model.route loggedIn.drawingMode
+                )
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , Ui.column
@@ -4072,19 +4108,21 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 ++ drawingModeAttributes model.route loggedIn.drawingMode
             )
             (Ui.Keyed.column
-                [ Ui.height Ui.fill
-                , Ui.width Ui.fill
-                , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                , scrollable (canScroll model.drag)
-                , MyUi.htmlStyle "overflow-wrap" "break-word"
-                , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on
+                ([ Ui.height Ui.fill
+                 , Ui.width Ui.fill
+                 , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
+                 , scrollable (canScroll model.drag)
+                 , MyUi.htmlStyle "overflow-wrap" "break-word"
+                 , Ui.id (Dom.idToString conversationContainerId)
+                 , Ui.Events.on
                     "scroll"
                     (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
-                , Ui.heightMin 0
-                , bounceScroll isMobile
-                , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                ]
+                 , Ui.heightMin 0
+                 , bounceScroll isMobile
+                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
+                 ]
+                    ++ drawingZoomAttributes model.route loggedIn.drawingMode
+                )
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , Ui.column

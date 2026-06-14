@@ -27,6 +27,10 @@ module Drawing exposing
     , undoButtonId
     , undoRedoButton
     , userColor
+    , zoomButtonId
+    , zoomCssOrigin
+    , zoomLevel
+    , zoomPointOffset
     )
 
 import CssPixels exposing (CssPixels)
@@ -110,6 +114,10 @@ type Msg
     | MouseUp
     | PressedUndo
     | PressedRedo
+    | PressedZoom
+    | -- The conversation container's viewport position and size, measured after
+      -- toggling zoom on. Nothing if the measurement failed.
+      GotZoomContainer (Maybe { x : Float, y : Float, width : Float, height : Float })
 
 
 type Model
@@ -128,6 +136,16 @@ type alias SelectedAnchorData =
       -- coordinates while the image might be displayed scaled down.
       pointScale : Float
     , stroke : Maybe ActiveStroke
+    , -- Half the displayed size of the anchor element in css pixels, so the zoom
+      -- can center on the middle of the anchor rather than its top left corner.
+      anchorHalfSize : ( Float, Float )
+    , -- How much the conversation viewport is magnified around the anchor so the
+      -- user can draw more precisely. 1 means no zoom.
+      zoom : Float
+    , -- The conversation container's viewport position and size, measured after
+      -- toggling zoom on. Used to center the magnified view on the anchor. Nothing
+      -- until measured.
+      zoomContainer : Maybe { x : Float, y : Float, width : Float, height : Float }
     }
 
 
@@ -142,14 +160,81 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> Float -> SelectedAnchorData
-initialAnchorSelection guildOrDmId anchorType position pointScale =
+initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> Float -> SelectedAnchorData
+initialAnchorSelection guildOrDmId anchorType position anchorHalfSize pointScale =
     { guildOrDmId = guildOrDmId
     , anchorType = anchorType
     , position = position
     , pointScale = pointScale
     , stroke = Nothing
+    , anchorHalfSize = anchorHalfSize
+    , zoom = 1
+    , zoomContainer = Nothing
     }
+
+
+{-| How much the conversation viewport is magnified when the user toggles zoom on
+while drawing.
+-}
+zoomLevel : Float
+zoomLevel =
+    2.5
+
+
+{-| The css transform-origin to magnify the conversation around, in css pixels
+relative to the conversation container. The transform tries to bring the center of
+the anchor to the center of the container, clamped so the magnified conversation
+always covers the container (no gap appears past its edges). This keeps anchors
+near an edge, like the user icon, timestamp or a full width image, aligned to that
+edge. Nothing until the container is measured.
+-}
+zoomCssOrigin : SelectedAnchorData -> Maybe ( Float, Float )
+zoomCssOrigin selected =
+    case selected.zoomContainer of
+        Just container ->
+            if selected.zoom <= 1 then
+                Nothing
+
+            else
+                let
+                    anchor : { x : Float, y : Float }
+                    anchor =
+                        Point2d.unwrap selected.position
+
+                    ( halfWidth, halfHeight ) =
+                        selected.anchorHalfSize
+
+                    z : Float
+                    z =
+                        selected.zoom
+                in
+                Just
+                    ( clamp 0 container.width ((z * (anchor.x - container.x + halfWidth) - container.width / 2) / (z - 1))
+                    , clamp 0 container.height ((z * (anchor.y - container.y + halfHeight) - container.height / 2) / (z - 1))
+                    )
+
+        Nothing ->
+            Nothing
+
+
+{-| The zoom focus point in css pixels relative to the anchor's top left corner,
+which is what the stroke coordinate mapping needs. Derived from the same origin as
+the css transform so the two stay consistent. Falls back to the anchor's top left
+corner before the container has been measured.
+-}
+zoomPointOffset : SelectedAnchorData -> ( Float, Float )
+zoomPointOffset selected =
+    case ( selected.zoomContainer, zoomCssOrigin selected ) of
+        ( Just container, Just ( originX, originY ) ) ->
+            let
+                anchor : { x : Float, y : Float }
+                anchor =
+                    Point2d.unwrap selected.position
+            in
+            ( originX - (anchor.x - container.x), originY - (anchor.y - container.y) )
+
+        _ ->
+            ( 0, 0 )
 
 
 maxFinishedStrokes : Int
@@ -409,6 +494,11 @@ redoButtonId =
     Dom.id "drawing_redo"
 
 
+zoomButtonId : HtmlId
+zoomButtonId =
+    Dom.id "drawing_zoom"
+
+
 {-| Transparent overlay that captures mouse events while the user is drawing.
 -}
 inputOverlay : Bool -> (Msg -> msg) -> Element msg
@@ -461,12 +551,12 @@ decodeMousePosition toMsg =
 anchorHighlight :
     HtmlId
     -> (userId -> String)
-    -> (Point2d CssPixels ScreenCoordinate -> msg)
+    -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg)
     -> Bool
     -> Drawing userId
     -> List (Ui.Attribute msg)
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
-    [ Ui.Events.on "click" (Json.Decode.map onPress decodeWithTargetScreenPosition)
+    [ Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
     , Dom.idToString htmlId |> Ui.id
     , Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
@@ -494,6 +584,26 @@ Html instead of elm-ui. The matching CSS rules live in MyUi.css.
 anchorHighlightHtmlClass : Html.Attribute msg
 anchorHighlightHtmlClass =
     Html.Attributes.class "drawing-anchor-select"
+
+
+{-| Half the displayed size of the clicked anchor element, read from the event's
+currentTarget. Defaults to zero when the fields are missing (e.g. simulated test
+clicks).
+-}
+decodeTargetHalfSize : Json.Decode.Decoder ( Float, Float )
+decodeTargetHalfSize =
+    Json.Decode.map2
+        (\width height -> ( width / 2, height / 2 ))
+        (currentTargetFloatWithDefault "offsetWidth")
+        (currentTargetFloatWithDefault "offsetHeight")
+
+
+currentTargetFloatWithDefault : String -> Json.Decode.Decoder Float
+currentTargetFloatWithDefault fieldName =
+    Json.Decode.oneOf
+        [ Json.Decode.at [ "currentTarget", fieldName ] Json.Decode.float
+        , Json.Decode.succeed 0
+        ]
 
 
 decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)
