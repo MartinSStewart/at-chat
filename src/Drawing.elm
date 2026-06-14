@@ -27,6 +27,8 @@ module Drawing exposing
     , undoButtonId
     , undoRedoButton
     , userColor
+    , zoomButtonId
+    , zoomLevel
     )
 
 import CssPixels exposing (CssPixels)
@@ -110,6 +112,11 @@ type Msg
     | MouseUp
     | PressedUndo
     | PressedRedo
+    | PressedZoom
+    | -- The transform-origin (anchor position relative to the conversation
+      -- container) measured after toggling zoom on. Nothing if the measurement
+      -- failed.
+      GotZoomOrigin (Maybe ( Float, Float ))
 
 
 type Model
@@ -128,6 +135,12 @@ type alias SelectedAnchorData =
       -- coordinates while the image might be displayed scaled down.
       pointScale : Float
     , stroke : Maybe ActiveStroke
+    , -- How much the conversation viewport is magnified around the anchor so the
+      -- user can draw more precisely. 1 means no zoom.
+      zoom : Float
+    , -- Where to anchor the css transform when zoomed in, measured as the anchor
+      -- position relative to the conversation container. Nothing until measured.
+      zoomOrigin : Maybe ( Float, Float )
     }
 
 
@@ -149,7 +162,17 @@ initialAnchorSelection guildOrDmId anchorType position pointScale =
     , position = position
     , pointScale = pointScale
     , stroke = Nothing
+    , zoom = 1
+    , zoomOrigin = Nothing
     }
+
+
+{-| How much the conversation viewport is magnified when the user toggles zoom on
+while drawing.
+-}
+zoomLevel : Float
+zoomLevel =
+    2.5
 
 
 maxFinishedStrokes : Int
@@ -407,6 +430,11 @@ undoButtonId =
 redoButtonId : HtmlId
 redoButtonId =
     Dom.id "drawing_redo"
+
+
+zoomButtonId : HtmlId
+zoomButtonId =
+    Dom.id "drawing_zoom"
 
 
 {-| Transparent overlay that captures mouse events while the user is drawing.

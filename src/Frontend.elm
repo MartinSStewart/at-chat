@@ -4363,8 +4363,8 @@ updateDrawing drawingMsg model =
                                     selected.guildOrDmId
                                     selected.anchorType
                                     (Drawing.StartStroke
-                                        ( (x - anchorPosition.x) * selected.pointScale
-                                        , (y - anchorPosition.y) * selected.pointScale
+                                        ( (x - anchorPosition.x) / selected.zoom * selected.pointScale
+                                        , (y - anchorPosition.y) / selected.zoom * selected.pointScale
                                         )
                                     )
                                     |> Just
@@ -4388,8 +4388,8 @@ updateDrawing drawingMsg model =
 
                                 unsent : List ( Float, Float )
                                 unsent =
-                                    ( (x - anchorPosition.x) * selected.pointScale
-                                    , (y - anchorPosition.y) * selected.pointScale
+                                    ( (x - anchorPosition.x) / selected.zoom * selected.pointScale
+                                    , (y - anchorPosition.y) / selected.zoom * selected.pointScale
                                     )
                                         :: stroke.unsent
 
@@ -4450,6 +4450,50 @@ updateDrawing drawingMsg model =
 
                 ( Drawing.PressedRedo, Drawing.SelectedAnchor selected ) ->
                     FrontendExtra.drawingRedo selected loggedIn model
+
+                ( Drawing.PressedZoom, Drawing.SelectedAnchor selected ) ->
+                    if selected.zoom == 1 then
+                        let
+                            anchorPosition : { x : Float, y : Float }
+                            anchorPosition =
+                                Point2d.unwrap selected.position
+                        in
+                        ( { loggedIn
+                            | drawingMode =
+                                Drawing.SelectedAnchor
+                                    { selected | zoom = Drawing.zoomLevel, zoomOrigin = Nothing }
+                          }
+                          -- Pin the magnified view on the anchor by measuring the
+                          -- anchor's position relative to the conversation container.
+                        , Dom.getElement Pages.Guild.conversationContainerId
+                            |> Task.attempt
+                                (\result ->
+                                    (case result of
+                                        Ok { element } ->
+                                            Just ( anchorPosition.x - element.x, anchorPosition.y - element.y )
+
+                                        Err _ ->
+                                            Nothing
+                                    )
+                                        |> Drawing.GotZoomOrigin
+                                        |> DrawingMsg
+                                )
+                        )
+
+                    else
+                        ( { loggedIn
+                            | drawingMode =
+                                Drawing.SelectedAnchor { selected | zoom = 1, zoomOrigin = Nothing }
+                          }
+                        , Command.none
+                        )
+
+                ( Drawing.GotZoomOrigin maybeOrigin, Drawing.SelectedAnchor selected ) ->
+                    ( { loggedIn
+                        | drawingMode = Drawing.SelectedAnchor { selected | zoomOrigin = maybeOrigin }
+                      }
+                    , Command.none
+                    )
 
                 ( _, Drawing.NoSelectedAnchor ) ->
                     ( loggedIn, Command.none )
