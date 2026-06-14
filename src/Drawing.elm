@@ -135,6 +135,9 @@ type alias SelectedAnchorData =
       -- coordinates while the image might be displayed scaled down.
       pointScale : Float
     , stroke : Maybe ActiveStroke
+    , -- Half the displayed size of the anchor element in css pixels. Used to zoom
+      -- in on the center of the anchor rather than its top left corner.
+      anchorHalfSize : ( Float, Float )
     , -- How much the conversation viewport is magnified around the anchor so the
       -- user can draw more precisely. 1 means no zoom.
       zoom : Float
@@ -155,13 +158,14 @@ init =
     NoSelectedAnchor
 
 
-initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> Float -> SelectedAnchorData
-initialAnchorSelection guildOrDmId anchorType position pointScale =
+initialAnchorSelection : AnyGuildOrDmId -> AnchorType -> Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> Float -> SelectedAnchorData
+initialAnchorSelection guildOrDmId anchorType position anchorHalfSize pointScale =
     { guildOrDmId = guildOrDmId
     , anchorType = anchorType
     , position = position
     , pointScale = pointScale
     , stroke = Nothing
+    , anchorHalfSize = anchorHalfSize
     , zoom = 1
     , zoomOrigin = Nothing
     }
@@ -489,12 +493,12 @@ decodeMousePosition toMsg =
 anchorHighlight :
     HtmlId
     -> (userId -> String)
-    -> (Point2d CssPixels ScreenCoordinate -> msg)
+    -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg)
     -> Bool
     -> Drawing userId
     -> List (Ui.Attribute msg)
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
-    [ Ui.Events.on "click" (Json.Decode.map onPress decodeWithTargetScreenPosition)
+    [ Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
     , Dom.idToString htmlId |> Ui.id
     , Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
@@ -522,6 +526,26 @@ Html instead of elm-ui. The matching CSS rules live in MyUi.css.
 anchorHighlightHtmlClass : Html.Attribute msg
 anchorHighlightHtmlClass =
     Html.Attributes.class "drawing-anchor-select"
+
+
+{-| Half the displayed size of the clicked anchor element, read from the event's
+currentTarget. Defaults to zero when the fields are missing (e.g. simulated test
+clicks) which falls back to zooming in on the anchor's top left corner.
+-}
+decodeTargetHalfSize : Json.Decode.Decoder ( Float, Float )
+decodeTargetHalfSize =
+    Json.Decode.map2
+        (\width height -> ( width / 2, height / 2 ))
+        (currentTargetFloatWithDefault "offsetWidth")
+        (currentTargetFloatWithDefault "offsetHeight")
+
+
+currentTargetFloatWithDefault : String -> Json.Decode.Decoder Float
+currentTargetFloatWithDefault fieldName =
+    Json.Decode.oneOf
+        [ Json.Decode.at [ "currentTarget", fieldName ] Json.Decode.float
+        , Json.Decode.succeed 0
+        ]
 
 
 decodeWithTargetScreenPosition : Json.Decode.Decoder (Point2d CssPixels ScreenCoordinate)

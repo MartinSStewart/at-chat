@@ -2540,6 +2540,15 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position, displayWidth } ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
+                            let
+                                displayHeight : Float
+                                displayHeight =
+                                    if Coord.xRaw imageSize > 0 then
+                                        displayWidth * toFloat (Coord.yRaw imageSize) / toFloat (Coord.xRaw imageSize)
+
+                                    else
+                                        displayWidth
+                            in
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor
@@ -2553,6 +2562,7 @@ updateLoaded msg model =
                                     )
                                 )
                                 position
+                                ( displayWidth / 2, displayHeight / 2 )
                                 -- Strokes on images are stored in the image's full resolution
                                 -- coordinates so they stay aligned when the image is scaled
                                 -- down to fit smaller screens
@@ -2652,39 +2662,42 @@ updateLoaded msg model =
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIcon elementPosition ->
+                MessageView.MessageView_PressedUserIcon elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.UserIconAnchor)
                                 elementPosition
+                                anchorHalfSize
                                 1
                                 model
 
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedTimestamp elementPosition ->
+                MessageView.MessageView_PressedTimestamp elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.TimestampAnchor)
                                 elementPosition
+                                anchorHalfSize
                                 1
                                 model
 
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedDateDivider date elementPosition ->
+                MessageView.MessageView_PressedDateDivider date elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
                         Just DmChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.DateDividerAnchor (Id.threadRouteWithoutMessage threadRoute) date)
                                 elementPosition
+                                anchorHalfSize
                                 1
                                 model
 
@@ -4327,21 +4340,42 @@ selectDrawingAnchor :
     AnyGuildOrDmId
     -> Drawing.AnchorType
     -> Point2d CssPixels ScreenCoordinate
+    -> ( Float, Float )
     -> Float
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-selectDrawingAnchor guildOrDmId anchorType elementPosition pointScale model =
+selectDrawingAnchor guildOrDmId anchorType elementPosition anchorHalfSize pointScale model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
                 | drawingMode =
-                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition pointScale
+                    Drawing.initialAnchorSelection guildOrDmId anchorType elementPosition anchorHalfSize pointScale
                         |> Drawing.SelectedAnchor
               }
             , Command.none
             )
         )
         model
+
+
+{-| Convert a mouse position (in viewport css pixels) into a point relative to the
+selected anchor's top left corner, in the anchor's coordinate space. When zoomed
+in the conversation is magnified around the center of the anchor, so the mouse
+position is mapped back through that same transform.
+-}
+anchorRelativePoint : Drawing.SelectedAnchorData -> Float -> Float -> ( Float, Float )
+anchorRelativePoint selected x y =
+    let
+        anchorPosition : { x : Float, y : Float }
+        anchorPosition =
+            Point2d.unwrap selected.position
+
+        ( halfWidth, halfHeight ) =
+            selected.anchorHalfSize
+    in
+    ( (halfWidth + (x - anchorPosition.x - halfWidth) / selected.zoom) * selected.pointScale
+    , (halfHeight + (y - anchorPosition.y - halfHeight) / selected.zoom) * selected.pointScale
+    )
 
 
 updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4352,20 +4386,13 @@ updateDrawing drawingMsg model =
                 ( Drawing.MouseDown x y, Drawing.SelectedAnchor selected ) ->
                     case selected.stroke of
                         Nothing ->
-                            let
-                                anchorPosition : { x : Float, y : Float }
-                                anchorPosition =
-                                    Point2d.unwrap selected.position
-                            in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Local_Drawing
                                     selected.guildOrDmId
                                     selected.anchorType
                                     (Drawing.StartStroke
-                                        ( (x - anchorPosition.x) / selected.zoom * selected.pointScale
-                                        , (y - anchorPosition.y) / selected.zoom * selected.pointScale
-                                        )
+                                        (anchorRelativePoint selected x y)
                                     )
                                     |> Just
                                 )
@@ -4382,16 +4409,9 @@ updateDrawing drawingMsg model =
                     case selected.stroke of
                         Just stroke ->
                             let
-                                anchorPosition : { x : Float, y : Float }
-                                anchorPosition =
-                                    Point2d.unwrap selected.position
-
                                 unsent : List ( Float, Float )
                                 unsent =
-                                    ( (x - anchorPosition.x) / selected.zoom * selected.pointScale
-                                    , (y - anchorPosition.y) / selected.zoom * selected.pointScale
-                                    )
-                                        :: stroke.unsent
+                                    anchorRelativePoint selected x y :: stroke.unsent
 
                                 setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
                                 setStroke newStroke =
@@ -4457,20 +4477,26 @@ updateDrawing drawingMsg model =
                             anchorPosition : { x : Float, y : Float }
                             anchorPosition =
                                 Point2d.unwrap selected.position
+
+                            ( halfWidth, halfHeight ) =
+                                selected.anchorHalfSize
                         in
                         ( { loggedIn
                             | drawingMode =
                                 Drawing.SelectedAnchor
                                     { selected | zoom = Drawing.zoomLevel, zoomOrigin = Nothing }
                           }
-                          -- Pin the magnified view on the anchor by measuring the
-                          -- anchor's position relative to the conversation container.
+                          -- Pin the magnified view on the center of the anchor by measuring
+                          -- the anchor's position relative to the conversation container.
                         , Dom.getElement Pages.Guild.conversationContainerId
                             |> Task.attempt
                                 (\result ->
                                     (case result of
                                         Ok { element } ->
-                                            Just ( anchorPosition.x - element.x, anchorPosition.y - element.y )
+                                            Just
+                                                ( anchorPosition.x - element.x + halfWidth
+                                                , anchorPosition.y - element.y + halfHeight
+                                                )
 
                                         Err _ ->
                                             Nothing

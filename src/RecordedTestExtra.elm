@@ -4235,6 +4235,48 @@ drawOnMessages imageUploadConfig =
                                 , user.checkView 100 (expectPolylineCount 1)
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
 
+                                -- Zooming in magnifies the conversation around the center of the
+                                -- anchor so the user can draw more precisely. The toggle flips the
+                                -- button label and the magnified conversation is clipped to its
+                                -- normal area so the rest of the page layout is unaffected.
+                                , admin.click 100 Drawing.zoomButtonId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Zoom out" ])
+                                , admin.snapshotView 100 { name = "Drawing zoomed in on an anchor" }
+
+                                -- A stroke drawn while zoomed in is mapped back through the zoom so
+                                -- the points are placed more precisely (the same mouse movement
+                                -- covers less of the anchor's coordinate space than at 1x zoom)
+                                , drawZigzagStroke admin
+                                , admin.checkView 100 (expectPolylineCount 2)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                case (Message.drawing Drawing.UserIconAnchor message).finished of
+                                                    zoomedStroke :: _ ->
+                                                        expectPointsCloseTo
+                                                            [ ( 20, 14 ), ( 32, 26 ), ( 44, 14 ), ( 56, 26 ), ( 68, 14 ), ( 80, 26 ) ]
+                                                            (List.Nonempty.toList zoomedStroke.points)
+
+                                                    [] ->
+                                                        Err "Expected the profile image to have a stroke drawn while zoomed in"
+
+                                            Nothing ->
+                                                Err "Message not found on the backend"
+                                    )
+
+                                -- Undo the zoomed stroke and zoom back out so the rest of the test
+                                -- continues with a single stroke and the conversation at 1x zoom
+                                , admin.click 100 Drawing.undoButtonId
+                                , admin.checkView 100 (expectPolylineCount 1)
+                                , admin.click 100 Drawing.zoomButtonId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Zoom in" ])
+
                                 -- Clicking the channel text input stops drawing by deselecting the
                                 -- anchor, so the drawing tab goes back to asking for an anchor
                                 , admin.click 100 Pages.Guild.channelTextInputId
@@ -4695,6 +4737,9 @@ drawingAnchorClick x y =
         , ( "clientY", Json.Encode.float (y + 5) )
         , ( "offsetX", Json.Encode.float 10 )
         , ( "offsetY", Json.Encode.float 5 )
+        , -- The displayed size of the anchor element. Only used to zoom in on the
+          -- center of the anchor, it has no effect on drawing while not zoomed in.
+          ( "currentTarget", Json.Encode.object [ ( "offsetWidth", Json.Encode.float 40 ), ( "offsetHeight", Json.Encode.float 40 ) ] )
         ]
 
 
