@@ -2,7 +2,6 @@ module User exposing
     ( AdminUiSection(..)
     , BackendUser
     , DiscordFrontendCurrentUser
-    , DiscordFrontendUser
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
@@ -73,7 +72,7 @@ import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (UserAgent)
-import UserSession exposing (UserSession)
+import UserSession exposing (DiscordFrontendUser, UserSession)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -539,12 +538,6 @@ type alias FrontendUser =
     { name : PersonName
     , isAdmin : Bool
     , createdAt : Time.Posix
-    , icon : Maybe FileHash
-    }
-
-
-type alias DiscordFrontendUser =
-    { name : PersonName
     , icon : Maybe FileHash
     }
 

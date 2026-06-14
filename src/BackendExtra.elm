@@ -83,9 +83,9 @@ import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
+import User exposing (BackendUser, DiscordFrontendCurrentUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (UserSession)
+import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
 
 
@@ -827,7 +827,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 SeqDict.empty
                 model.discordDmChannels
     in
-    ( case Debug.log "session.currentlyViewing" currentlyViewing of
+    ( case currentlyViewing of
         Just ( guildOrDmId, _ ) ->
             case guildOrDmId of
                 GuildOrDmId _ ->

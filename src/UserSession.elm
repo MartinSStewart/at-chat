@@ -1,10 +1,12 @@
 module UserSession exposing
-    ( FrontendUserSession
+    ( DiscordFrontendUser
+    , FrontendUserSession
     , NotificationMode(..)
     , PushSubscription(..)
     , SetViewing(..)
     , ToBeFilledInByBackend(..)
     , UserSession
+    , ViewDiscordDmData
     , init
     , setCurrentlyViewing
     , setViewingToCurrentlyViewing
@@ -15,8 +17,10 @@ import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
+import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
+import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -57,12 +61,24 @@ type NotificationMode
 type SetViewing
     = ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | ViewDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (ToBeFilledInByBackend (ViewDiscordDmData ChannelMessageId))
     | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
+    | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordDmData ChannelMessageId))
+    | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordDmData ThreadMessageId))
     | StopViewingChannel
+
+
+type alias ViewDiscordDmData messageId =
+    { messages : SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId))
+    , newUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    }
+
+
+type alias DiscordFrontendUser =
+    { name : PersonName
+    , icon : Maybe FileHash
+    }
 
 
 setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmId, ThreadRoute )

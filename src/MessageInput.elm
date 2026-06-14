@@ -51,7 +51,8 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import User exposing (DiscordFrontendUser, FrontendUser, LocalUser)
+import User exposing (FrontendUser, LocalUser)
+import UserSession exposing (DiscordFrontendUser)
 
 
 type alias MentionUserDropdown =
