@@ -4248,8 +4248,9 @@ drawOnMessages imageUploadConfig =
                                 -- A stroke drawn while zoomed in is mapped back through the zoom so
                                 -- the points are placed more precisely (the same mouse movement
                                 -- covers less of the anchor's coordinate space than at 1x zoom). The
-                                -- zoom keeps the anchor centered in the container, which the test
-                                -- reports as 100x100 at the origin with the anchor at (30, 25).
+                                -- zoom keeps the center of the anchor centered in the container, which
+                                -- the test reports as 100x100 at the origin with the anchor's top left
+                                -- at (30, 25) and its half size at (20, 20).
                                 , drawZigzagStroke admin
                                 , admin.checkView 100 (expectPolylineCount 2)
                                 , T.checkState
@@ -4260,7 +4261,7 @@ drawOnMessages imageUploadConfig =
                                                 case (Message.drawing Drawing.UserIconAnchor message).finished of
                                                     zoomedStroke :: _ ->
                                                         expectPointsCloseTo
-                                                            [ ( 0, -8 ), ( 12, 4 ), ( 24, -8 ), ( 36, 4 ), ( 48, -8 ), ( 60, 4 ) ]
+                                                            [ ( 20, 12 ), ( 32, 24 ), ( 44, 12 ), ( 56, 24 ), ( 68, 12 ), ( 80, 24 ) ]
                                                             (List.Nonempty.toList zoomedStroke.points)
 
                                                     [] ->
@@ -4739,6 +4740,9 @@ drawingAnchorClick x y =
         , ( "clientY", Json.Encode.float (y + 5) )
         , ( "offsetX", Json.Encode.float 10 )
         , ( "offsetY", Json.Encode.float 5 )
+        , -- The displayed size of the anchor element, used to center the zoom on the
+          -- middle of the anchor. It has no effect on drawing while not zoomed in.
+          ( "currentTarget", Json.Encode.object [ ( "offsetWidth", Json.Encode.float 40 ), ( "offsetHeight", Json.Encode.float 40 ) ] )
         ]
 
 
