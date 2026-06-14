@@ -4247,7 +4247,9 @@ drawOnMessages imageUploadConfig =
 
                                 -- A stroke drawn while zoomed in is mapped back through the zoom so
                                 -- the points are placed more precisely (the same mouse movement
-                                -- covers less of the anchor's coordinate space than at 1x zoom)
+                                -- covers less of the anchor's coordinate space than at 1x zoom).
+                                -- The user icon zooms in from the left edge of the conversation,
+                                -- which the test container reports at x = 0 with the anchor at x = 30.
                                 , drawZigzagStroke admin
                                 , admin.checkView 100 (expectPolylineCount 2)
                                 , T.checkState
@@ -4258,7 +4260,7 @@ drawOnMessages imageUploadConfig =
                                                 case (Message.drawing Drawing.UserIconAnchor message).finished of
                                                     zoomedStroke :: _ ->
                                                         expectPointsCloseTo
-                                                            [ ( 20, 14 ), ( 32, 26 ), ( 44, 14 ), ( 56, 26 ), ( 68, 14 ), ( 80, 26 ) ]
+                                                            [ ( -10, 14 ), ( 2, 26 ), ( 14, 14 ), ( 26, 26 ), ( 38, 14 ), ( 50, 26 ) ]
                                                             (List.Nonempty.toList zoomedStroke.points)
 
                                                     [] ->

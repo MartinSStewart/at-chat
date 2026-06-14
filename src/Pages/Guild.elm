@@ -3404,7 +3404,7 @@ drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
         ( Just Route.DmChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
-            case ( selected.zoom /= 1, selected.zoomOrigin ) of
+            case ( selected.zoom /= 1, Drawing.zoomCssOrigin selected ) of
                 ( True, Just ( originX, originY ) ) ->
                     [ MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat selected.zoom ++ ")")
                     , MyUi.htmlStyle

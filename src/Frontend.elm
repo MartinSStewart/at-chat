@@ -4370,11 +4370,11 @@ anchorRelativePoint selected x y =
         anchorPosition =
             Point2d.unwrap selected.position
 
-        ( halfWidth, halfHeight ) =
-            selected.anchorHalfSize
+        ( offsetX, offsetY ) =
+            Drawing.zoomPointOffset selected
     in
-    ( (halfWidth + (x - anchorPosition.x - halfWidth) / selected.zoom) * selected.pointScale
-    , (halfHeight + (y - anchorPosition.y - halfHeight) / selected.zoom) * selected.pointScale
+    ( (offsetX + (x - anchorPosition.x - offsetX) / selected.zoom) * selected.pointScale
+    , (offsetY + (y - anchorPosition.y - offsetY) / selected.zoom) * selected.pointScale
     )
 
 
@@ -4473,35 +4473,24 @@ updateDrawing drawingMsg model =
 
                 ( Drawing.PressedZoom, Drawing.SelectedAnchor selected ) ->
                     if selected.zoom == 1 then
-                        let
-                            anchorPosition : { x : Float, y : Float }
-                            anchorPosition =
-                                Point2d.unwrap selected.position
-
-                            ( halfWidth, halfHeight ) =
-                                selected.anchorHalfSize
-                        in
                         ( { loggedIn
                             | drawingMode =
                                 Drawing.SelectedAnchor
-                                    { selected | zoom = Drawing.zoomLevel, zoomOrigin = Nothing }
+                                    { selected | zoom = Drawing.zoomLevel, zoomContainer = Nothing }
                           }
-                          -- Pin the magnified view on the center of the anchor by measuring
-                          -- the anchor's position relative to the conversation container.
+                          -- Measure the conversation container so the magnified view can be
+                          -- pinned on the right spot of the anchor.
                         , Dom.getElement Pages.Guild.conversationContainerId
                             |> Task.attempt
                                 (\result ->
                                     (case result of
                                         Ok { element } ->
-                                            Just
-                                                ( anchorPosition.x - element.x + halfWidth
-                                                , anchorPosition.y - element.y + halfHeight
-                                                )
+                                            Just { x = element.x, y = element.y, width = element.width }
 
                                         Err _ ->
                                             Nothing
                                     )
-                                        |> Drawing.GotZoomOrigin
+                                        |> Drawing.GotZoomContainer
                                         |> DrawingMsg
                                 )
                         )
@@ -4509,14 +4498,14 @@ updateDrawing drawingMsg model =
                     else
                         ( { loggedIn
                             | drawingMode =
-                                Drawing.SelectedAnchor { selected | zoom = 1, zoomOrigin = Nothing }
+                                Drawing.SelectedAnchor { selected | zoom = 1, zoomContainer = Nothing }
                           }
                         , Command.none
                         )
 
-                ( Drawing.GotZoomOrigin maybeOrigin, Drawing.SelectedAnchor selected ) ->
+                ( Drawing.GotZoomContainer maybeContainer, Drawing.SelectedAnchor selected ) ->
                     ( { loggedIn
-                        | drawingMode = Drawing.SelectedAnchor { selected | zoomOrigin = maybeOrigin }
+                        | drawingMode = Drawing.SelectedAnchor { selected | zoomContainer = maybeContainer }
                       }
                     , Command.none
                     )

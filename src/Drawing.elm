@@ -28,7 +28,9 @@ module Drawing exposing
     , undoRedoButton
     , userColor
     , zoomButtonId
+    , zoomCssOrigin
     , zoomLevel
+    , zoomPointOffset
     )
 
 import CssPixels exposing (CssPixels)
@@ -113,10 +115,9 @@ type Msg
     | PressedUndo
     | PressedRedo
     | PressedZoom
-    | -- The transform-origin (anchor position relative to the conversation
-      -- container) measured after toggling zoom on. Nothing if the measurement
-      -- failed.
-      GotZoomOrigin (Maybe ( Float, Float ))
+    | -- The conversation container's viewport position and width, measured after
+      -- toggling zoom on. Nothing if the measurement failed.
+      GotZoomContainer (Maybe { x : Float, y : Float, width : Float })
 
 
 type Model
@@ -141,9 +142,10 @@ type alias SelectedAnchorData =
     , -- How much the conversation viewport is magnified around the anchor so the
       -- user can draw more precisely. 1 means no zoom.
       zoom : Float
-    , -- Where to anchor the css transform when zoomed in, measured as the anchor
-      -- position relative to the conversation container. Nothing until measured.
-      zoomOrigin : Maybe ( Float, Float )
+    , -- The conversation container's viewport position and width, measured after
+      -- toggling zoom on. Used to anchor the css transform on the right spot.
+      -- Nothing until measured.
+      zoomContainer : Maybe { x : Float, y : Float, width : Float }
     }
 
 
@@ -167,7 +169,7 @@ initialAnchorSelection guildOrDmId anchorType position anchorHalfSize pointScale
     , stroke = Nothing
     , anchorHalfSize = anchorHalfSize
     , zoom = 1
-    , zoomOrigin = Nothing
+    , zoomContainer = Nothing
     }
 
 
@@ -177,6 +179,53 @@ while drawing.
 zoomLevel : Float
 zoomLevel =
     2.5
+
+
+{-| The point the zoom is anchored on, in css pixels relative to the anchor's top
+left corner. The user icon sits on the left of a message and the timestamp on the
+right, so they zoom in from the left and right edge of the conversation
+respectively to stay on screen. Everything else zooms in on its center.
+-}
+zoomPointOffset : SelectedAnchorData -> ( Float, Float )
+zoomPointOffset selected =
+    let
+        ( halfWidth, halfHeight ) =
+            selected.anchorHalfSize
+
+        anchor : { x : Float, y : Float }
+        anchor =
+            Point2d.unwrap selected.position
+    in
+    case ( selected.anchorType, selected.zoomContainer ) of
+        ( MessageAnchor _ UserIconAnchor, Just container ) ->
+            ( container.x - anchor.x, halfHeight )
+
+        ( MessageAnchor _ TimestampAnchor, Just container ) ->
+            ( container.x + container.width - anchor.x, halfHeight )
+
+        _ ->
+            ( halfWidth, halfHeight )
+
+
+{-| The css transform-origin to magnify the conversation around, in css pixels
+relative to the conversation container. Nothing until the container is measured.
+-}
+zoomCssOrigin : SelectedAnchorData -> Maybe ( Float, Float )
+zoomCssOrigin selected =
+    case selected.zoomContainer of
+        Just container ->
+            let
+                anchor : { x : Float, y : Float }
+                anchor =
+                    Point2d.unwrap selected.position
+
+                ( offsetX, offsetY ) =
+                    zoomPointOffset selected
+            in
+            Just ( anchor.x - container.x + offsetX, anchor.y - container.y + offsetY )
+
+        Nothing ->
+            Nothing
 
 
 maxFinishedStrokes : Int
