@@ -480,7 +480,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
             (\admin user ->
-                [ admin.click 100 (Dom.id "guild_openDm_1")
+                [ admin.click 100 (Dom.id "guild_openDm_2")
                 , RecordedTestExtra.writeMessage admin 100 "Hello from admin"
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , user.checkView
@@ -495,7 +495,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Typing..." ])
 
                 -- Admin sends the message, typing indicator disappears
-                , admin.click 100 (Dom.id "guild_friendLabel_1")
+                , admin.click 100 (Dom.id "guild_friendLabel_2")
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Typing..." ])
 
@@ -516,7 +516,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
 
                 -- Admin finishes editing, editing indicator disappears
-                , admin.click 100 (Dom.id "guild_friendLabel_1")
+                , admin.click 100 (Dom.id "guild_friendLabel_2")
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
                 ]
@@ -966,7 +966,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , RecordedTestExtra.writeMessage user 100 "Hello from user"
-                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                        , admin.click 100 (Dom.id "guildsColumn_openDm_2")
                         , RecordedTestExtra.writeMessage admin 100 "First DM"
                         , RecordedTestExtra.writeMessage admin 100 "Second DM"
                         , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
@@ -1230,7 +1230,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , RecordedTestExtra.checkNotification "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                , admin.click 100 (Dom.id "guild_openDm_1")
+                , admin.click 100 (Dom.id "guild_openDm_2")
                 , RecordedTestExtra.writeMessage admin 100 "Here's a DM to you"
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , RecordedTestExtra.writeMessage user 100 "Here's a reply!"
@@ -1268,7 +1268,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             RecordedTestExtra.desktopWindow
             (\admin user ->
                 -- `user` has push notifications enabled and is currently viewing the guild channel (not the DM).
-                [ admin.click 100 (Dom.id "guild_openDm_1")
+                [ admin.click 100 (Dom.id "guild_openDm_2")
 
                 -- Positive control: while the user isn't viewing the DM they should get a push notification.
                 , RecordedTestExtra.writeMessage admin 100 "DM while away"
@@ -1798,11 +1798,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                     secondUserId : Id UserId
                     secondUserId =
-                        Id.fromInt 1
+                        Id.fromInt 2
 
                     thirdUserId : Id UserId
                     thirdUserId =
-                        Id.fromInt 2
+                        Id.fromInt 3
                 in
                 [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
                 , admin.click 100 (Dom.id "guild_openGuild_0")
