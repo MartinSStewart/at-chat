@@ -53,7 +53,18 @@ const allNames = new Set([...baseline, ...current]);
       path.join(baselineDir, name),
       path.join(currentDir, name),
       path.join(diffDir, name),
-      { outputDiffMask: true }
+      // odiff defaults to `threshold: 0.1`, which only flags a pixel once its
+      // squared YIQ colour distance exceeds 35215 * 0.1^2 ≈ 352. That is large
+      // enough to silently swallow real colour changes: e.g. recolouring a
+      // default user icon from rgb(232,134,170) to rgb(220,140,175) yields a
+      // per-pixel delta of only ~36, so every pixel reads as "identical" and
+      // the snapshot is wrongly reported as matching. Baseline and current are
+      // rendered by the same code on the same machine (fonts are force-loaded
+      // for determinism), so we want an exact comparison. `threshold: 0` makes
+      // any colour difference count; `antialiasing: true` still discounts pure
+      // anti-aliasing pixels so a sub-pixel layout shift can't cause spurious
+      // diffs.
+      { outputDiffMask: true, threshold: 0, antialiasing: true }
     );
     if (!match) {
       changed.push({ name, reason });
