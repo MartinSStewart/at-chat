@@ -342,6 +342,11 @@ sessionIdAttacker =
     Lamdera.sessionIdFromString "sessionId3"
 
 
+sessionId4 : SessionId
+sessionId4 =
+    Lamdera.sessionIdFromString "sessionId4"
+
+
 handleLogin :
     String
     -> EmailAddress
@@ -3852,7 +3857,7 @@ publicGoMatchViewTest normalConfig =
                     (\user ->
                         [ T.connectFrontend
                             100
-                            sessionIdAttacker
+                            sessionId4
                             "/go-match/does-not-exist"
                             tallDesktopWindow
                             (\missingViewer ->
