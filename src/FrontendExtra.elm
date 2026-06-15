@@ -97,8 +97,8 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
-import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
-import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
+import UserSession exposing (DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 
 
@@ -2587,7 +2587,7 @@ changeUpdate localMsg local =
                         StopViewingChannel ->
                             { local | localUser = { localUser | session = session } }
 
-                        ViewDiscordChannel guildId channelId _ messagesLoaded ->
+                        ViewDiscordChannel guildId channelId _ backendData ->
                             { local
                                 | localUser =
                                     { localUser
@@ -2598,15 +2598,32 @@ changeUpdate localMsg local =
                                                 NoThread
                                                 localUser.user
                                         , session = session
+                                        , otherDiscordUsers =
+                                            case backendData of
+                                                FilledInByBackend backendData2 ->
+                                                    SeqDict.union
+                                                        backendData2.newUsers
+                                                        localUser.otherDiscordUsers
+
+                                                EmptyPlaceholder ->
+                                                    localUser.otherDiscordUsers
                                     }
                                 , discordGuilds =
-                                    SeqDict.updateIfExists
-                                        guildId
-                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) channelId)
-                                        local.discordGuilds
+                                    case backendData of
+                                        FilledInByBackend backendData2 ->
+                                            SeqDict.updateIfExists
+                                                guildId
+                                                (LocalState.updateChannel
+                                                    (DmChannel.loadMessages (FilledInByBackend backendData2.messages))
+                                                    channelId
+                                                )
+                                                local.discordGuilds
+
+                                        EmptyPlaceholder ->
+                                            local.discordGuilds
                             }
 
-                        ViewDiscordChannelThread guildId channelId _ threadId messagesLoaded ->
+                        ViewDiscordChannelThread guildId channelId _ threadId backendData ->
                             { local
                                 | localUser =
                                     { localUser
@@ -2617,23 +2634,39 @@ changeUpdate localMsg local =
                                                 (ViewThread threadId)
                                                 localUser.user
                                         , session = session
+                                        , otherDiscordUsers =
+                                            case backendData of
+                                                FilledInByBackend backendData2 ->
+                                                    SeqDict.union
+                                                        backendData2.newUsers
+                                                        localUser.otherDiscordUsers
+
+                                                EmptyPlaceholder ->
+                                                    localUser.otherDiscordUsers
                                     }
                                 , discordGuilds =
-                                    SeqDict.updateIfExists
-                                        guildId
-                                        (LocalState.updateChannel
-                                            (\channel ->
-                                                { channel
-                                                    | threads =
-                                                        SeqDict.updateIfExists
-                                                            threadId
-                                                            (DmChannel.loadMessages messagesLoaded)
-                                                            channel.threads
-                                                }
-                                            )
-                                            channelId
-                                        )
-                                        local.discordGuilds
+                                    case backendData of
+                                        FilledInByBackend backendData2 ->
+                                            SeqDict.updateIfExists
+                                                guildId
+                                                (LocalState.updateChannel
+                                                    (\channel ->
+                                                        { channel
+                                                            | threads =
+                                                                SeqDict.updateIfExists
+                                                                    threadId
+                                                                    (DmChannel.loadMessages
+                                                                        (FilledInByBackend backendData2.messages)
+                                                                    )
+                                                                    channel.threads
+                                                        }
+                                                    )
+                                                    channelId
+                                                )
+                                                local.discordGuilds
+
+                                        EmptyPlaceholder ->
+                                            local.discordGuilds
                             }
 
                 Local_SetName name ->
