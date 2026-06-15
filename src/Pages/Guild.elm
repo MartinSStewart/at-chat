@@ -81,7 +81,8 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
-import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
+import UserSession exposing (DiscordFrontendUser)
 import VisibleMessages exposing (VisibleMessages)
 
 
