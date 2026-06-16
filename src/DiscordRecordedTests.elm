@@ -12,6 +12,7 @@ import Effect.Test as T
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import Local
 import MembersAndOwner
 import Message
 import MessageInput
@@ -1077,6 +1078,58 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "Discord users are loaded based on the guild being viewed plus DM channels"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ -- (1) Connecting while not viewing any Discord guild. Only the Discord users from the DM
+          -- channels the linked account belongs to are loaded: kess shares a DM channel and is
+          -- loaded, while AT (only a member of the Bot Test guild, with no shared DM channel) is
+          -- not, and neither is TesterBot (neither a guild member nor a DM channel participant).
+          RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
+                , admin.checkModel 100 (checkDiscordUserLoaded "Discord guild-only member AT" False guildOnlyDiscordUserId)
+                , admin.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)
+                ]
+            )
+
+        -- (2) Connecting (a second client on the same session) while viewing the Bot Test guild. The
+        -- members of the viewed guild are loaded as part of the initial data load, in addition to
+        -- the DM channel users: AT (a Bot Test member) is now loaded alongside kess (a DM channel
+        -- user). A Discord user that is neither a member of the Bot Test guild nor part of a shared
+        -- DM channel (TesterBot) is still not loaded, i.e. only the viewed guild's members get
+        -- loaded.
+        , T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            (Route.encode
+                (Route.DiscordGuildRoute
+                    { currentDiscordUserId = RecordedTestExtra.currentDiscordUserId
+                    , guildId = RecordedTestExtra.botTestGuild
+                    , channelRoute =
+                        Route.DiscordChannel_ChannelRoute
+                            RecordedTestExtra.botTestGuild_ChannelA
+                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            Nothing
+                    }
+                )
+            )
+            RecordedTestExtra.desktopWindow
+            (\viewer ->
+                [ viewer.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                , viewer.checkModel 200 (checkDiscordUserLoaded "Discord guild member AT" True guildOnlyDiscordUserId)
+                , viewer.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
+                , viewer.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
@@ -1180,6 +1233,65 @@ that other user. `seq` must be unique per message.
 discordDmMessage : String -> String -> String
 discordDmMessage seq content =
     "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"14912202028794" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}"
+
+
+{-| `AT`. A member of the Bot Test guild that does not share a DM channel with the
+linked account, so it is only loaded onto the frontend while the Bot Test guild is
+being viewed.
+-}
+guildOnlyDiscordUserId : Discord.Id Discord.UserId
+guildOnlyDiscordUserId =
+    Unsafe.uint64 "1401255355928936478" |> Discord.idFromUInt64
+
+
+{-| `kess`. Shares a DM channel with the linked account but is not a member of the Bot
+Test guild, so it is loaded as soon as the user connects regardless of which guild (if
+any) they are viewing.
+-}
+dmChannelOnlyDiscordUserId : Discord.Id Discord.UserId
+dmChannelOnlyDiscordUserId =
+    Unsafe.uint64 "168547048902098944" |> Discord.idFromUInt64
+
+
+{-| `TesterBot`. Neither a member of the Bot Test guild nor part of a shared DM channel,
+so it should never be loaded onto the frontend.
+-}
+unrelatedDiscordUserId : Discord.Id Discord.UserId
+unrelatedDiscordUserId =
+    Unsafe.uint64 "304157401937084416" |> Discord.idFromUInt64
+
+
+{-| Check whether a given Discord user has (or hasn't) been loaded into the set of "other"
+Discord users on the frontend. These are the Discord users loaded for the DM channels the
+user belongs to plus the members of whatever Discord guild the user is currently viewing.
+-}
+checkDiscordUserLoaded : String -> Bool -> Discord.Id Discord.UserId -> FrontendModel -> Result String ()
+checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
+    case model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        isLoaded : Bool
+                        isLoaded =
+                            SeqDict.member
+                                discordUserId
+                                (Local.model loggedIn.localState).localUser.otherDiscordUsers
+                    in
+                    if isLoaded == shouldBeLoaded then
+                        Ok ()
+
+                    else if shouldBeLoaded then
+                        Err (label ++ " should be loaded but wasn't")
+
+                    else
+                        Err (label ++ " should not be loaded but was")
+
+                Types.NotLoggedIn _ ->
+                    Err (label ++ ": expected the frontend to be logged in")
+
+        Types.Loading _ ->
+            Err (label ++ ": expected the frontend to have finished loading")
 
 
 {-| The Discord DM channel `discordDmMessage` sends messages to.
