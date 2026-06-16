@@ -59,6 +59,7 @@ import ImageEditor
 import ImageViewer
 import Json.Decode
 import Json.Decode.Extra
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
@@ -1094,12 +1095,15 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                 isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
-                        |> SeqSet.intersect (SeqDict.keys local.localUser.linkedDiscordUsers |> SeqSet.fromList)
+                        |> SeqSet.intersect
+                            (SeqDict.keys (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers)
+                                |> SeqSet.fromList
+                            )
                         |> SeqSet.isEmpty
                         |> not
 
                 allUsers =
-                    LocalState.allDiscordUsers local.localUser
+                    LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
@@ -2096,7 +2100,7 @@ textToDiscordRichText text memberIds local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers local.localUser
+            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
     in
     RichText.fromNonemptyString
         (List.foldl
@@ -3251,7 +3255,7 @@ changeUpdate localMsg local =
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if SeqDict.member discordUserId localUser.linkedDiscordUsers then
+                                                    if LinkedAndOtherDiscordUsers.isLinkedUser discordUserId localUser.discordUsers then
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
@@ -3325,7 +3329,7 @@ changeUpdate localMsg local =
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if SeqDict.member data.currentUserId localUser.linkedDiscordUsers then
+                                                    if LinkedAndOtherDiscordUsers.isLinkedUser data.currentUserId localUser.discordUsers then
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
@@ -3718,7 +3722,10 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | linkedDiscordUsers = SeqDict.insert userId user localUser.linkedDiscordUsers }
+                            { localUser
+                                | discordUsers =
+                                    LinkedAndOtherDiscordUsers.addLinkedUser userId user localUser.discordUsers
+                            }
                     }
 
                 Server_UnlinkDiscordUser userId ->
@@ -3796,11 +3803,11 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser
-                                | linkedDiscordUsers =
-                                    SeqDict.updateIfExists
+                                | discordUsers =
+                                    LinkedAndOtherDiscordUsers.updateLinkedUser
                                         userId
                                         (\user -> { user | needsAuthAgain = True })
-                                        localUser.linkedDiscordUsers
+                                        localUser.discordUsers
                             }
                     }
 
@@ -3814,22 +3821,21 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | linkedDiscordUsers =
-                                            SeqDict.updateIfExists
-                                                discordUserId
-                                                (\user ->
-                                                    { user
-                                                        | isLoadingData =
-                                                            case result of
-                                                                Ok _ ->
-                                                                    DiscordUserLoadedSuccessfully
+                                        | discordUsers =
+                                            SeqDict.foldl LinkedAndOtherDiscordUsers.addOtherUser localUser.discordUsers data.discordUsers
+                                                |> LinkedAndOtherDiscordUsers.updateLinkedUser
+                                                    discordUserId
+                                                    (\user ->
+                                                        { user
+                                                            | isLoadingData =
+                                                                case result of
+                                                                    Ok _ ->
+                                                                        DiscordUserLoadedSuccessfully
 
-                                                                Err time ->
-                                                                    DiscordUserLoadingFailed time
-                                                    }
-                                                )
-                                                localUser.linkedDiscordUsers
-                                        , otherDiscordUsers = SeqDict.foldl SeqDict.insert localUser.otherDiscordUsers data.discordUsers
+                                                                    Err time ->
+                                                                        DiscordUserLoadingFailed time
+                                                        }
+                                                    )
                                     }
                                 , discordGuilds = SeqDict.foldl SeqDict.insert local.discordGuilds data.discordGuilds
                                 , discordDmChannels = SeqDict.foldl SeqDict.insert local.discordDmChannels data.discordDms
@@ -3839,11 +3845,11 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | linkedDiscordUsers =
-                                            SeqDict.updateIfExists
+                                        | discordUsers =
+                                            LinkedAndOtherDiscordUsers.updateLinkedUser
                                                 discordUserId
                                                 (\user -> { user | isLoadingData = DiscordUserLoadingFailed time })
-                                                localUser.linkedDiscordUsers
+                                                localUser.discordUsers
                                     }
                             }
 

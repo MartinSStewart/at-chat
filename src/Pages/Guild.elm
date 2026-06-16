@@ -44,6 +44,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
@@ -376,13 +377,13 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                 ++ List.filterMap
                     (\( guildId, guild ) ->
                         let
-                            maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, User.DiscordFrontendCurrentUser )
+                            maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
                                 SeqDict.filter
                                     (\linkedUserId _ ->
                                         MembersAndOwner.isMember linkedUserId guild.membersAndOwner /= IsNotMember
                                     )
-                                    localUser.linkedDiscordUsers
+                                    (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
                                     |> SeqDict.toList
                                     |> List.head
                         in
@@ -992,7 +993,11 @@ discordGuildView model routeData loggedIn local =
             newGuildFormView form
 
         ( Nothing, Nothing ) ->
-            case ( SeqDict.get routeData.guildId local.discordGuilds, SeqDict.get routeData.currentDiscordUserId local.localUser.linkedDiscordUsers ) of
+            case
+                ( SeqDict.get routeData.guildId local.discordGuilds
+                , LinkedAndOtherDiscordUsers.getLinkedUser routeData.currentDiscordUserId local.localUser.discordUsers
+                )
+            of
                 ( Just guild, Just currentDiscordUser ) ->
                     if MembersAndOwner.isMember routeData.currentDiscordUserId guild.membersAndOwner == IsNotMember then
                         guildErrorPage
@@ -1572,7 +1577,7 @@ discordChannelView routeData guild loggedIn local model =
                                     (ChannelName.toString channel.name
                                         ++ " / "
                                         ++ threadPreviewText
-                                            (LocalState.allDiscordUsers local.localUser)
+                                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             threadMessageIndex
                                             channel
                                     )
@@ -2370,7 +2375,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         highlight
                                         messageHover2
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
+                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                         local.localUser
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
@@ -2381,7 +2386,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allDiscordUsers local.localUser
+                                            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
                                         editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
                                         editRichText =
@@ -2421,7 +2426,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (LocalState.allDiscordUsers local.localUser)
+                                                    (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     Nothing
@@ -2451,7 +2456,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     highlight
                                                     messageHover2
                                                     currentDiscordUserId
-                                                    (LocalState.allDiscordUsers local.localUser)
+                                                    (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                     local.localUser
                                                     maybeRepliedTo2
                                                     (Just thread)
@@ -2908,7 +2913,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         revealedSpoilers
                                         highlight
                                         messageHover2
-                                        (LocalState.allDiscordUsers local.localUser)
+                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                         currentDiscordUserId
                                         local.localUser
                                         maybeRepliedTo2
@@ -2919,7 +2924,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                 else
                                     let
                                         allUsers =
-                                            LocalState.allDiscordUsers local.localUser
+                                            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
                                         editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
                                         editRichText =
@@ -2955,7 +2960,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             revealedSpoilers
                                             highlight
                                             messageHover2
-                                            (LocalState.allDiscordUsers local.localUser)
+                                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             currentDiscordUserId
                                             local.localUser
                                             maybeRepliedTo2
@@ -3622,7 +3627,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers local.localUser
+            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -3765,7 +3770,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         local.localUser.customEmojis
                         local.localUser.stickers
                         loggedIn.textInputFocus
-                        (LocalState.allDiscordUsers local.localUser)
+                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
                 Err error ->
@@ -4068,7 +4073,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers local.localUser
+            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -4211,7 +4216,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
-                (LocalState.allDiscordUsers local.localUser)
+                (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
@@ -4384,7 +4389,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                     if edit.messageIndex == threadMessageIndex then
                         let
                             allUsers =
-                                LocalState.allDiscordUsers local.localUser
+                                LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
                             editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
                             editRichText =
@@ -4420,7 +4425,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             NoHighlight
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                             currentUserId
-                            (LocalState.allDiscordUsers local.localUser)
+                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                             local.localUser
                             Nothing
                             Nothing
@@ -4437,7 +4442,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                         NoHighlight
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn model)
                         currentUserId
-                        (LocalState.allDiscordUsers local.localUser)
+                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                         local.localUser
                         Nothing
                         Nothing
@@ -4878,7 +4883,7 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         highlight
         isHovered
         currentDiscordUserId
-        (LocalState.allDiscordUsers localUser)
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         localUser
         Nothing
         Nothing
@@ -4954,7 +4959,7 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
         highlight
         isHovered
         currentDiscordUserId
-        (LocalState.allDiscordUsers localUser)
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         localUser
         Nothing
         (Just thread)
@@ -5014,7 +5019,7 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
         revealedSpoilers
         highlight
         isHovered
-        (LocalState.allDiscordUsers localUser)
+        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
         currentDiscordUserId
         localUser
         Nothing
@@ -7157,7 +7162,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                             Nothing
                     }
                 )
-                (threadPreviewText (LocalState.allDiscordUsers localUser) threadMessageIndex channel)
+                (threadPreviewText (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -7759,7 +7764,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         messagePreview : String
         messagePreview =
-            case someoneIsTyping time (SeqDict.diff channel.lastTypedAt localUser.linkedDiscordUsers) of
+            case someoneIsTyping time (SeqDict.diff channel.lastTypedAt (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)) of
                 SomeoneIsTyping ->
                     "Typing..."
 
@@ -7771,16 +7776,22 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         MessageLoaded message2 ->
                             case message2 of
                                 UserTextMessage a ->
-                                    (if SeqDict.member a.createdBy localUser.linkedDiscordUsers then
+                                    (if LinkedAndOtherDiscordUsers.isLinkedUser a.createdBy localUser.discordUsers then
                                         "You: "
 
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString True (LocalState.allDiscordUsers localUser) a.content
+                                        ++ RichText.toString
+                                            True
+                                            (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+                                            a.content
 
                                 UserJoinedMessage _ userId _ _ ->
-                                    User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"
+                                    User.toString
+                                        userId
+                                        (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
+                                        ++ " joined!"
 
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
@@ -7804,7 +7815,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                     else
                         Nothing
                 )
-                (SeqDict.toList localUser.linkedDiscordUsers)
+                (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers))
     in
     case maybeCurrentUserId of
         Just currentUserId ->

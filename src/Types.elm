@@ -79,6 +79,7 @@ import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import ImageViewer
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
@@ -116,7 +117,7 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Untrusted exposing (Untrusted)
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendCurrentUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
 

@@ -41,7 +41,6 @@ module LocalState exposing
     , addReactionEmojiFrontend
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
-    , allDiscordUsers
     , allUsers
     , announcementChannel
     , callStartedText
@@ -138,6 +137,7 @@ import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
@@ -1577,13 +1577,6 @@ allUsers localUser =
         localUser.otherUsers
 
 
-allDiscordUsers : LocalUser -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-allDiscordUsers localUser =
-    SeqDict.union
-        (SeqDict.map (\_ user -> User.discordCurrentUserToFrontend user) localUser.linkedDiscordUsers)
-        localUser.otherDiscordUsers
-
-
 addReactionEmoji :
     EmojiOrCustomEmoji
     -> userId
@@ -2407,7 +2400,7 @@ canSendDiscordMessage local guildOrDmId =
             Ok ()
 
         DiscordGuildOrDmId_Dm data ->
-            case SeqDict.get data.currentUserId local.localUser.linkedDiscordUsers of
+            case LinkedAndOtherDiscordUsers.getLinkedUser data.currentUserId local.localUser.discordUsers of
                 Just linkedUser ->
                     if linkedUser.needsAuthAgain then
                         Err "Please link your Discord account again"

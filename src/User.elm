@@ -1,7 +1,6 @@
 module User exposing
     ( AdminUiSection(..)
     , BackendUser
-    , DiscordFrontendCurrentUser
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
@@ -16,7 +15,6 @@ module User exposing
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
-    , discordCurrentUserToFrontend
     , discordFullDataUserToFrontendCurrentUser
     , discordProfileImage
     , discordUserDataToFrontendUser
@@ -59,6 +57,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
@@ -445,12 +444,12 @@ getUser userId localUser =
 
 getDiscordUser : Discord.Id Discord.UserId -> LocalUser -> Maybe DiscordFrontendUser
 getDiscordUser userId localUser =
-    case SeqDict.get userId localUser.linkedDiscordUsers of
+    case LinkedAndOtherDiscordUsers.getLinkedUser userId localUser.discordUsers of
         Just user ->
-            discordCurrentUserToFrontend user |> Just
+            LinkedAndOtherDiscordUsers.discordCurrentUserToFrontend user |> Just
 
         Nothing ->
-            SeqDict.get userId localUser.otherDiscordUsers
+            LinkedAndOtherDiscordUsers.getOtherUser userId localUser.discordUsers
 
 
 type EmailNotifications
@@ -561,22 +560,11 @@ discordUserDataToFrontendUser discordUserData =
             }
 
 
-type alias DiscordFrontendCurrentUser =
-    { name : PersonName
-    , icon : Maybe FileHash
-    , email : Maybe EmailAddress
-    , needsAuthAgain : Bool
-    , linkedAt : Time.Posix
-    , isLoadingData : DiscordUserLoadingData
-    }
-
-
 type alias LocalUser =
     { session : UserSession
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
+    , discordUsers : LinkedAndOtherDiscordUsers
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
@@ -608,13 +596,6 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
     , needsAuthAgain = needsAuthAgain
     , linkedAt = data.linkedAt
     , isLoadingData = isLoadingData
-    }
-
-
-discordCurrentUserToFrontend : DiscordFrontendCurrentUser -> DiscordFrontendUser
-discordCurrentUserToFrontend user =
-    { name = user.name
-    , icon = user.icon
     }
 
 

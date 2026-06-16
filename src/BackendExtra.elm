@@ -57,6 +57,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera.Wire3
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
@@ -83,7 +84,7 @@ import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser)
+import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
