@@ -53,7 +53,7 @@ const allNames = new Set([...baseline, ...current]);
       path.join(baselineDir, name),
       path.join(currentDir, name),
       path.join(diffDir, name),
-      { outputDiffMask: true }
+      { outputDiffMask: true, threshold: 0 }
     );
     if (!match) {
       changed.push({ name, reason });

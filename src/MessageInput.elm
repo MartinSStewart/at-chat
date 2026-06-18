@@ -33,6 +33,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
@@ -51,7 +52,8 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import User exposing (DiscordFrontendUser, FrontendUser, LocalUser)
+import User exposing (FrontendUser, LocalUser)
+import UserSession exposing (DiscordFrontendUser)
 
 
 type alias MentionUserDropdown =
@@ -767,7 +769,7 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers local.localUser
+            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
     in
     (case guildOrDmId of
         DiscordGuildOrDmId_Guild _ guildId _ ->

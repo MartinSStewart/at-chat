@@ -24,6 +24,7 @@ module Broadcast exposing
     , toOtherAdmins
     , toSession
     , toUser
+    , toUserAlt
     , userGetAllSessions
     )
 
@@ -272,6 +273,34 @@ toUser clientToSkip sessionToSkip userId msg model =
                                     ChangeBroadcast msg
                                         |> Lamdera.sendToFrontend otherClientId
                                         |> Just
+                            )
+                            (NonemptyDict.toList clientIds)
+                            |> Command.batch
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+
+            else
+                Nothing
+        )
+        model.sessions
+        |> SeqDict.values
+        |> Command.batch
+
+
+toUserAlt : Id UserId -> (UserSession -> LocalMsg) -> BackendModel -> Command BackendOnly ToFrontend msg
+toUserAlt userId sessionToMsg model =
+    SeqDict.filterMap
+        (\sessionId otherUserSession ->
+            if userId == otherUserSession.userId then
+                case SeqDict.get sessionId model.connections of
+                    Just clientIds ->
+                        List.map
+                            (\( otherClientId, _ ) ->
+                                sessionToMsg otherUserSession
+                                    |> ChangeBroadcast
+                                    |> Lamdera.sendToFrontend otherClientId
                             )
                             (NonemptyDict.toList clientIds)
                             |> Command.batch

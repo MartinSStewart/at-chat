@@ -39,6 +39,7 @@ import ImageEditor
 import ImageViewer
 import Json.Decode
 import Lamdera as LamderaCore
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
@@ -489,8 +490,7 @@ loginDataToLocalState userAgent timezone loginData =
         { session = loginData.session
         , user = loginData.user
         , otherUsers = loginData.otherUsers
-        , otherDiscordUsers = loginData.otherDiscordUsers
-        , linkedDiscordUsers = loginData.linkedDiscordUsers
+        , discordUsers = loginData.discordUsers
         , timezone = timezone
         , userAgent = userAgent
         , stickers = loginData.stickers
@@ -3261,7 +3261,7 @@ updateLoaded msg model =
                                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                                 richText =
                                                                     RichText.fromNonemptyString
-                                                                        (LocalState.allDiscordUsers local.localUser)
+                                                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                                         nonempty
                                                             in
                                                             if message.content == richText then
@@ -5404,7 +5404,10 @@ pressedEditMessage guildOrDmId threadRoute model =
                         DiscordGuildOrDmId guildOrDmId2 ->
                             case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString False (LocalState.allDiscordUsers local.localUser) message.content
+                                    ( RichText.toString
+                                        False
+                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                        message.content
                                     , message.attachedFiles
                                     )
                                         |> Just

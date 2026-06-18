@@ -21,6 +21,7 @@ import GuildIcon
 import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
 import Message exposing (MessageState(..))
 import MyUi
@@ -191,7 +192,9 @@ chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
 chattingWithYourself data local =
     case SeqDict.get data.channelId local.discordDmChannels of
         Just channel2 ->
-            NonemptyDict.all (\userId _ -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel2.members
+            NonemptyDict.all
+                (\userId _ -> LinkedAndOtherDiscordUsers.isLinkedUser userId local.localUser.discordUsers)
+                channel2.members
 
         Nothing ->
             False

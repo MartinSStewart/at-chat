@@ -20,6 +20,7 @@ import FileStatus
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
+import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
@@ -303,7 +304,7 @@ viewMobile offset extraOptions loggedIn local model =
                             DiscordGuildOrDmId _ ->
                                 let
                                     allUsers =
-                                        LocalState.allDiscordUsers local.localUser
+                                        LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
                                     richText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
                                     richText =
@@ -449,11 +450,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
-                            SeqDict.member data.createdBy local.localUser.linkedDiscordUsers
+                            LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers
 
                         _ ->
                             False
-                    , LocalState.messageToString (LocalState.allDiscordUsers local.localUser) message
+                    , LocalState.messageToString
+                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                        message
                     , messageCustomEmojiIds message
                     )
                         |> Just

@@ -342,6 +342,11 @@ sessionIdAttacker =
     Lamdera.sessionIdFromString "sessionId3"
 
 
+sessionId4 : SessionId
+sessionId4 =
+    Lamdera.sessionIdFromString "sessionId4"
+
+
 handleLogin :
     String
     -> EmailAddress
@@ -544,7 +549,7 @@ mockCloudflareSfu path { currentRequest, data } =
                     -- publish: client sent us an offer; we return an answer + assigned trackNames
                     "{\"sessionDescription\":{\"sdp\":\"answer-sdp-from-"
                         ++ realtimeSessionId
-                        ++ "\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"1\"}]}"
+                        ++ "\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"2\"}]}"
                         |> httpBasic currentRequest.url 200
 
                 Err _ ->
@@ -571,11 +576,11 @@ mockVoiceChatPorts request =
                 Call.ToJs_StartCall _ ->
                     -- JS would: getUserMedia + addTransceiver(audio,video) + createOffer
                     -- + setLocalDescription, then send the offer SDP back.
-                    -- The mids match what RTCPeerConnection auto-assigns ("0", "1").
+                    -- The mids match what RTCPeerConnection auto-assigns ("0", "2").
                     fromJsEvent
                         (Call.FromJs_PublishOffer
                             (Cloudflare.sdpFromString "fake-publish-offer-sdp")
-                            [ "0", "1" ]
+                            [ "0", "2" ]
                         )
 
                 Call.ToJs_LeaveCall ->
@@ -712,7 +717,7 @@ fromJs_GotMediaDevices =
 
 fromJs_PublishOffer : String
 fromJs_PublishOffer =
-    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
+    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"2\"]]}"
 
 
 fromJs_PublishConnected : String
@@ -722,17 +727,17 @@ fromJs_PublishConnected =
 
 fromJs_RequestPullTracksSession1 : String
 fromJs_RequestPullTracksSession1 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"sfu-session-1\",[\"0\",\"1\"]]}"
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"sfu-session-1\",[\"0\",\"2\"]]}"
 
 
 fromJs_RequestPullTracksSession0 : String
 fromJs_RequestPullTracksSession0 =
-    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"1\"]]}"
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"2\"]]}"
 
 
 fromJs_PullAnswerSession1 : String
 fromJs_PullAnswerSession1 =
-    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"fake-pull-answer-sdp\"]}"
+    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"2\",\"otherClientId\":\"2 clientId 2\"},\"fake-pull-answer-sdp\"]}"
 
 
 fromJs_PullAnswerSession0 : String
@@ -815,27 +820,6 @@ voiceChatFromJsPayloads data =
                 else
                     Nothing
             )
-
-
-
---{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
---{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
---{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
---{"tag":"publish-connected","args":[]}
---{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
---{"tag":"publish-connected","args":[]}
---{"tag":"request-pull-tracks","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"sfu-session-1",["0","1"]]}
---{"tag":"request-pull-tracks","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"sfu-session-0",["0","1"]]}
---{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
---{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
---{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
---{"tag":"publish-connected","args":[]}
---{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
---{"tag":"publish-connected","args":[]}
---{"tag":"request-pull-tracks","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"sfu-session-1",["0","1"]]}
---{"tag":"request-pull-tracks","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"sfu-session-0",["0","1"]]}
---{"tag":"pull-answer","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"fake-pull-answer-sdp"]}
---{"tag":"pull-answer","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"fake-pull-answer-sdp"]}
 
 
 addCloudflareRealtimeApiKeys :
@@ -1079,7 +1063,7 @@ dmCallTest isMobile normalConfig =
                 [ T.collapsableGroup
                     "Voice chat"
                     [ addCloudflareRealtimeApiKeys admin
-                    , T.group (openDm admin "1")
+                    , T.group (openDm admin "2")
                     , T.group (openDm user "0")
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
@@ -1280,7 +1264,7 @@ voiceChatTest normalConfig =
                     , tallSnapshot admin 100 { name = "Ended a DM call with self" }
                     , admin.navigateBack 100
                     , admin.navigateBack 100
-                    , admin.click 100 (Dom.id "guild_openDm_1")
+                    , admin.click 100 (Dom.id "guild_openDm_2")
                     , user.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
@@ -2896,6 +2880,8 @@ startTest name startTime2 config actions =
                 [ T.collapsableGroup
                     "Attacker setup"
                     [ handleLogin firefoxDesktop attackerEmail attacker
+                    , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
+                    , attacker.click 100 (Dom.id "loginForm_submit")
                     , attacker.update 100 Types.EnableToFrontendLogging
                     ]
                 , T.group actions
@@ -3610,7 +3596,7 @@ inviteUserAndDmChat config =
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , writeMessage user 100 "Hello"
-                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                        , admin.click 100 (Dom.id "guildsColumn_openDm_2")
                         , writeMessage user 100 "Hello 2"
                         , writeMessage admin 100 "Hello from *admin*"
                         , user.checkView
@@ -3707,7 +3693,7 @@ goMatchTest normalConfig =
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
@@ -3790,7 +3776,7 @@ goTurnNotificationDotTest normalConfig =
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
@@ -3871,7 +3857,7 @@ publicGoMatchViewTest normalConfig =
                     (\user ->
                         [ T.connectFrontend
                             100
-                            sessionIdAttacker
+                            sessionId4
                             "/go-match/does-not-exist"
                             tallDesktopWindow
                             (\missingViewer ->
@@ -3882,7 +3868,7 @@ publicGoMatchViewTest normalConfig =
                                 ]
                             )
                         , user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
                         , admin.click 100 (Dom.id "go_cell_4_4")
