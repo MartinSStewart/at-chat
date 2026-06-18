@@ -12,6 +12,7 @@ import Effect.Test as T
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import LinkedAndOtherDiscordUsers
 import Local
 import MembersAndOwner
 import Message
@@ -1274,9 +1275,10 @@ checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
                     let
                         isLoaded : Bool
                         isLoaded =
-                            SeqDict.member
+                            LinkedAndOtherDiscordUsers.getOtherUser
                                 discordUserId
-                                (Local.model loggedIn.localState).localUser.otherDiscordUsers
+                                (Local.model loggedIn.localState).localUser.discordUsers
+                                /= Nothing
                     in
                     if isLoaded == shouldBeLoaded then
                         Ok ()
