@@ -296,12 +296,11 @@ toUserAlt userId sessionToMsg model =
             if userId == otherUserSession.userId then
                 case SeqDict.get sessionId model.connections of
                     Just clientIds ->
-                        List.filterMap
+                        List.map
                             (\( otherClientId, _ ) ->
                                 sessionToMsg otherUserSession
                                     |> ChangeBroadcast
                                     |> Lamdera.sendToFrontend otherClientId
-                                    |> Just
                             )
                             (NonemptyDict.toList clientIds)
                             |> Command.batch

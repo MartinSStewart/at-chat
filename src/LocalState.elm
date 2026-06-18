@@ -165,7 +165,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser, LocalUser)
-import UserSession exposing (DiscordFrontendUser, FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 

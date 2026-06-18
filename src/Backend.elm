@@ -42,6 +42,7 @@ import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
@@ -77,7 +78,7 @@ import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, Expo
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
-import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession, ViewDiscordGuildData)
+import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WireHelper
 
@@ -903,7 +904,7 @@ update msg model =
                                 discordUser.linkedTo
                                 (\session ->
                                     let
-                                        ( otherDiscordUsers, linkedDiscordUsers ) =
+                                        linkedAndOtherDiscordUsers =
                                             BackendExtra.getLinkedDiscordUsersAndOtherUsers
                                                 session.userId
                                                 session.currentlyViewing
@@ -917,7 +918,10 @@ update msg model =
                                                     (\guildId _ ->
                                                         case SeqDict.get guildId model2.discordGuilds of
                                                             Just guild ->
-                                                                BackendExtra.discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
+                                                                BackendExtra.discordGuildToFrontendForUser
+                                                                    Nothing
+                                                                    guild
+                                                                    (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
 
                                                             Nothing ->
                                                                 Nothing
@@ -928,7 +932,12 @@ update msg model =
                                                     (\data ->
                                                         case SeqDict.get data.dmChannelId model2.discordDmChannels of
                                                             Just dmChannel ->
-                                                                case BackendExtra.discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
+                                                                case
+                                                                    BackendExtra.discordDmChannelToFrontend
+                                                                        False
+                                                                        dmChannel
+                                                                        (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
+                                                                of
                                                                     Just dmChannel2 ->
                                                                         Just ( data.dmChannelId, dmChannel2 )
 
@@ -940,7 +949,7 @@ update msg model =
                                                     )
                                                     dmData
                                                     |> SeqDict.fromList
-                                            , discordUsers = otherDiscordUsers
+                                            , discordUsers = LinkedAndOtherDiscordUsers.otherUsers linkedAndOtherDiscordUsers
                                             }
                                         )
                                         |> ServerChange

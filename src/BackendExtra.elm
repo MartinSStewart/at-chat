@@ -57,7 +57,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera.Wire3
-import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
@@ -69,7 +69,6 @@ import Message
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
-import PersonName
 import Postmark
 import Quantity
 import RateLimit
@@ -467,7 +466,7 @@ getLoginData :
     -> LoginData
 getLoginData sessionId clientId session user requestMessagesFor model =
     let
-        ( otherDiscordUsers, linkedDiscordUsers ) =
+        linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId session.currentlyViewing model
     in
     { session = session
@@ -528,7 +527,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                             Nothing
                     )
                     guild
-                    linkedDiscordUsers
+                    (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
             model.discordGuilds
     , discordDmChannels =
@@ -543,7 +542,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                             False
                     )
                     dmChannel
-                    linkedDiscordUsers
+                    (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
             model.discordDmChannels
     , dmChannels =
@@ -587,8 +586,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
-    , otherDiscordUsers = otherDiscordUsers
-    , linkedDiscordUsers = linkedDiscordUsers
+    , discordUsers = linkedAndOtherDiscordUsers
     , otherSessions =
         SeqDict.remove sessionId model.sessions
             |> SeqDict.toList
@@ -742,10 +740,7 @@ getLinkedDiscordUsersAndOtherUsers :
     Id UserId
     -> Maybe ( AnyGuildOrDmId, ThreadRoute )
     -> BackendModel
-    ->
-        ( SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-        , SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
-        )
+    -> LinkedAndOtherDiscordUsers
 getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
     let
         linkedUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
@@ -763,7 +758,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                             else
                                 linkedDiscordUsers2
 
-                        BasicData data ->
+                        BasicData _ ->
                             linkedDiscordUsers2
 
                         NeedsAuthAgain data ->
@@ -828,44 +823,45 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 SeqDict.empty
                 model.discordDmChannels
     in
-    ( case currentlyViewing of
-        Just ( guildOrDmId, _ ) ->
-            case guildOrDmId of
-                GuildOrDmId _ ->
-                    SeqDict.empty
+    LinkedAndOtherDiscordUsers.init
+        (case currentlyViewing of
+            Just ( guildOrDmId, _ ) ->
+                case guildOrDmId of
+                    GuildOrDmId _ ->
+                        SeqDict.empty
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
-                    case SeqDict.get guildId model.discordGuilds of
-                        Just guild ->
-                            if isGuildMember guild then
-                                List.foldl
-                                    (\memberId dict2 ->
-                                        case SeqDict.get memberId model.discordUsers of
-                                            Just discordUser ->
-                                                SeqDict.insert
-                                                    memberId
-                                                    (User.discordUserDataToFrontendUser discordUser)
+                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
+                        case SeqDict.get guildId model.discordGuilds of
+                            Just guild ->
+                                if isGuildMember guild then
+                                    List.foldl
+                                        (\memberId dict2 ->
+                                            case SeqDict.get memberId model.discordUsers of
+                                                Just discordUser ->
+                                                    SeqDict.insert
+                                                        memberId
+                                                        (User.discordUserDataToFrontendUser discordUser)
+                                                        dict2
+
+                                                Nothing ->
                                                     dict2
+                                        )
+                                        visibleDmUsers
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
-                                            Nothing ->
-                                                dict2
-                                    )
+                                else
                                     visibleDmUsers
-                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
-                            else
+                            Nothing ->
                                 visibleDmUsers
 
-                        Nothing ->
-                            visibleDmUsers
+                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+                        visibleDmUsers
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
-                    visibleDmUsers
-
-        Nothing ->
-            visibleDmUsers
-    , linkedUsers
-    )
+            Nothing ->
+                visibleDmUsers
+        )
+        linkedUsers
 
 
 adminData : BackendModel -> Id PageId -> InitAdminData

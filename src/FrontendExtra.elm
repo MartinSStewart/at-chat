@@ -2623,15 +2623,16 @@ changeUpdate localMsg local =
                                                 NoThread
                                                 localUser.user
                                         , session = session
-                                        , otherDiscordUsers =
+                                        , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->
-                                                    SeqDict.union
+                                                    SeqDict.foldl
+                                                        LinkedAndOtherDiscordUsers.addOtherUser
+                                                        localUser.discordUsers
                                                         backendData2.newUsers
-                                                        localUser.otherDiscordUsers
 
                                                 EmptyPlaceholder ->
-                                                    localUser.otherDiscordUsers
+                                                    localUser.discordUsers
                                     }
                                 , discordGuilds =
                                     case backendData of
@@ -2659,15 +2660,16 @@ changeUpdate localMsg local =
                                                 (ViewThread threadId)
                                                 localUser.user
                                         , session = session
-                                        , otherDiscordUsers =
+                                        , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->
-                                                    SeqDict.union
+                                                    SeqDict.foldl
+                                                        LinkedAndOtherDiscordUsers.addOtherUser
+                                                        localUser.discordUsers
                                                         backendData2.newUsers
-                                                        localUser.otherDiscordUsers
 
                                                 EmptyPlaceholder ->
-                                                    localUser.otherDiscordUsers
+                                                    localUser.discordUsers
                                     }
                                 , discordGuilds =
                                     case backendData of
@@ -2889,7 +2891,14 @@ changeUpdate localMsg local =
                     }
 
                 Local_UnlinkDiscordUser userId ->
-                    unlinkDiscordUser userId local
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | discordUsers = LinkedAndOtherDiscordUsers.unlinkUser userId localUser.discordUsers }
+                    }
 
                 Local_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
@@ -3729,7 +3738,14 @@ changeUpdate localMsg local =
                     }
 
                 Server_UnlinkDiscordUser userId ->
-                    unlinkDiscordUser userId local
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | discordUsers = LinkedAndOtherDiscordUsers.unlinkUser userId localUser.discordUsers }
+                    }
 
                 Server_DiscordChannelCreated guildId channelId channelName topic ->
                     { local
@@ -4085,23 +4101,20 @@ changeUpdate localMsg local =
                                 )
                                 local.discordGuilds
                         , localUser =
-                            if SeqDict.member userJoinedId localUser.linkedDiscordUsers then
-                                localUser
+                            { localUser
+                                | discordUsers =
+                                    LinkedAndOtherDiscordUsers.updateOtherUser
+                                        userJoinedId
+                                        (\maybe ->
+                                            case maybe of
+                                                Just user ->
+                                                    { user | name = name }
 
-                            else
-                                { localUser
-                                    | otherDiscordUsers =
-                                        SeqDict.update userJoinedId
-                                            (\maybe ->
-                                                case maybe of
-                                                    Just user ->
-                                                        Just { user | name = name }
-
-                                                    Nothing ->
-                                                        Just { name = name, icon = Nothing }
-                                            )
-                                            localUser.otherDiscordUsers
-                                }
+                                                Nothing ->
+                                                    { name = name, icon = Nothing }
+                                        )
+                                        localUser.discordUsers
+                            }
                     }
 
                 Server_LinkedDiscordUserStickersLoaded newStickers ->
@@ -4492,37 +4505,13 @@ startReloadingDiscordUser time discordUserId local =
     { local
         | localUser =
             { localUser
-                | linkedDiscordUsers =
-                    SeqDict.updateIfExists
+                | discordUsers =
+                    LinkedAndOtherDiscordUsers.updateLinkedUser
                         discordUserId
                         (\user -> { user | isLoadingData = DiscordUserLoadingData time })
-                        localUser.linkedDiscordUsers
+                        localUser.discordUsers
             }
     }
-
-
-unlinkDiscordUser : Discord.Id Discord.UserId -> LocalState -> LocalState
-unlinkDiscordUser userId local =
-    let
-        localUser =
-            local.localUser
-    in
-    case SeqDict.get userId localUser.linkedDiscordUsers of
-        Just discordUser ->
-            { local
-                | localUser =
-                    { localUser
-                        | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers
-                        , otherDiscordUsers =
-                            SeqDict.insert
-                                userId
-                                (User.discordCurrentUserToFrontend discordUser)
-                                localUser.otherDiscordUsers
-                    }
-            }
-
-        Nothing ->
-            local
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> ThreadRoute -> LocalState -> LocalState
@@ -5306,7 +5295,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 , text =
                                                     RichText.toString
                                                         False
-                                                        (LocalState.allDiscordUsers local.localUser)
+                                                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                         message.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles

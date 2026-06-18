@@ -10,6 +10,7 @@ import Env
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import MyUi
@@ -28,7 +29,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import User exposing (DiscordFrontendCurrentUser)
+import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -385,7 +386,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Discord integration"
-                    [ if SeqDict.isEmpty local.localUser.linkedDiscordUsers then
+                    [ if SeqDict.isEmpty (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers) then
                         Ui.none
 
                       else
@@ -396,7 +397,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                 [ Ui.spacing 8 ]
                                 (List.map
                                     (\( discordUserId, data ) -> discordUserCard loaded discordUserId data)
-                                    (SeqDict.toList local.localUser.linkedDiscordUsers)
+                                    (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers))
                                 )
                             ]
                     , if model.showLinkDiscordSetup then

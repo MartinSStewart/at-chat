@@ -79,7 +79,7 @@ import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import ImageViewer
-import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
@@ -774,8 +774,7 @@ type alias LoginData =
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
+    , discordUsers : LinkedAndOtherDiscordUsers
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
