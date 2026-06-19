@@ -443,11 +443,13 @@ endInteraction windowSize model =
         Just { model | interaction = NoInteraction }
 
 
-{-| The size the image is actually drawn at, accounting for the `max-width: 90vw`
-and `max-height: 90vh` constraints and the current zoom level.
+{-| The size the image fits into before zooming, accounting for the
+`max-width: 90vw` and `max-height: 90vh` constraints but not the current zoom
+level. This is the size the `<img>` element is laid out at; zooming is applied
+on top via a CSS transform.
 -}
-displayedSize : Coord CssPixels -> Model -> ( Float, Float )
-displayedSize windowSize model =
+fittedSize : Coord CssPixels -> Model -> ( Float, Float )
+fittedSize windowSize model =
     let
         vw : Float
         vw =
@@ -469,7 +471,19 @@ displayedSize windowSize model =
         fit =
             min 1 (min (0.9 * vw / w) (0.9 * vh / h))
     in
-    ( w * fit * model.scale, h * fit * model.scale )
+    ( w * fit, h * fit )
+
+
+{-| The size the image is actually drawn at, accounting for the fitted size and
+the current zoom level.
+-}
+displayedSize : Coord CssPixels -> Model -> ( Float, Float )
+displayedSize windowSize model =
+    let
+        ( w, h ) =
+            fittedSize windowSize model
+    in
+    ( w * model.scale, h * model.scale )
 
 
 isOffScreen : Coord CssPixels -> Model -> Bool
@@ -690,6 +704,10 @@ touchPositions event =
 
 view : Bool -> Coord CssPixels -> Model -> Element Msg
 view isMobile windowSize model =
+    let
+        ( fittedWidth, fittedHeight ) =
+            fittedSize windowSize model
+    in
     Ui.el
         ([ Ui.id "imageViewer_overlay"
          , Ui.width Ui.fill
@@ -747,8 +765,14 @@ view isMobile windowSize model =
             (Ui.html
                 (Html.img
                     [ Html.Attributes.src model.imageUrl
-                    , Html.Attributes.style "max-width" "90vw"
-                    , Html.Attributes.style "max-height" "90vh"
+
+                    -- The fitted size is set explicitly (rather than relying on
+                    -- the image's intrinsic size with max-width/max-height) so
+                    -- the placeholder background fills the right area before the
+                    -- image has loaded.
+                    , Html.Attributes.style "width" (String.fromFloat fittedWidth ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat fittedHeight ++ "px")
+                    , MyUi.imagePlaceholderStyle
                     , Html.Attributes.style "display" "block"
                     , Html.Attributes.style
                         "image-rendering"

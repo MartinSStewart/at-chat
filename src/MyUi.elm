@@ -44,6 +44,7 @@ module MyUi exposing
     , hoverText
     , htmlStyle
     , id
+    , imagePlaceholderStyle
     , inputBackground
     , inputBorder
     , insetBottom
@@ -1014,6 +1015,15 @@ colorToStyle color =
         ++ ","
         ++ String.fromFloat alpha
         ++ ")"
+
+
+{-| A subtle background drawn behind an image while it's still loading, so it's
+clear something is there before the image finishes downloading. Once the image
+loads it paints over this placeholder.
+-}
+imagePlaceholderStyle : Html.Attribute msg
+imagePlaceholderStyle =
+    Html.Attributes.style "background-color" (colorToStyle background3)
 
 
 colorWithAlpha : Float -> Color -> Color

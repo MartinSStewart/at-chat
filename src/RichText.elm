@@ -2779,6 +2779,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                 Html.img
                                                                     (Html.Attributes.src thumbnailUrl
                                                                         :: Html.Attributes.style "display" "block"
+                                                                        :: MyUi.imagePlaceholderStyle
                                                                         :: Html.Attributes.width (round width)
                                                                         :: Html.Attributes.height (round height)
                                                                         -- Exposes the full-size image url so that a right-click (contextmenu)
@@ -3051,6 +3052,7 @@ embedView timezone onPressLink maybeOnPressImage containerWidth domainWhitelist 
                                     , Html.Attributes.style "height" heightText
                                     , Html.Attributes.style "border-radius" "4px"
                                     , Html.Attributes.style "display" "block"
+                                    , MyUi.imagePlaceholderStyle
                                     , Html.Attributes.attribute "data-image-url" imageData.url
                                     ]
                                     []
