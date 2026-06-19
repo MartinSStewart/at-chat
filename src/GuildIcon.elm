@@ -13,7 +13,7 @@ module GuildIcon exposing
     , view
     )
 
-import Discord exposing (UserDiscriminator)
+import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
