@@ -8,6 +8,7 @@ module RecordedTestExtra exposing
     , attackerShouldNotGetThisToFrontend
     , botTestGuild
     , botTestGuild_ChannelA
+    , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
     , chromeDesktop
