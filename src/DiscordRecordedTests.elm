@@ -1174,6 +1174,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
                             )
+                        , T.websocketSendString 100 connection (discordGroupDmMessage "412" "Second message")
+                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
                         ]
                     )
                 ]
