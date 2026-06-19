@@ -1188,6 +1188,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
                         , discordGroupDmMessage connection "Second message"
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
                         ]
                     )
                 ]
