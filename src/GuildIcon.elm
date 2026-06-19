@@ -4,6 +4,7 @@ module GuildIcon exposing
     , addGuildButton
     , defaultUser
     , defaultUserHtml
+    , discordUserView
     , fullWidth
     , notificationHelper
     , notificationView
@@ -12,6 +13,7 @@ module GuildIcon exposing
     , view
     )
 
+import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
@@ -114,7 +116,7 @@ view mode guild =
         ]
         (case guild.icon of
             Just icon ->
-                iconView mode icon
+                iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
                 String.replace "-" " " name
@@ -160,11 +162,24 @@ userView notification maybeIcon userId =
         ]
         (case maybeIcon of
             Just icon ->
-                iconView (Normal notification) icon
+                iconView (Normal notification) (FileStatus.fileUrl FileStatus.pngContent icon)
 
             Nothing ->
                 defaultUser True size (round (toFloat size * 8 / 50)) userId
         )
+
+
+discordUserView : ChannelNotificationType -> Maybe FileHash -> Discord.Id Discord.UserId -> Element msg
+discordUserView notification maybeIcon userId =
+    (case maybeIcon of
+        Just icon ->
+            FileStatus.fileUrl FileStatus.pngContent icon
+
+        Nothing ->
+            Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+    )
+        |> iconView (Normal notification)
+        |> Ui.el [ notificationView 0 -3 MyUi.background1 notification ]
 
 
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
@@ -201,8 +216,8 @@ defaultUserHtml size2 rounded userId =
         [ Icons.person ]
 
 
-iconView : Mode -> FileHash -> Element msg
-iconView mode icon =
+iconView : Mode -> String -> Element msg
+iconView mode url =
     Html.img
         [ Html.Attributes.style
             "width"
@@ -214,7 +229,7 @@ iconView mode icon =
                     String.fromInt size ++ "px"
             )
         , Html.Attributes.style "height" (String.fromInt size ++ "px")
-        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent icon)
+        , Html.Attributes.src url
         , Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-self" "center"
         , Html.Attributes.style "object-fit" "cover"

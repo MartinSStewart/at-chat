@@ -238,6 +238,42 @@ dmHasNotifications currentUser otherUserId dmChannel =
     channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
 
 
+{-| Find the linked Discord user that is a member of this Discord DM channel (i.e. "us").
+-}
+discordDmCurrentUserId : LocalUser -> DiscordFrontendDmChannel -> Maybe (Discord.Id Discord.UserId)
+discordDmCurrentUserId localUser dmChannel =
+    List.Extra.findMap
+        (\( userId, _ ) ->
+            if NonemptyDict.member userId dmChannel.members then
+                Just userId
+
+            else
+                Nothing
+        )
+        (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers))
+
+
+discordDmHasNotifications :
+    LocalUser
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordFrontendDmChannel
+    -> Maybe ( Discord.Id Discord.UserId, OneOrGreater )
+discordDmHasNotifications localUser channelId dmChannel =
+    case discordDmCurrentUserId localUser dmChannel of
+        Just currentUserId ->
+            newMessageCount
+                (SeqDict.get
+                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                    localUser.user.lastViewed
+                )
+                dmChannel
+                |> OneOrGreater.fromInt
+                |> Maybe.map (Tuple.pair currentUserId)
+
+        Nothing ->
+            Nothing
+
+
 canScroll : Drag -> Bool
 canScroll drag =
     case drag of
@@ -253,11 +289,12 @@ guildColumn :
     -> Route
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Bool
     -> Element FrontendMsg
-guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 =
+guildColumn isMobile route localUser dmChannels discordDmChannels guilds discordGuilds canScroll2 =
     let
         allUsers =
             LocalState.allUsers localUser
@@ -329,6 +366,53 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                             dmIcon
                 )
                 (SeqDict.toList dmChannels)
+                ++ List.filterMap
+                    (\( channelId, dmChannel ) ->
+                        let
+                            dmIcon =
+                                case discordDmHasNotifications localUser channelId dmChannel of
+                                    Just ( currentUserId, count ) ->
+                                        let
+                                            userId : Discord.Id Discord.UserId
+                                            userId =
+                                                NonemptyDict.remove currentUserId dmChannel.members
+                                                    |> SeqDict.keys
+                                                    |> List.head
+                                                    |> Maybe.withDefault currentUserId
+
+                                            maybeIcon : Maybe FileHash
+                                            maybeIcon =
+                                                User.getDiscordUser userId localUser |> Maybe.andThen .icon
+                                        in
+                                        elLinkButton
+                                            (Dom.id ("guildsColumn_openDiscordDm_" ++ Discord.idToString channelId))
+                                            (DiscordDmRoute
+                                                { currentDiscordUserId = currentUserId
+                                                , channelId = channelId
+                                                , viewingMessage = Nothing
+                                                , showMembersTab = HideMembersTab
+                                                , tab = Nothing
+                                                }
+                                            )
+                                            []
+                                            (GuildIcon.discordUserView (NewMessageForUser count) maybeIcon userId)
+                                            |> Just
+
+                                    Nothing ->
+                                        Nothing
+                        in
+                        case route of
+                            DiscordDmRoute dmRoute ->
+                                if dmRoute.channelId == channelId then
+                                    Nothing
+
+                                else
+                                    dmIcon
+
+                            _ ->
+                                dmIcon
+                    )
+                    (SeqDict.toList discordDmChannels)
                 ++ GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
                     (\( guildId, guild ) ->
@@ -602,49 +686,74 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg
 guildColumnLazy isMobile model local =
-    if canScroll model.drag then
-        Ui.Lazy.lazy6
-            guildColumnCanScroll
-            isMobile
-            model.route
-            local.localUser
-            local.dmChannels
-            local.guilds
-            local.discordGuilds
+    Ui.Lazy.lazy6
+        (case ( canScroll model.drag, isMobile ) of
+            ( True, True ) ->
+                guildColumnCanScrollMobile
 
-    else
-        Ui.Lazy.lazy6
-            guildColumnCannotScroll
-            isMobile
-            model.route
-            local.localUser
-            local.dmChannels
-            local.guilds
-            local.discordGuilds
+            ( True, False ) ->
+                guildColumnCanScrollNotMobile
+
+            ( False, True ) ->
+                guildColumnCannotScrollMobile
+
+            ( False, False ) ->
+                guildColumnCannotScrollNotMobile
+        )
+        model.route
+        local.localUser
+        local.dmChannels
+        local.discordDmChannels
+        local.guilds
+        local.discordGuilds
 
 
-guildColumnCanScroll :
-    Bool
-    -> Route
+guildColumnCanScrollMobile :
+    Route
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Element FrontendMsg
-guildColumnCanScroll isMobile route localUser dmChannels guilds discordGuilds =
-    guildColumn isMobile route localUser dmChannels guilds discordGuilds True
+guildColumnCanScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
+    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds True
 
 
-guildColumnCannotScroll :
-    Bool
-    -> Route
+guildColumnCanScrollNotMobile :
+    Route
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Element FrontendMsg
-guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds =
-    guildColumn isMobile route localUser dmChannels guilds discordGuilds False
+guildColumnCanScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
+    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds True
+
+
+guildColumnCannotScrollMobile :
+    Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg
+guildColumnCannotScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
+    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds False
+
+
+guildColumnCannotScrollNotMobile :
+    Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg
+guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
+    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds False
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
@@ -7823,6 +7932,19 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                 members2 : List (Discord.Id Discord.UserId)
                 members2 =
                     NonemptyDict.remove currentUserId channel.members |> SeqDict.keys
+
+                notification : ChannelNotificationType
+                notification =
+                    if isSelected then
+                        NoNotification
+
+                    else
+                        case discordDmHasNotifications localUser dmChannelId channel of
+                            Just ( _, count ) ->
+                                NewMessageForUser count
+
+                            Nothing ->
+                                NoNotification
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
@@ -7854,7 +7976,9 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                     [] ->
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
-                                [ User.discordProfileImage currentUserId otherUser.icon
+                                [ Ui.el
+                                    [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                                    (User.discordProfileImage currentUserId otherUser.icon)
                                 , Ui.column
                                     []
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -7877,6 +8001,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             )
                             members2
                             |> User.multipleProfileImages
+                            |> Ui.el [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
                         , Ui.column
                             []
                             [ List.filterMap

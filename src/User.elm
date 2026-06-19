@@ -718,28 +718,23 @@ profileImageHtml userId maybeFileHash =
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
-discordProfileImage _ maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.rounded profileImageRounding
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                , Ui.clip
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+discordProfileImage userId maybeFileHash =
+    Ui.image
+        [ Ui.rounded profileImageRounding
+        , Ui.width (Ui.px profileImageSize)
+        , Ui.height (Ui.px profileImageSize)
+        , Ui.clip
+        ]
+        { source =
+            case maybeFileHash of
+                Just fileHash ->
+                    FileStatus.fileUrl FileStatus.pngContent fileHash
 
-        Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.rounded profileImageRounding
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                Ui.none
+                Nothing ->
+                    Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+        , description = ""
+        , onLoad = Nothing
+        }
 
 
 profileImageNoRounding : Id UserId -> Maybe FileHash -> Element msg
@@ -826,25 +821,20 @@ multipleProfileImages profileImages =
 
 
 smallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
-smallProfileImage ( _, maybeFileHash ) =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.rounded 8
-                , Ui.width (Ui.px smallProfileImageSize)
-                , Ui.height (Ui.px smallProfileImageSize)
-                , Ui.clip
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+smallProfileImage ( userId, maybeFileHash ) =
+    Ui.image
+        [ Ui.rounded 8
+        , Ui.width (Ui.px smallProfileImageSize)
+        , Ui.height (Ui.px smallProfileImageSize)
+        , Ui.clip
+        ]
+        { source =
+            case maybeFileHash of
+                Just fileHash ->
+                    FileStatus.fileUrl FileStatus.pngContent fileHash
 
-        Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.rounded 8
-                , Ui.width (Ui.px smallProfileImageSize)
-                , Ui.height (Ui.px smallProfileImageSize)
-                ]
-                Ui.none
+                Nothing ->
+                    Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+        , description = ""
+        , onLoad = Nothing
+        }
