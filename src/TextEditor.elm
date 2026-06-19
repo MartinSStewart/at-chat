@@ -5,6 +5,7 @@ module TextEditor exposing
     , LocalState
     , Model
     , Msg(..)
+    , OutMsg(..)
     , ServerChange(..)
     , backendChangeUpdate
     , changeUpdate
@@ -43,6 +44,7 @@ type Msg
     | PressedReset
     | UndoChange
     | RedoChange
+    | PressedBack
 
 
 type LocalChange
@@ -132,7 +134,13 @@ getEditorState local =
         |> (\( _, _, a ) -> a)
 
 
-update : Id UserId -> Msg -> Model -> LocalState -> ( Model, Maybe LocalChange )
+type OutMsg
+    = OutMsg_LocalChange LocalChange
+    | OutMsg_Back
+    | NoOutMsg
+
+
+update : Id UserId -> Msg -> Model -> LocalState -> ( Model, OutMsg )
 update currentUserId msg model local =
     case msg of
         TypedText text ->
@@ -151,17 +159,17 @@ update currentUserId msg model local =
                     , if Range.rangeSize range == 0 && lengthDiff < 0 then
                         Edit_TypedText { range | start = range.start + lengthDiff } ""
                             |> Local_EditChange
-                            |> Just
+                            |> OutMsg_LocalChange
 
                       else
                         String.slice range.start (range.start + lengthDiff + Range.rangeSize range) text
                             |> Edit_TypedText range
                             |> Local_EditChange
-                            |> Just
+                            |> OutMsg_LocalChange
                     )
 
                 Nothing ->
-                    ( model, Nothing )
+                    ( model, NoOutMsg )
 
         --MovedCursor range ->
         --    case SeqDict.get currentUserId local.cursorPosition of
@@ -177,13 +185,16 @@ update currentUserId msg model local =
         --        Nothing ->
         --            ( model, Local_MovedCursor range |> Just )
         PressedReset ->
-            ( model, Just Local_Reset )
+            ( model, OutMsg_LocalChange Local_Reset )
 
         UndoChange ->
-            ( model, Just Local_Undo )
+            ( model, OutMsg_LocalChange Local_Undo )
 
         RedoChange ->
-            ( model, Just Local_Redo )
+            ( model, OutMsg_LocalChange Local_Redo )
+
+        PressedBack ->
+            ( model, OutMsg_Back )
 
 
 localChangeUpdate : Id UserId -> LocalChange -> LocalState -> LocalState
@@ -418,6 +429,16 @@ view currentUserId local =
     in
     Ui.row
         [ Ui.height Ui.fill
+        , Ui.inFront
+            (Ui.el
+                [ Ui.height Ui.fill, Ui.background (Ui.rgba 0 0 0 0.4) ]
+                (Ui.column
+                    [ Ui.centerX, Ui.centerY, Ui.width (Ui.px 300), Ui.spacing 8 ]
+                    [ Ui.text "Sorry, this feature is incomplete! Nothing you can really do here at the moment."
+                    , MyUi.secondaryButton (Dom.id "textEditor_back") PressedBack "Back to homepage"
+                    ]
+                )
+            )
         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
         , Ui.inFront
             (MyUi.elButton
@@ -483,6 +504,9 @@ isPress msg =
 
         RedoChange ->
             False
+
+        PressedBack ->
+            True
 
 
 textarea : LocalState -> Id UserId -> String -> EditorState -> Html Msg

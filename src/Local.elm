@@ -113,8 +113,8 @@ networkError msgToString currentTime (Local localModel_) =
             [ Ui.el
                 [ Ui.Font.bold ]
                 (Ui.text "Unable to reach the server. The following are not saved:")
-            , Dict.values localModel_.localMsgs
-                |> List.map (\{ msg } -> Ui.Prose.item [] (Ui.text (msgToString msg)))
+            , Dict.toList localModel_.localMsgs
+                |> List.map (\( changeId, { msg } ) -> Ui.Prose.item [] (Ui.text (String.fromInt changeId ++ " " ++ msgToString msg)))
                 |> Ui.Prose.bulleted
                     [ Ui.spacing 4
                     , Ui.Font.size 14

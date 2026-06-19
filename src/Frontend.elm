@@ -2887,26 +2887,39 @@ updateLoaded msg model =
             ( model, Command.none )
 
         TextEditorMsg textEditorMsg ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     let
                         local =
                             Local.model loggedIn.localState
 
-                        ( textEditor, localChange ) =
+                        ( textEditor, outMsg ) =
                             TextEditor.update
                                 local.localUser.session.userId
                                 textEditorMsg
                                 loggedIn.textEditor
                                 local.textEditor
                     in
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (Maybe.map Local_TextEditor localChange)
-                        { loggedIn | textEditor = textEditor }
-                        Command.none
-                )
-                model
+                    case outMsg of
+                        TextEditor.OutMsg_LocalChange localChange ->
+                            let
+                                ( loggedIn2, cmds ) =
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_TextEditor localChange |> Just)
+                                        { loggedIn | textEditor = textEditor }
+                                        Command.none
+                            in
+                            ( { model | loginStatus = LoggedIn loggedIn2 }, cmds )
+
+                        TextEditor.OutMsg_Back ->
+                            FrontendExtra.routePush model Route.HomePageRoute
+
+                        TextEditor.NoOutMsg ->
+                            ( { model | loginStatus = LoggedIn { loggedIn | textEditor = textEditor } }, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         PressedDiscordAcknowledgment checked ->
             FrontendExtra.updateLoggedIn

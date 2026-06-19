@@ -1288,7 +1288,7 @@ routeRequest previousRoute newRoute model =
                 )
                 { model | route = newRoute }
     in
-    case newRoute of
+    (case newRoute of
         HomePageRoute ->
             ( { model2
                 | loginStatus =
@@ -1299,7 +1299,7 @@ routeRequest previousRoute newRoute model =
                         LoggedIn _ ->
                             model2.loginStatus
               }
-            , viewCmd
+            , Command.none
             )
 
         AdminRoute { highlightLog } ->
@@ -1311,25 +1311,22 @@ routeRequest previousRoute newRoute model =
                             loggedIn.admin
                     in
                     ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }
-                    , Command.batch
-                        [ viewCmd
-                        , case (Local.model loggedIn.localState).adminData of
-                            IsAdminButDataNotLoaded ->
-                                (case highlightLog of
-                                    Just highlightLog2 ->
-                                        Pagination.itemToPageId highlightLog2 |> .pageId |> Just |> AdminDataRequest
+                    , case (Local.model loggedIn.localState).adminData of
+                        IsAdminButDataNotLoaded ->
+                            (case highlightLog of
+                                Just highlightLog2 ->
+                                    Pagination.itemToPageId highlightLog2 |> .pageId |> Just |> AdminDataRequest
 
-                                    Nothing ->
-                                        AdminDataRequest Nothing
-                                )
-                                    |> Lamdera.sendToBackend
+                                Nothing ->
+                                    AdminDataRequest Nothing
+                            )
+                                |> Lamdera.sendToBackend
 
-                            IsAdmin _ ->
-                                Command.none
+                        IsAdmin _ ->
+                            Command.none
 
-                            IsNotAdmin ->
-                                Command.none
-                        ]
+                        IsNotAdmin ->
+                            Command.none
                     )
                 )
                 model2
@@ -1370,17 +1367,17 @@ routeRequest previousRoute newRoute model =
                             False
                         )
                         previousRoute
-                        viewCmd
+                        Command.none
                         model3
 
                 NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 EditChannelRoute _ ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 JoinRoute inviteLinkId ->
                     case model3.loginStatus of
@@ -1390,7 +1387,7 @@ routeRequest previousRoute newRoute model =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
                               }
-                            , viewCmd
+                            , Command.none
                             )
 
                         LoggedIn loggedIn ->
@@ -1415,7 +1412,7 @@ routeRequest previousRoute newRoute model =
                                             )
 
                                     Nothing ->
-                                        viewCmd
+                                        Command.none
                                 ]
                             )
 
@@ -1460,20 +1457,20 @@ routeRequest previousRoute newRoute model =
                             False
                         )
                         previousRoute
-                        viewCmd
+                        Command.none
                         model3
 
                 DiscordChannel_NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 DiscordChannel_EditChannelRoute _ ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 DiscordChannel_GuildSettingsRoute ->
-                    enterSidebarRoute sameGuild previousRoute viewCmd model3
+                    enterSidebarRoute sameGuild previousRoute Command.none model3
 
         AiChatRoute ->
-            ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
+            ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
         DmRoute dmRoute ->
             let
@@ -1496,10 +1493,7 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch
-                        [ viewCmd
-                        , openChannelCmds sameDmRoute dmRoute.threadRoute loggedIn model3
-                        ]
+                    , openChannelCmds sameDmRoute dmRoute.threadRoute loggedIn model3
                     )
                 )
                 model3
@@ -1525,14 +1519,11 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch
-                        [ viewCmd
-                        , openChannelCmds
-                            sameDmRoute
-                            (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
-                            loggedIn
-                            model3
-                        ]
+                    , openChannelCmds
+                        sameDmRoute
+                        (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
+                        loggedIn
+                        model3
                     )
                 )
                 model3
@@ -1544,7 +1535,7 @@ routeRequest previousRoute newRoute model =
                     Lamdera.sendToBackend (LinkSlackOAuthCode code sessionId)
 
                 Err () ->
-                    viewCmd
+                    Command.none
             )
 
         TextEditorRoute ->
@@ -1564,6 +1555,8 @@ routeRequest previousRoute newRoute model =
             ( { model2 | publicGoMatch = PublicGoMatch_Loading }
             , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
             )
+    )
+        |> Tuple.mapSecond (\a -> Command.batch [ viewCmd, a ])
 
 
 updateLoggedIn :
