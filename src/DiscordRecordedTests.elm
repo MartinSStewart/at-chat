@@ -1129,6 +1129,57 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , RecordedTestExtra.startTest
+        "Discord group DM notification shows red icon in guild column"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A new Discord group DM (the linked account plus two other users) is created.
+                          T.websocketSendString 100 connection discordGroupDmChannelCreate
+
+                        -- The admin isn't viewing the group DM, and it has no messages, so no
+                        -- notification icon is shown in the guild column yet.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
+                            )
+
+                        -- A message arrives in the group DM while the admin isn't viewing it.
+                        , T.websocketSendString 100 connection (discordGroupDmMessage "411" "Hello everyone in the group!")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello everyone in the group!" ])
+
+                        -- A red notification icon for the group DM now appears in the guild column.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
+                            )
+                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord group DM notification icon in guild column" }
+
+                        -- Opening the group DM marks it as read, removing the notification icon.
+                        , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1500000000000000099")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
         RecordedTestExtra.startTime
         normalConfig
@@ -1283,6 +1334,23 @@ that other user. `seq` must be unique per message.
 discordDmMessage : String -> String -> String
 discordDmMessage seq content =
     "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"14912202028794" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}"
+
+
+{-| A `CHANNEL_CREATE` gateway event for a Discord group DM (channel id
+`1500000000000000099`) whose members are the linked account (`184437096813953035`)
+plus two other Discord users (`at0232` and `kess`).
+-}
+discordGroupDmChannelCreate : String
+discordGroupDmChannelCreate =
+    "{\"t\":\"CHANNEL_CREATE\",\"s\":410,\"op\":0,\"d\":{\"type\":3,\"id\":\"1500000000000000099\",\"last_message_id\":null,\"recipients\":[{\"username\":\"at28727\",\"id\":\"184437096813953035\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},{\"username\":\"at0232\",\"id\":\"161098476632014848\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},{\"username\":\"kess\",\"id\":\"168547048902098944\",\"discriminator\":\"0\",\"avatar\":null}]}}"
+
+
+{-| A `MESSAGE_CREATE` for the Discord group DM created by `discordGroupDmChannelCreate`,
+sent by `at0232`. `seq` must be unique per message.
+-}
+discordGroupDmMessage : String -> String -> String
+discordGroupDmMessage seq content =
+    "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:40:00.000000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"15000000000007" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000099\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[]}}"
 
 
 {-| `AT`. A member of the Bot Test guild that does not share a DM channel with the
