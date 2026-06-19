@@ -56,6 +56,7 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
+    , outwardBottomCorner
     , prewrap
     , radioColumn
     , radioRowWithSeparators
@@ -94,6 +95,8 @@ import PersonName exposing (PersonName)
 import Quantity
 import Round
 import SeqDict exposing (SeqDict)
+import Svg
+import Svg.Attributes
 import Time exposing (Month(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -821,6 +824,69 @@ deleteButton htmlId onPress =
 hoverText : String -> Ui.Attribute msg
 hoverText text =
     Ui.htmlAttribute (Html.Attributes.title text)
+
+
+outwardBottomCorner : Int -> Bool -> Ui.Color -> Ui.Attribute msg
+outwardBottomCorner radius isLeft color =
+    let
+        overlap : Int
+        overlap =
+            1
+
+        r : String
+        r =
+            String.fromInt radius
+
+        w : String
+        w =
+            String.fromInt (radius + overlap)
+
+        path : String
+        path =
+            if isLeft then
+                "M " ++ w ++ ",0 L " ++ r ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 1 0," ++ r ++ " L " ++ w ++ "," ++ r ++ " Z"
+
+            else
+                "M 0,0 L " ++ String.fromInt overlap ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 0 " ++ w ++ "," ++ r ++ " L 0," ++ r ++ " Z"
+
+        translate : String
+        translate =
+            if isLeft then
+                "translate(-" ++ r ++ "px, 0)"
+
+            else
+                "translate(" ++ r ++ "px, 0)"
+    in
+    Ui.inFront
+        (Ui.el
+            [ Ui.alignBottom
+            , if isLeft then
+                Ui.alignLeft
+
+              else
+                Ui.alignRight
+            , Ui.move { x = 0, y = 1, z = 0 }
+            , Ui.width (Ui.px (radius + overlap))
+            , Ui.height (Ui.px radius)
+            , Ui.Font.color color
+            , htmlStyle "transform" translate
+            , htmlStyle "pointer-events" "none"
+            ]
+            (Svg.svg
+                [ Svg.Attributes.width w
+                , Svg.Attributes.height r
+                , Svg.Attributes.viewBox ("0 0 " ++ w ++ " " ++ r)
+                , Svg.Attributes.style "display:block"
+                ]
+                [ Svg.path
+                    [ Svg.Attributes.d path
+                    , Svg.Attributes.fill "currentColor"
+                    ]
+                    []
+                ]
+                |> Ui.html
+            )
+        )
 
 
 id : HtmlId -> Ui.Attribute msg

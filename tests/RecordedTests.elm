@@ -1389,6 +1389,44 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         Err "Expected to only see LoginsRateLimited as an error email"
             )
         ]
+    , RecordedTestExtra.startTest "Cancel login code then retry with new code"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\user ->
+                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                , user.click 100 Pages.Home.loginButtonId
+                , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
+                , user.click 100 LoginForm.submitEmailButtonId
+
+                -- We should now be on the login code screen. Press cancel instead of entering the code.
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Check your email for a code" ])
+                , user.click 100 LoginForm.cancelButtonId
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Check your email for a code" ])
+
+                -- Try again with the same email and use the new login code that gets sent.
+                , user.click 100 Pages.Home.loginButtonId
+                , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
+                , user.click 100 LoginForm.submitEmailButtonId
+                , T.andThen
+                    100
+                    (\data ->
+                        case List.filterMap (RecordedTestExtra.isLoginEmail RecordedTestExtra.adminEmail) data.httpRequests of
+                            newLoginCode :: _ ->
+                                [ user.input 100 LoginForm.loginCodeInputId (String.fromInt newLoginCode) ]
+
+                            _ ->
+                                [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
+                    )
+                , RecordedTestExtra.hasExactText user [ PersonName.toString Backend.adminUser.name ]
+                ]
+            )
+        , RecordedTestExtra.checkNoErrorLogs
+        ]
     , T.testGroup
         "Login tests"
         (RecordedTestExtra.loginTests False normalConfig ++ RecordedTestExtra.loginTests True normalConfig)

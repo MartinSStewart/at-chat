@@ -7,6 +7,7 @@ module LoginForm exposing
     , LoginForm(..)
     , Msg(..)
     , SubmitStatus(..)
+    , cancelButtonId
     , emailInputId
     , errorView
     , init
@@ -689,6 +690,9 @@ enterLoginCodeView windowSize textSelection model =
               else
                 errorView "Too many incorrect attempts. Please refresh the page and try again."
             ]
+        , Ui.el
+            [ Ui.centerX, Ui.width Ui.shrink ]
+            (MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel")
         ]
 
 
@@ -737,6 +741,9 @@ enterTwoFactorCodeView windowSize textSelection model =
               else
                 errorView "Too many incorrect attempts. Please refresh the page and try again."
             ]
+        , Ui.el
+            [ Ui.centerX, Ui.width Ui.shrink ]
+            (MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel")
         ]
 
 
