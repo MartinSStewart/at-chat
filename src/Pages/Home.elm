@@ -16,18 +16,18 @@ import Ui.Shadow
 header : Bool -> LoginStatus -> Element FrontendMsg
 header isMobile loginStatus =
     Ui.el
-        [ Ui.background MyUi.background2
+        [ Ui.background MyUi.background1
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 16px 0 16px")
+            [ MyUi.htmlStyle "padding" ("calc(4px + " ++ MyUi.insetTop ++ ")" ++ " 16px 0 16px")
             , Ui.contentCenterY
             , MyUi.montserrat
             , Ui.widthMax 1280
             , Ui.centerX
             ]
             [ Ui.image
-                [ Ui.width (Ui.px 64), Ui.padding 8 ]
+                [ Ui.width (Ui.px 64), Ui.paddingWith { top = 4, left = 8, right = 8, bottom = 8 } ]
                 { source = "/at-logo-no-background.png"
                 , description = "Logo"
                 , onLoad = Nothing
@@ -36,23 +36,38 @@ header isMobile loginStatus =
                 LoggedIn _ ->
                     Ui.none
 
-                NotLoggedIn _ ->
+                NotLoggedIn notLoggedIn ->
                     MyUi.elButton
                         loginButtonId
                         PressedShowLogin
-                        (buttonAttributes isMobile)
+                        (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing))
                         (Ui.text "Login/Signup")
             ]
         )
 
 
-buttonAttributes : Bool -> List (Ui.Attribute msg)
-buttonAttributes isMobile =
-    [ MyUi.hover isMobile [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
-    , Ui.Font.weight 600
+buttonAttributes : Bool -> Bool -> List (Ui.Attribute msg)
+buttonAttributes isMobile isSelected =
+    [ Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
     , Ui.alignRight
+    , Ui.width Ui.shrink
+    , Ui.height Ui.fill
+    , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 8 }
+    , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+    , Ui.attrIf isSelected (Ui.background MyUi.background3)
+    , Ui.attrIf isSelected (MyUi.outwardBottomCorner 16 True MyUi.background3)
+    , Ui.attrIf isSelected (MyUi.outwardBottomCorner 16 False MyUi.background3)
+    , Ui.contentCenterY
+    , Ui.Font.color
+        (if isSelected then
+            MyUi.font1
+
+         else
+            MyUi.font3
+        )
+    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
     ]
 
 

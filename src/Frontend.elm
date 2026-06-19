@@ -637,7 +637,19 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 NotLoggedIn notLoggedIn ->
-                    ( { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Just LoginForm.init } }
+                    ( { model
+                        | loginStatus =
+                            NotLoggedIn
+                                { notLoggedIn
+                                    | loginForm =
+                                        case notLoggedIn.loginForm of
+                                            Just _ ->
+                                                notLoggedIn.loginForm
+
+                                            Nothing ->
+                                                Just LoginForm.init
+                                }
+                      }
                     , Command.none
                     )
 
