@@ -1,7 +1,6 @@
 module ChannelHeader exposing
     ( channel
     , channelHeader
-    , channelHeaderTabAttributes
     , chattingWithYourself
     , discordChannel
     , discordThread
@@ -33,8 +32,6 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeade
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
-import Svg
-import Svg.Attributes
 import Thread
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
