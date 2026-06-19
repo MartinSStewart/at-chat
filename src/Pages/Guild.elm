@@ -7976,8 +7976,9 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                     [] ->
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
-                                [ User.discordProfileImage currentUserId otherUser.icon
-                                    |> Ui.el [ GuildIcon.notificationView 0 -3 MyUi.background2 notification ]
+                                [ Ui.el
+                                    [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                                    (User.discordProfileImage currentUserId otherUser.icon)
                                 , Ui.column
                                     []
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -7989,7 +7990,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 []
 
                     rest ->
-                        [ (List.filterMap
+                        [ List.filterMap
                             (\userId ->
                                 case User.getDiscordUser userId localUser of
                                     Just user ->
@@ -8000,8 +8001,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             )
                             members2
                             |> User.multipleProfileImages
-                          )
-                            |> Ui.el [ GuildIcon.notificationView 0 -3 MyUi.background2 notification ]
+                            |> Ui.el [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
                         , Ui.column
                             []
                             [ List.filterMap
