@@ -1080,6 +1080,55 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , RecordedTestExtra.startTest
+        "Discord DM notification shows red icon in guild column"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ -- The admin is on the friends page and isn't viewing the Discord DM, so no
+                          -- notification icon is shown in the guild column yet.
+                          admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
+                            )
+                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM no notification icon" }
+
+                        -- A Discord DM arrives while the admin isn't viewing it.
+                        , T.websocketSendString 100 connection (discordDmMessage "311" "Check out this Discord DM!")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Check out this Discord DM!" ])
+
+                        -- A red notification icon for the Discord DM now appears in the guild column.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
+                            )
+                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM notification icon in guild column" }
+
+                        -- Opening the Discord DM marks it as read, removing the notification icon.
+                        , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1472236476401057854")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
         RecordedTestExtra.startTime
         normalConfig
