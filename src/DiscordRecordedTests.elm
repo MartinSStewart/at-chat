@@ -9,9 +9,11 @@ import Drawing
 import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Effect.Websocket as Websocket
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import Iso8601
 import LinkedAndOtherDiscordUsers
 import Local
 import MembersAndOwner
@@ -925,14 +927,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , RecordedTestExtra.checkNotification "Push notifications enabled"
 
                         -- The admin is viewing the Discord guild channel, so a message mentioning them should NOT push.
-                        , T.websocketSendString 100 connection (discordGuildMessage "201" "<@184437096813953035> while viewing")
+                        , discordGuildMessage connection "<@184437096813953035> while viewing"
                         , RecordedTestExtra.checkNoNotification "@at28727 while viewing"
 
                         -- Navigate the admin away from the channel.
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
 
                         -- Positive control: while the admin isn't viewing the channel a mention should push.
-                        , T.websocketSendString 100 connection (discordGuildMessage "202" "<@184437096813953035> while away")
+                        , discordGuildMessage connection "<@184437096813953035> while away"
                         , RecordedTestExtra.checkNotification "@at28727 while away"
                         ]
                     )
@@ -957,7 +959,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , RecordedTestExtra.checkNotification "Push notifications enabled"
 
                         -- Positive control: while the admin isn't viewing the DM a message should push.
-                        , T.websocketSendString 100 connection (discordDmMessage "211" "Discord DM while away")
+                        , discordDmMessage connection "Discord DM while away"
                         , RecordedTestExtra.checkNotification "Discord DM while away"
 
                         -- Open (and therefore view) the Discord DM channel.
@@ -965,7 +967,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
 
                         -- The admin is viewing the DM the message arrived in, so no push notification should be sent.
-                        , T.websocketSendString 100 connection (discordDmMessage "212" "Discord DM while viewing")
+                        , discordDmMessage connection "Discord DM while viewing"
                         , RecordedTestExtra.checkNoNotification "Discord DM while viewing"
                         ]
                     )
@@ -987,7 +989,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ RecordedTestExtra.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
-                        , T.websocketSendString 100 connection (discordDmMessage "221" "Draw on this Discord DM message!")
+                        , discordDmMessage connection "Draw on this Discord DM message!"
                         , admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Draw on this Discord DM message!" ])
@@ -1060,7 +1062,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ RecordedTestExtra.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
-                        , T.websocketSendString 100 connection (discordDmMessage "231" "Hello!")
+                        , discordDmMessage connection "Hello!"
 
                         -- Clicking the channel name in the header opens the channel description tab
                         , admin.click 100 (Dom.id "guild_openDescription")
@@ -1103,7 +1105,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM no notification icon" }
 
                         -- A Discord DM arrives while the admin isn't viewing it.
-                        , T.websocketSendString 100 connection (discordDmMessage "311" "Check out this Discord DM!")
+                        , discordDmMessage connection "Check out this Discord DM!"
                         , admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Check out this Discord DM!" ])
@@ -1154,7 +1156,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             )
 
                         -- A message arrives in the group DM while the admin isn't viewing it.
-                        , T.websocketSendString 100 connection (discordGroupDmMessage "411" "Hello everyone in the group!")
+                        , discordGroupDmMessage connection "Hello everyone in the group!"
                         , admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello everyone in the group!" ])
@@ -1174,7 +1176,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
                             )
-                        , T.websocketSendString 100 connection (discordGroupDmMessage "412" "Second message")
+                        , discordGroupDmMessage connection "Second message"
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
                         ]
                     )
@@ -1318,24 +1320,61 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     ]
 
 
-{-| Build a Discord guild `MESSAGE_CREATE` gateway event for the Bot Test guild's
-channel A, sent by `at0232` (a user other than the linked admin account). `seq`
-must be unique per message so the gateway sequence number and message id don't
-collide. `content` is the raw Discord message content (so a mention is written as
+{-| A unique value derived from the current test time. Used for the gateway sequence
+number and message id so that each `MESSAGE_CREATE` event is unique without the caller
+having to thread a counter through the test (the test clock always advances between
+sends).
+-}
+uniqueFromTime : Time.Posix -> String
+uniqueFromTime time =
+    Time.posixToMillis time |> String.fromInt
+
+
+{-| Send a Discord guild `MESSAGE_CREATE` gateway event for the Bot Test guild's
+channel A, sent by `at0232` (a user other than the linked admin account). The message
+timestamp is the current test time and the sequence number/message id are derived from
+it. `content` is the raw Discord message content (so a mention is written as
 `<@userId>`).
 -}
-discordGuildMessage : String -> String -> String
-discordGuildMessage seq content =
-    "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"14912202028793" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+discordGuildMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildMessage connection content =
+    T.andThen
+        100
+        (\data ->
+            let
+                unique : String
+                unique =
+                    uniqueFromTime data.time
+            in
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}")
+            ]
+        )
 
 
-{-| Build a Discord DM `MESSAGE_CREATE` gateway event (no `guild_id`) for the
-private channel the linked admin shares with user `137748026084163584`, sent by
-that other user. `seq` must be unique per message.
+{-| Send a Discord DM `MESSAGE_CREATE` gateway event (no `guild_id`) for the private
+channel the linked admin shares with user `137748026084163584`, sent by that other
+user. The message timestamp is the current test time and the sequence number/message
+id are derived from it.
 -}
-discordDmMessage : String -> String -> String
-discordDmMessage seq content =
-    "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"14912202028794" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}"
+discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordDmMessage connection content =
+    T.andThen
+        100
+        (\data ->
+            let
+                unique : String
+                unique =
+                    uniqueFromTime data.time
+            in
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}")
+            ]
+        )
 
 
 {-| A `CHANNEL_CREATE` gateway event for a Discord group DM (channel id
@@ -1347,12 +1386,26 @@ discordGroupDmChannelCreate =
     "{\"t\":\"CHANNEL_CREATE\",\"s\":410,\"op\":0,\"d\":{\"type\":3,\"id\":\"1500000000000000099\",\"last_message_id\":null,\"recipients\":[{\"username\":\"at28727\",\"id\":\"184437096813953035\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},{\"username\":\"at0232\",\"id\":\"161098476632014848\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},{\"username\":\"kess\",\"id\":\"168547048902098944\",\"discriminator\":\"0\",\"avatar\":null}]}}"
 
 
-{-| A `MESSAGE_CREATE` for the Discord group DM created by `discordGroupDmChannelCreate`,
-sent by `at0232`. `seq` must be unique per message.
+{-| Send a `MESSAGE_CREATE` for the Discord group DM created by
+`discordGroupDmChannelCreate`, sent by `at0232`. The message timestamp is the current
+test time and the sequence number/message id are derived from it.
 -}
-discordGroupDmMessage : String -> String -> String
-discordGroupDmMessage seq content =
-    "{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ seq ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:40:00.000000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"15000000000007" ++ seq ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000099\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[]}}"
+discordGroupDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGroupDmMessage connection content =
+    T.andThen
+        100
+        (\data ->
+            let
+                unique : String
+                unique =
+                    uniqueFromTime data.time
+            in
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000099\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[]}}")
+            ]
+        )
 
 
 {-| `AT`. A member of the Bot Test guild that does not share a DM channel with the
