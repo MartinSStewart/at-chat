@@ -1116,15 +1116,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
                             )
+
+                        -- The notification circle also appears on the DM in the DM channel column.
+                        , friendLabelHasNotificationCircle admin "1472236476401057854" "1"
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM notification icon in guild column" }
 
-                        -- Opening the Discord DM marks it as read, removing the notification icon.
+                        -- Opening the Discord DM marks it as read, removing the notification icon
+                        -- from both the guild column and the DM channel column.
                         , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1472236476401057854")
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
                             )
+                        , friendLabelHasNoNotificationCircle admin "1472236476401057854" "1"
                         ]
                     )
                 ]
@@ -1167,15 +1172,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
                             )
+
+                        -- The notification circle also appears on the group DM in the DM channel column.
+                        , friendLabelHasNotificationCircle admin "1500000000000000099" "1"
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord group DM notification icon in guild column" }
 
-                        -- Opening the group DM marks it as read, removing the notification icon.
+                        -- Opening the group DM marks it as read, removing the notification icon
+                        -- from both the guild column and the DM channel column.
                         , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1500000000000000099")
                         , admin.checkView
                             100
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000099" ]
                             )
+                        , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
                         , discordGroupDmMessage connection "Second message"
                         , RecordedTestExtra.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
                         ]
@@ -1405,6 +1415,47 @@ discordGroupDmMessage connection content =
                 connection
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000099\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[]}}")
             ]
+        )
+
+
+{-| Assert that the Discord DM/group DM friend label (in the DM channel column) for the
+given private channel id shows a notification circle with the given count. The count is
+rendered as the badge's `aria-label`.
+-}
+friendLabelHasNotificationCircle :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+friendLabelHasNotificationCircle user channelId count =
+    user.checkView
+        100
+        (\html ->
+            Test.Html.Query.find
+                [ Test.Html.Selector.id ("guild_discordFriendLabel_" ++ channelId) ]
+                html
+                |> Test.Html.Query.has
+                    [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" count) ]
+        )
+
+
+{-| Assert that the Discord DM/group DM friend label (in the DM channel column) for the
+given private channel id shows no notification circle with the given count.
+-}
+friendLabelHasNoNotificationCircle :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+friendLabelHasNoNotificationCircle user channelId count =
+    user.checkView
+        100
+        (\html ->
+            Test.Html.Query.find
+                [ Test.Html.Selector.id ("guild_discordFriendLabel_" ++ channelId) ]
+                html
+                |> Test.Html.Query.hasNot
+                    [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" count) ]
         )
 
 

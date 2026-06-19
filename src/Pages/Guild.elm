@@ -7932,6 +7932,19 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                 members2 : List (Discord.Id Discord.UserId)
                 members2 =
                     NonemptyDict.remove currentUserId channel.members |> SeqDict.keys
+
+                notification : ChannelNotificationType
+                notification =
+                    if isSelected then
+                        NoNotification
+
+                    else
+                        case discordDmHasNotifications localUser dmChannelId channel of
+                            Just ( _, count ) ->
+                                NewMessageForUser count
+
+                            Nothing ->
+                                NoNotification
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
@@ -7964,6 +7977,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
                                 [ User.discordProfileImage currentUserId otherUser.icon
+                                    |> Ui.el [ GuildIcon.notificationView 0 -3 MyUi.background2 notification ]
                                 , Ui.column
                                     []
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -7975,7 +7989,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 []
 
                     rest ->
-                        [ List.filterMap
+                        [ (List.filterMap
                             (\userId ->
                                 case User.getDiscordUser userId localUser of
                                     Just user ->
@@ -7986,6 +8000,8 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             )
                             members2
                             |> User.multipleProfileImages
+                          )
+                            |> Ui.el [ GuildIcon.notificationView 0 -3 MyUi.background2 notification ]
                         , Ui.column
                             []
                             [ List.filterMap
