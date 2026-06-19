@@ -373,14 +373,16 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                 case discordDmHasNotifications localUser channelId dmChannel of
                                     Just ( currentUserId, count ) ->
                                         let
-                                            maybeIcon : Maybe FileHash
-                                            maybeIcon =
+                                            userId : Discord.Id Discord.UserId
+                                            userId =
                                                 NonemptyDict.remove currentUserId dmChannel.members
                                                     |> SeqDict.keys
                                                     |> List.head
                                                     |> Maybe.withDefault currentUserId
-                                                    |> (\iconUserId -> User.getDiscordUser iconUserId localUser)
-                                                    |> Maybe.andThen .icon
+
+                                            maybeIcon : Maybe FileHash
+                                            maybeIcon =
+                                                User.getDiscordUser userId localUser |> Maybe.andThen .icon
                                         in
                                         elLinkButton
                                             (Dom.id ("guildsColumn_openDiscordDm_" ++ Discord.idToString channelId))
@@ -393,7 +395,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                                 }
                                             )
                                             []
-                                            (GuildIcon.discordUserView (NewMessageForUser count) maybeIcon)
+                                            (GuildIcon.discordUserView (NewMessageForUser count) maybeIcon userId)
                                             |> Just
 
                                     Nothing ->

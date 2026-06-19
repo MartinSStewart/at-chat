@@ -1879,11 +1879,16 @@ guildBannerUrl { size, imageType } guildId splashHash =
         (imageSizeQuery size)
 
 
-defaultUserAvatarUrl : ImageSize -> Id UserId -> UserDiscriminator -> String
-defaultUserAvatarUrl size userId (UserDiscriminator discriminator) =
+defaultUserAvatarUrl : ImageSize -> Id UserId -> String
+defaultUserAvatarUrl size userId =
+    let
+        discriminator : String
+        discriminator =
+            UInt64.mod (UInt64.shiftRightZfBy 22 (idToUInt64 userId)) (UInt64.fromInt 6) |> UInt64.toString
+    in
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "embed", "avatars", idToString userId, String.fromInt (modBy 5 discriminator) ++ ".png" ]
+        [ "embed", "avatars", discriminator ++ ".png" ]
         (imageSizeQuery size)
 
 
