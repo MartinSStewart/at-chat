@@ -1317,9 +1317,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             RecordedTestExtra.desktopWindow
             (\user ->
                 let
-                    openLoginAndSubmitEmail delay =
+                    openLoginAndSubmitEmail isFirst delay =
                         T.group
-                            [ user.click delay Pages.Home.loginButtonId
+                            [ if isFirst then
+                                T.group []
+
+                              else
+                                user.click delay (Dom.id "loginForm_cancelButton")
+                            , user.click delay Pages.Home.loginButtonId
                             , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
                             , user.click 100 LoginForm.submitEmailButtonId
                             ]
@@ -1329,7 +1334,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ Test.Html.Selector.text "Too many incorrect attempts." ]
                 in
                 [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
-                , openLoginAndSubmitEmail 100
+                , openLoginAndSubmitEmail True 100
                 , List.range 0 9
                     |> List.map
                         (\index ->
@@ -1356,7 +1361,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     )
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
                 , [ RecordedTestExtra.hasNotText user [ "Too many login attempts have been made." ]
-                  , openLoginAndSubmitEmail 100
+                  , openLoginAndSubmitEmail False 100
                   ]
                     |> T.group
                     |> List.repeat 6
@@ -1364,7 +1369,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , RecordedTestExtra.hasText user [ "Too many login attempts have been made." ]
                 , RecordedTestExtra.tallSnapshot user 100 { name = "Too many login attempts" }
                 , -- Should be able to log in again after some time has passed
-                  openLoginAndSubmitEmail (5 * 60 * 1000)
+                  openLoginAndSubmitEmail False (5 * 60 * 1000)
                 , T.andThen
                     100
                     (\data ->
