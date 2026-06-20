@@ -4389,7 +4389,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     channelId
                                                     currentDiscordUserId
                                                     ({ messages = loadMessagesHelper channel
-                                                     , newUsers = SeqDict.empty
+                                                     , newUsers = getNewUsers session guildId guild
                                                      }
                                                         |> FilledInByBackend
                                                     )
