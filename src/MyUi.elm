@@ -965,7 +965,6 @@ body {
 }
 .reaction-emoji-popup {
   opacity: 0;
-  pointer-events: none;
   transition: opacity 0.1s ease;
 }
 .reaction-emoji-button:hover .reaction-emoji-popup {

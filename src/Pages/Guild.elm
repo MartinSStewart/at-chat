@@ -4606,8 +4606,7 @@ reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
                         , Ui.background MyUi.background1
                         , Ui.paddingXY 4 0
                         , Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-button")
-                        , reactionPopup customEmojis allUsers animationMode emoji users
-                            |> Ui.above
+                        , reactionPopup customEmojis allUsers animationMode emoji users |> Ui.above
                         , Ui.borderColor
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
@@ -4656,45 +4655,53 @@ reactionPopup :
     -> NonemptySet userId
     -> Element MessageViewMsg
 reactionPopup customEmojis allUsers animationMode emoji users =
-    Ui.column
+    let
+        names : Nonempty (Element msg)
+        names =
+            List.Nonempty.map
+                (\userId ->
+                    case SeqDict.get userId allUsers of
+                        Just user ->
+                            Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (PersonName.toString user.name))
+
+                        Nothing ->
+                            Ui.text "<Missing>"
+                )
+                (NonemptySet.toNonemptyList users)
+    in
+    Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
-        , Ui.width Ui.shrink
+        , Ui.widthMin 200
         , Ui.background MyUi.background1
         , Ui.borderColor MyUi.border1
         , Ui.border 1
         , Ui.rounded 8
         , Ui.padding 8
-        , Ui.spacing 4
+        , Ui.spacing 8
         , Ui.move { x = 0, y = -8, z = 0 }
-        , Ui.Font.color MyUi.font1
-        , Ui.Shadow.shadows
-            [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
+        , Ui.Font.color MyUi.font3
+        , MyUi.noPointerEvents
+        , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
+        , Ui.contentCenterY
         ]
-        [ Ui.el
-            [ Ui.centerX ]
-            (case emoji of
-                EmojiOrCustomEmoji_Emoji emoji2 ->
-                    Ui.el [ Ui.Font.size 40 ] (Ui.text (Emoji.toString emoji2))
+        [ case emoji of
+            EmojiOrCustomEmoji_Emoji emoji2 ->
+                Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink ] (Ui.text (Emoji.toString emoji2))
 
-                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                    CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode
-                        |> Ui.html
-            )
-        , Ui.column
-            [ Ui.spacing 2
-            , Ui.Font.size 14
-            , Ui.width Ui.shrink
-            ]
-            (List.filterMap
-                (\userId ->
-                    case SeqDict.get userId allUsers of
-                        Just user ->
-                            Ui.text (PersonName.toString user.name) |> Just
+            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode
+                    |> Ui.html
+        , Ui.Prose.paragraph
+            [ Ui.Font.size 14, Ui.width Ui.fill ]
+            (case List.Nonempty.tail names of
+                [] ->
+                    [ List.Nonempty.head names ]
 
-                        Nothing ->
-                            Nothing
-                )
-                (NonemptySet.toList users)
+                [ two ] ->
+                    [ List.Nonempty.head names, Ui.text " and ", two ]
+
+                rest ->
+                    List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
             )
         ]
 
