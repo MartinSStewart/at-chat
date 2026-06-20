@@ -4691,7 +4691,9 @@ reactionPopup customEmojis allUsers animationMode emoji users =
     in
     Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
-        , Ui.width (Ui.px 300)
+        , Ui.width Ui.shrink
+        , MyUi.htmlStyle "width" "max-content"
+        , MyUi.htmlStyle "max-width" "300px"
         , Ui.background MyUi.background1
         , Ui.borderColor MyUi.border1
         , Ui.border 1
