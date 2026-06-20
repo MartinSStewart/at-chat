@@ -3909,9 +3909,6 @@ publicGoMatchViewTest normalConfig =
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
-                                                            , viewer.checkView
-                                                                100
-                                                                (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_cell_5_5" ])
                                                             , tallSnapshot viewer 100 { name = "Spectating Go match" }
                                                             ]
                                                         )

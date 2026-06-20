@@ -2083,44 +2083,20 @@ clockChip userId maybeUser seconds isActive stone setup score =
             Nothing ->
                 User.profileImageNoRounding userId Nothing
           )
-            |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 } ]
+            |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
-            [ Ui.spacing 16, Ui.alignRight ]
+            [ Ui.spacing 20, Ui.alignRight, Ui.Font.size 20, Ui.Font.color colorB ]
             [ case setup.timeControl of
                 Just _ ->
                     Ui.el
-                        [ Ui.Font.weight 600
+                        [ Ui.Font.bold
                         , Ui.width Ui.shrink
-                        , Ui.Font.size 20
-                        , Ui.Font.color colorB
                         ]
                         (Ui.text (formatClock seconds))
 
                 Nothing ->
                     Ui.none
-            , Ui.row
-                [ Ui.Font.color
-                    (case stone of
-                        White ->
-                            Ui.rgb 20 20 20
-
-                        Black ->
-                            Ui.rgb 230 230 230
-                    )
-                , Ui.spacing 4
-                , Ui.contentCenterY
-                , Ui.Font.letterSpacing -1
-                , Ui.Font.bold
-                ]
-                [ Ui.el
-                    [ Ui.width (Ui.px 16)
-                    , Ui.height (Ui.px 16)
-                    , Ui.background colorB
-                    , Ui.rounded 99
-                    ]
-                    Ui.none
-                , StringExtra.removeTrailing0s 1 score |> Ui.text
-                ]
+            , StringExtra.removeTrailing0s 1 score |> Ui.text
             ]
         ]
 
