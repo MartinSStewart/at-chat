@@ -1440,7 +1440,11 @@ updateGame currentTime currentUserId msg setup state model =
                             ( Game model, Command.none, Nothing )
 
                     Marking ->
-                        ( Game model, Command.none, MarkTerritory x y |> Just )
+                        if isLocalUsersTurn currentUserId setup state then
+                            ( Game model, Command.none, MarkTerritory x y |> Just )
+
+                        else
+                            ( Game model, Command.none, Nothing )
 
                     Confirming ->
                         ( Game model, Command.none, Nothing )
@@ -2346,9 +2350,16 @@ statusView currentTime state =
         [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
         (Ui.text
             (case state.phase of
-                Playing _ ->
+                Playing { previousPlayerPassed } ->
                     if hasTimeToDoAction currentTime state then
-                        stoneName state.currentPlayer ++ " to move"
+                        (if previousPlayerPassed then
+                            stoneName (otherStone state.currentPlayer) ++ " passed. "
+
+                         else
+                            ""
+                        )
+                            ++ stoneName state.currentPlayer
+                            ++ " to move"
 
                     else
                         case state.currentPlayer of
