@@ -963,6 +963,14 @@ body {
   outline-color: rgb(96,165,250);
   background-color: rgba(96,165,250,0.3);
 }
+.reaction-emoji-popup {
+  opacity: 0;
+  transition: opacity 0.05s ease 0s;
+}
+.reaction-emoji-button:hover .reaction-emoji-popup {
+  opacity: 1;
+  transition: opacity 0.2s ease 1s;
+}
 """
             )
         ]
