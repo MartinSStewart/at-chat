@@ -43,6 +43,7 @@ import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
@@ -54,6 +55,7 @@ import Icons
 import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
 import MyUi
 import Ports
+import Quantity
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -111,8 +113,8 @@ type alias Snapshot =
 
 
 type alias TimeControl =
-    { mainTime : Float
-    , increment : Float
+    { mainTime : Duration
+    , increment : Duration
     }
 
 
@@ -124,9 +126,9 @@ type alias GameState =
     , territoryMarks : Dict ( Int, Int ) Stone
     , currentPlayer : Stone
     , phase : Phase
-    , lastTick : Maybe Time.Posix
-    , blackTime : Float
-    , whiteTime : Float
+    , lastAction : Maybe Time.Posix
+    , blackTime : Duration
+    , whiteTime : Duration
     , history : List Snapshot
     }
 
@@ -418,15 +420,15 @@ initGameState setup =
                 tc.mainTime
 
             Nothing ->
-                0
+                Quantity.zero
     , whiteTime =
         case setup.timeControl of
             Just tc ->
                 tc.mainTime
 
             Nothing ->
-                0
-    , lastTick = Nothing
+                Quantity.zero
+    , lastAction = Nothing
     , board = board
     , lastMove = Nothing
     , history = []
@@ -477,7 +479,7 @@ type SetupMsg
 {-| Opaque
 -}
 type GameMsg
-    = PressedCell Int Int
+    = PressedCell ( Int, Int )
     | PressedPass
     | PressedDoneMarking
     | PressedAgree
@@ -489,6 +491,7 @@ type SpectatorMsg
     = PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
+    | Spectator_PressedCell ( Int, Int )
 
 
 type Action
@@ -662,33 +665,65 @@ currentSnapshot model =
     }
 
 
-applyIncrement : ValidatedSetup -> Stone -> GameState -> GameState
-applyIncrement setup mover model =
+actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> GameState -> Duration
+actualTimeLeft currentTime player currentPlayer timeLeft model =
+    case model.phase of
+        Playing _ ->
+            if player == currentPlayer then
+                let
+                    elapsedTime =
+                        Duration.from (Maybe.withDefault currentTime model.lastAction) currentTime
+                in
+                timeLeft |> Quantity.minus elapsedTime
+
+            else
+                timeLeft
+
+        Marking ->
+            timeLeft
+
+        Confirming ->
+            timeLeft
+
+        Scored record ->
+            timeLeft
+
+
+applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> GameState -> GameState
+applyIncrement currentTime setup mover model =
     case setup.timeControl of
         Just tc ->
             case mover of
                 Black ->
-                    { model | blackTime = model.blackTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | blackTime = actualTimeLeft currentTime Black mover model.blackTime model |> Quantity.plus tc.increment
+                        , lastAction = Just currentTime
+                    }
 
                 White ->
-                    { model | whiteTime = model.whiteTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | whiteTime = actualTimeLeft currentTime White mover model.whiteTime model |> Quantity.plus tc.increment
+                        , lastAction = Just currentTime
+                    }
 
         Nothing ->
-            { model | lastTick = Nothing }
+            { model | lastAction = Just currentTime }
 
 
-performPass : ValidatedSetup -> GameState -> GameState
-performPass setup model =
+performPass : Time.Posix -> ValidatedSetup -> GameState -> GameState
+performPass currentTime setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
             if previousPlayerPassed then
                 applyIncrement
+                    currentTime
                     setup
                     model.currentPlayer
                     { model | phase = Marking, currentPlayer = otherStone model.currentPlayer }
 
             else
                 applyIncrement
+                    currentTime
                     setup
                     model.currentPlayer
                     { model
@@ -699,55 +734,6 @@ performPass setup model =
 
         _ ->
             model
-
-
-
---
---tickClock : Time.Posix -> GameModel -> GameModel
---tickClock now model =
---    case model.setup.timeControl of
---        Nothing ->
---            model
---
---        Just _ ->
---            case ( model.state.phase, isViewingPast model ) of
---                ( Playing _, False ) ->
---                    let
---                        elapsed : Float
---                        elapsed =
---                            case model.state.lastTick of
---                                Just last ->
---                                    max 0 (Duration.from last now |> Duration.inSeconds)
---
---                                Nothing ->
---                                    0
---
---                        decremented : GameState
---                        decremented =
---                            case model.state.currentPlayer of
---                                Black ->
---                                    { model | blackTime = max 0 (model.state.blackTime - elapsed) }
---
---                                White ->
---                                    { model | whiteTime = max 0 (model.state.whiteTime - elapsed) }
---
---                        currentRemaining : Float
---                        currentRemaining =
---                            case decremented.currentPlayer of
---                                Black ->
---                                    decremented.blackTime
---
---                                White ->
---                                    decremented.whiteTime
---                    in
---                    if currentRemaining <= 0 then
---                        timeoutPass model.setup { decremented | lastTick = Just now }
---
---                    else
---                        { decremented | lastTick = Just now }
---
---                _ ->
---                    { model | lastTick = Just now }
 
 
 viewingSnapshot : GameState -> GameModel -> Snapshot
@@ -836,28 +822,25 @@ tryPlace setup x y model =
             Err "Move repeats a board state"
 
         else
-            applyIncrement
-                setup
-                stone
-                { model
-                    | board = boardAfterCapture
-                    , lastMove = Just ( x, y )
-                    , history = currentSnapshot model :: model.history
-                    , currentPlayer = opponent
-                    , blackCaptures =
-                        if stone == Black then
-                            model.blackCaptures + captured
+            { model
+                | board = boardAfterCapture
+                , lastMove = Just ( x, y )
+                , history = currentSnapshot model :: model.history
+                , currentPlayer = opponent
+                , blackCaptures =
+                    if stone == Black then
+                        model.blackCaptures + captured
 
-                        else
-                            model.blackCaptures
-                    , whiteCaptures =
-                        if stone == White then
-                            model.whiteCaptures + captured
+                    else
+                        model.blackCaptures
+                , whiteCaptures =
+                    if stone == White then
+                        model.whiteCaptures + captured
 
-                        else
-                            model.whiteCaptures
-                    , phase = Playing { previousPlayerPassed = False }
-                }
+                    else
+                        model.whiteCaptures
+                , phase = Playing { previousPlayerPassed = False }
+            }
                 |> Ok
 
 
@@ -1065,7 +1048,7 @@ parseTimeControl model =
                                 Err "Increment cannot be negative"
 
                             else
-                                Ok (Just { mainTime = minutes * 60, increment = inc })
+                                Ok (Just { mainTime = Duration.minutes minutes, increment = Duration.seconds inc })
 
 
 update :
@@ -1327,10 +1310,15 @@ updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action model =
     case action.change of
         PlaceStone x y ->
-            tryPlace setup x y model |> Result.withDefault model
+            case tryPlace setup x y model of
+                Ok model2 ->
+                    applyIncrement action.time setup model.currentPlayer model2
+
+                Err _ ->
+                    model
 
         PassTurn ->
-            applyIncrement setup model.currentPlayer (performPass setup model)
+            performPass action.time setup model
 
         MarkTerritory x y ->
             cycleTerritory setup x y model
@@ -1338,7 +1326,11 @@ updateAction setup action model =
         FinishedMarking ->
             case model.phase of
                 Marking ->
-                    { model | phase = Confirming, currentPlayer = otherStone model.currentPlayer }
+                    { model
+                        | phase = Confirming
+                        , currentPlayer = otherStone model.currentPlayer
+                        , lastAction = Just action.time
+                    }
 
                 _ ->
                     model
@@ -1356,6 +1348,7 @@ updateAction setup action model =
                                 { blackScore = b
                                 , whiteScore = w
                                 }
+                        , lastAction = Just action.time
                     }
 
                 _ ->
@@ -1368,6 +1361,7 @@ updateAction setup action model =
                         | phase = Playing { previousPlayerPassed = False }
                         , currentPlayer = otherStone model.currentPlayer
                         , territoryMarks = Dict.empty
+                        , lastAction = Just action.time
                     }
 
                 _ ->
@@ -1377,7 +1371,7 @@ updateAction setup action model =
 updateGame : Id UserId -> GameMsg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
 updateGame currentUserId msg setup state model =
     case msg of
-        PressedCell x y ->
+        PressedCell ( x, y ) ->
             if isViewingPast model then
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
@@ -1484,12 +1478,14 @@ updateSpectator msg state model =
             in
             { model | viewingMovesBack = total - clamped, lastError = Nothing }
 
-        --( Game (tickClock now model), Command.none, Nothing )
         PressedArrowLeft ->
             stepBack state model
 
         PressedArrowRight ->
             stepForward model
+
+        Spectator_PressedCell ( x, y ) ->
+            model
 
 
 cellPx : Int
@@ -1508,7 +1504,8 @@ viewHeight windowSize =
 
 
 view :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> Maybe MyUi.LastCopy
     -> LocalUser
     -> Id UserId
@@ -1516,7 +1513,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
+view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1537,8 +1534,8 @@ view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just match ->
-                            Ui.Lazy.lazy4
-                                gameView
+                            gameView
+                                currentTime
                                 windowSize
                                 localUser
                                 match
@@ -1924,12 +1921,12 @@ timeInput htmlId label value onChange =
         ]
 
 
-formatClock : Float -> String
+formatClock : Duration -> String
 formatClock seconds =
     let
         clamped : Int
         clamped =
-            max 0 (floor seconds)
+            max 0 (floor (Duration.inSeconds seconds))
 
         minutes : Int
         minutes =
@@ -1950,8 +1947,8 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
-clockView blackUser whiteUser state setup =
+clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
+clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
         gameActive =
@@ -1976,7 +1973,7 @@ clockView blackUser whiteUser state setup =
         [ clockChip
             setup.blackPlayer
             blackUser
-            state.blackTime
+            (actualTimeLeft currentTime Black state.currentPlayer state.blackTime state)
             (gameActive && state.currentPlayer == Black)
             Black
             setup
@@ -1984,7 +1981,7 @@ clockView blackUser whiteUser state setup =
         , clockChip
             setup.whitePlayer
             whiteUser
-            state.whiteTime
+            (actualTimeLeft currentTime White state.currentPlayer state.whiteTime state)
             (gameActive && state.currentPlayer == White)
             White
             setup
@@ -2039,7 +2036,7 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
+clockChip : Id UserId -> Maybe FrontendUser -> Duration -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
 clockChip userId maybeUser seconds isActive stone setup score =
     let
         ( colorA, colorB ) =
@@ -2157,8 +2154,8 @@ hasPendingTurn userId matches =
         matches
 
 
-spectatorView : Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
-spectatorView windowSize data model =
+spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
+spectatorView currentTime windowSize data model =
     let
         isMobile : Bool
         isMobile =
@@ -2192,8 +2189,8 @@ spectatorView windowSize data model =
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
-            , boardView windowSize [] data.setup state model
+            [ clockView currentTime (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
+            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map Spectator_PressedCell
             ]
         , if isMobile then
             Ui.none
@@ -2204,12 +2201,13 @@ spectatorView windowSize data model =
 
 
 gameView :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> LocalUser
     -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize localUser (MatchData data) model =
+gameView currentTime windowSize localUser (MatchData data) model =
     let
         isMobile : Bool
         isMobile =
@@ -2218,22 +2216,6 @@ gameView windowSize localUser (MatchData data) model =
         state : GameState
         state =
             data.cache
-
-        clickable : Bool
-        clickable =
-            if isViewingPast model then
-                True
-
-            else
-                case state.phase of
-                    Playing _ ->
-                        isLocalUsersTurn localUser.session.userId data.setup state
-
-                    Marking ->
-                        True
-
-                    _ ->
-                        False
     in
     Ui.column
         [ Ui.spacing
@@ -2253,7 +2235,7 @@ gameView windowSize localUser (MatchData data) model =
             )
         , Ui.background MyUi.background1
         ]
-        [ statusView state
+        [ Ui.Lazy.lazy statusView state
         , if isLocalUsersTurn localUser.session.userId data.setup state then
             case state.phase of
                 Playing { previousPlayerPassed } ->
@@ -2295,27 +2277,18 @@ gameView windowSize localUser (MatchData data) model =
             , Ui.rounded 4
             ]
             [ clockView
+                currentTime
                 (User.getUser data.setup.blackPlayer localUser)
                 (User.getUser data.setup.whitePlayer localUser)
                 state
                 data.setup
-            , boardView
-                windowSize
-                (if clickable then
-                    clickTargets (boardSizeToInt data.setup.width) (boardSizeToInt data.setup.height)
-
-                 else
-                    []
-                )
-                data.setup
-                state
-                model
+            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none
 
           else
-            historyView state model |> Ui.map SpectatorMsg
+            Ui.Lazy.lazy2 historyView state model |> Ui.map SpectatorMsg
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -2398,8 +2371,8 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> List (Html msg) -> ValidatedSetup -> GameState -> GameModel -> Element msg
-boardView windowSize overlay setup state model =
+boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element ( Int, Int )
+boardView windowSize setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -2484,7 +2457,7 @@ boardView windowSize overlay setup state model =
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing state
-            ++ overlay
+            ++ clickTargets (boardSizeToInt setup.width) (boardSizeToInt setup.height)
         )
         |> Ui.html
         |> Ui.el [ Ui.width Ui.shrink, Ui.centerX ]
@@ -2698,7 +2671,7 @@ territoryShapes marks =
             )
 
 
-clickTargets : Int -> Int -> List (Svg GameMsg)
+clickTargets : Int -> Int -> List (Svg ( Int, Int ))
 clickTargets width height =
     List.range 0 (width - 1)
         |> List.concatMap
@@ -2714,7 +2687,7 @@ clickTargets width height =
                                 , Svg.Attributes.height (String.fromInt cellPx)
                                 , Svg.Attributes.fill "transparent"
                                 , Svg.Attributes.style "cursor:pointer"
-                                , Svg.Events.onClick (PressedCell x y)
+                                , Svg.Events.onClick ( x, y )
                                 ]
                                 []
                         )
