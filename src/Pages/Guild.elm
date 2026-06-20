@@ -545,6 +545,7 @@ loggedInAsView localUser =
         , Ui.background MyUi.background1
         , MyUi.htmlStyle "padding" ("4px 4px calc(" ++ MyUi.insetBottom ++ " + 4px) 4px")
         , Ui.spacing 8
+        , Ui.clipWithEllipsis
         ]
         [ User.profileImageNoRounding localUser.session.userId localUser.user.icon
         , Ui.text (PersonName.toString localUser.user.name)
