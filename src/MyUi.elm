@@ -965,11 +965,11 @@ body {
 }
 .reaction-emoji-popup {
   opacity: 0;
-  transition: opacity 0.1s ease 0s;
+  transition: opacity 0.05s ease 0s;
 }
 .reaction-emoji-button:hover .reaction-emoji-popup {
   opacity: 1;
-  transition: opacity 0.1s ease 1s;
+  transition: opacity 0.2s ease 1s;
 }
 """
             )
