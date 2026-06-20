@@ -4569,13 +4569,14 @@ dropdownButtonId index =
 
 
 reactionEmojiView :
-    userId
+    IsHovered
+    -> userId
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> AnimationMode
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Element MessageViewMsg)
-reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
+reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -4606,7 +4607,6 @@ reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
                         , Ui.background MyUi.background1
                         , Ui.paddingXY 4 0
                         , Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-button")
-                        , reactionPopup customEmojis allUsers animationMode emoji users |> Ui.above
                         , Ui.borderColor
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
@@ -4624,6 +4624,18 @@ reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
                         , Ui.border 1
                         , Ui.width Ui.shrink
                         , Ui.Font.bold
+                        , case isHovered of
+                            IsHovered ->
+                                reactionPopup customEmojis allUsers animationMode emoji users |> Ui.above
+
+                            IsNotHovered ->
+                                Ui.noAttr
+
+                            IsHoveredButNoMenu ->
+                                Ui.noAttr
+
+                            IsHoveredWhileSelectingAnchor ->
+                                Ui.noAttr
                         ]
                         [ case emoji of
                             EmojiOrCustomEmoji_Emoji emoji2 ->
@@ -4693,7 +4705,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
         , Ui.width Ui.shrink
         , MyUi.htmlStyle "width" "max-content"
-        , MyUi.htmlStyle "max-width" "300px"
+        , MyUi.htmlStyle "max-width" "400px"
         , Ui.background MyUi.background1
         , Ui.borderColor MyUi.border1
         , Ui.border 1
@@ -4750,7 +4762,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
+                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -4895,7 +4907,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
+                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6468,7 +6480,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
+            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -6586,7 +6598,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
+            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
