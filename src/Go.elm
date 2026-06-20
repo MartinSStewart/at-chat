@@ -1568,6 +1568,7 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
         (Ui.column
             []
             [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
+            , Ui.el [ Ui.paddingXY 16 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -2271,42 +2272,47 @@ gameView currentTime windowSize localUser (MatchData data) model =
             )
         , Ui.background MyUi.background1
         ]
-        [ statusView currentTime state
-        , if isLocalUsersTurn localUser.session.userId data.setup state then
-            case state.phase of
-                Playing { previousPlayerPassed } ->
-                    Ui.el
-                        [ Ui.paddingXY 16 0 ]
-                        (MyUi.simpleButton
-                            (Dom.id "go_pass")
-                            PressedPass
-                            (Ui.text
-                                (if previousPlayerPassed then
-                                    "Pass and mark territory"
+        [ Ui.column
+            []
+            [ statusView currentTime state
+            , (if isLocalUsersTurn localUser.session.userId data.setup state && hasTimeToDoAction currentTime state then
+                case state.phase of
+                    Playing { previousPlayerPassed } ->
+                        Ui.el
+                            [ Ui.paddingXY 16 0 ]
+                            (MyUi.simpleButton
+                                (Dom.id "go_pass")
+                                PressedPass
+                                (Ui.text
+                                    (if previousPlayerPassed then
+                                        "Pass and mark territory"
 
-                                 else
-                                    "Pass"
+                                     else
+                                        "Pass"
+                                    )
                                 )
                             )
-                        )
 
-                Marking ->
-                    Ui.el
-                        [ Ui.paddingXY 16 0 ]
-                        (MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking"))
+                    Marking ->
+                        Ui.el
+                            [ Ui.paddingXY 16 0 ]
+                            (MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking"))
 
-                Confirming ->
-                    Ui.row
-                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
-                        [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
-                        , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
-                        ]
+                    Confirming ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                            [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
+                            , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
+                            ]
 
-                Scored _ ->
-                    Ui.none
+                    Scored _ ->
+                        Ui.none
 
-          else
-            Ui.none
+               else
+                Ui.none
+              )
+                |> Ui.el [ Ui.height (Ui.px 44), Ui.contentCenterY ]
+            ]
         , Ui.column
             [ Ui.width Ui.shrink
             , Ui.background boardColor
