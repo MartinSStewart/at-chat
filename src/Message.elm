@@ -12,6 +12,7 @@ module Message exposing
     , drawing
     , editUserTextMessage
     , handleDrawingChange
+    , isSameMessage
     , reactionEmojis
     , removeReactionEmoji
     , userJoined
@@ -398,6 +399,34 @@ createdAt message =
 
         GoMatchStarted time _ _ _ ->
             time
+
+
+{-| Returns True if both values are the same user text message (same author, creation time
+and content).
+
+This is used to make text-message insertion on the frontend idempotent. The frontend stores
+messages in an append-only array, so if the same `Server_SendMessage`/`LocalChangeResponse`
+change is ever applied more than once (which can happen around a disconnect/reconnect when
+Lamdera redelivers a `ToFrontend` message that the reconnect reload already incorporated),
+the message would otherwise get appended a second time and show up as a duplicate until the
+page is reloaded.
+
+The content is part of the comparison on purpose: two genuinely different messages can share
+the same author and timestamp (for example Discord messages with a coarse timestamp), and
+those must still be treated as distinct so that both are kept.
+
+Only user text messages are considered here, since those are the ones added via the
+append-only send path; other message kinds return False so they are never collapsed.
+
+-}
+isSameMessage : Message messageId userId -> Message messageId userId -> Bool
+isSameMessage messageA messageB =
+    case ( messageA, messageB ) of
+        ( UserTextMessage a, UserTextMessage b ) ->
+            a.createdBy == b.createdBy && a.createdAt == b.createdAt && a.content == b.content && a.repliedTo == b.repliedTo
+
+        _ ->
+            False
 
 
 addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId

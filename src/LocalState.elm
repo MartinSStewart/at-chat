@@ -1082,26 +1082,50 @@ createMessageFrontend :
             , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
 createMessageFrontend message channel =
-    { channel
-        | messages = Array.push (MessageLoaded message) channel.messages
-        , visibleMessages = VisibleMessages.increment channel channel.visibleMessages
-        , lastTypedAt =
-            case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+    if lastMessageIsDuplicate message channel.messages then
+        -- Guard against the same message being added twice. This can happen around a
+        -- disconnect/reconnect when a server change is delivered more than once: because
+        -- messages are stored in an append-only array, re-applying the change would
+        -- otherwise append a duplicate copy that persists until the page is reloaded.
+        channel
 
-                UserJoinedMessage _ _ _ _ ->
-                    channel.lastTypedAt
+    else
+        { channel
+            | messages = Array.push (MessageLoaded message) channel.messages
+            , visibleMessages = VisibleMessages.increment channel channel.visibleMessages
+            , lastTypedAt =
+                case message of
+                    UserTextMessage { createdBy } ->
+                        SeqDict.remove createdBy channel.lastTypedAt
 
-                DeletedMessage _ ->
-                    channel.lastTypedAt
+                    UserJoinedMessage _ _ _ _ ->
+                        channel.lastTypedAt
 
-                CallStarted _ _ _ _ _ ->
-                    channel.lastTypedAt
+                    DeletedMessage _ ->
+                        channel.lastTypedAt
 
-                GoMatchStarted _ _ _ _ ->
-                    channel.lastTypedAt
-    }
+                    CallStarted _ _ _ _ _ ->
+                        channel.lastTypedAt
+
+                    GoMatchStarted _ _ _ _ ->
+                        channel.lastTypedAt
+        }
+
+
+{-| The frontend keeps each channel's messages in an append-only array (the array index is
+the message id). A `Server_SendMessage`/`LocalChangeResponse` change is therefore applied by
+appending the new message to the end. If the same change is ever delivered twice the message
+would be appended twice and show up as a duplicate, so we treat appending a message that is
+identical to the most recently received one as a no-op.
+-}
+lastMessageIsDuplicate : Message messageId userId -> Array (MessageState messageId userId) -> Bool
+lastMessageIsDuplicate message messages =
+    case Array.get (Array.length messages - 1) messages of
+        Just (MessageLoaded lastMessage) ->
+            Message.isSameMessage message lastMessage
+
+        _ ->
+            False
 
 
 createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild
