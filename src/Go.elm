@@ -48,7 +48,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
 import Env
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Html.Events
 import Icons
@@ -127,8 +127,7 @@ type alias GameState =
     , currentPlayer : Stone
     , phase : Phase
     , lastAction : Maybe Time.Posix
-    , blackTime : Duration
-    , whiteTime : Duration
+    , timeLeft : Maybe { white : Duration, black : Duration }
     , history : List Snapshot
     }
 
@@ -414,20 +413,13 @@ initGameState setup =
             else
                 White
     in
-    { blackTime =
+    { timeLeft =
         case setup.timeControl of
             Just tc ->
-                tc.mainTime
+                Just { white = tc.mainTime, black = tc.mainTime }
 
             Nothing ->
-                Quantity.zero
-    , whiteTime =
-        case setup.timeControl of
-            Just tc ->
-                tc.mainTime
-
-            Nothing ->
-                Quantity.zero
+                Nothing
     , lastAction = Nothing
     , board = board
     , lastMove = Nothing
@@ -685,28 +677,36 @@ actualTimeLeft currentTime player currentPlayer timeLeft model =
         Confirming ->
             timeLeft
 
-        Scored record ->
+        Scored _ ->
             timeLeft
 
 
 applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> GameState -> GameState
 applyIncrement currentTime setup mover model =
-    case setup.timeControl of
-        Just tc ->
+    case ( setup.timeControl, model.timeLeft ) of
+        ( Just tc, Just { white, black } ) ->
             case mover of
                 Black ->
                     { model
-                        | blackTime = actualTimeLeft currentTime Black mover model.blackTime model |> Quantity.plus tc.increment
+                        | timeLeft =
+                            { white = white
+                            , black = actualTimeLeft currentTime Black mover black model |> Quantity.plus tc.increment
+                            }
+                                |> Just
                         , lastAction = Just currentTime
                     }
 
                 White ->
                     { model
-                        | whiteTime = actualTimeLeft currentTime White mover model.whiteTime model |> Quantity.plus tc.increment
+                        | timeLeft =
+                            { white = actualTimeLeft currentTime White mover white model |> Quantity.plus tc.increment
+                            , black = black
+                            }
+                                |> Just
                         , lastAction = Just currentTime
                     }
 
-        Nothing ->
+        _ ->
             { model | lastAction = Just currentTime }
 
 
@@ -1310,20 +1310,15 @@ foldActions setup actions =
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action model =
     let
-        timeLeft =
-            case model.currentPlayer of
-                White ->
-                    model.whiteTime
-
-                Black ->
-                    model.blackTime
+        currentPlayer =
+            model.currentPlayer
     in
-    if actualTimeLeft action.time model.currentPlayer model.currentPlayer timeLeft model |> Quantity.greaterThanZero then
+    if hasTimeToDoAction action.time model then
         case action.change of
             PlaceStone x y ->
                 case tryPlace setup x y model of
                     Ok model2 ->
-                        applyIncrement action.time setup model.currentPlayer model2
+                        applyIncrement action.time setup currentPlayer model2
 
                     Err _ ->
                         model
@@ -1339,7 +1334,7 @@ updateAction setup action model =
                     Marking ->
                         { model
                             | phase = Confirming
-                            , currentPlayer = otherStone model.currentPlayer
+                            , currentPlayer = otherStone currentPlayer
                             , lastAction = Just action.time
                         }
 
@@ -1370,7 +1365,7 @@ updateAction setup action model =
                     Confirming ->
                         { model
                             | phase = Playing { previousPlayerPassed = False }
-                            , currentPlayer = otherStone model.currentPlayer
+                            , currentPlayer = otherStone currentPlayer
                             , territoryMarks = Dict.empty
                             , lastAction = Just action.time
                         }
@@ -1384,16 +1379,24 @@ updateAction setup action model =
 
 hasTimeToDoAction : Time.Posix -> GameState -> Bool
 hasTimeToDoAction time model =
-    let
-        timeLeft =
-            case model.currentPlayer of
-                White ->
-                    model.whiteTime
+    case model.timeLeft of
+        Just { black, white } ->
+            actualTimeLeft
+                time
+                model.currentPlayer
+                model.currentPlayer
+                (case model.currentPlayer of
+                    White ->
+                        white
 
-                Black ->
-                    model.blackTime
-    in
-    actualTimeLeft time model.currentPlayer model.currentPlayer timeLeft model |> Quantity.greaterThanZero
+                    Black ->
+                        black
+                )
+                model
+                |> Quantity.greaterThanZero
+
+        Nothing ->
+            True
 
 
 updateGame :
@@ -1519,7 +1522,7 @@ updateSpectator msg state model =
         PressedArrowRight ->
             stepForward model
 
-        Spectator_PressedCell ( x, y ) ->
+        Spectator_PressedCell _ ->
             model
 
 
@@ -2008,18 +2011,28 @@ clockView currentTime blackUser whiteUser state setup =
         [ clockChip
             setup.blackPlayer
             blackUser
-            (actualTimeLeft currentTime Black state.currentPlayer state.blackTime state)
+            (case state.timeLeft of
+                Just timeLeft ->
+                    actualTimeLeft currentTime Black state.currentPlayer timeLeft.black state |> Just
+
+                Nothing ->
+                    Nothing
+            )
             (gameActive && state.currentPlayer == Black)
             Black
-            setup
             (currentScore setup state Black)
         , clockChip
             setup.whitePlayer
             whiteUser
-            (actualTimeLeft currentTime White state.currentPlayer state.whiteTime state)
+            (case state.timeLeft of
+                Just timeLeft ->
+                    actualTimeLeft currentTime White state.currentPlayer timeLeft.white state |> Just
+
+                Nothing ->
+                    Nothing
+            )
             (gameActive && state.currentPlayer == White)
             White
-            setup
             (currentScore setup state White)
         ]
 
@@ -2071,8 +2084,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Duration -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
-clockChip userId maybeUser timeLeft isActive stone setup score =
+clockChip : Id UserId -> Maybe FrontendUser -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
+clockChip userId maybeUser maybeTimeLeft isActive stone score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2121,8 +2134,8 @@ clockChip userId maybeUser timeLeft isActive stone setup score =
             |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
             [ Ui.spacing 20, Ui.alignRight, Ui.Font.size 20, Ui.Font.color colorB ]
-            [ case setup.timeControl of
-                Just _ ->
+            [ case maybeTimeLeft of
+                Just timeLeft ->
                     Ui.el
                         [ Ui.Font.bold
                         , Ui.width Ui.shrink
@@ -2328,16 +2341,7 @@ statusView currentTime state =
         (Ui.text
             (case state.phase of
                 Playing _ ->
-                    let
-                        timeLeft =
-                            case state.currentPlayer of
-                                White ->
-                                    state.whiteTime
-
-                                Black ->
-                                    state.blackTime
-                    in
-                    if actualTimeLeft currentTime state.currentPlayer state.currentPlayer timeLeft state |> Quantity.greaterThanZero then
+                    if hasTimeToDoAction currentTime state then
                         stoneName state.currentPlayer ++ " to move"
 
                     else
