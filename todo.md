@@ -14,6 +14,7 @@
 * Messages disappear for one user (are still sent but vanishing locally). This is happening when backups are created.
   Need to make backups lock up server less
 * Fix BrowserDomNotFound error in program-test that's breaking the zoom-in part of the "Draw on top of messages" test
+* Some Discord stickers width /= height but the current sticker view assumes width == height
 
 Requested features:
 
