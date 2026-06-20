@@ -1076,6 +1076,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                             let
                                 ( game2, cmd, maybeChange ) =
                                     updateGame
+                                        time
                                         currentUserId
                                         gameMsg
                                         match.setup
@@ -1308,68 +1309,102 @@ foldActions setup actions =
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action model =
-    case action.change of
-        PlaceStone x y ->
-            case tryPlace setup x y model of
-                Ok model2 ->
-                    applyIncrement action.time setup model.currentPlayer model2
+    let
+        timeLeft =
+            case model.currentPlayer of
+                White ->
+                    model.whiteTime
 
-                Err _ ->
-                    model
+                Black ->
+                    model.blackTime
+    in
+    if actualTimeLeft action.time model.currentPlayer model.currentPlayer timeLeft model |> Quantity.greaterThanZero then
+        case action.change of
+            PlaceStone x y ->
+                case tryPlace setup x y model of
+                    Ok model2 ->
+                        applyIncrement action.time setup model.currentPlayer model2
 
-        PassTurn ->
-            performPass action.time setup model
+                    Err _ ->
+                        model
 
-        MarkTerritory x y ->
-            cycleTerritory setup x y model
+            PassTurn ->
+                performPass action.time setup model
 
-        FinishedMarking ->
-            case model.phase of
-                Marking ->
-                    { model
-                        | phase = Confirming
-                        , currentPlayer = otherStone model.currentPlayer
-                        , lastAction = Just action.time
-                    }
+            MarkTerritory x y ->
+                cycleTerritory setup x y model
 
-                _ ->
-                    model
+            FinishedMarking ->
+                case model.phase of
+                    Marking ->
+                        { model
+                            | phase = Confirming
+                            , currentPlayer = otherStone model.currentPlayer
+                            , lastAction = Just action.time
+                        }
 
-        AcceptTerritory ->
-            case model.phase of
-                Confirming ->
-                    let
-                        ( b, w ) =
-                            computeScore setup model
-                    in
-                    { model
-                        | phase =
-                            Scored
-                                { blackScore = b
-                                , whiteScore = w
-                                }
-                        , lastAction = Just action.time
-                    }
+                    _ ->
+                        model
 
-                _ ->
-                    model
+            AcceptTerritory ->
+                case model.phase of
+                    Confirming ->
+                        let
+                            ( b, w ) =
+                                computeScore setup model
+                        in
+                        { model
+                            | phase =
+                                Scored
+                                    { blackScore = b
+                                    , whiteScore = w
+                                    }
+                            , lastAction = Just action.time
+                        }
 
-        RejectTerritory ->
-            case model.phase of
-                Confirming ->
-                    { model
-                        | phase = Playing { previousPlayerPassed = False }
-                        , currentPlayer = otherStone model.currentPlayer
-                        , territoryMarks = Dict.empty
-                        , lastAction = Just action.time
-                    }
+                    _ ->
+                        model
 
-                _ ->
-                    model
+            RejectTerritory ->
+                case model.phase of
+                    Confirming ->
+                        { model
+                            | phase = Playing { previousPlayerPassed = False }
+                            , currentPlayer = otherStone model.currentPlayer
+                            , territoryMarks = Dict.empty
+                            , lastAction = Just action.time
+                        }
+
+                    _ ->
+                        model
+
+    else
+        model
 
 
-updateGame : Id UserId -> GameMsg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
-updateGame currentUserId msg setup state model =
+hasTimeToDoAction : Time.Posix -> GameState -> Bool
+hasTimeToDoAction time model =
+    let
+        timeLeft =
+            case model.currentPlayer of
+                White ->
+                    model.whiteTime
+
+                Black ->
+                    model.blackTime
+    in
+    actualTimeLeft time model.currentPlayer model.currentPlayer timeLeft model |> Quantity.greaterThanZero
+
+
+updateGame :
+    Time.Posix
+    -> Id UserId
+    -> GameMsg
+    -> ValidatedSetup
+    -> GameState
+    -> GameModel
+    -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
@@ -1378,7 +1413,7 @@ updateGame currentUserId msg setup state model =
             else
                 case state.phase of
                     Playing _ ->
-                        if isLocalUsersTurn currentUserId setup state then
+                        if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
                                 Ok updated ->
                                     let
@@ -1415,8 +1450,8 @@ updateGame currentUserId msg setup state model =
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
-                case state.phase of
-                    Playing _ ->
+                case ( state.phase, hasTimeToDoAction currentTime state ) of
+                    ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( Game model
                             , Command.none
@@ -2037,7 +2072,7 @@ currentPlayersTurn actions =
 
 
 clockChip : Id UserId -> Maybe FrontendUser -> Duration -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
-clockChip userId maybeUser seconds isActive stone setup score =
+clockChip userId maybeUser timeLeft isActive stone setup score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2091,8 +2126,20 @@ clockChip userId maybeUser seconds isActive stone setup score =
                     Ui.el
                         [ Ui.Font.bold
                         , Ui.width Ui.shrink
+                        , if Quantity.lessThanZero timeLeft then
+                            Ui.Font.color
+                                (case stone of
+                                    White ->
+                                        Ui.rgb 175 0 21
+
+                                    Black ->
+                                        MyUi.errorColor
+                                )
+
+                          else
+                            Ui.noAttr
                         ]
-                        (Ui.text (formatClock seconds))
+                        (Ui.text (formatClock timeLeft))
 
                 Nothing ->
                     Ui.none
@@ -2159,7 +2206,7 @@ spectatorView currentTime windowSize data model =
             )
         , Ui.background MyUi.background1
         ]
-        [ statusView state
+        [ statusView currentTime state
         , Ui.column
             [ Ui.width Ui.shrink
             , Ui.background boardColor
@@ -2211,7 +2258,7 @@ gameView currentTime windowSize localUser (MatchData data) model =
             )
         , Ui.background MyUi.background1
         ]
-        [ Ui.Lazy.lazy statusView state
+        [ statusView currentTime state
         , if isLocalUsersTurn localUser.session.userId data.setup state then
             case state.phase of
                 Playing { previousPlayerPassed } ->
@@ -2274,14 +2321,32 @@ gameView currentTime windowSize localUser (MatchData data) model =
         ]
 
 
-statusView : GameState -> Element msg
-statusView state =
+statusView : Time.Posix -> GameState -> Element msg
+statusView currentTime state =
     Ui.el
         [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
         (Ui.text
             (case state.phase of
                 Playing _ ->
-                    stoneName state.currentPlayer ++ " to move"
+                    let
+                        timeLeft =
+                            case state.currentPlayer of
+                                White ->
+                                    state.whiteTime
+
+                                Black ->
+                                    state.blackTime
+                    in
+                    if actualTimeLeft currentTime state.currentPlayer state.currentPlayer timeLeft state |> Quantity.greaterThanZero then
+                        stoneName state.currentPlayer ++ " to move"
+
+                    else
+                        case state.currentPlayer of
+                            White ->
+                                "Black wins! White loses on time."
+
+                            Black ->
+                                "White wins! Black loses on time."
 
                 Marking ->
                     stoneName state.currentPlayer
