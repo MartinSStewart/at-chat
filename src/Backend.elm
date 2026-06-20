@@ -4166,23 +4166,27 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         SeqDict.empty
 
                                     else
-                                        List.foldl
-                                            (\memberId dict ->
-                                                case SeqDict.get memberId model.discordUsers of
-                                                    Just member ->
-                                                        SeqDict.insert
-                                                            memberId
-                                                            (User.discordUserDataToFrontendUser member)
-                                                            dict
-
-                                                    Nothing ->
-                                                        dict
-                                            )
-                                            SeqDict.empty
-                                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        getNewUsersHelper guild
 
                                 _ ->
-                                    SeqDict.empty
+                                    getNewUsersHelper guild
+
+                        getNewUsersHelper : DiscordBackendGuild -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+                        getNewUsersHelper guild =
+                            List.foldl
+                                (\memberId dict ->
+                                    case SeqDict.get memberId model.discordUsers of
+                                        Just member ->
+                                            SeqDict.insert
+                                                memberId
+                                                (User.discordUserDataToFrontendUser member)
+                                                dict
+
+                                        Nothing ->
+                                            dict
+                                )
+                                SeqDict.empty
+                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                     in
                     case viewing of
                         ViewDm otherUserId _ ->

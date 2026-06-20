@@ -125,7 +125,7 @@ subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
 subscriptions model =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
-        , Time.every (Duration.seconds 2) GotTime
+        , Time.every Duration.second GotTime
         , Effect.Browser.Events.onKeyDown
             (Json.Decode.map4
                 (\ctrlKey metaKey shiftKey key ->
