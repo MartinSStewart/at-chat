@@ -2002,6 +2002,9 @@ isPressMsg msg =
                 Go.ChangedViewingMove _ ->
                     False
 
+                Go.Spectator_PressedCell _ ->
+                    True
+
         PressedUnregisterServiceWorkers ->
             True
 

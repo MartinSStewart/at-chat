@@ -578,6 +578,7 @@ tabBodyView local loggedIn model =
                     case dmRoute.tab of
                         Just (DmChannelHeaderTab_Go maybeMatchId) ->
                             Go.view
+                                model.time
                                 model.windowSize
                                 model.lastCopied
                                 local.localUser

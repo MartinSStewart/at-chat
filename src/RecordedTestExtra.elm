@@ -31,6 +31,7 @@ module RecordedTestExtra exposing
     , firefoxDesktop
     , focusEvent
     , goMatchTest
+    , goTimeoutTest
     , goTurnNotificationDotTest
     , handleInternalRequests
     , handleLogin
@@ -3729,9 +3730,9 @@ goMatchTest normalConfig =
                                 -- Wrap up the game: pass twice, finish marking, agree on scoring
                                 , admin.click 100 (Dom.id "go_pass")
                                 , user2.click 100 (Dom.id "go_pass")
-                                , admin.click 100 (Dom.id "go_cell_3_6")
-                                , admin.click 100 (Dom.id "go_doneMarking")
-                                , user2.click 100 (Dom.id "go_agree")
+                                , admin.click 1000 (Dom.id "go_cell_3_6")
+                                , admin.click 1000 (Dom.id "go_doneMarking")
+                                , user2.click 1000 (Dom.id "go_agree")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
 
@@ -3741,16 +3742,84 @@ goMatchTest normalConfig =
                                 , user2.click 100 (Dom.id "guild_goMatchStartedCard_1")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-                                , admin.click 100 (Dom.id "go_cell_3_3")
-                                , user2.click 100 (Dom.id "go_cell_3_4")
-                                , admin.click 100 (Dom.id "go_pass")
-                                , user2.click 100 (Dom.id "go_pass")
-                                , admin.click 100 (Dom.id "go_cell_3_6")
-                                , admin.click 100 (Dom.id "go_doneMarking")
-                                , user2.click 100 (Dom.id "go_disagree")
-                                , admin.click 100 (Dom.id "go_cell_3_5")
+                                , admin.click 2000 (Dom.id "go_cell_3_3")
+                                , user2.click 2000 (Dom.id "go_cell_3_4")
+                                , admin.click 2000 (Dom.id "go_pass")
+                                , user2.click 2000 (Dom.id "go_pass")
+                                , admin.click 2000 (Dom.id "go_cell_3_6")
+                                , admin.click 2000 (Dom.id "go_doneMarking")
+                                , user2.click 2000 (Dom.id "go_disagree")
+                                , admin.click 2000 (Dom.id "go_cell_3_5")
                                 ]
                             )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+goTimeoutTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+goTimeoutTest normalConfig =
+    startTest
+        "A player who runs out of time can't move, and both players see the loss-on-time result"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            tallDesktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        , admin.click 100 (Dom.id "guild_openGoMatch")
+
+                        -- Set up a very short time control: 1 minute main time, no increment.
+                        , admin.input 100 (Dom.id "go_mainTimeInput") "1"
+                        , admin.input 100 (Dom.id "go_incrementInput") "0"
+                        , admin.click 100 (Dom.id "go_start")
+                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
+
+                        -- Admin is Black (creator default) and moves first. This starts
+                        -- White's clock ticking, and both players see it's White's turn.
+                        , admin.click 100 (Dom.id "go_cell_4_4")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
+
+                        -- Both players agree a single move has been played so far.
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
+
+                        -- Let 70 seconds pass (more than White's 60 second clock) and then
+                        -- have White (the user) try to place a stone. The move must be rejected
+                        -- because White has run out of time.
+                        , user.click 70000 (Dom.id "go_cell_5_4")
+
+                        -- The rejected move means no new stone was added: both players still
+                        -- only see a single move in the history.
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "2 / 2" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "2 / 2" ])
+
+                        -- Both players see the same loss-on-time result.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Black wins! White loses on time." ])
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Black wins! White loses on time." ])
+
+                        -- And neither player still sees a "to move" prompt.
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "White to move" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "White to move" ])
                         ]
                     )
                 ]
@@ -3909,9 +3978,6 @@ publicGoMatchViewTest normalConfig =
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
-                                                            , viewer.checkView
-                                                                100
-                                                                (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_cell_5_5" ])
                                                             , tallSnapshot viewer 100 { name = "Spectating Go match" }
                                                             ]
                                                         )

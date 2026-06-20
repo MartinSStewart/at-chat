@@ -43,17 +43,19 @@ import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
 import Env
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
 import MyUi
 import Ports
+import Quantity
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -111,8 +113,8 @@ type alias Snapshot =
 
 
 type alias TimeControl =
-    { mainTime : Float
-    , increment : Float
+    { mainTime : Duration
+    , increment : Duration
     }
 
 
@@ -124,9 +126,8 @@ type alias GameState =
     , territoryMarks : Dict ( Int, Int ) Stone
     , currentPlayer : Stone
     , phase : Phase
-    , lastTick : Maybe Time.Posix
-    , blackTime : Float
-    , whiteTime : Float
+    , lastAction : Maybe Time.Posix
+    , timeLeft : Maybe { white : Duration, black : Duration }
     , history : List Snapshot
     }
 
@@ -412,21 +413,14 @@ initGameState setup =
             else
                 White
     in
-    { blackTime =
+    { timeLeft =
         case setup.timeControl of
             Just tc ->
-                tc.mainTime
+                Just { white = tc.mainTime, black = tc.mainTime }
 
             Nothing ->
-                0
-    , whiteTime =
-        case setup.timeControl of
-            Just tc ->
-                tc.mainTime
-
-            Nothing ->
-                0
-    , lastTick = Nothing
+                Nothing
+    , lastAction = Nothing
     , board = board
     , lastMove = Nothing
     , history = []
@@ -477,7 +471,7 @@ type SetupMsg
 {-| Opaque
 -}
 type GameMsg
-    = PressedCell Int Int
+    = PressedCell ( Int, Int )
     | PressedPass
     | PressedDoneMarking
     | PressedAgree
@@ -489,6 +483,7 @@ type SpectatorMsg
     = PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
+    | Spectator_PressedCell ( Int, Int )
 
 
 type Action
@@ -662,33 +657,73 @@ currentSnapshot model =
     }
 
 
-applyIncrement : ValidatedSetup -> Stone -> GameState -> GameState
-applyIncrement setup mover model =
-    case setup.timeControl of
-        Just tc ->
+actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> GameState -> Duration
+actualTimeLeft currentTime player currentPlayer timeLeft model =
+    case model.phase of
+        Playing _ ->
+            if player == currentPlayer then
+                let
+                    elapsedTime =
+                        Duration.from (Maybe.withDefault currentTime model.lastAction) currentTime
+                in
+                timeLeft |> Quantity.minus elapsedTime
+
+            else
+                timeLeft
+
+        Marking ->
+            timeLeft
+
+        Confirming ->
+            timeLeft
+
+        Scored _ ->
+            timeLeft
+
+
+applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> GameState -> GameState
+applyIncrement currentTime setup mover model =
+    case ( setup.timeControl, model.timeLeft ) of
+        ( Just tc, Just { white, black } ) ->
             case mover of
                 Black ->
-                    { model | blackTime = model.blackTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | timeLeft =
+                            { white = white
+                            , black = actualTimeLeft currentTime Black mover black model |> Quantity.plus tc.increment
+                            }
+                                |> Just
+                        , lastAction = Just currentTime
+                    }
 
                 White ->
-                    { model | whiteTime = model.whiteTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | timeLeft =
+                            { white = actualTimeLeft currentTime White mover white model |> Quantity.plus tc.increment
+                            , black = black
+                            }
+                                |> Just
+                        , lastAction = Just currentTime
+                    }
 
-        Nothing ->
-            { model | lastTick = Nothing }
+        _ ->
+            { model | lastAction = Just currentTime }
 
 
-performPass : ValidatedSetup -> GameState -> GameState
-performPass setup model =
+performPass : Time.Posix -> ValidatedSetup -> GameState -> GameState
+performPass currentTime setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
             if previousPlayerPassed then
                 applyIncrement
+                    currentTime
                     setup
                     model.currentPlayer
                     { model | phase = Marking, currentPlayer = otherStone model.currentPlayer }
 
             else
                 applyIncrement
+                    currentTime
                     setup
                     model.currentPlayer
                     { model
@@ -699,55 +734,6 @@ performPass setup model =
 
         _ ->
             model
-
-
-
---
---tickClock : Time.Posix -> GameModel -> GameModel
---tickClock now model =
---    case model.setup.timeControl of
---        Nothing ->
---            model
---
---        Just _ ->
---            case ( model.state.phase, isViewingPast model ) of
---                ( Playing _, False ) ->
---                    let
---                        elapsed : Float
---                        elapsed =
---                            case model.state.lastTick of
---                                Just last ->
---                                    max 0 (Duration.from last now |> Duration.inSeconds)
---
---                                Nothing ->
---                                    0
---
---                        decremented : GameState
---                        decremented =
---                            case model.state.currentPlayer of
---                                Black ->
---                                    { model | blackTime = max 0 (model.state.blackTime - elapsed) }
---
---                                White ->
---                                    { model | whiteTime = max 0 (model.state.whiteTime - elapsed) }
---
---                        currentRemaining : Float
---                        currentRemaining =
---                            case decremented.currentPlayer of
---                                Black ->
---                                    decremented.blackTime
---
---                                White ->
---                                    decremented.whiteTime
---                    in
---                    if currentRemaining <= 0 then
---                        timeoutPass model.setup { decremented | lastTick = Just now }
---
---                    else
---                        { decremented | lastTick = Just now }
---
---                _ ->
---                    { model | lastTick = Just now }
 
 
 viewingSnapshot : GameState -> GameModel -> Snapshot
@@ -836,28 +822,25 @@ tryPlace setup x y model =
             Err "Move repeats a board state"
 
         else
-            applyIncrement
-                setup
-                stone
-                { model
-                    | board = boardAfterCapture
-                    , lastMove = Just ( x, y )
-                    , history = currentSnapshot model :: model.history
-                    , currentPlayer = opponent
-                    , blackCaptures =
-                        if stone == Black then
-                            model.blackCaptures + captured
+            { model
+                | board = boardAfterCapture
+                , lastMove = Just ( x, y )
+                , history = currentSnapshot model :: model.history
+                , currentPlayer = opponent
+                , blackCaptures =
+                    if stone == Black then
+                        model.blackCaptures + captured
 
-                        else
-                            model.blackCaptures
-                    , whiteCaptures =
-                        if stone == White then
-                            model.whiteCaptures + captured
+                    else
+                        model.blackCaptures
+                , whiteCaptures =
+                    if stone == White then
+                        model.whiteCaptures + captured
 
-                        else
-                            model.whiteCaptures
-                    , phase = Playing { previousPlayerPassed = False }
-                }
+                    else
+                        model.whiteCaptures
+                , phase = Playing { previousPlayerPassed = False }
+            }
                 |> Ok
 
 
@@ -1065,7 +1048,7 @@ parseTimeControl model =
                                 Err "Increment cannot be negative"
 
                             else
-                                Ok (Just { mainTime = minutes * 60, increment = inc })
+                                Ok (Just { mainTime = Duration.minutes minutes, increment = Duration.seconds inc })
 
 
 update :
@@ -1093,6 +1076,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                             let
                                 ( game2, cmd, maybeChange ) =
                                     updateGame
+                                        time
                                         currentUserId
                                         gameMsg
                                         match.setup
@@ -1325,66 +1309,114 @@ foldActions setup actions =
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action model =
-    case action.change of
-        PlaceStone x y ->
-            tryPlace setup x y model |> Result.withDefault model
+    let
+        currentPlayer =
+            model.currentPlayer
+    in
+    if hasTimeToDoAction action.time model then
+        case action.change of
+            PlaceStone x y ->
+                case tryPlace setup x y model of
+                    Ok model2 ->
+                        applyIncrement action.time setup currentPlayer model2
 
-        PassTurn ->
-            applyIncrement setup model.currentPlayer (performPass setup model)
+                    Err _ ->
+                        model
 
-        MarkTerritory x y ->
-            cycleTerritory setup x y model
+            PassTurn ->
+                performPass action.time setup model
 
-        FinishedMarking ->
-            case model.phase of
-                Marking ->
-                    { model | phase = Confirming, currentPlayer = otherStone model.currentPlayer }
+            MarkTerritory x y ->
+                cycleTerritory setup x y model
 
-                _ ->
-                    model
+            FinishedMarking ->
+                case model.phase of
+                    Marking ->
+                        { model
+                            | phase = Confirming
+                            , currentPlayer = otherStone currentPlayer
+                            , lastAction = Just action.time
+                        }
 
-        AcceptTerritory ->
-            case model.phase of
-                Confirming ->
-                    let
-                        ( b, w ) =
-                            computeScore setup model
-                    in
-                    { model
-                        | phase =
-                            Scored
-                                { blackScore = b
-                                , whiteScore = w
-                                }
-                    }
+                    _ ->
+                        model
 
-                _ ->
-                    model
+            AcceptTerritory ->
+                case model.phase of
+                    Confirming ->
+                        let
+                            ( b, w ) =
+                                computeScore setup model
+                        in
+                        { model
+                            | phase =
+                                Scored
+                                    { blackScore = b
+                                    , whiteScore = w
+                                    }
+                            , lastAction = Just action.time
+                        }
 
-        RejectTerritory ->
-            case model.phase of
-                Confirming ->
-                    { model
-                        | phase = Playing { previousPlayerPassed = False }
-                        , currentPlayer = otherStone model.currentPlayer
-                        , territoryMarks = Dict.empty
-                    }
+                    _ ->
+                        model
 
-                _ ->
-                    model
+            RejectTerritory ->
+                case model.phase of
+                    Confirming ->
+                        { model
+                            | phase = Playing { previousPlayerPassed = False }
+                            , currentPlayer = otherStone currentPlayer
+                            , territoryMarks = Dict.empty
+                            , lastAction = Just action.time
+                        }
+
+                    _ ->
+                        model
+
+    else
+        model
 
 
-updateGame : Id UserId -> GameMsg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
-updateGame currentUserId msg setup state model =
+hasTimeToDoAction : Time.Posix -> GameState -> Bool
+hasTimeToDoAction time model =
+    case model.timeLeft of
+        Just { black, white } ->
+            actualTimeLeft
+                time
+                model.currentPlayer
+                model.currentPlayer
+                (case model.currentPlayer of
+                    White ->
+                        white
+
+                    Black ->
+                        black
+                )
+                model
+                |> Quantity.greaterThanZero
+
+        Nothing ->
+            True
+
+
+updateGame :
+    Time.Posix
+    -> Id UserId
+    -> GameMsg
+    -> ValidatedSetup
+    -> GameState
+    -> GameModel
+    -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame currentTime currentUserId msg setup state model =
     case msg of
-        PressedCell x y ->
+        PressedCell ( x, y ) ->
             if isViewingPast model then
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
                 case state.phase of
                     Playing _ ->
-                        if isLocalUsersTurn currentUserId setup state then
+                        if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
                                 Ok updated ->
                                     let
@@ -1408,7 +1440,11 @@ updateGame currentUserId msg setup state model =
                             ( Game model, Command.none, Nothing )
 
                     Marking ->
-                        ( Game model, Command.none, MarkTerritory x y |> Just )
+                        if isLocalUsersTurn currentUserId setup state then
+                            ( Game model, Command.none, MarkTerritory x y |> Just )
+
+                        else
+                            ( Game model, Command.none, Nothing )
 
                     Confirming ->
                         ( Game model, Command.none, Nothing )
@@ -1421,8 +1457,8 @@ updateGame currentUserId msg setup state model =
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
-                case state.phase of
-                    Playing _ ->
+                case ( state.phase, hasTimeToDoAction currentTime state ) of
+                    ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( Game model
                             , Command.none
@@ -1484,12 +1520,14 @@ updateSpectator msg state model =
             in
             { model | viewingMovesBack = total - clamped, lastError = Nothing }
 
-        --( Game (tickClock now model), Command.none, Nothing )
         PressedArrowLeft ->
             stepBack state model
 
         PressedArrowRight ->
             stepForward model
+
+        Spectator_PressedCell _ ->
+            model
 
 
 cellPx : Int
@@ -1508,7 +1546,8 @@ viewHeight windowSize =
 
 
 view :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> Maybe MyUi.LastCopy
     -> LocalUser
     -> Id UserId
@@ -1516,7 +1555,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
+view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1533,12 +1572,13 @@ view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
         (Ui.column
             []
             [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
+            , Ui.el [ Ui.paddingXY 16 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just match ->
-                            Ui.Lazy.lazy4
-                                gameView
+                            gameView
+                                currentTime
                                 windowSize
                                 localUser
                                 match
@@ -1924,12 +1964,12 @@ timeInput htmlId label value onChange =
         ]
 
 
-formatClock : Float -> String
+formatClock : Duration -> String
 formatClock seconds =
     let
         clamped : Int
         clamped =
-            max 0 (floor seconds)
+            max 0 (floor (Duration.inSeconds seconds))
 
         minutes : Int
         minutes =
@@ -1950,8 +1990,8 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
-clockView blackUser whiteUser state setup =
+clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
+clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
         gameActive =
@@ -1976,18 +2016,28 @@ clockView blackUser whiteUser state setup =
         [ clockChip
             setup.blackPlayer
             blackUser
-            state.blackTime
+            (case state.timeLeft of
+                Just timeLeft ->
+                    actualTimeLeft currentTime Black state.currentPlayer timeLeft.black state |> Just
+
+                Nothing ->
+                    Nothing
+            )
             (gameActive && state.currentPlayer == Black)
             Black
-            setup
             (currentScore setup state Black)
         , clockChip
             setup.whitePlayer
             whiteUser
-            state.whiteTime
+            (case state.timeLeft of
+                Just timeLeft ->
+                    actualTimeLeft currentTime White state.currentPlayer timeLeft.white state |> Just
+
+                Nothing ->
+                    Nothing
+            )
             (gameActive && state.currentPlayer == White)
             White
-            setup
             (currentScore setup state White)
         ]
 
@@ -2039,8 +2089,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
-clockChip userId maybeUser seconds isActive stone setup score =
+clockChip : Id UserId -> Maybe FrontendUser -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
+clockChip userId maybeUser maybeTimeLeft isActive stone score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2086,44 +2136,32 @@ clockChip userId maybeUser seconds isActive stone setup score =
             Nothing ->
                 User.profileImageNoRounding userId Nothing
           )
-            |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 } ]
+            |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
-            [ Ui.spacing 16, Ui.alignRight ]
-            [ case setup.timeControl of
-                Just _ ->
+            [ Ui.spacing 20, Ui.alignRight, Ui.Font.size 20, Ui.Font.color colorB ]
+            [ case maybeTimeLeft of
+                Just timeLeft ->
                     Ui.el
-                        [ Ui.Font.weight 600
+                        [ Ui.Font.bold
                         , Ui.width Ui.shrink
-                        , Ui.Font.size 20
-                        , Ui.Font.color colorB
+                        , if Quantity.lessThanZero timeLeft then
+                            Ui.Font.color
+                                (case stone of
+                                    White ->
+                                        Ui.rgb 175 0 21
+
+                                    Black ->
+                                        MyUi.errorColor
+                                )
+
+                          else
+                            Ui.noAttr
                         ]
-                        (Ui.text (formatClock seconds))
+                        (Ui.text (formatClock timeLeft))
 
                 Nothing ->
                     Ui.none
-            , Ui.row
-                [ Ui.Font.color
-                    (case stone of
-                        White ->
-                            Ui.rgb 20 20 20
-
-                        Black ->
-                            Ui.rgb 230 230 230
-                    )
-                , Ui.spacing 4
-                , Ui.contentCenterY
-                , Ui.Font.letterSpacing -1
-                , Ui.Font.bold
-                ]
-                [ Ui.el
-                    [ Ui.width (Ui.px 16)
-                    , Ui.height (Ui.px 16)
-                    , Ui.background colorB
-                    , Ui.rounded 99
-                    ]
-                    Ui.none
-                , StringExtra.removeTrailing0s 1 score |> Ui.text
-                ]
+            , StringExtra.removeTrailing0s 1 score |> Ui.text
             ]
         ]
 
@@ -2157,8 +2195,8 @@ hasPendingTurn userId matches =
         matches
 
 
-spectatorView : Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
-spectatorView windowSize data model =
+spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
+spectatorView currentTime windowSize data model =
     let
         isMobile : Bool
         isMobile =
@@ -2186,14 +2224,14 @@ spectatorView windowSize data model =
             )
         , Ui.background MyUi.background1
         ]
-        [ statusView state
+        [ statusView currentTime state
         , Ui.column
             [ Ui.width Ui.shrink
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
-            , boardView windowSize [] data.setup state model
+            [ clockView currentTime (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
+            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map Spectator_PressedCell
             ]
         , if isMobile then
             Ui.none
@@ -2204,12 +2242,13 @@ spectatorView windowSize data model =
 
 
 gameView :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> LocalUser
     -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize localUser (MatchData data) model =
+gameView currentTime windowSize localUser (MatchData data) model =
     let
         isMobile : Bool
         isMobile =
@@ -2218,22 +2257,6 @@ gameView windowSize localUser (MatchData data) model =
         state : GameState
         state =
             data.cache
-
-        clickable : Bool
-        clickable =
-            if isViewingPast model then
-                True
-
-            else
-                case state.phase of
-                    Playing _ ->
-                        isLocalUsersTurn localUser.session.userId data.setup state
-
-                    Marking ->
-                        True
-
-                    _ ->
-                        False
     in
     Ui.column
         [ Ui.spacing
@@ -2253,69 +2276,65 @@ gameView windowSize localUser (MatchData data) model =
             )
         , Ui.background MyUi.background1
         ]
-        [ statusView state
-        , if isLocalUsersTurn localUser.session.userId data.setup state then
-            case state.phase of
-                Playing { previousPlayerPassed } ->
-                    Ui.el
-                        [ Ui.paddingXY 16 0 ]
-                        (MyUi.simpleButton
-                            (Dom.id "go_pass")
-                            PressedPass
-                            (Ui.text
-                                (if previousPlayerPassed then
-                                    "Pass and mark territory"
+        [ Ui.column
+            []
+            [ statusView currentTime state
+            , (if isLocalUsersTurn localUser.session.userId data.setup state && hasTimeToDoAction currentTime state then
+                case state.phase of
+                    Playing { previousPlayerPassed } ->
+                        Ui.el
+                            [ Ui.paddingXY 16 0 ]
+                            (MyUi.simpleButton
+                                (Dom.id "go_pass")
+                                PressedPass
+                                (Ui.text
+                                    (if previousPlayerPassed then
+                                        "Pass and mark territory"
 
-                                 else
-                                    "Pass"
+                                     else
+                                        "Pass"
+                                    )
                                 )
                             )
-                        )
 
-                Marking ->
-                    Ui.el
-                        [ Ui.paddingXY 16 0 ]
-                        (MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking"))
+                    Marking ->
+                        Ui.el
+                            [ Ui.paddingXY 16 0 ]
+                            (MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking"))
 
-                Confirming ->
-                    Ui.row
-                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
-                        [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
-                        , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
-                        ]
+                    Confirming ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                            [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
+                            , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
+                            ]
 
-                Scored _ ->
-                    Ui.none
+                    Scored _ ->
+                        Ui.none
 
-          else
-            Ui.none
+               else
+                Ui.none
+              )
+                |> Ui.el [ Ui.height (Ui.px 44), Ui.contentCenterY ]
+            ]
         , Ui.column
             [ Ui.width Ui.shrink
             , Ui.background boardColor
             , Ui.rounded 4
             ]
             [ clockView
+                currentTime
                 (User.getUser data.setup.blackPlayer localUser)
                 (User.getUser data.setup.whitePlayer localUser)
                 state
                 data.setup
-            , boardView
-                windowSize
-                (if clickable then
-                    clickTargets (boardSizeToInt data.setup.width) (boardSizeToInt data.setup.height)
-
-                 else
-                    []
-                )
-                data.setup
-                state
-                model
+            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none
 
           else
-            historyView state model |> Ui.map SpectatorMsg
+            Ui.Lazy.lazy2 historyView state model |> Ui.map SpectatorMsg
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -2325,14 +2344,30 @@ gameView windowSize localUser (MatchData data) model =
         ]
 
 
-statusView : GameState -> Element msg
-statusView state =
+statusView : Time.Posix -> GameState -> Element msg
+statusView currentTime state =
     Ui.el
         [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
         (Ui.text
             (case state.phase of
-                Playing _ ->
-                    stoneName state.currentPlayer ++ " to move"
+                Playing { previousPlayerPassed } ->
+                    if hasTimeToDoAction currentTime state then
+                        (if previousPlayerPassed then
+                            stoneName (otherStone state.currentPlayer) ++ " passed. "
+
+                         else
+                            ""
+                        )
+                            ++ stoneName state.currentPlayer
+                            ++ " to move"
+
+                    else
+                        case state.currentPlayer of
+                            White ->
+                                "Black wins! White loses on time."
+
+                            Black ->
+                                "White wins! Black loses on time."
 
                 Marking ->
                     stoneName state.currentPlayer
@@ -2398,8 +2433,8 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> List (Html msg) -> ValidatedSetup -> GameState -> GameModel -> Element msg
-boardView windowSize overlay setup state model =
+boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element ( Int, Int )
+boardView windowSize setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -2484,7 +2519,7 @@ boardView windowSize overlay setup state model =
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing state
-            ++ overlay
+            ++ clickTargets (boardSizeToInt setup.width) (boardSizeToInt setup.height)
         )
         |> Ui.html
         |> Ui.el [ Ui.width Ui.shrink, Ui.centerX ]
@@ -2698,7 +2733,7 @@ territoryShapes marks =
             )
 
 
-clickTargets : Int -> Int -> List (Svg GameMsg)
+clickTargets : Int -> Int -> List (Svg ( Int, Int ))
 clickTargets width height =
     List.range 0 (width - 1)
         |> List.concatMap
@@ -2714,7 +2749,7 @@ clickTargets width height =
                                 , Svg.Attributes.height (String.fromInt cellPx)
                                 , Svg.Attributes.fill "transparent"
                                 , Svg.Attributes.style "cursor:pointer"
-                                , Svg.Events.onClick (PressedCell x y)
+                                , Svg.Events.onClick ( x, y )
                                 ]
                                 []
                         )

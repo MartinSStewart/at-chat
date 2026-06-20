@@ -6876,13 +6876,14 @@ view model =
                             [ Ui.background MyUi.background3, Ui.contentCenterX, Ui.contentCenterY ]
                             (case loaded.publicGoMatch of
                                 PublicGoMatch_Loaded data gameModel ->
-                                    Ui.el
-                                        [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , Ui.width Ui.shrink
-                                        ]
-                                        (Go.spectatorView loaded.windowSize data gameModel |> Ui.map GoSpectatorMsg)
+                                    Go.spectatorView loaded.time loaded.windowSize data gameModel
+                                        |> Ui.map GoSpectatorMsg
+                                        |> Ui.el
+                                            [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
+                                            , Ui.centerX
+                                            , Ui.centerY
+                                            , Ui.width Ui.shrink
+                                            ]
 
                                 PublicGoMatch_Missing ->
                                     errorPage loaded "Go match not found"

@@ -2146,6 +2146,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , T.testGroup
         "Go matches"
         [ RecordedTestExtra.goMatchTest normalConfig
+        , RecordedTestExtra.goTimeoutTest normalConfig
         , RecordedTestExtra.goTurnNotificationDotTest normalConfig
         , RecordedTestExtra.publicGoMatchViewTest normalConfig
         ]
