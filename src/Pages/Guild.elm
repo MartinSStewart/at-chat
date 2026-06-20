@@ -4647,6 +4647,46 @@ reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
             |> Just
 
 
+{-| A downward pointing triangle (with a 1px border to match the popup) that sits
+at the bottom of the reaction popup, pointing toward the reaction emoji below it.
+-}
+reactionPopupArrow : Element msg
+reactionPopupArrow =
+    let
+        triangle : Int -> String -> String -> Html msg
+        triangle size left color =
+            Html.div
+                [ Html.Attributes.style "position" "absolute"
+                , Html.Attributes.style "top" "0"
+                , Html.Attributes.style "left" left
+                , Html.Attributes.style "width" "0"
+                , Html.Attributes.style "height" "0"
+                , Html.Attributes.style "border-left" (String.fromInt size ++ "px solid transparent")
+                , Html.Attributes.style "border-right" (String.fromInt size ++ "px solid transparent")
+                , Html.Attributes.style "border-top" (String.fromInt size ++ "px solid " ++ color)
+                ]
+                []
+    in
+    Ui.el
+        [ Ui.alignLeft
+        , Ui.move { x = 11, y = -1, z = 0 }
+        , Ui.width Ui.shrink
+        , MyUi.noPointerEvents
+        ]
+        (Ui.html
+            (Html.div
+                [ Html.Attributes.style "position" "relative"
+                , Html.Attributes.style "width" "16px"
+                , Html.Attributes.style "height" "8px"
+                , Html.Attributes.style "pointer-events" "none"
+                ]
+                [ triangle 8 "0" "rgb(60,70,100)"
+                , triangle 7 "1px" "rgb(14,20,40)"
+                ]
+            )
+        )
+
+
 reactionPopup :
     SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
@@ -4683,6 +4723,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
         , MyUi.noPointerEvents
         , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
         , Ui.contentCenterY
+        , Ui.below reactionPopupArrow
         ]
         [ case emoji of
             EmojiOrCustomEmoji_Emoji emoji2 ->
