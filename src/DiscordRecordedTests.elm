@@ -33,6 +33,48 @@ import Unsafe
 import User
 
 
+{-| Reads the number of currently visible messages in the at0232 Discord DM channel
+(id 185574444641550336) from the given frontend and checks it against a predicate.
+-}
+checkDmVisibleMessageCount :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> (Int -> Bool)
+    -> T.Data FrontendModel BackendModel
+    -> Result String ()
+checkDmVisibleMessageCount admin isExpected data =
+    let
+        dmChannelId : Discord.Id Discord.PrivateChannelId
+        dmChannelId =
+            Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+    in
+    case SeqDict.get admin.clientId data.frontends of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    case SeqDict.get dmChannelId (Local.model loggedIn.localState).discordDmChannels of
+                        Just dmChannel ->
+                            if isExpected dmChannel.visibleMessages.count then
+                                Ok ()
+
+                            else
+                                Err
+                                    ("Discord DM visibleMessages.count="
+                                        ++ String.fromInt dmChannel.visibleMessages.count
+                                        ++ " while the messages array still holds "
+                                        ++ String.fromInt (Array.length dmChannel.messages)
+                                        ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
+                                    )
+
+                        Nothing ->
+                            Err "The Discord DM channel is missing from the frontend"
+
+                _ ->
+                    Err "Expected admin to be logged in"
+
+        _ ->
+            Err "Expected admin frontend to be loaded"
+
+
 discordTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> String
@@ -206,6 +248,74 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             )
                         ]
                     )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Discord DM messages disappear after websocket reconnect (HandleReadyDataStep2)"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ -- Open the Discord DM channel with at0232 and load a message into it.
+                          admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.click 100 (Dom.id "guild_discordFriendLabel_185574444641550336")
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":200,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000200","flags":0,"embeds":[],"edited_timestamp":null,"content":"DM message that should survive reconnect","components":[],"channel_type":1,"channel_id":"185574444641550336","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[]}}"""
+
+                        -- The message is loaded and visible in the open DM channel.
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "DM message that should survive reconnect" ])
+
+                        -- Sanity check: the message really is loaded into the open conversation
+                        -- (visibleMessages is non-empty), not merely shown as a friend-list preview.
+                        , T.checkState 0 (checkDmVisibleMessageCount admin (\count -> count > 0))
+
+                        -- The Discord websocket "fails": send op 9 (Invalid Session) which clears
+                        -- the gateway session and forces a fresh reconnect (rather than a resume).
+                        , T.websocketSendString 100 connection """{"t":null,"s":null,"op":9,"d":false}"""
+                        ]
+                    )
+
+                -- A brand new gateway connection is created after the reconnect. Complete the
+                -- handshake on it (hello -> identify) and replay the READY data, which triggers
+                -- HandleReadyDataStep2 again.
+                , RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , RecordedTestExtra.andThenWebsocket
+                    (\connection websocketState ->
+                        case Array.toList websocketState.dataSent |> List.filter RecordedTestExtra.isOp2 of
+                            [ _ ] ->
+                                [ T.websocketSendString 100 connection discordOp0Ready
+                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
+                    )
+
+                -- BUG: HandleReadyDataStep2 rebroadcasts the DM channel using
+                -- BackendExtra.discordDmChannelToFrontend with preloadMessages = False, so the
+                -- channel arrives with visibleMessages = VisibleMessages.empty. The frontend
+                -- (FrontendExtra, Server_DiscordUserLoadingDataIsDone) then blindly overwrites its
+                -- copy of the channel with `SeqDict.foldl SeqDict.insert`, wiping out the visible
+                -- messages of the DM that is currently open. Because visibleMessages.oldest is 0, no
+                -- "load older messages" request is ever made, so the message is gone for good even
+                -- though the backend still has it.
+                --
+                -- This assertion describes the desired behaviour (the message should still be
+                -- visible after the reconnect) and therefore FAILS while the bug is present.
+                , T.checkState 3000 (checkDmVisibleMessageCount admin (\count -> count > 0))
                 ]
             )
         ]
