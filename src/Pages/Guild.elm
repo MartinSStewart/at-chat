@@ -4647,9 +4647,6 @@ reactionEmojiView currentUserId customEmojis allUsers animationMode reactions =
             |> Just
 
 
-{-| A downward pointing triangle (with a 1px border to match the popup) that sits
-at the bottom of the reaction popup, pointing toward the reaction emoji below it.
--}
 reactionPopupArrow : Element msg
 reactionPopupArrow =
     let
@@ -4668,20 +4665,14 @@ reactionPopupArrow =
                 []
     in
     Ui.el
-        [ Ui.alignLeft
-        , Ui.move { x = 11, y = -1, z = 0 }
-        , Ui.width Ui.shrink
-        , MyUi.noPointerEvents
-        ]
+        [ Ui.move { x = 11, y = 0, z = 0 }, MyUi.noPointerEvents ]
         (Ui.html
             (Html.div
                 [ Html.Attributes.style "position" "relative"
                 , Html.Attributes.style "width" "16px"
                 , Html.Attributes.style "height" "8px"
-                , Html.Attributes.style "pointer-events" "none"
                 ]
-                [ triangle 8 "0" "rgb(60,70,100)"
-                , triangle 7 "1px" "rgb(14,20,40)"
+                [ triangle 11 "1px" (MyUi.colorToStyle MyUi.background1)
                 ]
             )
         )
@@ -4702,7 +4693,9 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                 (\userId ->
                     case SeqDict.get userId allUsers of
                         Just user ->
-                            Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (PersonName.toString user.name))
+                            Ui.el
+                                [ Ui.Font.color MyUi.font1, Ui.width Ui.shrink ]
+                                (Ui.text (PersonName.toString user.name))
 
                         Nothing ->
                             Ui.text "<Missing>"
@@ -4718,7 +4711,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
         , Ui.rounded 8
         , Ui.padding 8
         , Ui.spacing 8
-        , Ui.move { x = 0, y = -8, z = 0 }
+        , Ui.move { x = 0, y = -12, z = 0 }
         , Ui.Font.color MyUi.font3
         , MyUi.noPointerEvents
         , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
