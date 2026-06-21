@@ -94,6 +94,7 @@ type RichText userId
     | EscapedChar EscapedChar
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
+    | BulletPoint HasLeadingLineBreak (Nonempty (Maybe (RichText userId)))
 
 
 type HasLeadingLineBreak
