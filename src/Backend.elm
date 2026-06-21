@@ -852,32 +852,6 @@ update msg model =
                                 guildDataDict =
                                     SeqDict.fromList guildData
 
-                                newGuildDataDict :
-                                    SeqDict
-                                        (Discord.Id Discord.GuildId)
-                                        { guild : Discord.GatewayGuild
-                                        , channels : List Discord.Channel
-                                        , icon : Maybe FileStatus.UploadResponse
-                                        }
-                                newGuildDataDict =
-                                    SeqDict.filter
-                                        (\guildId _ ->
-                                            case SeqDict.get guildId model.discordGuilds of
-                                                Just guild ->
-                                                    MembersAndOwner.isMember discordUserId guild.membersAndOwner
-                                                        == MembersAndOwner.IsNotMember
-
-                                                Nothing ->
-                                                    False
-                                        )
-                                        guildDataDict
-
-                                newDmData : List { dmChannelId : Discord.Id Discord.PrivateChannelId, members : List (Discord.Id Discord.UserId) }
-                                newDmData =
-                                    List.filter
-                                        (\data -> SeqDict.member data.dmChannelId model.discordDmChannels |> not)
-                                        dmData
-
                                 model2 : BackendModel
                                 model2 =
                                     { model
@@ -952,7 +926,7 @@ update msg model =
                                                             Nothing ->
                                                                 Nothing
                                                     )
-                                                    newGuildDataDict
+                                                    guildDataDict
                                             , discordDms =
                                                 List.filterMap
                                                     (\data ->
@@ -973,7 +947,7 @@ update msg model =
                                                             Nothing ->
                                                                 Nothing
                                                     )
-                                                    newDmData
+                                                    dmData
                                                     |> SeqDict.fromList
                                             , discordUsers = LinkedAndOtherDiscordUsers.otherUsers linkedAndOtherDiscordUsers
                                             }

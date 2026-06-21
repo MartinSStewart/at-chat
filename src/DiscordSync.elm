@@ -2534,8 +2534,14 @@ handleReadyData userId readyData model =
         discordDmChannels =
             case readyData.privateChannels of
                 Included privateChannels ->
-                    List.map
-                        (\dmChannel -> { dmChannelId = dmChannel.id, members = dmChannel.recipientIds })
+                    List.filterMap
+                        (\dmChannel ->
+                            if SeqDict.member dmChannel.id model.discordDmChannels then
+                                Nothing
+
+                            else
+                                Just { dmChannelId = dmChannel.id, members = dmChannel.recipientIds }
+                        )
                         privateChannels
 
                 Missing ->
