@@ -16,6 +16,7 @@ import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
 import Iso8601
 import LinkedAndOtherDiscordUsers
 import Local
+import LocalState
 import MembersAndOwner
 import Message
 import MessageInput
@@ -33,8 +34,30 @@ import Unsafe
 import User
 
 
+{-| Runs the given function against the admin frontend's LocalState, surfacing a
+descriptive error if the admin isn't loaded/logged in.
+-}
+withAdminLocalState :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Data FrontendModel BackendModel
+    -> (LocalState.LocalState -> Result String ())
+    -> Result String ()
+withAdminLocalState admin data fn =
+    case SeqDict.get admin.clientId data.frontends of
+        Just (Types.Loaded loaded) ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    fn (Local.model loggedIn.localState)
+
+                _ ->
+                    Err "Expected admin to be logged in"
+
+        _ ->
+            Err "Expected admin frontend to be loaded"
+
+
 {-| Reads the number of currently visible messages in the at0232 Discord DM channel
-(id 185574444641550336) from the given frontend and checks it against a predicate.
+(id 185574444641550336) from the admin frontend and checks it against a predicate.
 -}
 checkDmVisibleMessageCount :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -42,37 +65,72 @@ checkDmVisibleMessageCount :
     -> T.Data FrontendModel BackendModel
     -> Result String ()
 checkDmVisibleMessageCount admin isExpected data =
-    let
-        dmChannelId : Discord.Id Discord.PrivateChannelId
-        dmChannelId =
-            Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
-    in
-    case SeqDict.get admin.clientId data.frontends of
-        Just (Types.Loaded loaded) ->
-            case loaded.loginStatus of
-                Types.LoggedIn loggedIn ->
-                    case SeqDict.get dmChannelId (Local.model loggedIn.localState).discordDmChannels of
-                        Just dmChannel ->
-                            if isExpected dmChannel.visibleMessages.count then
-                                Ok ()
+    withAdminLocalState admin
+        data
+        (\local ->
+            let
+                dmChannelId : Discord.Id Discord.PrivateChannelId
+                dmChannelId =
+                    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+            in
+            case SeqDict.get dmChannelId local.discordDmChannels of
+                Just dmChannel ->
+                    if isExpected dmChannel.visibleMessages.count then
+                        Ok ()
 
-                            else
-                                Err
-                                    ("Discord DM visibleMessages.count="
-                                        ++ String.fromInt dmChannel.visibleMessages.count
-                                        ++ " while the messages array still holds "
-                                        ++ String.fromInt (Array.length dmChannel.messages)
-                                        ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
-                                    )
+                    else
+                        Err
+                            ("Discord DM visibleMessages.count="
+                                ++ String.fromInt dmChannel.visibleMessages.count
+                                ++ " while the messages array still holds "
+                                ++ String.fromInt (Array.length dmChannel.messages)
+                                ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
+                            )
 
-                        Nothing ->
-                            Err "The Discord DM channel is missing from the frontend"
+                Nothing ->
+                    Err "The Discord DM channel is missing from the frontend"
+        )
 
-                _ ->
-                    Err "Expected admin to be logged in"
 
-        _ ->
-            Err "Expected admin frontend to be loaded"
+{-| Reads the number of currently visible messages in the bot test guild's channel
+(guild 705745250815311942, channel 1072828564317159465) from the admin frontend and
+checks it against a predicate.
+-}
+checkGuildVisibleMessageCount :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> (Int -> Bool)
+    -> T.Data FrontendModel BackendModel
+    -> Result String ()
+checkGuildVisibleMessageCount admin isExpected data =
+    withAdminLocalState admin
+        data
+        (\local ->
+            let
+                guildId : Discord.Id Discord.GuildId
+                guildId =
+                    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+                channelId : Discord.Id Discord.ChannelId
+                channelId =
+                    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+            in
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    if isExpected channel.visibleMessages.count then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Discord guild channel visibleMessages.count="
+                                ++ String.fromInt channel.visibleMessages.count
+                                ++ " while the messages array still holds "
+                                ++ String.fromInt (Array.length channel.messages)
+                                ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open guild channel, so they disappear from view."
+                            )
+
+                Nothing ->
+                    Err "The Discord guild channel is missing from the frontend"
+        )
 
 
 discordTests :
@@ -252,7 +310,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , RecordedTestExtra.startTest
-        "Discord DM messages disappear after websocket reconnect (HandleReadyDataStep2)"
+        "Discord DM and guild messages survive websocket reconnect (HandleReadyDataStep2)"
         RecordedTestExtra.startTime
         normalConfig
         [ RecordedTestExtra.linkDiscordAndLogin
@@ -265,8 +323,15 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\admin ->
                 [ RecordedTestExtra.andThenWebsocket
                     (\connection _ ->
-                        [ -- Open the Discord DM channel with at0232 and load a message into it.
-                          admin.click 100 (Dom.id "guildIcon_showFriends")
+                        [ -- Open a Discord guild channel and load a message into it.
+                          admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":199,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1500000000000000199","flags":0,"embeds":[],"edited_timestamp":null,"content":"Guild message that should survive reconnect","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Guild message that should survive reconnect" ])
+
+                        -- Open the Discord DM channel with at0232 and load a message into it.
+                        , admin.click 100 (Dom.id "guildIcon_showFriends")
                         , admin.click 100 (Dom.id "guild_discordFriendLabel_185574444641550336")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":200,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000200","flags":0,"embeds":[],"edited_timestamp":null,"content":"DM message that should survive reconnect","components":[],"channel_type":1,"channel_id":"185574444641550336","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[]}}"""
 
@@ -275,9 +340,10 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "DM message that should survive reconnect" ])
 
-                        -- Sanity check: the message really is loaded into the open conversation
+                        -- Sanity check: both messages really are loaded into their conversations
                         -- (visibleMessages is non-empty), not merely shown as a friend-list preview.
                         , T.checkState 0 (checkDmVisibleMessageCount admin (\count -> count > 0))
+                        , T.checkState 0 (checkGuildVisibleMessageCount admin (\count -> count > 0))
 
                         -- The Discord websocket "fails": send op 9 (Invalid Session) which clears
                         -- the gateway session and forces a fresh reconnect (rather than a resume).
@@ -304,18 +370,18 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
                     )
 
-                -- BUG: HandleReadyDataStep2 rebroadcasts the DM channel using
-                -- BackendExtra.discordDmChannelToFrontend with preloadMessages = False, so the
-                -- channel arrives with visibleMessages = VisibleMessages.empty. The frontend
-                -- (FrontendExtra, Server_DiscordUserLoadingDataIsDone) then blindly overwrites its
-                -- copy of the channel with `SeqDict.foldl SeqDict.insert`, wiping out the visible
-                -- messages of the DM that is currently open. Because visibleMessages.oldest is 0, no
-                -- "load older messages" request is ever made, so the message is gone for good even
-                -- though the backend still has it.
+                -- Regression check for the bug where HandleReadyDataStep2 rebroadcast every Discord
+                -- DM/guild with preloadMessages = False, and the frontend (FrontendExtra,
+                -- Server_DiscordUserLoadingDataIsDone) blindly overwrote its copy of each channel with
+                -- `SeqDict.foldl SeqDict.insert`. That reset visibleMessages to empty for the open
+                -- channel, and because visibleMessages.oldest is 0 no "load older messages" request is
+                -- ever made, so the messages disappear for good even though the backend still has them.
                 --
-                -- This assertion describes the desired behaviour (the message should still be
-                -- visible after the reconnect) and therefore FAILS while the bug is present.
+                -- The fix only rebroadcasts brand new guilds/DMs, so the messages that were loaded
+                -- before the reconnect must still be visible afterwards, for both the DM and the guild
+                -- channel.
                 , T.checkState 3000 (checkDmVisibleMessageCount admin (\count -> count > 0))
+                , T.checkState 0 (checkGuildVisibleMessageCount admin (\count -> count > 0))
                 ]
             )
         ]
