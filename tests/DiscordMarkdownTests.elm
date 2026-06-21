@@ -181,22 +181,24 @@ basicFormattingTests =
         , fromNonemptyStringTest "(https://a.com/abc(123))" (Nonempty (NormalText '(' "") [ Hyperlink (unsafeUrl "https://a.com/abc(123)"), NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc123)" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc123")) [ NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc1(23))" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc1(23))")) [])
-        , fromNonemptyStringTest "* a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [])
+        , fromNonemptyStringTest "* a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
         , fromNonemptyStringTest
+            -- Discord trims trailing whitespace from messages, so the trailing line break is removed
             "* a\n"
-            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [ NormalText '\n' "" ])
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
         , fromNonemptyStringTest
+            -- Discord trims trailing whitespace, so "* a\n* " becomes "* a\n*"
             "* a\n* "
-            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [ NormalText '*' " " ])
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "*" ])
         , fromNonemptyStringTest
             "abc\n* a"
-            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) []) ])
+            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []) ])
         , fromNonemptyStringTest
             "* a\n* \n* b"
             (Nonempty
                 (BulletPoint
                     NoLeadingLineBreak
-                    (Nonempty (Just (NormalText 'a' "")) [ Nothing, Just (NormalText 'b' "") ])
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
                 )
                 []
             )
@@ -205,26 +207,28 @@ basicFormattingTests =
             (Nonempty
                 (BulletPoint
                     NoLeadingLineBreak
-                    (Nonempty (Just (Bold (Nonempty (NormalText 'a' "bc") []))) [])
+                    (Nonempty [ Italic (Nonempty (NormalText 'a' "bc") []) ] [])
                 )
                 []
             )
-        , fromNonemptyStringTest "- a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [])
+        , fromNonemptyStringTest "- a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
         , fromNonemptyStringTest
+            -- Discord trims trailing whitespace from messages, so the trailing line break is removed
             "- a\n"
-            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [ NormalText '\n' "" ])
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
         , fromNonemptyStringTest
+            -- Discord trims trailing whitespace, so "- a\n- " becomes "- a\n-"
             "- a\n- "
-            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) [])) [ NormalText '-' " " ])
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "-" ])
         , fromNonemptyStringTest
             "abc\n- a"
-            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty (Just (NormalText 'a' "")) []) ])
+            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []) ])
         , fromNonemptyStringTest
             "- a\n- \n- b"
             (Nonempty
                 (BulletPoint
                     NoLeadingLineBreak
-                    (Nonempty (Just (NormalText 'a' "")) [ Nothing, Just (NormalText 'b' "") ])
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
                 )
                 []
             )
@@ -233,7 +237,7 @@ basicFormattingTests =
             (Nonempty
                 (BulletPoint
                     NoLeadingLineBreak
-                    (Nonempty (Just (Bold (Nonempty (NormalText 'a' "bc") []))) [])
+                    (Nonempty [ Italic (Nonempty (NormalText 'a' "bc") []) ] [])
                 )
                 []
             )
@@ -242,7 +246,7 @@ basicFormattingTests =
             (Nonempty
                 (BulletPoint
                     NoLeadingLineBreak
-                    (Nonempty (Just (NormalText 'a' "")) [ Nothing, Just (NormalText 'b' "") ])
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
                 )
                 []
             )

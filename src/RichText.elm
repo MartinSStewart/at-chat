@@ -94,7 +94,7 @@ type RichText userId
     | EscapedChar EscapedChar
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
-    | BulletPoint HasLeadingLineBreak (Nonempty (Maybe (RichText userId)))
+    | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
 
 
 type HasLeadingLineBreak
@@ -236,6 +236,9 @@ spoilerAttachedFile fileId nonempty =
 
                 CustomEmoji _ ->
                     richText
+
+                BulletPoint a items ->
+                    BulletPoint a (List.Nonempty.map (mapBulletItem (spoilerAttachedFile fileId)) items)
         )
         nonempty
 
@@ -336,6 +339,13 @@ unspoilerAttachedFile fileId nonempty =
 
                         CustomEmoji _ ->
                             Nonempty ( False, richText ) []
+
+                        BulletPoint hasLeadingLineBreak items ->
+                            Nonempty
+                                ( False
+                                , BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items)
+                                )
+                                []
                 )
                 nonempty2
     in
@@ -405,6 +415,11 @@ unspoilerAttachedFile fileId nonempty =
 
                 CustomEmoji _ ->
                     Nonempty richText []
+
+                BulletPoint hasLeadingLineBreak items ->
+                    Nonempty
+                        (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items))
+                        []
         )
         nonempty
 
@@ -478,6 +493,24 @@ removeAttachedFile shouldRemove list =
 
                 CustomEmoji _ ->
                     Just richText
+
+                BulletPoint a items ->
+                    BulletPoint
+                        a
+                        (List.Nonempty.map
+                            (\item ->
+                                case List.Nonempty.fromList item of
+                                    Just nonempty ->
+                                        removeAttachedFile shouldRemove nonempty
+                                            |> Maybe.map List.Nonempty.toList
+                                            |> Maybe.withDefault []
+
+                                    Nothing ->
+                                        []
+                            )
+                            items
+                        )
+                        |> Just
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -538,6 +571,9 @@ hyperlinks nonempty =
 
                 CustomEmoji _ ->
                     []
+
+                BulletPoint _ items ->
+                    List.concatMap (bulletItemConcatMap hyperlinks) (List.Nonempty.toList items)
         )
         (List.Nonempty.toList nonempty)
 
@@ -602,6 +638,9 @@ attachmentsHelper isSpoilered nonempty =
 
                 CustomEmoji _ ->
                     []
+
+                BulletPoint _ items ->
+                    List.concatMap (bulletItemConcatMap (attachmentsHelper isSpoilered)) (List.Nonempty.toList items)
         )
         (List.Nonempty.toList nonempty)
 
@@ -661,6 +700,9 @@ customEmojiIds nonempty =
 
                 CustomEmoji customEmojiId ->
                     [ customEmojiId ]
+
+                BulletPoint _ items ->
+                    List.concatMap (bulletItemConcatMap customEmojiIds) (List.Nonempty.toList items)
         )
         (List.Nonempty.toList nonempty)
 
@@ -720,6 +762,9 @@ stickers nonempty =
 
                 CustomEmoji _ ->
                     []
+
+                BulletPoint _ items ->
+                    List.concatMap (bulletItemConcatMap stickers) (List.Nonempty.toList items)
         )
         (List.Nonempty.toList nonempty)
 
@@ -886,6 +931,22 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
 
                 CustomEmoji id ->
                     CustomEmoji.idToString id
+
+                BulletPoint hasLeadingLineBreak items ->
+                    (case hasLeadingLineBreak of
+                        NoLeadingLineBreak ->
+                            ""
+
+                        HasLeadingLineBreak ->
+                            "\n"
+                    )
+                        ++ (List.Nonempty.toList items
+                                |> List.map
+                                    (\item ->
+                                        "* " ++ toStringHelper userToString emojisForStickersAndAttachments users item
+                                    )
+                                |> String.join "\n"
+                           )
         )
         list
         |> String.concat
@@ -908,7 +969,14 @@ fromNonemptyString users string =
                             ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent users content) ] )
 
                         Nothing ->
-                            ( 0, [] )
+                            case extractBulletPoint starBulletMarker (parseBlockQuoteContent users) source 0 of
+                                Just bullet ->
+                                    ( bullet.endIndex
+                                    , bulletRevNodes (BulletPoint NoLeadingLineBreak bullet.items) bullet.trailing []
+                                    )
+
+                                Nothing ->
+                                    ( 0, [] )
 
         result =
             parseLoop source startIndex users [] "" startRevNodes
@@ -1028,6 +1096,147 @@ findLineEnd source index =
         findLineEnd source (index + 1)
 
 
+{-| Matches a bullet point marker ("\* ") at the given index, returning the marker length.
+-}
+starBulletMarker : String -> Int -> Maybe Int
+starBulletMarker source index =
+    if stringAtRange index 2 source == Just "* " then
+        Just 2
+
+    else
+        Nothing
+
+
+{-| Matches a Discord bullet point marker ("\* " or "- ") at the given index, returning the marker length.
+-}
+starOrDashBulletMarker : String -> Int -> Maybe Int
+starOrDashBulletMarker source index =
+    case stringAtRange index 2 source of
+        Just "* " ->
+            Just 2
+
+        Just "- " ->
+            Just 2
+
+        _ ->
+            Nothing
+
+
+{-| Checks if the line that ended at `lineEnd` is followed by another bullet line ("\\n" then a marker).
+Returns the separator text (e.g. "\\n\* ") and the index where the next line's content starts.
+-}
+bulletContinuation : (String -> Int -> Maybe Int) -> String -> Int -> Maybe ( String, Int )
+bulletContinuation matchMarker source lineEnd =
+    if stringAt lineEnd source == Just "\n" then
+        case matchMarker source (lineEnd + 1) of
+            Just markerLen ->
+                Just ( String.slice lineEnd (lineEnd + 1 + markerLen) source, lineEnd + 1 + markerLen )
+
+            Nothing ->
+                Nothing
+
+    else
+        Nothing
+
+
+collectBulletLines :
+    (String -> Int -> Maybe Int)
+    -> (String -> List (RichText userId))
+    -> String
+    -> Int
+    -> String
+    -> { items : List (List (RichText userId)), trailing : String, endIndex : Int }
+collectBulletLines matchMarker parseContent source contentStart markerPrefix =
+    let
+        lineEnd =
+            findLineEnd source contentStart
+
+        nodes =
+            parseContent (String.slice contentStart lineEnd source)
+    in
+    case bulletContinuation matchMarker source lineEnd of
+        Just ( nextPrefix, nextContentStart ) ->
+            let
+                rest =
+                    collectBulletLines matchMarker parseContent source nextContentStart nextPrefix
+            in
+            { items = nodes :: rest.items, trailing = rest.trailing, endIndex = rest.endIndex }
+
+        Nothing ->
+            if List.isEmpty nodes then
+                -- An empty bullet item at the end of the list isn't treated as a bullet. Instead the
+                -- marker (and the line break before it) is left as normal text.
+                { items = [], trailing = markerPrefix, endIndex = lineEnd }
+
+            else
+                { items = [ nodes ], trailing = "", endIndex = lineEnd }
+
+
+extractBulletPoint :
+    (String -> Int -> Maybe Int)
+    -> (String -> List (RichText userId))
+    -> String
+    -> Int
+    -> Maybe { items : Nonempty (List (RichText userId)), trailing : String, endIndex : Int }
+extractBulletPoint matchMarker parseContent source index =
+    case matchMarker source index of
+        Just markerLen ->
+            let
+                result =
+                    collectBulletLines
+                        matchMarker
+                        parseContent
+                        source
+                        (index + markerLen)
+                        (String.slice index (index + markerLen) source)
+            in
+            case List.Nonempty.fromList result.items of
+                Just items ->
+                    Just { items = items, trailing = result.trailing, endIndex = result.endIndex }
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+{-| Prepends a bullet point node (and any leftover trailing text) to the reversed node list.
+-}
+bulletRevNodes : RichText userId -> String -> List (RichText userId) -> List (RichText userId)
+bulletRevNodes bulletNode trailing flushed =
+    case String.Nonempty.fromString trailing of
+        Just t ->
+            NormalText (String.Nonempty.head t) (String.Nonempty.tail t) :: bulletNode :: flushed
+
+        Nothing ->
+            bulletNode :: flushed
+
+
+{-| Applies a function to the contents of a single bullet item, preserving empty items.
+-}
+mapBulletItem : (Nonempty (RichText userId) -> Nonempty (RichText userId)) -> List (RichText userId) -> List (RichText userId)
+mapBulletItem f item =
+    case List.Nonempty.fromList item of
+        Just nonempty ->
+            f nonempty |> List.Nonempty.toList
+
+        Nothing ->
+            item
+
+
+{-| Collects values from the contents of a single bullet item.
+-}
+bulletItemConcatMap : (Nonempty (RichText userId) -> List a) -> List (RichText userId) -> List a
+bulletItemConcatMap f item =
+    case List.Nonempty.fromList item of
+        Just nonempty ->
+            f nonempty
+
+        Nothing ->
+            []
+
+
 normalize : Nonempty (RichText userId) -> Nonempty (RichText userId)
 normalize nonempty =
     List.foldl
@@ -1100,6 +1309,11 @@ normalize nonempty =
 
                 CustomEmoji id ->
                     List.Nonempty.cons (CustomEmoji id) nonempty2
+
+                BulletPoint hasLeadingLineBreak items ->
+                    List.Nonempty.cons
+                        (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items))
+                        nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -1161,6 +1375,9 @@ normalize nonempty =
 
                 CustomEmoji id ->
                     CustomEmoji id
+
+                BulletPoint hasLeadingLineBreak items ->
+                    BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items)
             )
             []
         )
@@ -1505,12 +1722,27 @@ parseLoop source index users modifiers accText revNodes =
                                         )
 
                                 Nothing ->
-                                    case parseStickerId (index + 1) source of
-                                        ( index2, Just stickerId ) ->
-                                            parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                                    case extractBulletPoint starBulletMarker (parseBlockQuoteContent users) source (index + 1) of
+                                        Just bullet ->
+                                            parseLoop
+                                                source
+                                                bullet.endIndex
+                                                users
+                                                modifiers
+                                                ""
+                                                (bulletRevNodes
+                                                    (BulletPoint HasLeadingLineBreak bullet.items)
+                                                    bullet.trailing
+                                                    (flushText accText revNodes)
+                                                )
 
-                                        ( _, Nothing ) ->
-                                            parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+                                        Nothing ->
+                                            case parseStickerId (index + 1) source of
+                                                ( index2, Just stickerId ) ->
+                                                    parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                                                ( _, Nothing ) ->
+                                                    parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -2164,6 +2396,19 @@ mentionsUserHelper set nonempty =
 
                 CustomEmoji _ ->
                     set2
+
+                BulletPoint _ items ->
+                    List.foldl
+                        (\item set3 ->
+                            case List.Nonempty.fromList item of
+                                Just nonempty3 ->
+                                    mentionsUserHelper set3 nonempty3
+
+                                Nothing ->
+                                    set3
+                        )
+                        set2
+                        (List.Nonempty.toList items)
         )
         set
         nonempty
@@ -2885,6 +3130,47 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList ++ [ CustomEmoji.view "1.4em " "0.2em" id config.customEmojis config.animationMode ]
+                    )
+
+                BulletPoint _ items ->
+                    let
+                        ( ( _, spoilerIndex3 ), embedIndex3, listItems ) =
+                            List.foldl
+                                (\bulletItem ( ( _, sp ), em, acc ) ->
+                                    case List.Nonempty.fromList bulletItem of
+                                        Just nonempty2 ->
+                                            let
+                                                ( ( d4, sp4 ), em4, html ) =
+                                                    viewHelper
+                                                        True
+                                                        showLargeContent
+                                                        maybePressedSpoiler
+                                                        maybeOnPressImage
+                                                        onPressLink
+                                                        sp
+                                                        state
+                                                        config
+                                                        embeds
+                                                        em
+                                                        nonempty2
+                                            in
+                                            ( ( d4, sp4 ), em4, acc ++ [ Html.li [] html ] )
+
+                                        Nothing ->
+                                            ( ( True, sp ), em, acc ++ [ Html.li [] [] ] )
+                                )
+                                ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, [] )
+                                (List.Nonempty.toList items)
+                    in
+                    ( ( True, spoilerIndex3 )
+                    , embedIndex3
+                    , currentList
+                        ++ [ Html.ul
+                                [ Html.Attributes.style "margin" "0"
+                                , Html.Attributes.style "padding-left" "24px"
+                                ]
+                                listItems
+                           ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -3775,6 +4061,43 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             ]
                         )
                     )
+
+                BulletPoint hasLeadingLineBreak items ->
+                    let
+                        leading : String
+                        leading =
+                            case hasLeadingLineBreak of
+                                HasLeadingLineBreak ->
+                                    "\n"
+
+                                NoLeadingLineBreak ->
+                                    ""
+                    in
+                    List.foldl
+                        (\( itemIndex, bulletItem ) ( index3, output3 ) ->
+                            let
+                                marker : String
+                                marker =
+                                    if itemIndex == 0 then
+                                        leading ++ "* "
+
+                                    else
+                                        "\n* "
+                            in
+                            textInputViewHelper
+                                state
+                                allUsers
+                                attachedFiles
+                                customEmojis
+                                stickers2
+                                (index3 + String.length marker)
+                                selection
+                                bulletItem
+                                inBlockQuote
+                                (Array.push (formatText marker) output3)
+                        )
+                        ( index2, output2 )
+                        (List.indexedMap Tuple.pair (List.Nonempty.toList items))
         )
         ( index, output )
         list
@@ -4027,7 +4350,14 @@ fromDiscordHelper text attachments2 embeds customEmojis stickers2 =
                                         ( endIndex, [ Heading level NoLeadingLineBreak (parseDiscordHeadingContent customEmojis content) ] )
 
                                     Nothing ->
-                                        ( 0, [] )
+                                        case extractBulletPoint starOrDashBulletMarker (parseDiscordBlockQuoteContent customEmojis) source 0 of
+                                            Just bullet ->
+                                                ( bullet.endIndex
+                                                , bulletRevNodes (BulletPoint NoLeadingLineBreak bullet.items) bullet.trailing []
+                                                )
+
+                                            Nothing ->
+                                                ( 0, [] )
 
                     result =
                         discordParseLoop customEmojis source startIndex [] "" startRevNodes
@@ -4136,24 +4466,39 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                         )
 
                                 Nothing ->
-                                    case parseStickerId (index + 1) source of
-                                        ( index2, Just stickerId ) ->
+                                    case extractBulletPoint starOrDashBulletMarker (parseDiscordBlockQuoteContent customEmojis) source (index + 1) of
+                                        Just bullet ->
                                             discordParseLoop
                                                 customEmojis
                                                 source
-                                                index2
+                                                bullet.endIndex
                                                 modifiers
                                                 ""
-                                                (Sticker stickerId :: flushText accText revNodes)
+                                                (bulletRevNodes
+                                                    (BulletPoint HasLeadingLineBreak bullet.items)
+                                                    bullet.trailing
+                                                    (flushText accText revNodes)
+                                                )
 
-                                        ( _, Nothing ) ->
-                                            discordParseLoop
-                                                customEmojis
-                                                source
-                                                (index + 1)
-                                                modifiers
-                                                (accText ++ "\n")
-                                                revNodes
+                                        Nothing ->
+                                            case parseStickerId (index + 1) source of
+                                                ( index2, Just stickerId ) ->
+                                                    discordParseLoop
+                                                        customEmojis
+                                                        source
+                                                        index2
+                                                        modifiers
+                                                        ""
+                                                        (Sticker stickerId :: flushText accText revNodes)
+
+                                                ( _, Nothing ) ->
+                                                    discordParseLoop
+                                                        customEmojis
+                                                        source
+                                                        (index + 1)
+                                                        modifiers
+                                                        (accText ++ "\n")
+                                                        revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -4687,6 +5032,19 @@ toDiscordHelper customEmojis content =
 
                         Nothing ->
                             "<missing:123123123>"
+
+                BulletPoint hasLeadingLineBreak items ->
+                    (case hasLeadingLineBreak of
+                        HasLeadingLineBreak ->
+                            "\n"
+
+                        NoLeadingLineBreak ->
+                            ""
+                    )
+                        ++ (List.Nonempty.toList items
+                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis bulletItem)
+                                |> String.join "\n"
+                           )
         )
         content
         |> String.concat
