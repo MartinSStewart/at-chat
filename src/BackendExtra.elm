@@ -828,7 +828,7 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
             Just ( guildOrDmId, _ ) ->
                 case guildOrDmId of
                     GuildOrDmId _ ->
-                        SeqDict.empty
+                        visibleDmUsers
 
                     DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
                         case SeqDict.get guildId model.discordGuilds of
