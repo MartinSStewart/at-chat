@@ -56,6 +56,11 @@ withAdminLocalState admin data fn =
             Err "Expected admin frontend to be loaded"
 
 
+checkDmVisibleMessageCountDmChannelId : Discord.Id Discord.PrivateChannelId
+checkDmVisibleMessageCountDmChannelId =
+    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+
+
 {-| Reads the number of currently visible messages in the at0232 Discord DM channel
 (id 185574444641550336) from the admin frontend and checks it against a predicate.
 -}
@@ -68,12 +73,7 @@ checkDmVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
         data
         (\local ->
-            let
-                dmChannelId : Discord.Id Discord.PrivateChannelId
-                dmChannelId =
-                    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
-            in
-            case SeqDict.get dmChannelId local.discordDmChannels of
+            case SeqDict.get checkDmVisibleMessageCountDmChannelId local.discordDmChannels of
                 Just dmChannel ->
                     if isExpected dmChannel.visibleMessages.count then
                         Ok ()
@@ -92,6 +92,16 @@ checkDmVisibleMessageCount admin isExpected data =
         )
 
 
+checkGuildVisibleMessageCountGuildId : Discord.Id Discord.GuildId
+checkGuildVisibleMessageCountGuildId =
+    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+checkGuildVisibleMessageCountChannelId : Discord.Id Discord.ChannelId
+checkGuildVisibleMessageCountChannelId =
+    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+
+
 {-| Reads the number of currently visible messages in the bot test guild's channel
 (guild 705745250815311942, channel 1072828564317159465) from the admin frontend and
 checks it against a predicate.
@@ -105,16 +115,7 @@ checkGuildVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
         data
         (\local ->
-            let
-                guildId : Discord.Id Discord.GuildId
-                guildId =
-                    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
-
-                channelId : Discord.Id Discord.ChannelId
-                channelId =
-                    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
-            in
-            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+            case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
                 Just ( _, channel ) ->
                     if isExpected channel.visibleMessages.count then
                         Ok ()
