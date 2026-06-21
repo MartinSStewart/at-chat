@@ -74,6 +74,7 @@ module RecordedTestExtra exposing
     , startupDataJson
     , tallSnapshot
     , userEmail
+    , videoAttachmentTest
     , voiceChatTest
     , websocketByDiscordToken
     , writeMessage
@@ -1742,6 +1743,52 @@ uploadImageAttachment user =
         , T.backendUpdate
             100
             (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+        ]
+
+
+{-| Uploads a non-image file. The reported image size is Nothing since the Rust
+server only extracts image dimensions for files it can decode as an image.
+-}
+uploadVideoAttachment :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+uploadVideoAttachment user =
+    T.group
+        [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+        , T.backendUpdate
+            100
+            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+        ]
+
+
+videoAttachmentTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+videoAttachmentTest videoUploadConfig =
+    startTest
+        "Video attachments are shown inline in a video element"
+        startTime
+        videoUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin _ ->
+                [ uploadVideoAttachment admin
+                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                -- The video renders inline in a <video> element instead of an
+                -- "open in new tab" link, so it can be watched without leaving
+                -- the page.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "spoiler_1_file_1"
+                        , Test.Html.Selector.tag "video"
+                        ]
+                    )
+                , admin.snapshotView 100 { name = "Video attachment" }
+                ]
+            )
         ]
 
 
