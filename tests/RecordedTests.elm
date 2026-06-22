@@ -269,9 +269,27 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         []
                 )
                 RecordedTestExtra.domain
+
+        -- Uploads an audio file. Like videoUploadConfig, the upload response
+        -- reports no image size.
+        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        audioUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleHttpRequestsWithUploadedImageSize Nothing)
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-audio.mp3" "audio/mpeg" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.videoAttachmentTest videoUploadConfig
+    , RecordedTestExtra.audioAttachmentTest audioUploadConfig
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
     , RecordedTestExtra.imageViewerTests imageUploadConfig
     , RecordedTestExtra.startTest

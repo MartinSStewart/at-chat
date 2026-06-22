@@ -164,11 +164,11 @@ contentTypeType contentType2 =
             else if String.startsWith "text/" text then
                 Text
 
-            else if String.startsWith "audio/" text then
-                Video
-
             else if String.startsWith "video/" text then
                 Video
+
+            else if String.startsWith "audio/" text then
+                Audio
 
             else if String.startsWith "application/" text then
                 Application

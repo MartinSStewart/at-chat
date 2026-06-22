@@ -6,6 +6,7 @@ module RecordedTestExtra exposing
     , andThenWebsocket
     , attackerEmail
     , attackerShouldNotGetThisToFrontend
+    , audioAttachmentTest
     , botTestGuild
     , botTestGuild_ChannelA
     , checkNoErrorLogs
@@ -1749,10 +1750,10 @@ uploadImageAttachment user =
 {-| Uploads a non-image file. The reported image size is Nothing since the Rust
 server only extracts image dimensions for files it can decode as an image.
 -}
-uploadVideoAttachment :
+uploadNonImageAttachment :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-uploadVideoAttachment user =
+uploadNonImageAttachment user =
     T.group
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
         , T.backendUpdate
@@ -1772,7 +1773,7 @@ videoAttachmentTest videoUploadConfig =
         [ connectTwoUsersAndJoinNewGuild
             desktopWindow
             (\admin _ ->
-                [ uploadVideoAttachment admin
+                [ uploadNonImageAttachment admin
                 , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
 
@@ -1787,6 +1788,37 @@ videoAttachmentTest videoUploadConfig =
                         ]
                     )
                 , admin.snapshotView 100 { name = "Video attachment" }
+                ]
+            )
+        ]
+
+
+audioAttachmentTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+audioAttachmentTest audioUploadConfig =
+    startTest
+        "Audio attachments are shown inline in an audio element"
+        startTime
+        audioUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin _ ->
+                [ uploadNonImageAttachment admin
+                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+
+                -- The audio renders inline in an <audio> element instead of an
+                -- "open in new tab" link, so it can be played without leaving
+                -- the page.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "spoiler_1_file_1"
+                        , Test.Html.Selector.tag "audio"
+                        ]
+                    )
+                , admin.snapshotView 100 { name = "Audio attachment" }
                 ]
             )
         ]

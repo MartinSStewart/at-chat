@@ -3107,6 +3107,9 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         FileStatus.Video ->
                                                             videoView maybeHtmlId state.spoiler containerWidth2 fileData
 
+                                                        FileStatus.Audio ->
+                                                            audioView maybeHtmlId state.spoiler containerWidth2 fileData
+
                                                         _ ->
                                                             fileDownloadView maybeHtmlId state.spoiler fileData
                                            ]
@@ -3628,6 +3631,45 @@ videoView maybeHtmlId isSpoilered containerWidth fileData =
             , Html.Attributes.style "max-width" (String.fromInt containerWidth ++ "px")
             , Html.Attributes.style "max-height" "300px"
             , Html.Attributes.style "border-radius" "4px"
+            ]
+            []
+
+
+audioView : Maybe String -> Bool -> Int -> FileData -> Html msg
+audioView maybeHtmlId isSpoilered containerWidth fileData =
+    let
+        idAttribute : Html.Attribute msg
+        idAttribute =
+            case maybeHtmlId of
+                Just htmlId ->
+                    Html.Attributes.id htmlId
+
+                Nothing ->
+                    Html.Attributes.class ""
+
+        width : Int
+        width =
+            min containerWidth 320
+    in
+    if isSpoilered then
+        Html.div
+            [ idAttribute
+            , Html.Attributes.style "width" (String.fromInt width ++ "px")
+            , Html.Attributes.style "height" "54px"
+            , Html.Attributes.style "display" "block"
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "background-color" "rgb(0,0,0)"
+            ]
+            []
+
+    else
+        Html.audio
+            [ idAttribute
+            , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+            , Html.Attributes.controls True
+            , Html.Attributes.style "display" "block"
+            , Html.Attributes.style "width" (String.fromInt width ++ "px")
+            , Html.Attributes.style "max-width" "100%"
             ]
             []
 
