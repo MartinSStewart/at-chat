@@ -4722,7 +4722,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
         ]
         [ case emoji of
             EmojiOrCustomEmoji_Emoji emoji2 ->
-                Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink ] (Ui.text (Emoji.toString emoji2))
+                Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
