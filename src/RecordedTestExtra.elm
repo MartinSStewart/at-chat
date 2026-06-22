@@ -1796,13 +1796,6 @@ attachmentTestActions options admin =
     , admin.click 100 (Dom.id "fileStatus_spoiler_1")
     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-    , admin.checkView
-        100
-        (Test.Html.Query.hasNot
-            [ Test.Html.Selector.id "spoiler_2_file_1"
-            , Test.Html.Selector.tag options.tagName
-            ]
-        )
     , admin.snapshotView 100 { name = options.spoileredSnapshot }
 
     -- Clicking the spoiler reveals the inline media element.

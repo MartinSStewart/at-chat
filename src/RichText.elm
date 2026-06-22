@@ -3651,27 +3651,34 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
         width =
             min containerWidth 600
     in
-    if isSpoilered then
-        Html.div
-            [ idAttribute
-            , Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "height" "54px"
-            , Html.Attributes.style "display" "block"
-            , Html.Attributes.style "border-radius" "4px"
-            , Html.Attributes.style "background-color" "rgb(0,0,0)"
-            ]
-            []
+    Html.div
+        ([ Html.Attributes.style "width" (String.fromInt width ++ "px") ]
+            ++ (if isSpoilered then
+                    [ Html.Attributes.style "background-color" "rgb(0,0,0)"
+                    ]
 
-    else
-        Html.audio
-            [ idAttribute
-            , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
-            , Html.Attributes.controls True
-            , Html.Attributes.style "display" "block"
-            , Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "max-width" "100%"
-            ]
+                else
+                    []
+               )
+        )
+        [ Html.audio
+            ([ Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+             , Html.Attributes.controls True
+             , Html.Attributes.style "display" "block"
+             , Html.Attributes.style "width" (String.fromInt width ++ "px")
+             , idAttribute
+             ]
+                ++ (if isSpoilered then
+                        [ Html.Attributes.style "pointer-events" "none"
+                        , Html.Attributes.style "opacity" "0"
+                        ]
+
+                    else
+                        []
+                   )
+            )
             []
+        ]
 
 
 fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
