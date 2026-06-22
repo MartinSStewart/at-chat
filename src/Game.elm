@@ -1,12 +1,18 @@
 module Game exposing
-    ( BackendGameData
+    ( BackendGameData(..)
     , FrontendGameData
-    , Model
+    , LocalChange(..)
+    , MatchData
+    , Model(..)
+    , Msg(..)
+    , OutMsg(..)
     , addGoAction
     , addPublicLink
     , goMatchData
     , hasPendingTurn
     , initMatchData
+    , update
+    , view
     )
 
 import Array exposing (Array)
@@ -151,8 +157,16 @@ type OutMsg
     | OutSelectMatch (Maybe (Id ChannelMessageId))
 
 
-update : Time.Posix -> Id UserId -> Id UserId -> Msg -> Maybe Model -> ( Maybe Model, List OutMsg )
-update time currentUserId otherUserId msg model =
+update :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> Msg
+    -> Id ChannelMessageId
+    -> Maybe ( Id ChannelMessageId, Go.ValidatedSetup, Go.GameState )
+    -> Maybe Model
+    -> ( Maybe Model, List OutMsg )
+update time currentUserId otherUserId msg newMatchId maybeMatch model =
     case msg of
         PressedShareGoMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -163,17 +177,45 @@ update time currentUserId otherUserId msg model =
         GoMsg goMsg ->
             let
                 ( goModel, outMsgs ) =
-                    Go.update time currentUserId otherUserId goMsg
+                    Go.update time
+                        currentUserId
+                        otherUserId
+                        goMsg
+                        maybeMatch
+                        (case model of
+                            Just (GoModel goModel2) ->
+                                Just goModel2
+
+                            _ ->
+                                Nothing
+                        )
+
+                matchId : Id ChannelMessageId
+                matchId =
+                    case maybeMatch of
+                        Just ( id, _, _ ) ->
+                            id
+
+                        Nothing ->
+                            newMatchId
             in
-            ( model
-            , List.map
+            ( Maybe.map GoModel goModel
+            , List.concatMap
                 (\outMsg ->
                     case outMsg of
                         Go.OutLocalChange localChange ->
-                            LocalChange_Go localChange
+                            case localChange of
+                                Go.StartMatch _ _ ->
+                                    -- A brand new match takes the next message id, then we navigate to it.
+                                    [ OutLocalChange (LocalChange_Go matchId localChange)
+                                    , OutSelectMatch (Just matchId)
+                                    ]
+
+                                _ ->
+                                    [ OutLocalChange (LocalChange_Go matchId localChange) ]
 
                         Go.PlaySound sound ->
-                            PlaySound sound
+                            [ PlaySound sound ]
                 )
                 outMsgs
             )
@@ -184,16 +226,16 @@ update time currentUserId otherUserId msg model =
         PressedSelectGame game ->
             case game of
                 Game_Go ->
-                    GoModel Go.initSetup
+                    ( Just (GoModel (Go.Setup Go.initSetup)), [] )
 
                 Game_WordSpellingGame ->
-                    WordSpellingGameModel
+                    Debug.todo ""
 
         PressedReset ->
             ( model, [ OutSelectMatch Nothing ] )
 
-        SelectedMatch newMatchId ->
-            ( model, [ OutSelectMatch newMatchId ] )
+        SelectedMatch selectedMatchId ->
+            ( model, [ OutSelectMatch (Just selectedMatchId) ] )
 
 
 view :
@@ -329,18 +371,18 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                     Nothing ->
                         newMatchValue
 
-            onSelect : String -> Go.Msg
+            onSelect : String -> Msg
             onSelect text =
                 if text == newMatchValue then
-                    SelectedMatch Nothing
+                    PressedReset
 
                 else
                     case String.toInt text of
                         Just n ->
-                            SelectedMatch (Just (Id.fromInt n))
+                            SelectedMatch (Id.fromInt n)
 
                         Nothing ->
-                            SelectedMatch Nothing
+                            PressedReset
         in
         Ui.column
             [ Ui.padding
@@ -417,7 +459,7 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                             , MyUi.copyBox
                                                 (Dom.id "go_shareLink")
                                                 PressedCopyLink
-                                                Go.NoOpMsg
+                                                (GoMsg Go.NoOpMsg)
                                                 { lastCopied = lastCopied }
                                                 (Go.publicGoMatchUrl publicLink)
                                             ]

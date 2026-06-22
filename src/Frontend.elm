@@ -1936,7 +1936,7 @@ updateLoaded msg model =
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
 
-        GoMsg goMsg ->
+        GameMsg gameMsg ->
             case ( model.route, model.loginStatus ) of
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
                     let
@@ -1950,6 +1950,10 @@ updateLoaded msg model =
                                     SeqDict.get otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.frontendInit
 
+                                newMatchId : Id Id.ChannelMessageId
+                                newMatchId =
+                                    DmChannel.latestMessageId dmChannel |> Id.increment
+
                                 maybeMatch : Maybe ( Id Id.ChannelMessageId, Go.ValidatedSetup, Go.GameState )
                                 maybeMatch =
                                     case maybeMatchId of
@@ -1961,80 +1965,73 @@ updateLoaded msg model =
                                         Nothing ->
                                             Nothing
 
-                                ( goModel2, cmd, outMsg ) =
-                                    Go.update
+                                ( gameModel2, outMsgs ) =
+                                    Game.update
                                         model.time
                                         local.localUser.session.userId
                                         otherUserId
-                                        goMsg
+                                        gameMsg
+                                        newMatchId
                                         maybeMatch
-                                        (case SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch of
-                                            Just (Game.GoModel m) ->
-                                                Just m
+                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
 
-                                            _ ->
-                                                Nothing
-                                        )
+                                loggedInWithModel : LoggedIn2
+                                loggedInWithModel =
+                                    { loggedIn
+                                        | currentDmGoMatch =
+                                            SeqDict.update
+                                                ( otherUserId, maybeMatchId )
+                                                (\_ -> gameModel2)
+                                                loggedIn.currentDmGoMatch
+                                    }
 
-                                maybeChange : Maybe Go.LocalChange
-                                maybeChange =
-                                    case outMsg of
-                                        Go.OutLocalChange change ->
-                                            Just change
-
-                                        _ ->
-                                            Nothing
-
-                                ( loggedIn2, cmd2 ) =
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Maybe.map (Local_Go { otherUserId = otherUserId }) maybeChange)
-                                        { loggedIn
-                                            | currentDmGoMatch =
-                                                SeqDict.update
-                                                    ( otherUserId, maybeMatchId )
-                                                    (\_ -> Maybe.map Game.GoModel goModel2)
-                                                    loggedIn.currentDmGoMatch
-                                        }
-                                        (Command.map never GoMsg cmd)
-
-                                ( model2, routeCmd ) =
-                                    case outMsg of
-                                        Go.OutLocalChange localChange ->
-                                            case localChange of
-                                                Go.StartMatch _ _ ->
-                                                    FrontendExtra.routePush
-                                                        { model | loginStatus = LoggedIn loggedIn2 }
-                                                        (DmRoute
-                                                            { dmRoute
-                                                                | tab =
-                                                                    DmChannel.latestMessageId dmChannel
-                                                                        |> Id.increment
-                                                                        |> Just
-                                                                        |> DmChannelHeaderTab_Games
-                                                                        |> Just
-                                                            }
-                                                        )
+                                ( loggedIn2, localChangeCmd ) =
+                                    List.foldl
+                                        (\outMsg ( accLoggedIn, accCmd ) ->
+                                            case outMsg of
+                                                Game.OutLocalChange change ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Just (Local_Game { otherUserId = otherUserId } change))
+                                                        accLoggedIn
+                                                        accCmd
 
                                                 _ ->
-                                                    ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                                    ( accLoggedIn, accCmd )
+                                        )
+                                        ( loggedInWithModel, Command.none )
+                                        outMsgs
 
-                                        Go.OutSelectMatch newMatchId ->
-                                            FrontendExtra.routePush
-                                                { model | loginStatus = LoggedIn loggedIn2 }
-                                                (DmRoute
-                                                    { dmRoute
-                                                        | tab = Just (DmChannelHeaderTab_Games newMatchId)
-                                                    }
-                                                )
+                                ( model2, effectCmd ) =
+                                    List.foldl
+                                        (\outMsg ( accModel, accCmd ) ->
+                                            case outMsg of
+                                                Game.PlaySound sound ->
+                                                    ( accModel, Command.batch [ accCmd, Ports.playSound sound ] )
 
-                                        Go.NoOutMsg ->
-                                            ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                                Game.CopyText text ->
+                                                    let
+                                                        ( copyModel, copyCmd ) =
+                                                            copyText text accModel
+                                                    in
+                                                    ( copyModel, Command.batch [ accCmd, copyCmd ] )
 
-                                        Go.CopyText text ->
-                                            copyText text { model | loginStatus = LoggedIn loggedIn2 }
+                                                Game.OutSelectMatch newSelected ->
+                                                    let
+                                                        ( pushModel, pushCmd ) =
+                                                            FrontendExtra.routePush
+                                                                accModel
+                                                                (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
+                                                    in
+                                                    ( pushModel, Command.batch [ accCmd, pushCmd ] )
+
+                                                Game.OutLocalChange _ ->
+                                                    ( accModel, accCmd )
+                                        )
+                                        ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                        outMsgs
                             in
-                            ( model2, Command.batch [ routeCmd, cmd2 ] )
+                            ( model2, Command.batch [ localChangeCmd, effectCmd ] )
 
                         _ ->
                             ( model, Command.none )
@@ -6500,34 +6497,42 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
-                                Server_Go _ _ goChange ->
-                                    case goChange of
-                                        Go.StartMatch _ _ ->
+                                Server_Game _ _ gameChange ->
+                                    case gameChange of
+                                        Game.LocalChange_Go _ goChange ->
+                                            case goChange of
+                                                Go.StartMatch _ _ ->
+                                                    ( loggedIn2, Command.none )
+
+                                                Go.Action actionWithTime ->
+                                                    ( loggedIn2
+                                                    , case actionWithTime.change of
+                                                        Go.PlaceStone _ _ ->
+                                                            Ports.playSound "pop"
+
+                                                        Go.PassTurn ->
+                                                            Ports.playSound "pop"
+
+                                                        Go.MarkTerritory _ _ ->
+                                                            Command.none
+
+                                                        Go.FinishedMarking ->
+                                                            Ports.playSound "pop"
+
+                                                        Go.AcceptTerritory ->
+                                                            Ports.playSound "pop"
+
+                                                        Go.RejectTerritory ->
+                                                            Ports.playSound "pop"
+                                                    )
+
+                                                Go.CreatePublicLink _ _ ->
+                                                    ( loggedIn2, Command.none )
+
+                                        Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 
-                                        Go.Action _ actionWithTime ->
-                                            ( loggedIn2
-                                            , case actionWithTime.change of
-                                                Go.PlaceStone _ _ ->
-                                                    Ports.playSound "pop"
-
-                                                Go.PassTurn ->
-                                                    Ports.playSound "pop"
-
-                                                Go.MarkTerritory _ _ ->
-                                                    Command.none
-
-                                                Go.FinishedMarking ->
-                                                    Ports.playSound "pop"
-
-                                                Go.AcceptTerritory ->
-                                                    Ports.playSound "pop"
-
-                                                Go.RejectTerritory ->
-                                                    Ports.playSound "pop"
-                                            )
-
-                                        Go.CreatePublicLink _ _ ->
+                                        Game.LocalChange_WordSpellingGame _ _ ->
                                             ( loggedIn2, Command.none )
 
                                 _ ->

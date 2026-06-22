@@ -255,16 +255,24 @@ pendingChangesText localChange =
                 Call.Local_SetRemoteCallData _ ->
                     "Set audio/video input enabled"
 
-        Local_Go _ change ->
+        Local_Game _ change ->
             case change of
-                Go.StartMatch _ _ ->
-                    "Started Go match"
+                Game.CreatePublicLink _ _ ->
+                    "Shared match"
 
-                Go.Action _ _ ->
-                    "Made a move in Go"
+                Game.LocalChange_Go _ goChange ->
+                    case goChange of
+                        Go.StartMatch _ _ ->
+                            "Started Go match"
 
-                Go.CreatePublicLink _ _ ->
-                    "Shared Go match"
+                        Go.Action _ ->
+                            "Made a move in Go"
+
+                        Go.CreatePublicLink _ _ ->
+                            "Shared Go match"
+
+                Game.LocalChange_WordSpellingGame _ _ ->
+                    "Word spelling game change"
 
         Local_Drawing _ _ _ ->
             "Drew on a message"
@@ -1809,7 +1817,7 @@ isPressMsg msg =
         AiChatMsg aiChatMsg ->
             AiChat.isPressMsg aiChatMsg
 
-        GoMsg _ ->
+        GameMsg _ ->
             True
 
         UserNameEditableMsg editableMsg ->
@@ -3069,8 +3077,8 @@ changeUpdate localMsg local =
                         Call.Local_SetRemoteCallData _ ->
                             local
 
-                Local_Go { otherUserId } goChange ->
-                    goChangeUpdate local.localUser.session.userId otherUserId goChange local
+                Local_Game { otherUserId } gameChange ->
+                    gameChangeUpdate local.localUser.session.userId otherUserId gameChange local
 
                 Local_Drawing guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
@@ -4232,20 +4240,20 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Server_Go changeBy { otherUserId } goChange ->
-                    goChangeUpdate changeBy otherUserId goChange local
+                Server_Game changeBy { otherUserId } gameChange ->
+                    gameChangeUpdate changeBy otherUserId gameChange local
 
                 Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
-goChangeUpdate :
+gameChangeUpdate :
     Id UserId
     -> Id UserId
-    -> Go.LocalChange
+    -> Game.LocalChange
     -> LocalState
     -> LocalState
-goChangeUpdate changeBy otherUserId goChange local =
+gameChangeUpdate changeBy otherUserId gameChange local =
     { local
         | dmChannels =
             SeqDict.update
@@ -4256,34 +4264,39 @@ goChangeUpdate changeBy otherUserId goChange local =
                         dmChannel =
                             Maybe.withDefault DmChannel.frontendInit maybe
                     in
-                    (case goChange of
-                        Go.StartMatch createdAt setup ->
-                            let
-                                dmChannel2 : FrontendDmChannel
-                                dmChannel2 =
-                                    LocalState.createChannelMessageFrontend
-                                        (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_Go)
-                                        dmChannel
+                    (case gameChange of
+                        Game.LocalChange_Go matchId goChange ->
+                            case goChange of
+                                Go.StartMatch createdAt setup ->
+                                    let
+                                        dmChannel2 : FrontendDmChannel
+                                        dmChannel2 =
+                                            LocalState.createChannelMessageFrontend
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_Go)
+                                                dmChannel
 
-                                matchId : Id ChannelMessageId
-                                matchId =
-                                    DmChannel.latestMessageId dmChannel2
-                            in
-                            { dmChannel2
-                                | games =
-                                    SeqDict.insert
-                                        matchId
-                                        (Game.initMatchData (Game.GameData_Go setup Array.empty) Nothing)
-                                        dmChannel2.games
-                            }
+                                        newMatchId : Id ChannelMessageId
+                                        newMatchId =
+                                            DmChannel.latestMessageId dmChannel2
+                                    in
+                                    { dmChannel2
+                                        | games =
+                                            SeqDict.insert
+                                                newMatchId
+                                                (Game.initMatchData (Game.GameData_Go setup Array.empty) Nothing)
+                                                dmChannel2.games
+                                    }
 
-                        Go.Action matchId actionWithTime ->
-                            { dmChannel
-                                | games =
-                                    SeqDict.updateIfExists matchId (Game.addGoAction actionWithTime) dmChannel.games
-                            }
+                                Go.Action actionWithTime ->
+                                    { dmChannel
+                                        | games =
+                                            SeqDict.updateIfExists matchId (Game.addGoAction actionWithTime) dmChannel.games
+                                    }
 
-                        Go.CreatePublicLink matchId data ->
+                                Go.CreatePublicLink _ _ ->
+                                    dmChannel
+
+                        Game.CreatePublicLink matchId data ->
                             case data of
                                 FilledInByBackend publicId ->
                                     { dmChannel
@@ -4296,6 +4309,9 @@ goChangeUpdate changeBy otherUserId goChange local =
 
                                 EmptyPlaceholder ->
                                     dmChannel
+
+                        Game.LocalChange_WordSpellingGame _ _ ->
+                            dmChannel
                     )
                         |> Just
                 )

@@ -107,6 +107,7 @@ import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
+import Game
 import Go
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -3184,7 +3185,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AddCustomEmojisToUser _ ->
                     False
 
-                Local_Go _ _ ->
+                Local_Game _ _ ->
                     True
 
                 Local_Drawing _ _ _ ->
@@ -3374,7 +3375,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
                             True
 
-                        Types.Server_Go _ _ _ ->
+                        Types.Server_Game _ _ _ ->
                             True
 
                         Types.Server_SetGuildIcon _ _ ->
@@ -3568,22 +3569,25 @@ allAttackerLocalChanges =
     , Local_VoiceChatChange (Call.Local_Leave startTime)
     , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
     , Local_VoiceChatChange Call.Local_PublishConnected
-    , Local_Go
+    , Local_Game
         { otherUserId = Broadcast.adminUserId }
-        (Go.StartMatch
-            (Time.millisToPosix 0)
-            { width = Go.boardSize9
-            , height = Go.boardSize9
-            , handicap = 0
-            , komiHalfPoints = Go.KomiHalfPoints 2
-            , timeControl = Nothing
-            , blackPlayer = normalUserId
-            , whitePlayer = Broadcast.adminUserId
-            }
+        (Game.LocalChange_Go
+            (Id.fromInt 0)
+            (Go.StartMatch
+                (Time.millisToPosix 0)
+                { width = Go.boardSize9
+                , height = Go.boardSize9
+                , handicap = 0
+                , komiHalfPoints = Go.KomiHalfPoints 2
+                , timeControl = Nothing
+                , blackPlayer = normalUserId
+                , whitePlayer = Broadcast.adminUserId
+                }
+            )
         )
-    , Local_Go
+    , Local_Game
         { otherUserId = Broadcast.adminUserId }
-        (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
+        (Game.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     , Local_Drawing
         guildOrDmId_guild

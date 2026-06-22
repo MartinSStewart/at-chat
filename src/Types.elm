@@ -488,7 +488,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
-    | GoMsg Go.Msg
+    | GameMsg Game.Msg
     | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
@@ -873,7 +873,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
-    | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
+    | Server_Game (Id UserId) { otherUserId : Id UserId } Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
 
 
@@ -917,5 +917,5 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
-    | Local_Go { otherUserId : Id UserId } Go.LocalChange
+    | Local_Game { otherUserId : Id UserId } Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

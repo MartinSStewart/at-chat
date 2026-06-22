@@ -584,7 +584,7 @@ tabBodyView local loggedIn model =
                                 maybeMatchId
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
                                 (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
-                                |> Ui.map GoMsg
+                                |> Ui.map GameMsg
                                 |> Just
 
                         Just DmChannelHeaderTab_VoiceChat ->

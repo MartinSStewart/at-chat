@@ -1707,8 +1707,8 @@ toBackendLog toBackend =
                 Local_VoiceChatChange _ ->
                     ToBackendLog_Local_VoiceChatChange
 
-                Local_Go _ _ ->
-                    ToBackendLog_Local_Go
+                Local_Game _ _ ->
+                    ToBackendLog_Local_Game
 
                 Local_Drawing _ _ _ ->
                     ToBackendLog_Local_Drawing
