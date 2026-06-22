@@ -4763,6 +4763,9 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                             Ui.text "<Missing>"
                 )
                 (NonemptySet.toNonemptyList users)
+
+        nameCount =
+            List.Nonempty.length names
     in
     Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
@@ -4790,15 +4793,25 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                 CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
         , Ui.Prose.paragraph
             [ Ui.Font.size 14, Ui.width Ui.fill ]
-            (case List.Nonempty.tail names of
-                [] ->
-                    [ List.Nonempty.head names ]
+            (if nameCount > 10 then
+                let
+                    visible =
+                        List.Nonempty.take 8 names
+                            |> List.Nonempty.toList
+                            |> List.intersperse (Ui.text ", ")
+                in
+                visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
 
-                [ two ] ->
-                    [ List.Nonempty.head names, Ui.text " and ", two ]
+             else
+                case List.Nonempty.tail names of
+                    [] ->
+                        [ List.Nonempty.head names ]
 
-                rest ->
-                    List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
+                    [ two ] ->
+                        [ List.Nonempty.head names, Ui.text " and ", two ]
+
+                    rest ->
+                        List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
             )
         ]
 
