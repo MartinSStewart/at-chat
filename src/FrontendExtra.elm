@@ -102,6 +102,7 @@ import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import WordSpellingGame
 
 
 pendingChangesText : LocalChange -> String
@@ -4304,8 +4305,30 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                 EmptyPlaceholder ->
                                     dmChannel
 
-                        Game.LocalChange_WordSpellingGame _ _ ->
-                            dmChannel
+                        Game.LocalChange_WordSpellingGame _ wsChange ->
+                            case wsChange of
+                                WordSpellingGame.StartMatch createdAt setup ->
+                                    let
+                                        dmChannel2 : FrontendDmChannel
+                                        dmChannel2 =
+                                            LocalState.createChannelMessageFrontend
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_WordSpellingGame)
+                                                dmChannel
+
+                                        newMatchId : Id ChannelMessageId
+                                        newMatchId =
+                                            DmChannel.latestMessageId dmChannel2
+                                    in
+                                    { dmChannel2
+                                        | games =
+                                            SeqDict.insert
+                                                newMatchId
+                                                (Game.initMatchData (Game.GameData_WordSpellingGame setup Array.empty) Nothing)
+                                                dmChannel2.games
+                                    }
+
+                                WordSpellingGame.Action _ ->
+                                    dmChannel
                     )
                         |> Just
                 )

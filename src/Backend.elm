@@ -82,6 +82,7 @@ import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WireHelper
+import WordSpellingGame
 
 
 app :
@@ -5107,8 +5108,55 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                Game.LocalChange_WordSpellingGame _ _ ->
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                Game.LocalChange_WordSpellingGame matchId wsChange ->
+                                    case wsChange of
+                                        WordSpellingGame.StartMatch createdAt setup ->
+                                            let
+                                                ( messageId, dmChannel2 ) =
+                                                    LocalState.createChannelMessageBackend
+                                                        (GameStarted
+                                                            createdAt
+                                                            session.userId
+                                                            SeqDict.empty
+                                                            Drawing.emptyDrawing
+                                                            Game_WordSpellingGame
+                                                        )
+                                                        dmChannel
+
+                                                localMsg2 : Game.LocalChange
+                                                localMsg2 =
+                                                    Game.LocalChange_WordSpellingGame messageId (WordSpellingGame.StartMatch time setup)
+                                            in
+                                            ( { model
+                                                | dmChannels =
+                                                    SeqDict.insert
+                                                        dmChannelId
+                                                        { dmChannel2
+                                                            | games =
+                                                                SeqDict.insert
+                                                                    messageId
+                                                                    (Game.GameData_WordSpellingGame setup Array.empty)
+                                                                    dmChannel2.games
+                                                        }
+                                                        model.dmChannels
+                                              }
+                                            , Command.batch
+                                                [ Local_Game otherUserId localMsg2
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDmChannelExcludingOne
+                                                    clientId
+                                                    session.userId
+                                                    otherUserId.otherUserId
+                                                    (\otherUserId2 ->
+                                                        Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                                                    )
+                                                    model
+                                                ]
+                                            )
+
+                                        WordSpellingGame.Action _ ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_Drawing guildOrDmId anchor drawingChange ->

@@ -137,8 +137,8 @@ hasPendingTurn userId matches =
                             else
                                 set
 
-                FrontendGameData_WordSpellingGame setup array gameState ->
-                    Debug.todo ""
+                FrontendGameData_WordSpellingGame _ _ _ ->
+                    set
         )
         SeqSet.empty
         matches
@@ -221,7 +221,44 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
             )
 
         WordSpellingGameMsg wordSpellingGameMsg ->
-            Debug.todo ""
+            let
+                ( wsModel, outMsgs ) =
+                    WordSpellingGame.update time
+                        wordSpellingGameMsg
+                        (case model of
+                            Just (WordSpellingGameModel wsModel2) ->
+                                Just wsModel2
+
+                            _ ->
+                                Nothing
+                        )
+
+                matchId : Id ChannelMessageId
+                matchId =
+                    case maybeMatch of
+                        Just ( id, _, _ ) ->
+                            id
+
+                        Nothing ->
+                            newMatchId
+            in
+            ( Maybe.map WordSpellingGameModel wsModel
+            , List.concatMap
+                (\outMsg ->
+                    case outMsg of
+                        WordSpellingGame.OutLocalChange localChange ->
+                            case localChange of
+                                WordSpellingGame.StartMatch _ _ ->
+                                    -- A brand new match takes the next message id, then we navigate to it.
+                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange)
+                                    , OutSelectMatch (Just matchId)
+                                    ]
+
+                                _ ->
+                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
+                )
+                outMsgs
+            )
 
         PressedSelectGame game ->
             case game of
@@ -229,7 +266,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                     ( Just (GoModel (Go.Setup Go.initSetup)), [] )
 
                 Game_WordSpellingGame ->
-                    Debug.todo ""
+                    ( Just (WordSpellingGameModel (WordSpellingGame.Setup WordSpellingGame.initSetup)), [] )
 
         PressedReset ->
             ( Nothing, [ OutSelectMatch Nothing ] )
@@ -309,7 +346,16 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                 |> Ui.map GoMsg
 
                         Just (WordSpellingGameModel model2) ->
-                            Debug.todo ""
+                            WordSpellingGame.setupView
+                                windowSize
+                                (case model2 of
+                                    WordSpellingGame.Setup setup ->
+                                        setup
+
+                                    _ ->
+                                        WordSpellingGame.initSetup
+                                )
+                                |> Ui.map WordSpellingGameMsg
 
                         Nothing ->
                             Ui.row
