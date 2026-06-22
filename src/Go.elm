@@ -26,14 +26,18 @@ module Go exposing
     , currentPlayersTurn
     , deadStones
     , foldActions
+    , gameView
     , initGame
+    , initSetup
     , isLocalUsersTurn
     , pressedKey
+    , publicGoMatchUrl
+    , setupView
     , spectatorView
     , update
     , updateAction
     , updateSpectator
-    , view
+    , viewHeight
     )
 
 import Array exposing (Array)
@@ -1023,7 +1027,7 @@ update :
     -> Id UserId
     -> Id UserId
     -> Msg
-    -> Maybe ( ValidatedSetup, GameState )
+    -> Maybe ( Id ChannelMessageId, ValidatedSetup, GameState )
     -> Maybe Model
     -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
 update time currentUserId otherUserId msg maybeMatch model =
@@ -1036,7 +1040,7 @@ update time currentUserId otherUserId msg maybeMatch model =
 
         GameMsg gameMsg ->
             case maybeMatch of
-                Just ( setup, state ) ->
+                Just ( matchId, setup, state ) ->
                     let
                         ( game2, cmd, maybeChange ) =
                             updateGame
@@ -1498,212 +1502,6 @@ boardChromeHeight =
 viewHeight : Coord CssPixels -> Int
 viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
-
-
-view :
-    Time.Posix
-    -> Coord CssPixels
-    -> Maybe MyUi.LastCopy
-    -> LocalUser
-    -> Id UserId
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> Maybe Model
-    -> Element Msg
-view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
-    let
-        isMobile : Bool
-        isMobile =
-            MyUi.isMobile { windowSize = windowSize }
-    in
-    Ui.el
-        [ Ui.height (Ui.px (viewHeight windowSize))
-        , Ui.scrollable
-        , Ui.background MyUi.tabBackground
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , MyUi.noShrinking
-        ]
-        (Ui.column
-            []
-            [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
-            , case maybeMatchId of
-                Just matchId ->
-                    case SeqDict.get matchId matches of
-                        Just match ->
-                            gameView
-                                currentTime
-                                windowSize
-                                localUser
-                                match
-                                (case model of
-                                    Just (Game game) ->
-                                        game
-
-                                    Just (Setup _) ->
-                                        initGame
-
-                                    Nothing ->
-                                        initGame
-                                )
-                                |> Ui.map GameMsg
-
-                        Nothing ->
-                            Ui.text "Match not found"
-
-                Nothing ->
-                    Ui.Lazy.lazy3
-                        setupView
-                        (localUser.session.userId == otherUserId)
-                        windowSize
-                        (case model of
-                            Just (Game _) ->
-                                initSetup
-
-                            Just (Setup setup) ->
-                                setup
-
-                            Nothing ->
-                                initSetup
-                        )
-                        |> Ui.map SetupMsg
-            ]
-        )
-
-
-matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
-matchSwitcherView isMobile lastCopied maybeMatchId matches =
-    if SeqDict.isEmpty matches then
-        Ui.none
-
-    else
-        let
-            newMatchValue : String
-            newMatchValue =
-                " "
-
-            currentValue : String
-            currentValue =
-                case maybeMatchId of
-                    Just matchId ->
-                        String.fromInt (Id.toInt matchId)
-
-                    Nothing ->
-                        newMatchValue
-
-            onSelect : String -> Msg
-            onSelect text =
-                if text == newMatchValue then
-                    SelectedMatch Nothing
-
-                else
-                    case String.toInt text of
-                        Just n ->
-                            SelectedMatch (Just (Id.fromInt n))
-
-                        Nothing ->
-                            SelectedMatch Nothing
-        in
-        Ui.column
-            [ Ui.padding
-                (if isMobile then
-                    8
-
-                 else
-                    12
-                )
-            , Ui.spacing 8
-            ]
-            [ Ui.row
-                [ Ui.spacing 8
-                ]
-                [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
-                , Ui.html
-                    (Html.select
-                        [ Html.Attributes.id "go_matchSwitcher"
-                        , Html.Attributes.value currentValue
-                        , Html.Events.onInput onSelect
-                        , Html.Attributes.style "height" "100%"
-                        , Html.Attributes.attribute "aria-label" "View match"
-                        , Html.Attributes.style "padding"
-                            (if isMobile then
-                                "4px"
-
-                             else
-                                "7px 8px"
-                            )
-                        , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
-                        , Html.Attributes.style "border-radius" "4px"
-                        , Html.Attributes.style "font-size"
-                            (if isMobile then
-                                "14px"
-
-                             else
-                                "16px"
-                            )
-                        , Html.Attributes.style "background-color" "rgb(32,40,70)"
-                        , Html.Attributes.style "color" "rgb(255,255,255)"
-                        , Html.Attributes.style "cursor" "pointer"
-                        ]
-                        (Html.option
-                            [ Html.Attributes.value newMatchValue
-                            , Html.Attributes.selected (maybeMatchId == Nothing)
-                            ]
-                            [ Html.text "Setup new match" ]
-                            :: List.map
-                                (\( matchId, _ ) ->
-                                    let
-                                        value : String
-                                        value =
-                                            Id.toString matchId
-                                    in
-                                    Html.option
-                                        [ Html.Attributes.value value
-                                        , Html.Attributes.selected (Just matchId == maybeMatchId)
-                                        ]
-                                        [ Html.text ("Match #" ++ value) ]
-                                )
-                                (SeqDict.toList matches)
-                        )
-                    )
-                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-                , case maybeMatchId of
-                    Just matchId ->
-                        Ui.row
-                            [ Ui.spacing 4, Ui.alignRight ]
-                            (case SeqDict.get matchId matches of
-                                Just (MatchData match) ->
-                                    case match.publicLink of
-                                        Just publicLink ->
-                                            [ Ui.text "Share"
-                                            , MyUi.copyBox
-                                                (Dom.id "go_shareLink")
-                                                PressedCopyLink
-                                                NoOpMsg
-                                                { lastCopied = lastCopied }
-                                                (publicGoMatchUrl publicLink)
-                                            ]
-
-                                        Nothing ->
-                                            [ MyUi.simpleButton
-                                                (Dom.id "go_share")
-                                                (PressedShareGoMatch matchId)
-                                                (Ui.text "Share")
-                                            ]
-
-                                Nothing ->
-                                    [ MyUi.simpleButton
-                                        (Dom.id "go_share")
-                                        (PressedShareGoMatch matchId)
-                                        (Ui.text "Share")
-                                    ]
-                            )
-
-                    Nothing ->
-                        Ui.none
-                ]
-            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
-            ]
 
 
 publicGoMatchUrl : SecretId GamePublicId -> String

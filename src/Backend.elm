@@ -37,6 +37,7 @@ import EmailAddress
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileId)
+import Game
 import Go
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -4986,7 +4987,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     | games =
                                                         SeqDict.insert
                                                             messageId
-                                                            ( setup, Array.empty )
+                                                            (Game.GameData_Go setup Array.empty)
                                                             dmChannel2.games
                                                 }
                                                 model.dmChannels
@@ -5008,7 +5009,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Go.Action matchId actionWithTime ->
                                     case SeqDict.get matchId dmChannel.games of
-                                        Just ( goSetup, actions ) ->
+                                        Just (Game.GameData_Go goSetup actions) ->
                                             let
                                                 isCurrentPlayer : Bool
                                                 isCurrentPlayer =
@@ -5032,7 +5033,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 | games =
                                                                     SeqDict.insert
                                                                         matchId
-                                                                        ( goSetup, Array.push actionWithTime actions )
+                                                                        (Game.GameData_Go goSetup (Array.push actionWithTime actions))
                                                                         dmChannel.games
                                                             }
                                                             model.dmChannels
@@ -5055,7 +5056,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             else
                                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                        Nothing ->
+                                        _ ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 Go.CreatePublicLink matchId _ ->
@@ -5252,7 +5253,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
                                     case SeqDict.get messageId dmChannel.games of
-                                        Just ( setup, actions ) ->
+                                        Just (Game.GameData_Go setup actions) ->
                                             let
                                                 lookupUser : Id UserId -> User.FrontendUser
                                                 lookupUser uid =
@@ -5274,7 +5275,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             }
                                                 |> Ok
 
-                                        Nothing ->
+                                        _ ->
                                             Err ()
 
                                 Nothing ->

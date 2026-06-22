@@ -30,6 +30,7 @@ import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
+import Game
 import Go
 import GuildName
 import Html exposing (Html)
@@ -1196,7 +1197,26 @@ updateLoaded msg model =
                                                                 | currentDmGoMatch =
                                                                     SeqDict.update
                                                                         ( otherUserId, maybeMatchId )
-                                                                        (Go.pressedKey key maybeMatchId dmChannel.goMatches)
+                                                                        (\maybeGameModel ->
+                                                                            case
+                                                                                maybeMatchId
+                                                                                    |> Maybe.andThen (\matchId -> SeqDict.get matchId dmChannel.games)
+                                                                                    |> Maybe.andThen Game.goMatchData
+                                                                            of
+                                                                                Just ( _, state ) ->
+                                                                                    (case maybeGameModel of
+                                                                                        Just (Game.GoModel m) ->
+                                                                                            Just m
+
+                                                                                        _ ->
+                                                                                            Nothing
+                                                                                    )
+                                                                                        |> Go.pressedKey key state
+                                                                                        |> Maybe.map Game.GoModel
+
+                                                                                Nothing ->
+                                                                                    maybeGameModel
+                                                                        )
                                                                         loggedIn.currentDmGoMatch
                                                               }
                                                             , Command.none
@@ -1930,15 +1950,31 @@ updateLoaded msg model =
                                     SeqDict.get otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.frontendInit
 
+                                maybeMatch : Maybe ( Id Id.ChannelMessageId, Go.ValidatedSetup, Go.GameState )
+                                maybeMatch =
+                                    case maybeMatchId of
+                                        Just matchId ->
+                                            SeqDict.get matchId dmChannel.games
+                                                |> Maybe.andThen Game.goMatchData
+                                                |> Maybe.map (\( setup, state ) -> ( matchId, setup, state ))
+
+                                        Nothing ->
+                                            Nothing
+
                                 ( goModel2, cmd, outMsg ) =
                                     Go.update
                                         model.time
                                         local.localUser.session.userId
                                         otherUserId
                                         goMsg
-                                        maybeMatchId
-                                        dmChannel.goMatches
-                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                        maybeMatch
+                                        (case SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch of
+                                            Just (Game.GoModel m) ->
+                                                Just m
+
+                                            _ ->
+                                                Nothing
+                                        )
 
                                 maybeChange : Maybe Go.LocalChange
                                 maybeChange =
@@ -1957,7 +1993,7 @@ updateLoaded msg model =
                                             | currentDmGoMatch =
                                                 SeqDict.update
                                                     ( otherUserId, maybeMatchId )
-                                                    (\_ -> goModel2)
+                                                    (\_ -> Maybe.map Game.GoModel goModel2)
                                                     loggedIn.currentDmGoMatch
                                         }
                                         (Command.map never GoMsg cmd)

@@ -126,8 +126,8 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
             dmChannel.threads
     , games =
         SeqDict.map
-            (\matchId ( setup, actions ) ->
-                Game.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
+            (\matchId gameData ->
+                Game.initMatchData gameData (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
             )
             dmChannel.games
     , dateDividerDrawings = dmChannel.dateDividerDrawings

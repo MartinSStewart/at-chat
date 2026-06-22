@@ -50,6 +50,7 @@ import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
+import Game
 import Go
 import Html exposing (Html)
 import Html.Events
@@ -4269,28 +4270,28 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     DmChannel.latestMessageId dmChannel2
                             in
                             { dmChannel2
-                                | goMatches =
+                                | games =
                                     SeqDict.insert
                                         matchId
-                                        (Go.initMatchData setup Array.empty Nothing)
-                                        dmChannel2.goMatches
+                                        (Game.initMatchData (Game.GameData_Go setup Array.empty) Nothing)
+                                        dmChannel2.games
                             }
 
                         Go.Action matchId actionWithTime ->
                             { dmChannel
-                                | goMatches =
-                                    SeqDict.updateIfExists matchId (Go.addAction actionWithTime) dmChannel.goMatches
+                                | games =
+                                    SeqDict.updateIfExists matchId (Game.addGoAction actionWithTime) dmChannel.games
                             }
 
                         Go.CreatePublicLink matchId data ->
                             case data of
                                 FilledInByBackend publicId ->
                                     { dmChannel
-                                        | goMatches =
+                                        | games =
                                             SeqDict.updateIfExists
                                                 matchId
-                                                (Go.addPublicLink publicId)
-                                                dmChannel.goMatches
+                                                (Game.addPublicLink publicId)
+                                                dmChannel.games
                                     }
 
                                 EmptyPlaceholder ->
