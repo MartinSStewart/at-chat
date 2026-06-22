@@ -3652,8 +3652,8 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
             min containerWidth 600
     in
     Html.div
-        ([ Html.Attributes.style "width" (String.fromInt width ++ "px") ]
-            ++ (if isSpoilered then
+        (Html.Attributes.style "width" (String.fromInt width ++ "px")
+            :: (if isSpoilered then
                     [ Html.Attributes.style "background-color" "rgb(0,0,0)"
                     ]
 
