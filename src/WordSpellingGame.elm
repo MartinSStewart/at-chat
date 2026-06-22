@@ -1,4 +1,14 @@
-module WordSpellingGame exposing (Action, ActionWithTime, GameState, Model, Player, ValidatedSetup, foldActions)
+module WordSpellingGame exposing
+    ( Action
+    , ActionWithTime
+    , GameState
+    , LocalChange
+    , Model
+    , Msg
+    , Player
+    , ValidatedSetup
+    , foldActions
+    )
 
 {-| Were calling it this to avoid the Scrabble trademark
 -}
@@ -6,7 +16,7 @@ module WordSpellingGame exposing (Action, ActionWithTime, GameState, Model, Play
 import Array exposing (Array)
 import Effect.Time as Time
 import Go exposing (TimeControl)
-import Id exposing (Id, UserId)
+import Id exposing (ChannelMessageId, Id, UserId)
 import SeqDict exposing (SeqDict)
 
 
@@ -18,9 +28,17 @@ type Model
     | Game { tray : Array Int }
 
 
+type Msg
+    = PressedGridCell ( Int, Int )
+
+
 type alias ValidatedSetup =
     { timeControls : TimeControl
     }
+
+
+type LocalChange
+    = Action (Id ChannelMessageId) ActionWithTime
 
 
 type Action

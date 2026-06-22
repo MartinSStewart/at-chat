@@ -46,7 +46,6 @@ import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
-import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
 import Env
 import Html
@@ -55,11 +54,8 @@ import Html.Events
 import Icons
 import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
 import MyUi
-import Ports
 import Quantity
 import SecretId exposing (SecretId)
-import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import StringExtra
 import Svg exposing (Svg)
@@ -429,10 +425,6 @@ maxDimension =
 type Msg
     = GameMsg GameMsg
     | SetupMsg SetupMsg
-    | SelectedMatch (Maybe (Id ChannelMessageId))
-    | PressedReset
-    | PressedShareGoMatch (Id ChannelMessageId)
-    | PressedCopyLink String
     | NoOpMsg
 
 
@@ -483,15 +475,13 @@ type alias ActionWithTime =
 
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
-    | Action (Id ChannelMessageId) ActionWithTime
+    | Action ActionWithTime
     | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
 
 
 type OutMsg
-    = NoOutMsg
-    | OutLocalChange LocalChange
-    | OutSelectMatch (Maybe (Id ChannelMessageId))
-    | CopyText String
+    = OutLocalChange LocalChange
+    | PlaySound String
 
 
 otherStone : Stone -> Stone
@@ -1029,20 +1019,14 @@ update :
     -> Msg
     -> Maybe ( Id ChannelMessageId, ValidatedSetup, GameState )
     -> Maybe Model
-    -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
+    -> ( Maybe Model, List OutMsg )
 update time currentUserId otherUserId msg maybeMatch model =
     case msg of
-        PressedReset ->
-            ( model, Command.none, OutSelectMatch Nothing )
-
-        SelectedMatch newMatchId ->
-            ( model, Command.none, OutSelectMatch newMatchId )
-
         GameMsg gameMsg ->
             case maybeMatch of
                 Just ( matchId, setup, state ) ->
                     let
-                        ( game2, cmd, maybeChange ) =
+                        ( game2, outMsg ) =
                             updateGame
                                 time
                                 currentUserId
@@ -1060,23 +1044,19 @@ update time currentUserId otherUserId msg maybeMatch model =
                                         initGame
                                 )
                     in
-                    ( Just game2
-                    , cmd
-                    , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
-                        |> localChangeToOut
-                    )
+                    ( Just game2, outMsg )
 
                 Nothing ->
-                    ( model, Command.none, NoOutMsg )
+                    ( model, [] )
 
         SetupMsg setupMsg ->
             case maybeMatch of
                 Just _ ->
-                    ( model, Command.none, NoOutMsg )
+                    ( model, [] )
 
                 Nothing ->
                     let
-                        ( model2, cmd, maybeChange ) =
+                        ( model2, outMsgs ) =
                             updateSetup
                                 time
                                 currentUserId
@@ -1093,26 +1073,10 @@ update time currentUserId otherUserId msg maybeMatch model =
                                         initSetup
                                 )
                     in
-                    ( Just model2, cmd, localChangeToOut maybeChange )
-
-        PressedShareGoMatch matchId ->
-            ( model, Command.none, OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) )
-
-        PressedCopyLink text ->
-            ( model, Command.none, CopyText text )
+                    ( Just model2, outMsgs )
 
         NoOpMsg ->
-            ( model, Command.none, NoOutMsg )
-
-
-localChangeToOut : Maybe LocalChange -> OutMsg
-localChangeToOut maybeChange =
-    case maybeChange of
-        Just change ->
-            OutLocalChange change
-
-        Nothing ->
-            NoOutMsg
+            ( model, [] )
 
 
 pressedKey :
@@ -1201,40 +1165,40 @@ updateSetup :
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+    -> ( Model, List OutMsg )
 updateSetup time creatorId otherPlayerId msg model =
     case msg of
         ChangedWidthInput input ->
-            ( Setup { model | widthInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | widthInput = input, error = Nothing }, [] )
 
         ChangedHeightInput input ->
-            ( Setup { model | heightInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | heightInput = input, error = Nothing }, [] )
 
         ChangedHandicapInput input ->
-            ( Setup { model | handicapInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | handicapInput = input, error = Nothing }, [] )
 
         ChangedKomiInput input ->
-            ( Setup { model | komiInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | komiInput = input, error = Nothing }, [] )
 
         ChangedMainTimeInput input ->
-            ( Setup { model | mainTimeInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | mainTimeInput = input, error = Nothing }, [] )
 
         ChangedIncrementInput input ->
-            ( Setup { model | incrementInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | incrementInput = input, error = Nothing }, [] )
 
         SelectedSize selection ->
-            ( Setup { model | sizeSelection = selection, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | sizeSelection = selection, error = Nothing }, [] )
 
         SelectedPlayingAs stone ->
-            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, [] )
 
         PressedStartGame ->
             case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
-                    ( Game initGame, Command.none, Just (StartMatch time setup) )
+                    ( Game initGame, [ OutLocalChange (StartMatch time setup) ] )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, Command.none, Nothing )
+                    ( Setup { model | error = Just error }, [] )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1365,12 +1329,12 @@ updateGame :
     -> ValidatedSetup
     -> GameState
     -> GameModel
-    -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+    -> ( Model, List OutMsg )
 updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none, Nothing )
+                ( Game (jumpToLatest model), [] )
 
             else
                 case state.phase of
@@ -1378,90 +1342,83 @@ updateGame currentTime currentUserId msg setup state model =
                         if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
                                 Ok updated ->
-                                    let
-                                        placed : Bool
-                                        placed =
-                                            updated.lastMove /= state.lastMove
-                                    in
                                     ( Game model
-                                    , if placed then
-                                        Ports.playSound "pop"
-
-                                      else
-                                        Command.none
-                                    , PlaceStone x y |> Just
+                                    , [ PlaySound "pop"
+                                      , Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
+                                      ]
                                     )
 
                                 Err error ->
-                                    ( Game { model | lastError = Just error }, Command.none, Nothing )
+                                    ( Game { model | lastError = Just error }, [] )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     Marking ->
                         if isLocalUsersTurn currentUserId setup state then
-                            ( Game model, Command.none, MarkTerritory x y |> Just )
+                            ( Game model
+                            , [ Action { time = currentTime, change = MarkTerritory x y } |> OutLocalChange ]
+                            )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     Confirming ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
                     Scored _ ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
         PressedPass ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none, Nothing )
+                ( Game (jumpToLatest model), [] )
 
             else
                 case ( state.phase, hasTimeToDoAction currentTime state ) of
                     ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( Game model
-                            , Command.none
-                            , Just PassTurn
+                            , [ Action { time = currentTime, change = PassTurn } |> OutLocalChange ]
                             )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     _ ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
         PressedDoneMarking ->
             case state.phase of
                 Marking ->
-                    ( Game model, Command.none, Just FinishedMarking )
+                    ( Game model
+                    , [ Action { time = currentTime, change = FinishedMarking } |> OutLocalChange ]
+                    )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         PressedAgree ->
             case state.phase of
                 Confirming ->
                     ( Game model
-                    , Command.none
-                    , Just AcceptTerritory
+                    , [ Action { time = currentTime, change = AcceptTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         PressedDisagree ->
             case state.phase of
                 Confirming ->
                     ( Game model
-                    , Command.none
-                    , Just RejectTerritory
+                    , [ Action { time = currentTime, change = RejectTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         SpectatorMsg spectatorMsg ->
-            ( Game (updateSpectator spectatorMsg state model), Command.none, Nothing )
+            ( Game (updateSpectator spectatorMsg state model), [] )
 
 
 updateSpectator : SpectatorMsg -> GameState -> GameModel -> GameModel
@@ -1985,7 +1942,7 @@ gameView :
     -> ValidatedSetup
     -> GameState
     -> GameModel
-    -> Element GameMsg
+    -> Element Msg
 gameView currentTime windowSize localUser setup state model =
     let
         isMobile : Bool
@@ -2076,6 +2033,7 @@ gameView currentTime windowSize localUser setup state model =
             Nothing ->
                 Ui.none
         ]
+        |> Ui.map GameMsg
 
 
 statusView : Time.Posix -> GameState -> Element msg

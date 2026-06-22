@@ -1,15 +1,26 @@
-module Game exposing (..)
+module Game exposing
+    ( BackendGameData
+    , FrontendGameData
+    , Model
+    , addGoAction
+    , addPublicLink
+    , goMatchData
+    , hasPendingTurn
+    , initMatchData
+    )
 
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
+import Effect.Command as Command
 import Effect.Time as Time
 import Go
 import Html
 import Html.Attributes
 import Html.Events
 import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
+import Message exposing (Game(..))
 import MyUi
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -18,6 +29,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
+import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
 
@@ -34,6 +46,16 @@ type BackendGameData
 type FrontendGameData
     = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.GameState
     | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.GameState
+
+
+type Msg
+    = GoMsg Go.Msg
+    | WordSpellingGameMsg WordSpellingGame.Msg
+    | PressedShareGoMatch (Id ChannelMessageId)
+    | PressedCopyLink String
+    | SelectedMatch (Id ChannelMessageId)
+    | PressedReset
+    | PressedSelectGame Game
 
 
 {-| OpaqueVariants
@@ -116,6 +138,64 @@ hasPendingTurn userId matches =
         matches
 
 
+type LocalChange
+    = CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
+    | LocalChange_Go (Id ChannelMessageId) Go.LocalChange
+    | LocalChange_WordSpellingGame (Id ChannelMessageId) WordSpellingGame.LocalChange
+
+
+type OutMsg
+    = OutLocalChange LocalChange
+    | CopyText String
+    | PlaySound String
+    | OutSelectMatch (Maybe (Id ChannelMessageId))
+
+
+update : Time.Posix -> Id UserId -> Id UserId -> Msg -> Maybe Model -> ( Maybe Model, List OutMsg )
+update time currentUserId otherUserId msg model =
+    case msg of
+        PressedShareGoMatch matchId ->
+            ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
+
+        PressedCopyLink text ->
+            ( model, [ CopyText text ] )
+
+        GoMsg goMsg ->
+            let
+                ( goModel, outMsgs ) =
+                    Go.update time currentUserId otherUserId goMsg
+            in
+            ( model
+            , List.map
+                (\outMsg ->
+                    case outMsg of
+                        Go.OutLocalChange localChange ->
+                            LocalChange_Go localChange
+
+                        Go.PlaySound sound ->
+                            PlaySound sound
+                )
+                outMsgs
+            )
+
+        WordSpellingGameMsg wordSpellingGameMsg ->
+            Debug.todo ""
+
+        PressedSelectGame game ->
+            case game of
+                Game_Go ->
+                    GoModel Go.initSetup
+
+                Game_WordSpellingGame ->
+                    WordSpellingGameModel
+
+        PressedReset ->
+            ( model, [ OutSelectMatch Nothing ] )
+
+        SelectedMatch newMatchId ->
+            ( model, [ OutSelectMatch newMatchId ] )
+
+
 view :
     Time.Posix
     -> Coord CssPixels
@@ -125,7 +205,7 @@ view :
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
-    -> Element Go.Msg
+    -> Element Msg
 view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
@@ -162,7 +242,7 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                             _ ->
                                                 Go.initGame
                                         )
-                                        |> Ui.map Go.GameMsg
+                                        |> Ui.map GoMsg
 
                                 FrontendGameData_WordSpellingGame _ _ _ ->
                                     Ui.text "Unsupported game"
@@ -171,22 +251,65 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                             Ui.text "Match not found"
 
                 Nothing ->
-                    Go.setupView
-                        (localUser.session.userId == otherUserId)
-                        windowSize
-                        (case model of
-                            Just (GoModel (Go.Setup setup)) ->
-                                setup
+                    case model of
+                        Just (GoModel model2) ->
+                            Go.setupView
+                                (localUser.session.userId == otherUserId)
+                                windowSize
+                                (case model2 of
+                                    Go.Setup setup ->
+                                        setup
 
-                            _ ->
-                                Go.initSetup
-                        )
-                        |> Ui.map Go.SetupMsg
+                                    _ ->
+                                        Go.initSetup
+                                )
+                                |> Ui.map Go.SetupMsg
+                                |> Ui.map GoMsg
+
+                        Just (WordSpellingGameModel model2) ->
+                            Debug.todo ""
+
+                        Nothing ->
+                            Ui.row
+                                [ Ui.spacing 8, Ui.wrap ]
+                                (List.map gameSelectButton allGames)
             ]
         )
 
 
-matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Go.Msg
+allGames : List Game
+allGames =
+    [ Game_Go
+    , Game_WordSpellingGame
+    ]
+
+
+gameToString : Game -> String
+gameToString game =
+    case game of
+        Game_Go ->
+            "Go"
+
+        Game_WordSpellingGame ->
+            "Word Spelling Game"
+
+
+gameSelectButton : Game -> Element Msg
+gameSelectButton game =
+    MyUi.elButton
+        (Dom.id ("game_select_" ++ gameToString game))
+        (PressedSelectGame game)
+        [ Ui.width (Ui.px 200)
+        , Ui.height (Ui.px 200)
+        , Ui.rounded 8
+        , Ui.background MyUi.buttonBackground
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
+        ]
+        (gameToString game |> Ui.text)
+
+
+matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
 matchSwitcherView isMobile lastCopied maybeMatchId matches =
     if SeqDict.isEmpty matches then
         Ui.none
@@ -209,15 +332,15 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
             onSelect : String -> Go.Msg
             onSelect text =
                 if text == newMatchValue then
-                    Go.SelectedMatch Nothing
+                    SelectedMatch Nothing
 
                 else
                     case String.toInt text of
                         Just n ->
-                            Go.SelectedMatch (Just (Id.fromInt n))
+                            SelectedMatch (Just (Id.fromInt n))
 
                         Nothing ->
-                            Go.SelectedMatch Nothing
+                            SelectedMatch Nothing
         in
         Ui.column
             [ Ui.padding
@@ -281,7 +404,7 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                 (SeqDict.toList matches)
                         )
                     )
-                , MyUi.simpleButton (Dom.id "go_reset") Go.PressedReset (Ui.text "New game")
+                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
                 , case maybeMatchId of
                     Just matchId ->
                         Ui.row
@@ -293,7 +416,7 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                             [ Ui.text "Share"
                                             , MyUi.copyBox
                                                 (Dom.id "go_shareLink")
-                                                Go.PressedCopyLink
+                                                PressedCopyLink
                                                 Go.NoOpMsg
                                                 { lastCopied = lastCopied }
                                                 (Go.publicGoMatchUrl publicLink)
@@ -302,14 +425,14 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                         Nothing ->
                                             [ MyUi.simpleButton
                                                 (Dom.id "go_share")
-                                                (Go.PressedShareGoMatch matchId)
+                                                (PressedShareGoMatch matchId)
                                                 (Ui.text "Share")
                                             ]
 
                                 Nothing ->
                                     [ MyUi.simpleButton
                                         (Dom.id "go_share")
-                                        (Go.PressedShareGoMatch matchId)
+                                        (PressedShareGoMatch matchId)
                                         (Ui.text "Share")
                                     ]
                             )
