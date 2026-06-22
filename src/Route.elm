@@ -25,7 +25,7 @@ import Codec
 import Dict
 import Discord
 import DmChannel exposing (DmChannelId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GoMatchPublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import Pagination
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -46,7 +46,7 @@ type Route
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
-    | PublicGoMatchRoute (SecretId GoMatchPublicId)
+    | PublicGoMatchRoute (SecretId GamePublicId)
 
 
 type LinkDiscordError
@@ -373,7 +373,7 @@ decodeChannelHeaderTab url2 =
                 "description" ->
                     DmChannelHeaderTab_ChannelDescription |> Just
 
-                "go" ->
+                "game" ->
                     DmChannelHeaderTab_Games goMatchId |> Just
 
                 "call" ->
@@ -689,7 +689,7 @@ encodeChannelHeaderTab tab =
             [ Url.Builder.string tabParam "call" ]
 
         Just (DmChannelHeaderTab_Games maybeMatchId) ->
-            Url.Builder.string tabParam "go"
+            Url.Builder.string tabParam "game"
                 :: (case maybeMatchId of
                         Just matchId ->
                             [ Url.Builder.int goMatchParam (Id.toInt matchId) ]

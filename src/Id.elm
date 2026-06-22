@@ -5,7 +5,7 @@ module Id exposing
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
-    , GoMatchPublicId(..)
+    , GamePublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
@@ -136,7 +136,7 @@ type VideoNodeId
     = VideoNodeId Never
 
 
-type GoMatchPublicId
+type GamePublicId
     = GoMatchPublicId Never
 
 

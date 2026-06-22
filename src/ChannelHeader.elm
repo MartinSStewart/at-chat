@@ -16,6 +16,7 @@ import ChannelName exposing (ChannelName)
 import DmChannel
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Game exposing (MatchData)
 import Go
 import GuildIcon
 import Html.Attributes
@@ -376,7 +377,7 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
+            , Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
             ]
         ]
 
@@ -395,20 +396,20 @@ privateChatWith isMobile currentTab otherUserId local name =
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
             , SeqDict.get otherUserId local.dmChannels
-                |> Maybe.map .goMatches
+                |> Maybe.map .games
                 |> Maybe.withDefault SeqDict.empty
-                |> Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId
+                |> Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId
             ]
         ]
 
 
-goGameButton :
+gameButton :
     Bool
     -> Maybe DmChannelHeaderTab
     -> Id UserId
-    -> SeqDict (Id ChannelMessageId) Go.MatchData
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> Element FrontendMsg
-goGameButton isMobile currentTab userId goMatches =
+gameButton isMobile currentTab userId goMatches =
     let
         viewingGo : Bool
         viewingGo =
@@ -420,7 +421,7 @@ goGameButton isMobile currentTab userId goMatches =
                     False
 
         hasPendingTurn =
-            Go.hasPendingTurn userId goMatches
+            Game.hasPendingTurn userId goMatches
     in
     channelHeaderTab
         isMobile
@@ -581,7 +582,7 @@ tabBodyView local loggedIn model =
                                 local.localUser
                                 otherUserId
                                 maybeMatchId
-                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
+                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
                                 (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
                                 |> Ui.map GoMsg
                                 |> Just

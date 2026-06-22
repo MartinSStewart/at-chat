@@ -28,8 +28,9 @@ import Array.Extra
 import Date exposing (Date)
 import Discord
 import Drawing exposing (Drawing)
+import Game exposing (BackendGameData)
 import Go
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -38,13 +39,14 @@ import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
+import WordSpellingGame
 
 
 type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
@@ -72,7 +74,7 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , goMatches : SeqDict (Id ChannelMessageId) Go.MatchData
+    , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
@@ -88,7 +90,7 @@ backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , goMatches = SeqDict.empty
+    , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -99,7 +101,7 @@ frontendInit =
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , goMatches = SeqDict.empty
+    , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -107,7 +109,7 @@ frontendInit =
 toFrontend :
     Maybe ThreadRoute
     -> DmChannelId
-    -> OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    -> OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
     -> DmChannel
     -> FrontendDmChannel
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
@@ -122,12 +124,12 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    , goMatches =
+    , games =
         SeqDict.map
             (\matchId ( setup, actions ) ->
-                Go.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
+                Game.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
             )
-            dmChannel.goMatches
+            dmChannel.games
     , dateDividerDrawings = dmChannel.dateDividerDrawings
     }
 

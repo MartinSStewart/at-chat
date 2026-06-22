@@ -449,7 +449,7 @@ videoNodes localUser config loggedIn local =
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
 
         voiceChatY =
-            MyUi.channelHeaderHeight
+            MyUi.channelHeaderHeight + 4
 
         maxWidth : Int
         maxWidth =

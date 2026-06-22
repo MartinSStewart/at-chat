@@ -8,7 +8,6 @@ module Go exposing
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , MatchData(..)
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -23,18 +22,16 @@ module Go exposing
     , Stone(..)
     , TimeControl
     , ValidatedSetup
-    , addAction
-    , addPublicLink
     , boardSize9
     , currentPlayersTurn
     , deadStones
     , foldActions
-    , hasPendingTurn
     , initGame
-    , initMatchData
+    , isLocalUsersTurn
     , pressedKey
     , spectatorView
     , update
+    , updateAction
     , updateSpectator
     , view
     )
@@ -52,7 +49,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
+import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
 import MyUi
 import Ports
 import Quantity
@@ -373,25 +370,6 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing }
 
 
-initMatchData : ValidatedSetup -> Array ActionWithTime -> Maybe (SecretId GoMatchPublicId) -> MatchData
-initMatchData setup actions publicLink =
-    { setup = setup, actions = actions, cache = foldActions setup actions, publicLink = publicLink } |> MatchData
-
-
-addAction : ActionWithTime -> MatchData -> MatchData
-addAction action (MatchData match) =
-    { match
-        | actions = Array.push action match.actions
-        , cache = updateAction match.setup action match.cache
-    }
-        |> MatchData
-
-
-addPublicLink : SecretId GoMatchPublicId -> MatchData -> MatchData
-addPublicLink publicLink (MatchData match) =
-    { match | publicLink = Just publicLink } |> MatchData
-
-
 initGameState : ValidatedSetup -> GameState
 initGameState setup =
     let
@@ -499,21 +477,10 @@ type alias ActionWithTime =
     { time : Time.Posix, change : Action }
 
 
-{-| OpaqueVariants
--}
-type MatchData
-    = MatchData
-        { setup : ValidatedSetup
-        , actions : Array ActionWithTime
-        , cache : GameState
-        , publicLink : Maybe (SecretId GoMatchPublicId)
-        }
-
-
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action (Id ChannelMessageId) ActionWithTime
-    | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GoMatchPublicId))
+    | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
 
 
 type OutMsg
@@ -1572,7 +1539,6 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
         (Ui.column
             []
             [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
-            , Ui.el [ Ui.paddingXY 16 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -1650,105 +1616,109 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                         Nothing ->
                             SelectedMatch Nothing
         in
-        Ui.row
-            [ Ui.spacing 8
-            , Ui.padding
+        Ui.column
+            [ Ui.padding
                 (if isMobile then
                     8
 
                  else
                     12
                 )
-            , Ui.height Ui.fill
+            , Ui.spacing 8
             ]
-            [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
-            , Ui.html
-                (Html.select
-                    [ Html.Attributes.id "go_matchSwitcher"
-                    , Html.Attributes.value currentValue
-                    , Html.Events.onInput onSelect
-                    , Html.Attributes.style "height" "100%"
-                    , Html.Attributes.attribute "aria-label" "View match"
-                    , Html.Attributes.style "padding"
-                        (if isMobile then
-                            "4px"
+            [ Ui.row
+                [ Ui.spacing 8
+                ]
+                [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
+                , Ui.html
+                    (Html.select
+                        [ Html.Attributes.id "go_matchSwitcher"
+                        , Html.Attributes.value currentValue
+                        , Html.Events.onInput onSelect
+                        , Html.Attributes.style "height" "100%"
+                        , Html.Attributes.attribute "aria-label" "View match"
+                        , Html.Attributes.style "padding"
+                            (if isMobile then
+                                "4px"
 
-                         else
-                            "7px 8px"
-                        )
-                    , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
-                    , Html.Attributes.style "border-radius" "4px"
-                    , Html.Attributes.style "font-size"
-                        (if isMobile then
-                            "14px"
-
-                         else
-                            "16px"
-                        )
-                    , Html.Attributes.style "background-color" "rgb(32,40,70)"
-                    , Html.Attributes.style "color" "rgb(255,255,255)"
-                    , Html.Attributes.style "cursor" "pointer"
-                    ]
-                    (Html.option
-                        [ Html.Attributes.value newMatchValue
-                        , Html.Attributes.selected (maybeMatchId == Nothing)
-                        ]
-                        [ Html.text "Setup new match" ]
-                        :: List.map
-                            (\( matchId, _ ) ->
-                                let
-                                    value : String
-                                    value =
-                                        Id.toString matchId
-                                in
-                                Html.option
-                                    [ Html.Attributes.value value
-                                    , Html.Attributes.selected (Just matchId == maybeMatchId)
-                                    ]
-                                    [ Html.text ("Match #" ++ value) ]
+                             else
+                                "7px 8px"
                             )
-                            (SeqDict.toList matches)
-                    )
-                )
-            , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-            , case maybeMatchId of
-                Just matchId ->
-                    Ui.row
-                        [ Ui.spacing 4, Ui.alignRight ]
-                        (case SeqDict.get matchId matches of
-                            Just (MatchData match) ->
-                                case match.publicLink of
-                                    Just publicLink ->
-                                        [ Ui.text "Share"
-                                        , MyUi.copyBox
-                                            (Dom.id "go_shareLink")
-                                            PressedCopyLink
-                                            NoOpMsg
-                                            { lastCopied = lastCopied }
-                                            (publicGoMatchUrl publicLink)
-                                        ]
+                        , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                        , Html.Attributes.style "border-radius" "4px"
+                        , Html.Attributes.style "font-size"
+                            (if isMobile then
+                                "14px"
 
-                                    Nothing ->
-                                        [ MyUi.simpleButton
-                                            (Dom.id "go_share")
-                                            (PressedShareGoMatch matchId)
-                                            (Ui.text "Share")
+                             else
+                                "16px"
+                            )
+                        , Html.Attributes.style "background-color" "rgb(32,40,70)"
+                        , Html.Attributes.style "color" "rgb(255,255,255)"
+                        , Html.Attributes.style "cursor" "pointer"
+                        ]
+                        (Html.option
+                            [ Html.Attributes.value newMatchValue
+                            , Html.Attributes.selected (maybeMatchId == Nothing)
+                            ]
+                            [ Html.text "Setup new match" ]
+                            :: List.map
+                                (\( matchId, _ ) ->
+                                    let
+                                        value : String
+                                        value =
+                                            Id.toString matchId
+                                    in
+                                    Html.option
+                                        [ Html.Attributes.value value
+                                        , Html.Attributes.selected (Just matchId == maybeMatchId)
                                         ]
-
-                            Nothing ->
-                                [ MyUi.simpleButton
-                                    (Dom.id "go_share")
-                                    (PressedShareGoMatch matchId)
-                                    (Ui.text "Share")
-                                ]
+                                        [ Html.text ("Match #" ++ value) ]
+                                )
+                                (SeqDict.toList matches)
                         )
+                    )
+                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
+                , case maybeMatchId of
+                    Just matchId ->
+                        Ui.row
+                            [ Ui.spacing 4, Ui.alignRight ]
+                            (case SeqDict.get matchId matches of
+                                Just (MatchData match) ->
+                                    case match.publicLink of
+                                        Just publicLink ->
+                                            [ Ui.text "Share"
+                                            , MyUi.copyBox
+                                                (Dom.id "go_shareLink")
+                                                PressedCopyLink
+                                                NoOpMsg
+                                                { lastCopied = lastCopied }
+                                                (publicGoMatchUrl publicLink)
+                                            ]
 
-                Nothing ->
-                    Ui.none
+                                        Nothing ->
+                                            [ MyUi.simpleButton
+                                                (Dom.id "go_share")
+                                                (PressedShareGoMatch matchId)
+                                                (Ui.text "Share")
+                                            ]
+
+                                Nothing ->
+                                    [ MyUi.simpleButton
+                                        (Dom.id "go_share")
+                                        (PressedShareGoMatch matchId)
+                                        (Ui.text "Share")
+                                    ]
+                            )
+
+                    Nothing ->
+                        Ui.none
+                ]
+            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
             ]
 
 
-publicGoMatchUrl : SecretId GoMatchPublicId -> String
+publicGoMatchUrl : SecretId GamePublicId -> String
 publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
@@ -2176,25 +2146,6 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
-hasPendingTurn userId matches =
-    SeqDict.foldl
-        (\matchId (MatchData match) set ->
-            case match.cache.phase of
-                Scored _ ->
-                    set
-
-                _ ->
-                    if isLocalUsersTurn userId match.setup match.cache then
-                        SeqSet.insert matchId set
-
-                    else
-                        set
-        )
-        SeqSet.empty
-        matches
-
-
 spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
 spectatorView currentTime windowSize data model =
     let
@@ -2245,18 +2196,15 @@ gameView :
     Time.Posix
     -> Coord CssPixels
     -> LocalUser
-    -> MatchData
+    -> ValidatedSetup
+    -> GameState
     -> GameModel
     -> Element GameMsg
-gameView currentTime windowSize localUser (MatchData data) model =
+gameView currentTime windowSize localUser setup state model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
-
-        state : GameState
-        state =
-            data.cache
     in
     Ui.column
         [ Ui.spacing
@@ -2279,7 +2227,7 @@ gameView currentTime windowSize localUser (MatchData data) model =
         [ Ui.column
             []
             [ statusView currentTime state
-            , (if isLocalUsersTurn localUser.session.userId data.setup state && hasTimeToDoAction currentTime state then
+            , (if isLocalUsersTurn localUser.session.userId setup state && hasTimeToDoAction currentTime state then
                 case state.phase of
                     Playing { previousPlayerPassed } ->
                         Ui.el
@@ -2324,11 +2272,11 @@ gameView currentTime windowSize localUser (MatchData data) model =
             ]
             [ clockView
                 currentTime
-                (User.getUser data.setup.blackPlayer localUser)
-                (User.getUser data.setup.whitePlayer localUser)
+                (User.getUser setup.blackPlayer localUser)
+                (User.getUser setup.whitePlayer localUser)
                 state
-                data.setup
-            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map PressedCell
+                setup
+            , Ui.Lazy.lazy4 boardView windowSize setup state model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none

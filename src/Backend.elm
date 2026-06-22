@@ -4983,11 +4983,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.insert
                                                 dmChannelId
                                                 { dmChannel2
-                                                    | goMatches =
+                                                    | games =
                                                         SeqDict.insert
                                                             messageId
                                                             ( setup, Array.empty )
-                                                            dmChannel2.goMatches
+                                                            dmChannel2.games
                                                 }
                                                 model.dmChannels
                                       }
@@ -5007,7 +5007,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                                 Go.Action matchId actionWithTime ->
-                                    case SeqDict.get matchId dmChannel.goMatches of
+                                    case SeqDict.get matchId dmChannel.games of
                                         Just ( goSetup, actions ) ->
                                             let
                                                 isCurrentPlayer : Bool
@@ -5029,11 +5029,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         SeqDict.insert
                                                             dmChannelId
                                                             { dmChannel
-                                                                | goMatches =
+                                                                | games =
                                                                     SeqDict.insert
                                                                         matchId
                                                                         ( goSetup, Array.push actionWithTime actions )
-                                                                        dmChannel.goMatches
+                                                                        dmChannel.games
                                                             }
                                                             model.dmChannels
                                                   }
@@ -5059,7 +5059,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 Go.CreatePublicLink matchId _ ->
-                                    case SeqDict.get matchId dmChannel.goMatches of
+                                    case SeqDict.get matchId dmChannel.games of
                                         Just _ ->
                                             case OneToOne.first ( dmChannelId, matchId ) model.goMatchPublicIds of
                                                 Just publicId ->
@@ -5251,7 +5251,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         response =
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
-                                    case SeqDict.get messageId dmChannel.goMatches of
+                                    case SeqDict.get messageId dmChannel.games of
                                         Just ( setup, actions ) ->
                                             let
                                                 lookupUser : Id UserId -> User.FrontendUser
