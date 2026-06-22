@@ -855,7 +855,7 @@ messageCustomEmojiIds message =
         CallStarted _ _ _ reactions _ ->
             reactionIds reactions
 
-        GameStarted _ _ reactions _ ->
+        GameStarted _ _ reactions _ _ ->
             reactionIds reactions
 
 

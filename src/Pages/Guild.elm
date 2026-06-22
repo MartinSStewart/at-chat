@@ -50,7 +50,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (Message(..), MessageState(..), UserTextMessageData)
+import Message exposing (Game(..), Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
@@ -2398,7 +2398,7 @@ maybeRepliedTo message channel =
         CallStarted _ _ _ _ _ ->
             Nothing
 
-        GameStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Nothing
 
 
@@ -3505,7 +3505,7 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         CallStarted _ _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
-                        GameStarted _ userId _ _ ->
+                        GameStarted _ userId _ _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -4945,7 +4945,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GameStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Ui.none
 
 
@@ -5076,7 +5076,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GameStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Ui.none
 
 
@@ -5441,7 +5441,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GameStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5457,7 +5457,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5602,7 +5602,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GameStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5618,7 +5618,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5749,7 +5749,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GameStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5762,7 +5762,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5890,7 +5890,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     ]
                 )
 
-        GameStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5903,7 +5903,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -6286,7 +6286,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
         Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GameStarted _ userId _ _ ) ->
+        Just ( repliedToIndex, GameStarted _ userId _ _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
@@ -6405,14 +6405,24 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-goMatchStartedCard messageId userId allUsers =
-    eventCard
-        (Dom.id ("guild_goMatchStartedCard_" ++ Id.toString messageId))
-        MessageViewMsg_PressedGoMatchStartedCard
-        (Ui.html Icons.go)
-        (User.toString userId allUsers)
-        "started a Go match"
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Game -> Element MessageViewMsg
+goMatchStartedCard messageId userId allUsers game =
+    case game of
+        Game_Go ->
+            eventCard
+                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                MessageViewMsg_PressedGameStartedCard
+                (Ui.html Icons.go)
+                (User.toString userId allUsers)
+                "started a Go match"
+
+        Game_WordSpellingGame ->
+            eventCard
+                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                MessageViewMsg_PressedGameStartedCard
+                (Ui.html Icons.go)
+                (User.toString userId allUsers)
+                "started a Word Spelling match"
 
 
 eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
@@ -6850,7 +6860,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GameStarted _ userId _ _ ->
+                            GameStarted _ userId _ _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -7949,8 +7959,8 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ ->
-                                    LocalState.goMatchStartedText
+                                GameStarted _ _ _ _ game ->
+                                    LocalState.gameStartedText game
 
                         MessageUnloaded ->
                             ""
@@ -8078,8 +8088,8 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ ->
-                                    LocalState.goMatchStartedText
+                                GameStarted _ _ _ _ game ->
+                                    LocalState.gameStartedText game
 
                         MessageUnloaded ->
                             ""

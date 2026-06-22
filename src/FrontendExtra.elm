@@ -66,7 +66,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), Game(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -4261,7 +4261,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
+                                        (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_Go)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId

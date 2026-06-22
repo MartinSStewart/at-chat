@@ -50,7 +50,7 @@ import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), Dis
 import Log
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Message(..))
+import Message exposing (ChangeAttachments(..), Game(..), Message(..))
 import MyUi
 import NonemptyDict
 import NonemptySet
@@ -1182,7 +1182,7 @@ update msg model =
                                                                 CallStarted _ _ _ _ _ ->
                                                                     members
 
-                                                                GameStarted _ _ _ _ ->
+                                                                GameStarted _ _ _ _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -2228,8 +2228,8 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         CallStarted _ endedAt _ _ _ ->
                             LocalState.callStartedText endedAt
 
-                        GameStarted _ _ _ _ ->
-                            LocalState.goMatchStartedText
+                        GameStarted _ _ _ _ game ->
+                            LocalState.gameStartedText game
 
                 Nothing ->
                     "Thread"
@@ -4974,6 +4974,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     session.userId
                                                     SeqDict.empty
                                                     Drawing.emptyDrawing
+                                                    Game_Go
                                                 )
                                                 dmChannel
                                     in

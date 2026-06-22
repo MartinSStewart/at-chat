@@ -2649,7 +2649,7 @@ updateLoaded msg model =
                         PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
+                MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
                             case model.route of

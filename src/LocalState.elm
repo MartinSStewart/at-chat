@@ -78,9 +78,9 @@ module LocalState exposing
     , editMessageFrontendHelperNoThread
     , editMessageHelper
     , editMessageHelperNoThread
+    , gameStartedText
     , getDiscordGuildAndChannel
     , getGuildAndChannel
-    , goMatchStartedText
     , guildOrDmIdToMessage
     , guildOrDmIdToMessages
     , guildOrDmIdToMessagesCount
@@ -419,8 +419,8 @@ messageToString allUsers3 message =
         CallStarted _ endedAt _ _ _ ->
             callStartedText endedAt
 
-        GameStarted _ _ _ _ ->
-            goMatchStartedText
+        GameStarted _ _ _ _ game ->
+            gameStartedText game
 
 
 callStartedText : Maybe Time.Posix -> String
@@ -433,8 +433,8 @@ callStartedText endedAt =
             "Call started"
 
 
-goMatchStartedText : String
-goMatchStartedText =
+gameStartedText : Message.Game -> String
+gameStartedText game =
     "Go match started"
 
 
@@ -892,7 +892,7 @@ createMessageBackend message channel =
                 CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GameStarted _ _ _ _ ->
+                GameStarted _ _ _ _ _ ->
                     channel.lastTypedAt
       }
     )
@@ -961,7 +961,7 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 CallStarted _ _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
-                GameStarted _ _ _ _ ->
+                GameStarted _ _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -1009,7 +1009,7 @@ createDiscordMessageBackend messageId message channel =
                     CallStarted _ _ _ _ _ ->
                         channel.lastTypedAt
 
-                    GameStarted _ _ _ _ ->
+                    GameStarted _ _ _ _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1099,7 +1099,7 @@ createMessageFrontend message channel =
                 CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GameStarted _ _ _ _ ->
+                GameStarted _ _ _ _ _ ->
                     channel.lastTypedAt
     }
 
@@ -2262,7 +2262,7 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (CallStarted _ _ startedBy _ _) ->
                                     [ startedBy ]
 
-                                Just (GameStarted _ startedBy _ _) ->
+                                Just (GameStarted _ startedBy _ _ _) ->
                                     [ startedBy ]
 
                                 Nothing ->
@@ -2320,7 +2320,7 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 CallStarted _ _ startedBy _ _ ->
                                     [ startedBy ]
 
-                                GameStarted _ startedBy _ _ ->
+                                GameStarted _ startedBy _ _ _ ->
                                     [ startedBy ]
 
                         _ ->
@@ -2352,7 +2352,7 @@ repliedToUserId maybeRepliedTo channel =
                         CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GameStarted _ startedBy _ _ ->
+                        GameStarted _ startedBy _ _ _ ->
                             Just startedBy
 
                 Nothing ->
@@ -2381,7 +2381,7 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GameStarted _ startedBy _ _ ->
+                        GameStarted _ startedBy _ _ _ ->
                             Just startedBy
 
                 _ ->
@@ -2696,7 +2696,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             CallStarted time _ startedBy reactions _ ->
                                                 CallStarted_NoReply time startedBy reactions
 
-                                            GameStarted time _ reactions _ ->
+                                            GameStarted time _ reactions _ _ ->
                                                 GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
@@ -2731,7 +2731,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                         CallStarted time _ startedBy reactions _ ->
                                             CallStarted_NoReply time startedBy reactions
 
-                                        GameStarted time _ reactions _ ->
+                                        GameStarted time _ reactions _ _ ->
                                             GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
@@ -2789,7 +2789,7 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                 CallStarted time _ startedBy reactions _ ->
                                     CallStarted_NoReply time startedBy reactions
 
-                                GameStarted time _ reactions _ ->
+                                GameStarted time _ reactions _ _ ->
                                     GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply
