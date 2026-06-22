@@ -1789,7 +1789,7 @@ attachmentTestActions options admin =
             , Test.Html.Selector.tag options.tagName
             ]
         )
-    , admin.snapshotView 100 { name = options.plainSnapshot }
+    , tallSnapshot admin 100 { name = options.plainSnapshot }
 
     -- A spoilered attachment (second message) stays hidden behind a black box,
     -- so the media element isn't rendered yet.
@@ -1797,7 +1797,7 @@ attachmentTestActions options admin =
     , admin.click 100 (Dom.id "fileStatus_spoiler_1")
     , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-    , admin.snapshotView 100 { name = options.spoileredSnapshot }
+    , tallSnapshot admin 100 { name = options.spoileredSnapshot }
 
     -- Clicking the spoiler reveals the inline media element.
     , clickSpoiler admin (Dom.id "spoiler_2_0")
@@ -1808,7 +1808,7 @@ attachmentTestActions options admin =
             , Test.Html.Selector.tag options.tagName
             ]
         )
-    , admin.snapshotView 100 { name = options.revealedSnapshot }
+    , tallSnapshot admin 100 { name = options.revealedSnapshot }
     ]
 
 

@@ -526,17 +526,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "channel_textinput") "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)"
 
                 -- Snapshot the formatted preview while the message is still in the text input.
-                , admin.snapshotView 100 { name = "Rich text message in text input" }
+                , RecordedTestExtra.tallSnapshot admin 100 { name = "Rich text message in text input" }
 
                 -- Send the message and snapshot how it renders in the channel.
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , RecordedTestExtra.focusEvent admin 100 Nothing Nothing
-                , admin.snapshotView 1000 { name = "Rich text message after being sent" }
+                , RecordedTestExtra.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
                 , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
                 , admin.click 100 (Dom.id "miniView_reply")
                 , admin.input 100 (Dom.id "channel_textinput") "Reply"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , admin.snapshotView 1000 { name = "Rich text message previewed in reply" }
+                , RecordedTestExtra.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
                 ]
             )
         ]
