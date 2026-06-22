@@ -538,6 +538,19 @@ richTextToMessage previousText previousList nonempty =
 
                 RichText.CustomEmoji _ ->
                     ( currentText, list )
+
+                RichText.BulletPoint _ items ->
+                    List.foldl
+                        (\bulletItem ( currentText2, list2 ) ->
+                            case List.Nonempty.fromList bulletItem of
+                                Just nonempty2 ->
+                                    richTextToMessage (currentText2 ++ "\n* ") list2 nonempty2
+
+                                Nothing ->
+                                    ( currentText2 ++ "\n* ", list2 )
+                        )
+                        ( currentText, list )
+                        (List.Nonempty.toList items)
         )
         ( previousText, previousList )
         (List.Nonempty.toList nonempty)

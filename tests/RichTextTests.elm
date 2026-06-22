@@ -78,6 +78,7 @@ stringFuzzer =
         , "-"
         , "❓"
         , "\u{FEFF}"
+        , "-"
         ]
 
 
@@ -515,6 +516,40 @@ test =
         , fromNonemptyStringTest "(https://a.com/abc(123))" (Nonempty (NormalText '(' "") [ Hyperlink (unsafeUrl "https://a.com/abc(123)"), NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc123)" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc123")) [ NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc1(23))" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc1(23))")) [])
+        , fromNonemptyStringTest "* a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
+        , fromNonemptyStringTest
+            "* a\n"
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "" ])
+        , fromNonemptyStringTest
+            "* a\n* "
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "* " ])
+        , fromNonemptyStringTest
+            "abc\n* a"
+            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []) ])
+        , fromNonemptyStringTest
+            "* a\n* \n* b"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "* *abc*"
+            (Nonempty
+                (BulletPoint NoLeadingLineBreak (Nonempty [ Bold (Nonempty (NormalText 'a' "bc") []) ] []))
+                []
+            )
+        , fromNonemptyStringTest "- a" (Nonempty (NormalText '-' " a") [])
+        , fromNonemptyStringTest "- a\n" (Nonempty (NormalText '-' " a\n") [])
+        , fromNonemptyStringTest "- *abc*" (Nonempty (NormalText '-' " ") [ Bold (Nonempty (NormalText 'a' "bc") []) ])
+        , fromNonemptyStringTest
+            "* a\n- \n- b"
+            (Nonempty
+                (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []))
+                [ NormalText '\n' "- \n- b" ]
+            )
         ]
 
 

@@ -181,6 +181,75 @@ basicFormattingTests =
         , fromNonemptyStringTest "(https://a.com/abc(123))" (Nonempty (NormalText '(' "") [ Hyperlink (unsafeUrl "https://a.com/abc(123)"), NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc123)" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc123")) [ NormalText ')' "" ])
         , fromNonemptyStringTest "https://a.com/abc1(23))" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc1(23))")) [])
+        , fromNonemptyStringTest "* a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
+        , fromNonemptyStringTest
+            -- Discord trims trailing whitespace from messages, so the trailing line break is removed
+            "* a\n"
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
+        , fromNonemptyStringTest
+            -- Discord trims trailing whitespace, so "* a\n* " becomes "* a\n*"
+            "* a\n* "
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "*" ])
+        , fromNonemptyStringTest
+            "abc\n* a"
+            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []) ])
+        , fromNonemptyStringTest
+            "* a\n* \n* b"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "* *abc*"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ Italic (Nonempty (NormalText 'a' "bc") []) ] [])
+                )
+                []
+            )
+        , fromNonemptyStringTest "- a" (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
+        , fromNonemptyStringTest
+            -- Discord trims trailing whitespace from messages, so the trailing line break is removed
+            "- a\n"
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [])
+        , fromNonemptyStringTest
+            -- Discord trims trailing whitespace, so "- a\n- " becomes "- a\n-"
+            "- a\n- "
+            (Nonempty (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] [])) [ NormalText '\n' "-" ])
+        , fromNonemptyStringTest
+            "abc\n- a"
+            (Nonempty (NormalText 'a' "bc") [ BulletPoint HasLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []) ])
+        , fromNonemptyStringTest
+            "- a\n- \n- b"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "- *abc*"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ Italic (Nonempty (NormalText 'a' "bc") []) ] [])
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "* a\n- \n- b"
+            (Nonempty
+                (BulletPoint
+                    NoLeadingLineBreak
+                    (Nonempty [ NormalText 'a' "" ] [ [], [ NormalText 'b' "" ] ])
+                )
+                []
+            )
         ]
 
 
