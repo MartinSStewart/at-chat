@@ -3143,36 +3143,36 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
 
                 BulletPoint _ items ->
                     let
-                        ( ( _, spoilerIndex3 ), embedIndex3, listItems ) =
+                        ( ( _, spoilerIndex5 ), embedIndex5, listItems ) =
                             List.foldl
-                                (\bulletItem ( ( _, sp ), em, acc ) ->
+                                (\bulletItem ( ( _, spoilerIndex3 ), embedIndex3, acc ) ->
                                     case List.Nonempty.fromList bulletItem of
                                         Just nonempty2 ->
                                             let
-                                                ( ( d4, sp4 ), em4, html ) =
+                                                ( ( d4, spoilerIndex4 ), embedIndex4, html ) =
                                                     viewHelper
                                                         True
                                                         showLargeContent
                                                         maybePressedSpoiler
                                                         maybeOnPressImage
                                                         onPressLink
-                                                        sp
+                                                        spoilerIndex3
                                                         state
                                                         config
                                                         embeds
-                                                        em
+                                                        embedIndex3
                                                         nonempty2
                                             in
-                                            ( ( d4, sp4 ), em4, acc ++ [ Html.li [] html ] )
+                                            ( ( d4, spoilerIndex4 ), embedIndex4, acc ++ [ Html.li [] html ] )
 
                                         Nothing ->
-                                            ( ( True, sp ), em, acc ++ [ Html.li [] [] ] )
+                                            ( ( True, spoilerIndex3 ), embedIndex3, acc ++ [ Html.li [] [] ] )
                                 )
                                 ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, [] )
                                 (List.Nonempty.toList items)
                     in
-                    ( ( True, spoilerIndex3 )
-                    , embedIndex3
+                    ( ( True, spoilerIndex5 )
+                    , embedIndex5
                     , currentList
                         ++ [ Html.ul
                                 [ Html.Attributes.style "margin" "0"
