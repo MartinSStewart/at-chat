@@ -57,7 +57,7 @@ type FrontendGameData
 type Msg
     = GoMsg Go.Msg
     | WordSpellingGameMsg WordSpellingGame.Msg
-    | PressedShareGoMatch (Id ChannelMessageId)
+    | PressedShareMatch (Id ChannelMessageId)
     | PressedCopyLink String
     | SelectedMatch (Id ChannelMessageId)
     | PressedReset
@@ -168,7 +168,7 @@ update :
     -> ( Maybe Model, List OutMsg )
 update time currentUserId otherUserId msg newMatchId maybeMatch model =
     case msg of
-        PressedShareGoMatch matchId ->
+        PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
 
         PressedCopyLink text ->
@@ -232,7 +232,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                     Debug.todo ""
 
         PressedReset ->
-            ( model, [ OutSelectMatch Nothing ] )
+            ( Nothing, [ OutSelectMatch Nothing ] )
 
         SelectedMatch selectedMatchId ->
             ( model, [ OutSelectMatch (Just selectedMatchId) ] )
@@ -467,14 +467,14 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                         Nothing ->
                                             [ MyUi.simpleButton
                                                 (Dom.id "go_share")
-                                                (PressedShareGoMatch matchId)
+                                                (PressedShareMatch matchId)
                                                 (Ui.text "Share")
                                             ]
 
                                 Nothing ->
                                     [ MyUi.simpleButton
                                         (Dom.id "go_share")
-                                        (PressedShareGoMatch matchId)
+                                        (PressedShareMatch matchId)
                                         (Ui.text "Share")
                                     ]
                             )

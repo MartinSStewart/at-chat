@@ -268,9 +268,6 @@ pendingChangesText localChange =
                         Go.Action _ ->
                             "Made a move in Go"
 
-                        Go.CreatePublicLink _ _ ->
-                            "Shared Go match"
-
                 Game.LocalChange_WordSpellingGame _ _ ->
                     "Word spelling game change"
 
@@ -4292,9 +4289,6 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                         | games =
                                             SeqDict.updateIfExists matchId (Game.addGoAction actionWithTime) dmChannel.games
                                     }
-
-                                Go.CreatePublicLink _ _ ->
-                                    dmChannel
 
                         Game.CreatePublicLink matchId data ->
                             case data of

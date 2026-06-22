@@ -5061,9 +5061,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 _ ->
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                        Go.CreatePublicLink _ _ ->
-                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
                                 Game.CreatePublicLink matchId _ ->
                                     case SeqDict.get matchId dmChannel.games of
                                         Just _ ->

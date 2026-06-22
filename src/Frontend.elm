@@ -6526,9 +6526,6 @@ updateLoadedFromBackend msg model =
                                                             Ports.playSound "pop"
                                                     )
 
-                                                Go.CreatePublicLink _ _ ->
-                                                    ( loggedIn2, Command.none )
-
                                         Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 

@@ -476,7 +476,6 @@ type alias ActionWithTime =
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action ActionWithTime
-    | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GamePublicId))
 
 
 type OutMsg
