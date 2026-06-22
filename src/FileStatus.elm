@@ -167,6 +167,9 @@ contentTypeType contentType2 =
             else if String.startsWith "video/" text then
                 Video
 
+            else if String.startsWith "audio/" text then
+                Audio
+
             else if String.startsWith "application/" text then
                 Application
 
@@ -201,6 +204,7 @@ type ContentTypeType
     = Text
     | Image
     | Video
+    | Audio
     | Application
     | Other
 

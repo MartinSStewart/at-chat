@@ -6,6 +6,7 @@ module RecordedTestExtra exposing
     , andThenWebsocket
     , attackerEmail
     , attackerShouldNotGetThisToFrontend
+    , audioAttachmentTest
     , botTestGuild
     , botTestGuild_ChannelA
     , checkNoErrorLogs
@@ -74,6 +75,7 @@ module RecordedTestExtra exposing
     , startupDataJson
     , tallSnapshot
     , userEmail
+    , videoAttachmentTest
     , voiceChatTest
     , websocketByDiscordToken
     , writeMessage
@@ -1742,6 +1744,114 @@ uploadImageAttachment user =
         , T.backendUpdate
             100
             (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+        ]
+
+
+{-| Uploads a non-image file. The reported image size is Nothing since the Rust
+server only extracts image dimensions for files it can decode as an image.
+-}
+uploadNonImageAttachment :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+uploadNonImageAttachment user =
+    T.group
+        [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+        , T.backendUpdate
+            100
+            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+        ]
+
+
+{-| Builds the actions for an inline media attachment end-to-end test. First a
+plain attachment is posted and snapshotted, then a spoilered one which is hidden
+behind a black box until the user clicks it to reveal the inline media element.
+`tagName` is the element that should appear once visible ("video" or "audio").
+-}
+attachmentTestActions :
+    { tagName : String
+    , plainSnapshot : String
+    , spoileredSnapshot : String
+    , revealedSnapshot : String
+    }
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+attachmentTestActions options admin =
+    [ -- The attachment renders inline in a media element instead of an "open in
+      -- new tab" link, so it can be played without leaving the page.
+      uploadNonImageAttachment admin
+    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+    , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+    , admin.checkView
+        100
+        (Test.Html.Query.has
+            [ Test.Html.Selector.id "spoiler_1_file_1"
+            , Test.Html.Selector.tag options.tagName
+            ]
+        )
+    , admin.snapshotView 100 { name = options.plainSnapshot }
+
+    -- A spoilered attachment (second message) stays hidden behind a black box,
+    -- so the media element isn't rendered yet.
+    , uploadNonImageAttachment admin
+    , admin.click 100 (Dom.id "fileStatus_spoiler_1")
+    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+    , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+    , admin.snapshotView 100 { name = options.spoileredSnapshot }
+
+    -- Clicking the spoiler reveals the inline media element.
+    , clickSpoiler admin (Dom.id "spoiler_2_0")
+    , admin.checkView
+        100
+        (Test.Html.Query.has
+            [ Test.Html.Selector.id "spoiler_2_file_1"
+            , Test.Html.Selector.tag options.tagName
+            ]
+        )
+    , admin.snapshotView 100 { name = options.revealedSnapshot }
+    ]
+
+
+videoAttachmentTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+videoAttachmentTest videoUploadConfig =
+    startTest
+        "Video attachments render inline and can be spoilered"
+        startTime
+        videoUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin _ ->
+                attachmentTestActions
+                    { tagName = "video"
+                    , plainSnapshot = "Video attachment"
+                    , spoileredSnapshot = "Spoilered video attachment"
+                    , revealedSnapshot = "Unspoilered video attachment"
+                    }
+                    admin
+            )
+        ]
+
+
+audioAttachmentTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+audioAttachmentTest audioUploadConfig =
+    startTest
+        "Audio attachments render inline and can be spoilered"
+        startTime
+        audioUploadConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin _ ->
+                attachmentTestActions
+                    { tagName = "audio"
+                    , plainSnapshot = "Audio attachment"
+                    , spoileredSnapshot = "Spoilered audio attachment"
+                    , revealedSnapshot = "Unspoilered audio attachment"
+                    }
+                    admin
+            )
         ]
 
 

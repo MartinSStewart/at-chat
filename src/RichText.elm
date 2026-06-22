@@ -3090,19 +3090,28 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                     [ imageElement [] ]
 
                                                 _ ->
-                                                    fileDownloadView
-                                                        (case maybePressedSpoiler of
-                                                            Just ( htmlIdPrefix, _ ) ->
-                                                                Dom.idToString htmlIdPrefix
-                                                                    ++ "_file_"
-                                                                    ++ Id.toString fileId
-                                                                    |> Just
+                                                    let
+                                                        maybeHtmlId : Maybe String
+                                                        maybeHtmlId =
+                                                            case maybePressedSpoiler of
+                                                                Just ( htmlIdPrefix, _ ) ->
+                                                                    Dom.idToString htmlIdPrefix
+                                                                        ++ "_file_"
+                                                                        ++ Id.toString fileId
+                                                                        |> Just
 
-                                                            Nothing ->
-                                                                Nothing
-                                                        )
-                                                        state.spoiler
-                                                        fileData
+                                                                Nothing ->
+                                                                    Nothing
+                                                    in
+                                                    case FileStatus.contentTypeType fileData.contentType of
+                                                        FileStatus.Video ->
+                                                            videoView maybeHtmlId state.spoiler containerWidth2 fileData
+
+                                                        FileStatus.Audio ->
+                                                            audioView maybeHtmlId state.spoiler containerWidth2 fileData
+
+                                                        _ ->
+                                                            fileDownloadView maybeHtmlId state.spoiler fileData
                                            ]
 
                                 Nothing ->
@@ -3590,6 +3599,88 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
+videoView : Maybe String -> Bool -> Int -> FileData -> Html msg
+videoView maybeHtmlId isSpoilered containerWidth fileData =
+    let
+        idAttribute : Html.Attribute msg
+        idAttribute =
+            case maybeHtmlId of
+                Just htmlId ->
+                    Html.Attributes.id htmlId
+
+                Nothing ->
+                    Html.Attributes.class ""
+    in
+    if isSpoilered then
+        Html.div
+            [ idAttribute
+            , Html.Attributes.style "width" (String.fromInt (min containerWidth 320) ++ "px")
+            , Html.Attributes.style "height" "180px"
+            , Html.Attributes.style "display" "block"
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "background-color" "rgb(0,0,0)"
+            ]
+            []
+
+    else
+        Html.video
+            [ idAttribute
+            , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+            , Html.Attributes.controls True
+            , Html.Attributes.style "display" "block"
+            , Html.Attributes.style "max-width" (String.fromInt containerWidth ++ "px")
+            , Html.Attributes.style "max-height" "300px"
+            , Html.Attributes.style "border-radius" "4px"
+            ]
+            []
+
+
+audioView : Maybe String -> Bool -> Int -> FileData -> Html msg
+audioView maybeHtmlId isSpoilered containerWidth fileData =
+    let
+        idAttribute : Html.Attribute msg
+        idAttribute =
+            case maybeHtmlId of
+                Just htmlId ->
+                    Html.Attributes.id htmlId
+
+                Nothing ->
+                    Html.Attributes.class ""
+
+        width : Int
+        width =
+            min containerWidth 600
+    in
+    Html.div
+        (Html.Attributes.style "width" (String.fromInt width ++ "px")
+            :: (if isSpoilered then
+                    [ Html.Attributes.style "background-color" "rgb(0,0,0)"
+                    ]
+
+                else
+                    []
+               )
+        )
+        [ Html.audio
+            ([ Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+             , Html.Attributes.controls True
+             , Html.Attributes.style "display" "block"
+             , Html.Attributes.style "width" (String.fromInt width ++ "px")
+             , idAttribute
+             ]
+                ++ (if isSpoilered then
+                        [ Html.Attributes.style "pointer-events" "none"
+                        , Html.Attributes.style "opacity" "0"
+                        ]
+
+                    else
+                        []
+                   )
+            )
+            []
+        ]
+
+
 fileDownloadView : Maybe String -> Bool -> FileData -> Html msg
 fileDownloadView maybeHtmlId isSpoilered fileData =
     let
@@ -3620,8 +3711,7 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
 
           else
             Html.Attributes.href fileUrl
-        , Html.Attributes.target "_blank"
-        , Html.Attributes.rel "noreferrer"
+        , Html.Attributes.download (FileName.toString fileData.fileName)
         , Html.Attributes.style "font-size" "14px"
         , Html.Attributes.style "padding" "4px 8px 4px 8px"
         ]

@@ -1129,14 +1129,14 @@ volume =
         ]
 
 
-camera : Html msg
-camera =
+camera : Int -> Html msg
+camera width =
     Svg.svg
         [ Svg.Attributes.fill "none"
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
-        , Svg.Attributes.width "24"
+        , Svg.Attributes.width (String.fromInt width)
         ]
         [ Svg.path
             [ Svg.Attributes.strokeLinecap "round"

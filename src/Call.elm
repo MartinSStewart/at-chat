@@ -1135,7 +1135,7 @@ view windowSize roomId calls model =
                             PressedToggleMute
                         , voiceChatControlButton
                             "guild_voiceChatPauseVideo"
-                            (Ui.html Icons.camera)
+                            (Ui.html (Icons.camera 24))
                             model.remoteCallData.videoInputEnabled
                             PressedTogglePauseVideo
                         ]
@@ -1676,8 +1676,20 @@ mediaDeviceSelectors isMobile roomId model =
 
                     Nothing ->
                         Ui.none
-                , deviceDropdown isMobile "Microphone" Icons.microphone audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
-                , deviceDropdown isMobile "Camera" Icons.camera videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
+                , deviceDropdown
+                    isMobile
+                    "Microphone"
+                    Icons.microphone
+                    audioDevices
+                    model.selectedAudioInputDevice
+                    SelectedAudioInputDevice
+                , deviceDropdown
+                    isMobile
+                    "Camera"
+                    (Icons.camera 24)
+                    videoDevices
+                    model.selectedVideoInputDevice
+                    SelectedVideoInputDevice
                 ]
 
 

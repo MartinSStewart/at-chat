@@ -68,7 +68,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     let
         handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests =
-            handleHttpRequestsWithUploadedImageSize (Coord.xy 128 128)
+            handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 128 128))
 
         handleHttpRequestsWithUploadedImageSize uploadedImageSize ({ currentRequest } as httpRequests) =
             case String.split "/" currentRequest.url of
@@ -102,20 +102,23 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     FileStatus.uploadResponseCodec
                                     { fileHash = FileStatus.fileHash "123123123"
                                     , imageSize =
-                                        { imageSize = uploadedImageSize
-                                        , orientation = Nothing
-                                        , gpsLocation = Nothing
-                                        , cameraOwner = Nothing
-                                        , exposureTime = Nothing
-                                        , fNumber = Nothing
-                                        , focalLength = Nothing
-                                        , isoSpeedRating = Nothing
-                                        , make = Nothing
-                                        , model = Nothing
-                                        , software = Nothing
-                                        , userComment = Nothing
-                                        }
-                                            |> Just
+                                        Maybe.map
+                                            (\size ->
+                                                { imageSize = size
+                                                , orientation = Nothing
+                                                , gpsLocation = Nothing
+                                                , cameraOwner = Nothing
+                                                , exposureTime = Nothing
+                                                , fNumber = Nothing
+                                                , focalLength = Nothing
+                                                , isoSpeedRating = Nothing
+                                                , make = Nothing
+                                                , model = Nothing
+                                                , software = Nothing
+                                                , userComment = Nothing
+                                                }
+                                            )
+                                            uploadedImageSize
                                     }
                                 )
 
@@ -240,7 +243,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             T.Config
                 Frontend.app_
                 Backend.app_
-                (handleHttpRequestsWithUploadedImageSize (Coord.xy 800 100))
+                (handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 800 100)))
                 RecordedTestExtra.handlePortToJs
                 handleFileRequest
                 (\_ ->
@@ -249,8 +252,44 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         []
                 )
                 RecordedTestExtra.domain
+
+        -- Uploads a video file. The upload response reports no image size, just
+        -- like the Rust server does for files it can't decode as an image.
+        videoUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        videoUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleHttpRequestsWithUploadedImageSize Nothing)
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-video.mp4" "video/mp4" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
+
+        -- Uploads an audio file. Like videoUploadConfig, the upload response
+        -- reports no image size.
+        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        audioUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleHttpRequestsWithUploadedImageSize Nothing)
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-audio.mp3" "audio/mpeg" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
+    , RecordedTestExtra.videoAttachmentTest videoUploadConfig
+    , RecordedTestExtra.audioAttachmentTest audioUploadConfig
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
     , RecordedTestExtra.imageViewerTests imageUploadConfig
     , RecordedTestExtra.startTest
