@@ -3649,7 +3649,7 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
 
         width : Int
         width =
-            min containerWidth 320
+            min containerWidth 600
     in
     if isSpoilered then
         Html.div
