@@ -3631,6 +3631,10 @@ videoView maybeHtmlId isSpoilered containerWidth fileData =
             , Html.Attributes.style "max-width" (String.fromInt containerWidth ++ "px")
             , Html.Attributes.style "max-height" "300px"
             , Html.Attributes.style "border-radius" "4px"
+
+            -- Exposes the file url so that a right-click (contextmenu) on the
+            -- video can offer a "Download" option.
+            , Html.Attributes.attribute "data-download-url" (FileStatus.fileUrl fileData.contentType fileData.fileHash)
             ]
             []
 
@@ -3674,7 +3678,10 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
                         ]
 
                     else
-                        []
+                        -- Exposes the file url so that a right-click (contextmenu)
+                        -- on the audio can offer a "Download" option.
+                        [ Html.Attributes.attribute "data-download-url" (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+                        ]
                    )
             )
             []

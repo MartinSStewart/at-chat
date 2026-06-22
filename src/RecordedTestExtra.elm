@@ -1772,6 +1772,7 @@ attachmentTestActions :
     , plainSnapshot : String
     , spoileredSnapshot : String
     , revealedSnapshot : String
+    , downloadUrl : String
     }
     -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -1808,6 +1809,56 @@ attachmentTestActions options admin =
             ]
         )
     , admin.snapshotView 100 { name = options.revealedSnapshot }
+
+    -- The media element exposes its file url via the data-download-url attribute
+    -- so that a right-click (contextmenu) on it can offer a "Download" option.
+    , admin.checkView
+        100
+        (Test.Html.Query.has
+            [ Test.Html.Selector.id "spoiler_2_file_1"
+            , Test.Html.Selector.attribute (Html.Attributes.attribute "data-download-url" options.downloadUrl)
+            ]
+        )
+
+    -- Right clicking somewhere on the message that isn't the media element opens
+    -- the message menu without the "Download" option.
+    , admin.custom
+        100
+        (Dom.id "guild_message_2")
+        "contextmenu"
+        (Json.Encode.object
+            [ ( "clientX", Json.Encode.float 50 )
+            , ( "clientY", Json.Encode.float 150 )
+            ]
+        )
+    , admin.checkView
+        100
+        (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_download" ])
+
+    -- Right clicking the media element itself includes its file url (exposed via
+    -- the data-download-url attribute) so the menu offers a "Download" option.
+    , admin.custom
+        100
+        (Dom.id "guild_message_2")
+        "contextmenu"
+        (Json.Encode.object
+            [ ( "clientX", Json.Encode.float 50 )
+            , ( "clientY", Json.Encode.float 150 )
+            , ( "target"
+              , Json.Encode.object
+                    [ ( "dataset"
+                      , Json.Encode.object [ ( "downloadUrl", Json.Encode.string options.downloadUrl ) ]
+                      )
+                    ]
+              )
+            ]
+        )
+    , admin.checkView
+        100
+        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_download" ])
+
+    -- Clicking "Download" downloads the file.
+    , admin.click 100 (Dom.id "messageMenu_download")
     ]
 
 
@@ -1827,6 +1878,10 @@ videoAttachmentTest videoUploadConfig =
                     , plainSnapshot = "Video attachment"
                     , spoileredSnapshot = "Spoilered video attachment"
                     , revealedSnapshot = "Unspoilered video attachment"
+                    , downloadUrl =
+                        FileStatus.fileUrl
+                            (FileStatus.contentType "video/mp4")
+                            (FileStatus.fileHash "123123123")
                     }
                     admin
             )
@@ -1849,6 +1904,10 @@ audioAttachmentTest audioUploadConfig =
                     , plainSnapshot = "Audio attachment"
                     , spoileredSnapshot = "Spoilered audio attachment"
                     , revealedSnapshot = "Unspoilered audio attachment"
+                    , downloadUrl =
+                        FileStatus.fileUrl
+                            (FileStatus.contentType "audio/mpeg")
+                            (FileStatus.fileHash "123123123")
                     }
                     admin
             )

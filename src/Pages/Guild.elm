@@ -6394,7 +6394,7 @@ decodeMessageContextMenu : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
 decodeMessageContextMenu isThreadStarter =
     Json.Decode.map3
         (\x y target ->
-            ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl (Coord.xy (round x) (round y))
+            ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl target.downloadUrl (Coord.xy (round x) (round y))
             , True
             )
         )
@@ -6403,8 +6403,9 @@ decodeMessageContextMenu isThreadStarter =
         decodeEventTarget
 
 
-{-| Reads the "data-image-url"/"data-link-url" off the event's target (walking up
-its ancestors). Falls back to no urls when there is no target (e.g. in tests).
+{-| Reads the "data-image-url"/"data-link-url"/"data-download-url" off the
+event's target (walking up its ancestors). Falls back to no urls when there is
+no target (e.g. in tests).
 -}
 decodeEventTarget : Json.Decode.Decoder ContextMenuTarget
 decodeEventTarget =
@@ -6415,19 +6416,20 @@ decodeEventTarget =
 
 
 type alias ContextMenuTarget =
-    { imageUrl : Maybe String, linkUrl : Maybe String }
+    { imageUrl : Maybe String, linkUrl : Maybe String, downloadUrl : Maybe String }
 
 
 emptyContextMenuTarget : ContextMenuTarget
 emptyContextMenuTarget =
-    { imageUrl = Nothing, linkUrl = Nothing }
+    { imageUrl = Nothing, linkUrl = Nothing, downloadUrl = Nothing }
 
 
 {-| Walks up from the event target through its ancestors looking for the nearest
-"data-image-url"/"data-link-url" attributes. We have to climb the tree because
-the element actually under the cursor is often a descendant of the one carrying
-the attribute (e.g. the <canvas>/<img> that an animated-image-player web
-component appends inside itself, or the favicon/label inside a link).
+"data-image-url"/"data-link-url"/"data-download-url" attributes. We have to climb
+the tree because the element actually under the cursor is often a descendant of
+the one carrying the attribute (e.g. the <canvas>/<img> that an
+animated-image-player web component appends inside itself, or the favicon/label
+inside a link).
 -}
 decodeContextMenuTarget : Int -> Json.Decode.Decoder ContextMenuTarget
 decodeContextMenuTarget depth =
@@ -6435,11 +6437,13 @@ decodeContextMenuTarget depth =
         (\here parent ->
             { imageUrl = orElseMaybe here.imageUrl parent.imageUrl
             , linkUrl = orElseMaybe here.linkUrl parent.linkUrl
+            , downloadUrl = orElseMaybe here.downloadUrl parent.downloadUrl
             }
         )
-        (Json.Decode.map2 ContextMenuTarget
+        (Json.Decode.map3 ContextMenuTarget
             (Json.Decode.maybe (Json.Decode.at [ "dataset", "imageUrl" ] Json.Decode.string))
             (Json.Decode.maybe (Json.Decode.at [ "dataset", "linkUrl" ] Json.Decode.string))
+            (Json.Decode.maybe (Json.Decode.at [ "dataset", "downloadUrl" ] Json.Decode.string))
         )
         (if depth <= 0 then
             Json.Decode.succeed emptyContextMenuTarget
@@ -6490,14 +6494,15 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
          , Ui.Events.on
             "touchstart"
             (Json.Decode.map2
-                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.downloadUrl)
                 (Touch.decodeTouchEvent
-                    (\time touches imageUrl linkUrl ->
+                    (\time touches imageUrl linkUrl downloadUrl ->
                         MessageView_TouchStart
                             time
                             isThreadStarter
                             imageUrl
                             linkUrl
+                            downloadUrl
                             (NonemptyDict.map
                                 (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
                                 touches
@@ -6608,14 +6613,15 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
          , Ui.Events.on
             "touchstart"
             (Json.Decode.map2
-                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl target.downloadUrl)
                 (Touch.decodeTouchEvent
-                    (\time touches imageUrl linkUrl ->
+                    (\time touches imageUrl linkUrl downloadUrl ->
                         MessageView_TouchStart
                             time
                             False
                             imageUrl
                             linkUrl
+                            downloadUrl
                             (NonemptyDict.map
                                 (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
                                 touches

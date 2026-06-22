@@ -1694,6 +1694,9 @@ isPressMsg msg =
         PressedCopyImage _ ->
             True
 
+        PressedDownloadFile _ ->
+            True
+
         PressedCreateGuild ->
             True
 
@@ -1790,7 +1793,7 @@ isPressMsg msg =
         PressedCancelMessageEdit _ ->
             True
 
-        CheckMessageAltPress _ _ _ _ _ _ ->
+        CheckMessageAltPress _ _ _ _ _ _ _ ->
             False
 
         PressedShowUserOption ->

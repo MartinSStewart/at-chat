@@ -1056,6 +1056,9 @@ updateLoaded msg model =
             , Ports.copyImageToClipboard imageUrl
             )
 
+        PressedDownloadFile downloadUrl ->
+            ( model, Effect.File.Download.url downloadUrl )
+
         PressedCreateGuild ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -1425,7 +1428,7 @@ updateLoaded msg model =
             ( { model | notificationPermission = notificationPermission }, Command.none )
 
         TouchStart maybeGuildOrDmIdAndMessageIndex timeStamp touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing (Duration.addTo model.timeOrigin timeStamp) touches model
+            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing Nothing (Duration.addTo model.timeOrigin timeStamp) touches model
 
         TouchMoved timeStamp newTouches ->
             let
@@ -1766,7 +1769,7 @@ updateLoaded msg model =
                 )
                 model
 
-        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl ->
+        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
@@ -1778,6 +1781,7 @@ updateLoaded msg model =
                                     isThreadStarter
                                     maybeImageUrl
                                     maybeLinkUrl
+                                    maybeDownloadUrl
                                     Coord.origin
                                     loggedIn
                                     (Local.model loggedIn.localState)
@@ -2280,10 +2284,10 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl touches ->
-                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl (Duration.addTo model.timeOrigin timeStamp) touches model
+                MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl touches ->
+                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl maybeDownloadUrl (Duration.addTo model.timeOrigin timeStamp) touches model
 
-                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( handleAltPressedMessage
@@ -2292,6 +2296,7 @@ updateLoaded msg model =
                                 isThreadStarter
                                 maybeImageUrl
                                 maybeLinkUrl
+                                maybeDownloadUrl
                                 clickedAt
                                 loggedIn
                                 (Local.model loggedIn.localState)
@@ -2468,6 +2473,7 @@ updateLoaded msg model =
                                         , isThreadStarter = isThreadStarter
                                         , imageUrl = Nothing
                                         , linkUrl = Nothing
+                                        , downloadUrl = Nothing
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
@@ -5525,11 +5531,12 @@ touchStart :
     Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )
     -> Maybe String
     -> Maybe String
+    -> Maybe String
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touches model =
+touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl maybeDownloadUrl time touches model =
     case model.drag of
         NoDrag ->
             if isTouchingTextInput touches then
@@ -5544,7 +5551,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
                                 Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                                     Process.sleep (Duration.seconds 0.5)
                                         |> Task.perform
-                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl)
+                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl)
 
                                 Nothing ->
                                     Command.none
@@ -5573,8 +5580,8 @@ touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touch
             ( model, Command.none )
 
 
-handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl clickedAt loggedIn local model =
+handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Maybe String -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
             MessageMenu
@@ -5584,6 +5591,7 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl ma
                 , position = clickedAt
                 , imageUrl = maybeImageUrl
                 , linkUrl = maybeLinkUrl
+                , downloadUrl = maybeDownloadUrl
                 , mobileMode =
                     MessageMenuOpening
                         { offset = Quantity.zero

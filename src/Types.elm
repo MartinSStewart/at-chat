@@ -273,6 +273,7 @@ type alias MessageMenuExtraOptions =
     , mobileMode : MessageHoverMobileMode
     , imageUrl : Maybe String
     , linkUrl : Maybe String
+    , downloadUrl : Maybe String
     }
 
 
@@ -445,6 +446,7 @@ type FrontendMsg
     | FrontendNoOp
     | PressedCopyText String
     | PressedCopyImage String
+    | PressedDownloadFile String
     | PressedCreateGuild
     | NewGuildFormChanged NewGuildForm
     | PressedSubmitNewGuild NewGuildForm
@@ -480,7 +482,7 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
+    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String) (Maybe String)
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg

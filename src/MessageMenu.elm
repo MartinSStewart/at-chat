@@ -103,6 +103,7 @@ mobileMenuMaxHeight extraOptions local model =
         False
         extraOptions.imageUrl
         extraOptions.linkUrl
+        extraOptions.downloadUrl
         Coord.origin
         local
         model
@@ -127,7 +128,7 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId threadRoute False Nothing Nothing Coord.origin local model
+            menuItems True guildOrDmId threadRoute False Nothing Nothing Nothing Coord.origin local model
                 |> .items
                 |> List.length
                 |> toFloat
@@ -224,6 +225,7 @@ viewMobile offset extraOptions loggedIn local model =
                 extraOptions.isThreadStarter
                 extraOptions.imageUrl
                 extraOptions.linkUrl
+                extraOptions.downloadUrl
                 extraOptions.position
                 local
                 model
@@ -371,6 +373,7 @@ view model extraOptions local loggedIn =
                     extraOptions.isThreadStarter
                     extraOptions.imageUrl
                     extraOptions.linkUrl
+                    extraOptions.downloadUrl
                     extraOptions.position
                     local
                     model
@@ -420,11 +423,12 @@ menuItems :
     -> Bool
     -> Maybe String
     -> Maybe String
+    -> Maybe String
     -> Coord CssPixels
     -> LocalState
     -> LoadedFrontend
     -> { items : List (Element FrontendMsg), height : Int }
-menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
+menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl maybeDownloadUrl position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
@@ -658,6 +662,12 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                 Nothing ->
                     NoItem
+            , case maybeDownloadUrl of
+                Just downloadUrl ->
+                    downloadButton isMobile downloadUrl |> ButtonItem
+
+                Nothing ->
+                    NoItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button
@@ -794,6 +804,16 @@ copyLinkButton isMobile linkUrl lastCopied =
                 "Copy link"
         )
         (PressedCopyText linkUrl)
+
+
+downloadButton : Bool -> String -> Element FrontendMsg
+downloadButton isMobile downloadUrl =
+    button
+        isMobile
+        (Dom.id "messageMenu_download")
+        Icons.download
+        "Download"
+        (PressedDownloadFile downloadUrl)
 
 
 horizontalLine : Element msg
