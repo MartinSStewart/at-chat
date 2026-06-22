@@ -517,16 +517,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
             (\admin _ ->
-                let
-                    message : String
-                    message =
-                        "# Rich text demo\nThis line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)"
-                in
                 [ -- Focus the channel text input and type a message that uses bullet
                   -- points along with various other rich text formatting.
                   RecordedTestExtra.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
-                , admin.input 100 (Dom.id "channel_textinput") message
+                , admin.input 100 (Dom.id "channel_textinput") "# Rich text demo"
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.input 100 (Dom.id "channel_textinput") "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)"
 
                 -- Snapshot the formatted preview while the message is still in the text input.
                 , admin.snapshotView 100 { name = "Rich text message in text input" }
@@ -535,6 +532,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , RecordedTestExtra.focusEvent admin 100 Nothing Nothing
                 , admin.snapshotView 1000 { name = "Rich text message after being sent" }
+                , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
+                , admin.click 100 (Dom.id "miniView_reply")
+                , admin.input 100 (Dom.id "channel_textinput") "Reply"
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.snapshotView 1000 { name = "Rich text message previewed in reply" }
                 ]
             )
         ]
