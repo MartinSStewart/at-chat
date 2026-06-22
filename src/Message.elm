@@ -45,7 +45,7 @@ type Message messageId userId
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
-    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
+    | GameStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
 
 
 maxEmbeds : number
@@ -245,7 +245,7 @@ addEmbed ( url, result ) message =
         CallStarted _ _ _ _ _ ->
             message
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ ->
             message
 
 
@@ -347,8 +347,8 @@ handleDrawingChange changeBy anchorType change message =
         CallStarted time endedAt userId reactions drawings ->
             CallStarted time endedAt userId reactions (Drawing.handleLocalChange changeBy change drawings)
 
-        GoMatchStarted time userId reactions drawings ->
-            GoMatchStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings)
+        GameStarted time userId reactions drawings ->
+            GameStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings)
 
 
 drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
@@ -377,7 +377,7 @@ drawing anchor message =
         CallStarted _ _ _ _ drawings ->
             drawings
 
-        GoMatchStarted _ _ _ drawings ->
+        GameStarted _ _ _ drawings ->
             drawings
 
 
@@ -396,7 +396,7 @@ createdAt message =
         CallStarted time _ _ _ _ ->
             time
 
-        GoMatchStarted time _ _ _ ->
+        GameStarted time _ _ _ ->
             time
 
 
@@ -415,8 +415,8 @@ addReactionEmoji userId emoji message =
         CallStarted time endedAt startedBy reactions drawings ->
             CallStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions) drawings
 
-        GoMatchStarted time startedBy reactions drawings ->
-            GoMatchStarted time startedBy (addReactionEmojiHelper userId emoji reactions) drawings
+        GameStarted time startedBy reactions drawings ->
+            GameStarted time startedBy (addReactionEmojiHelper userId emoji reactions) drawings
 
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -439,8 +439,8 @@ removeReactionEmoji userId emoji message =
         CallStarted time endedAt startedBy reactions drawings ->
             CallStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
 
-        GoMatchStarted time startedBy reactions drawings ->
-            GoMatchStarted time startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
+        GameStarted time startedBy reactions drawings ->
+            GameStarted time startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
 
 
 removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -475,5 +475,5 @@ reactionEmojis message =
         CallStarted _ _ _ reactions _ ->
             reactions
 
-        GoMatchStarted _ _ reactions _ ->
+        GameStarted _ _ reactions _ ->
             reactions

@@ -2398,7 +2398,7 @@ maybeRepliedTo message channel =
         CallStarted _ _ _ _ _ ->
             Nothing
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ ->
             Nothing
 
 
@@ -3505,7 +3505,7 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         CallStarted _ _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
-                        GoMatchStarted _ userId _ _ ->
+                        GameStarted _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -4945,7 +4945,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ ->
             Ui.none
 
 
@@ -5076,7 +5076,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ ->
             Ui.none
 
 
@@ -5441,7 +5441,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5602,7 +5602,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5749,7 +5749,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5890,7 +5890,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings ->
             threadMessageContainer
                 highlight
                 messageId
@@ -6286,7 +6286,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
         Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GoMatchStarted _ userId _ _ ) ->
+        Just ( repliedToIndex, GameStarted _ userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
@@ -6850,7 +6850,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GoMatchStarted _ userId _ _ ->
+                            GameStarted _ userId _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -7949,7 +7949,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ _ ->
+                                GameStarted _ _ _ _ ->
                                     LocalState.goMatchStartedText
 
                         MessageUnloaded ->
@@ -8078,7 +8078,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ _ ->
+                                GameStarted _ _ _ _ ->
                                     LocalState.goMatchStartedText
 
                         MessageUnloaded ->

@@ -1182,7 +1182,7 @@ update msg model =
                                                                 CallStarted _ _ _ _ _ ->
                                                                     members
 
-                                                                GoMatchStarted _ _ _ _ ->
+                                                                GameStarted _ _ _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -2228,7 +2228,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         CallStarted _ endedAt _ _ _ ->
                             LocalState.callStartedText endedAt
 
-                        GoMatchStarted _ _ _ _ ->
+                        GameStarted _ _ _ _ ->
                             LocalState.goMatchStartedText
 
                 Nothing ->
@@ -4969,7 +4969,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         ( messageId, dmChannel2 ) =
                                             LocalState.createChannelMessageBackend
-                                                (GoMatchStarted
+                                                (GameStarted
                                                     createdAt
                                                     session.userId
                                                     SeqDict.empty

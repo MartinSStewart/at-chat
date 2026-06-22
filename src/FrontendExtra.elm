@@ -4261,7 +4261,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 dmChannel2 : FrontendDmChannel
                                 dmChannel2 =
                                     LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
+                                        (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
                                         dmChannel
 
                                 matchId : Id ChannelMessageId

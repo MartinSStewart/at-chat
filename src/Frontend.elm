@@ -1172,7 +1172,7 @@ updateLoaded msg model =
                     case model.route of
                         DmRoute dmRoute ->
                             case dmRoute.tab of
-                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                                Just (DmChannelHeaderTab_Games maybeMatchId) ->
                                     FrontendExtra.updateLoggedIn
                                         (\loggedIn ->
                                             case loggedIn.textInputFocus of
@@ -1924,7 +1924,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
                     in
                     case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                        ( Just (DmChannelHeaderTab_Go maybeMatchId), Just otherUserId ) ->
+                        ( Just (DmChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
                             let
                                 dmChannel =
                                     SeqDict.get otherUserId local.dmChannels
@@ -1975,7 +1975,7 @@ updateLoaded msg model =
                                                                     DmChannel.latestMessageId dmChannel
                                                                         |> Id.increment
                                                                         |> Just
-                                                                        |> DmChannelHeaderTab_Go
+                                                                        |> DmChannelHeaderTab_Games
                                                                         |> Just
                                                             }
                                                         )
@@ -1988,7 +1988,7 @@ updateLoaded msg model =
                                                 { model | loginStatus = LoggedIn loggedIn2 }
                                                 (DmRoute
                                                     { dmRoute
-                                                        | tab = Just (DmChannelHeaderTab_Go newMatchId)
+                                                        | tab = Just (DmChannelHeaderTab_Games newMatchId)
                                                     }
                                                 )
 
@@ -2656,7 +2656,7 @@ updateLoaded msg model =
                                 DmRoute dmRoute ->
                                     FrontendExtra.routePush
                                         model
-                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Go (Just messageId)) })
+                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games (Just messageId)) })
 
                                 HomePageRoute ->
                                     ( model, Command.none )

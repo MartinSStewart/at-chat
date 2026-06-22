@@ -70,7 +70,7 @@ type alias DmRouteData =
 
 type DmChannelHeaderTab
     = DmChannelHeaderTab_VoiceChat
-    | DmChannelHeaderTab_Go (Maybe (Id ChannelMessageId))
+    | DmChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
     | DmChannelHeaderTab_ChannelDescription
     | DmChannelHeaderTab_Draw
 
@@ -374,7 +374,7 @@ decodeChannelHeaderTab url2 =
                     DmChannelHeaderTab_ChannelDescription |> Just
 
                 "go" ->
-                    DmChannelHeaderTab_Go goMatchId |> Just
+                    DmChannelHeaderTab_Games goMatchId |> Just
 
                 "call" ->
                     DmChannelHeaderTab_VoiceChat |> Just
@@ -484,9 +484,9 @@ sameChannelHeaderTab tabA tabB =
         DmChannelHeaderTab_VoiceChat ->
             tabB == DmChannelHeaderTab_VoiceChat
 
-        DmChannelHeaderTab_Go _ ->
+        DmChannelHeaderTab_Games _ ->
             case tabB of
-                DmChannelHeaderTab_Go _ ->
+                DmChannelHeaderTab_Games _ ->
                     True
 
                 _ ->
@@ -688,7 +688,7 @@ encodeChannelHeaderTab tab =
         Just DmChannelHeaderTab_VoiceChat ->
             [ Url.Builder.string tabParam "call" ]
 
-        Just (DmChannelHeaderTab_Go maybeMatchId) ->
+        Just (DmChannelHeaderTab_Games maybeMatchId) ->
             Url.Builder.string tabParam "go"
                 :: (case maybeMatchId of
                         Just matchId ->

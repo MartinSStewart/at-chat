@@ -419,7 +419,7 @@ messageToString allUsers3 message =
         CallStarted _ endedAt _ _ _ ->
             callStartedText endedAt
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ ->
             goMatchStartedText
 
 
@@ -892,7 +892,7 @@ createMessageBackend message channel =
                 CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted _ _ _ _ ->
+                GameStarted _ _ _ _ ->
                     channel.lastTypedAt
       }
     )
@@ -961,7 +961,7 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 CallStarted _ _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
-                GoMatchStarted _ _ _ _ ->
+                GameStarted _ _ _ _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -1009,7 +1009,7 @@ createDiscordMessageBackend messageId message channel =
                     CallStarted _ _ _ _ _ ->
                         channel.lastTypedAt
 
-                    GoMatchStarted _ _ _ _ ->
+                    GameStarted _ _ _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1099,7 +1099,7 @@ createMessageFrontend message channel =
                 CallStarted _ _ _ _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted _ _ _ _ ->
+                GameStarted _ _ _ _ ->
                     channel.lastTypedAt
     }
 
@@ -2262,7 +2262,7 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (CallStarted _ _ startedBy _ _) ->
                                     [ startedBy ]
 
-                                Just (GoMatchStarted _ startedBy _ _) ->
+                                Just (GameStarted _ startedBy _ _) ->
                                     [ startedBy ]
 
                                 Nothing ->
@@ -2320,7 +2320,7 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 CallStarted _ _ startedBy _ _ ->
                                     [ startedBy ]
 
-                                GoMatchStarted _ startedBy _ _ ->
+                                GameStarted _ startedBy _ _ ->
                                     [ startedBy ]
 
                         _ ->
@@ -2352,7 +2352,7 @@ repliedToUserId maybeRepliedTo channel =
                         CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GoMatchStarted _ startedBy _ _ ->
+                        GameStarted _ startedBy _ _ ->
                             Just startedBy
 
                 Nothing ->
@@ -2381,7 +2381,7 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         CallStarted _ _ startedBy _ _ ->
                             Just startedBy
 
-                        GoMatchStarted _ startedBy _ _ ->
+                        GameStarted _ startedBy _ _ ->
                             Just startedBy
 
                 _ ->
@@ -2696,7 +2696,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             CallStarted time _ startedBy reactions _ ->
                                                 CallStarted_NoReply time startedBy reactions
 
-                                            GoMatchStarted time _ reactions _ ->
+                                            GameStarted time _ reactions _ ->
                                                 GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
@@ -2731,7 +2731,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                         CallStarted time _ startedBy reactions _ ->
                                             CallStarted_NoReply time startedBy reactions
 
-                                        GoMatchStarted time _ reactions _ ->
+                                        GameStarted time _ reactions _ ->
                                             GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
@@ -2789,7 +2789,7 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                 CallStarted time _ startedBy reactions _ ->
                                     CallStarted_NoReply time startedBy reactions
 
-                                GoMatchStarted time _ reactions _ ->
+                                GameStarted time _ reactions _ ->
                                     GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply

@@ -66,8 +66,8 @@ tabFuzzer : Fuzzer DmChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
         [ DmChannelHeaderTab_VoiceChat
-        , DmChannelHeaderTab_Go Nothing
-        , DmChannelHeaderTab_Go (Just (Id.fromInt 123))
+        , DmChannelHeaderTab_Games Nothing
+        , DmChannelHeaderTab_Games (Just (Id.fromInt 123))
         , DmChannelHeaderTab_Draw
         ]
 

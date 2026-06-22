@@ -410,13 +410,10 @@ goGameButton :
     -> Element FrontendMsg
 goGameButton isMobile currentTab userId goMatches =
     let
-        _ =
-            Debug.log "rerender goGameButton" ()
-
         viewingGo : Bool
         viewingGo =
             case currentTab of
-                Just (DmChannelHeaderTab_Go _) ->
+                Just (DmChannelHeaderTab_Games _) ->
                     True
 
                 _ ->
@@ -427,8 +424,8 @@ goGameButton isMobile currentTab userId goMatches =
     in
     channelHeaderTab
         isMobile
-        (Dom.id "guild_openGoMatch")
-        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Go)
+        (Dom.id "guild_openGamesTab")
+        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Games)
         currentTab
         (Ui.el
             [ Ui.width Ui.shrink
@@ -551,7 +548,7 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Go _ ->
+                        DmChannelHeaderTab_Games _ ->
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
@@ -576,7 +573,7 @@ tabBodyView local loggedIn model =
             case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                        Just (DmChannelHeaderTab_Games maybeMatchId) ->
                             Go.view
                                 model.time
                                 model.windowSize
@@ -636,7 +633,7 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Go _ ->
+                        DmChannelHeaderTab_Games _ ->
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
