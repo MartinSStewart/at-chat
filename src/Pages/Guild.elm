@@ -8645,6 +8645,24 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                         ]
                                         (Ui.html Icons.document)
 
+                                FileStatus.Video ->
+                                    Ui.el
+                                        [ Ui.centerX
+                                        , Ui.centerY
+                                        , Ui.Font.color MyUi.font3
+                                        , Ui.move { x = 6, y = 0, z = 0 }
+                                        ]
+                                        (Ui.html (Icons.camera 42))
+
+                                FileStatus.Audio ->
+                                    Ui.el
+                                        [ Ui.width (Ui.px 42)
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , Ui.Font.color MyUi.font3
+                                        ]
+                                        (Ui.html Icons.volume)
+
                                 _ ->
                                     Ui.el
                                         [ Ui.Font.bold
