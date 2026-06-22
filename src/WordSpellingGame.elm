@@ -21,15 +21,19 @@ import SeqDict exposing (SeqDict)
 
 
 type Model
-    = Setup
-        { mainTimeInput : String
-        , incrementInput : String
-        }
+    = Setup Setup
     | Game { tray : Array Int }
 
 
 type Msg
     = PressedGridCell ( Int, Int )
+
+
+type alias Setup =
+    { mainTimeInput : String
+    , incrementInput : String
+    , traySize : Int
+    }
 
 
 type alias ValidatedSetup =
@@ -38,7 +42,7 @@ type alias ValidatedSetup =
 
 
 type LocalChange
-    = Action (Id ChannelMessageId) ActionWithTime
+    = Action ActionWithTime
 
 
 type Action
