@@ -38,6 +38,7 @@ type alias Setup =
 
 type alias ValidatedSetup =
     { timeControls : TimeControl
+    , traySize : OneOrGreater
     }
 
 
