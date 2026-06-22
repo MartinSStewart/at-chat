@@ -1023,11 +1023,10 @@ update :
     -> Id UserId
     -> Id UserId
     -> Msg
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
+    -> Maybe ( ValidatedSetup, GameState )
     -> Maybe Model
     -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
-update time currentUserId otherUserId msg maybeMatchId matches model =
+update time currentUserId otherUserId msg maybeMatch model =
     case msg of
         PressedReset ->
             ( model, Command.none, OutSelectMatch Nothing )
@@ -1036,43 +1035,38 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
             ( model, Command.none, OutSelectMatch newMatchId )
 
         GameMsg gameMsg ->
-            case maybeMatchId of
-                Just matchId ->
-                    case SeqDict.get matchId matches of
-                        Just (MatchData match) ->
-                            let
-                                ( game2, cmd, maybeChange ) =
-                                    updateGame
-                                        time
-                                        currentUserId
-                                        gameMsg
-                                        match.setup
-                                        match.cache
-                                        (case model of
-                                            Just (Game game) ->
-                                                game
+            case maybeMatch of
+                Just ( setup, state ) ->
+                    let
+                        ( game2, cmd, maybeChange ) =
+                            updateGame
+                                time
+                                currentUserId
+                                gameMsg
+                                setup
+                                state
+                                (case model of
+                                    Just (Game game) ->
+                                        game
 
-                                            Just (Setup _) ->
-                                                initGame
+                                    Just (Setup _) ->
+                                        initGame
 
-                                            Nothing ->
-                                                initGame
-                                        )
-                            in
-                            ( Just game2
-                            , cmd
-                            , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
-                                |> localChangeToOut
-                            )
-
-                        Nothing ->
-                            ( model, Command.none, NoOutMsg )
+                                    Nothing ->
+                                        initGame
+                                )
+                    in
+                    ( Just game2
+                    , cmd
+                    , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
+                        |> localChangeToOut
+                    )
 
                 Nothing ->
                     ( model, Command.none, NoOutMsg )
 
         SetupMsg setupMsg ->
-            case maybeMatchId of
+            case maybeMatch of
                 Just _ ->
                     ( model, Command.none, NoOutMsg )
 
@@ -1088,8 +1082,8 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                     Just (Game _) ->
                                         initSetup
 
-                                    Just (Setup setup) ->
-                                        setup
+                                    Just (Setup setup2) ->
+                                        setup2
 
                                     Nothing ->
                                         initSetup
@@ -1119,29 +1113,23 @@ localChangeToOut maybeChange =
 
 pressedKey :
     String
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
+    -> GameState
     -> Maybe Model
     -> Maybe Model
-pressedKey key maybeMatchId matches model =
-    case maybeMatchId of
-        Just matchId ->
-            case ( model, SeqDict.get matchId matches ) of
-                ( Just (Game model2), Just (MatchData match) ) ->
-                    case key of
-                        "ArrowLeft" ->
-                            stepBack match.cache model2 |> Game |> Just
+pressedKey key state model =
+    case model of
+        Just (Game model2) ->
+            case key of
+                "ArrowLeft" ->
+                    stepBack state model2 |> Game |> Just
 
-                        "ArrowRight" ->
-                            stepForward model2 |> Game |> Just
-
-                        _ ->
-                            Game model2 |> Just
+                "ArrowRight" ->
+                    stepForward model2 |> Game |> Just
 
                 _ ->
-                    model
+                    Game model2 |> Just
 
-        Nothing ->
+        _ ->
             model
 
 

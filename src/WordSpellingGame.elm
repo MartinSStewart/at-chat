@@ -1,4 +1,4 @@
-module WordSpellingGame exposing (Action, ActionWithTime, GameState, Player, ValidatedSetup, foldActions)
+module WordSpellingGame exposing (Action, ActionWithTime, GameState, Model, Player, ValidatedSetup, foldActions)
 
 {-| Were calling it this to avoid the Scrabble trademark
 -}
@@ -8,6 +8,14 @@ import Effect.Time as Time
 import Go exposing (TimeControl)
 import Id exposing (Id, UserId)
 import SeqDict exposing (SeqDict)
+
+
+type Model
+    = Setup
+        { mainTimeInput : String
+        , incrementInput : String
+        }
+    | Game { tray : Array Int }
 
 
 type alias ValidatedSetup =
@@ -32,6 +40,7 @@ type alias GameState =
 
 type alias Player =
     { userId : Id UserId
+    , tray : List LetterOrWildcard
     , score : Int
     }
 

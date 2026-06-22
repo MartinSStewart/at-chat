@@ -9,6 +9,11 @@ import SeqSet exposing (SeqSet)
 import WordSpellingGame
 
 
+type Model
+    = GoModel Go.Model
+    | WordSpellingGameModel WordSpellingGame.Model
+
+
 type BackendGameData
     = GameData_Go Go.ValidatedSetup (Array Go.ActionWithTime)
     | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime)
