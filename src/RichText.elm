@@ -3163,10 +3163,10 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                         embedIndex3
                                                         nonempty2
                                             in
-                                            ( ( d4, spoilerIndex4 ), embedIndex4, acc ++ [ Html.li [] html ] )
+                                            ( ( d4, spoilerIndex4 ), embedIndex4, html :: acc )
 
                                         Nothing ->
-                                            ( ( True, spoilerIndex3 ), embedIndex3, acc ++ [ Html.li [] [] ] )
+                                            ( ( True, spoilerIndex3 ), embedIndex3, acc )
                                 )
                                 ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, [] )
                                 (List.Nonempty.toList items)
@@ -3174,12 +3174,18 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     ( ( True, spoilerIndex5 )
                     , embedIndex5
                     , currentList
-                        ++ [ Html.ul
-                                [ Html.Attributes.style "margin" "0"
-                                , Html.Attributes.style "padding-left" "24px"
-                                ]
-                                listItems
-                           ]
+                        ++ (case showLargeContent of
+                                ShowLargeContent _ ->
+                                    [ Html.ul
+                                        [ Html.Attributes.style "margin" "0"
+                                        , Html.Attributes.style "padding-left" "24px"
+                                        ]
+                                        (List.map (Html.li []) listItems)
+                                    ]
+
+                                NoLargeContent ->
+                                    List.concatMap (\a -> Html.text " • " :: a) listItems
+                           )
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
