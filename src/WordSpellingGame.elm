@@ -439,56 +439,121 @@ statusView currentUserId gameState =
 boardView : GameState -> GameModel -> Element GameMsg
 boardView gameState model =
     Ui.column
-        [ Ui.width Ui.shrink, Ui.pointer ]
-        (List.map
-            (\y ->
-                Ui.row
-                    []
-                    (List.map (\x -> cellView ( x, y ) gameState model) (List.range 0 (gridSize - 1)))
-            )
-            (List.range 0 (gridSize - 1))
-        )
+        (SeqDict.foldl
+            (\( x, y ) { letter, isWildcard } attributes ->
+                Ui.inFront
+                    (Ui.el
+                        [ Ui.background (Ui.rgb 240 220 130)
+                        , Ui.width (Ui.px cellSize)
+                        , Ui.height (Ui.px cellSize)
+                        , Ui.move { x = x * cellSize, y = y * cellSize, z = 0 }
+                        ]
+                        (Ui.text
+                            (if isWildcard then
+                                " "
 
-
-cellView : ( Int, Int ) -> GameState -> GameModel -> Element GameMsg
-cellView position gameState model =
-    let
-        commonAttributes : List (Ui.Attribute msg)
-        commonAttributes =
-            [ Ui.width (Ui.px 28)
-            , Ui.height (Ui.px 28)
-            , Ui.border 2
-            , Ui.borderColor
-                (if model.selectedCell == Just position then
-                    Ui.rgb 255 0 0
-
-                 else
-                    MyUi.inputBorder
-                )
-            , Ui.contentCenterX
-            , Ui.contentCenterY
-            ]
-    in
-    case SeqDict.get position gameState.board of
-        Just tile ->
-            Ui.el
-                (Ui.background (Ui.rgb 240 220 130) :: commonAttributes)
-                (Ui.text
-                    (if tile.isWildcard then
-                        " "
-
-                     else
-                        (letterData tile.letter).text
+                             else
+                                (letterData letter).text
+                            )
+                        )
                     )
-                )
+                    :: attributes
+            )
+            [ Ui.width Ui.shrink
+            , Ui.pointer
+            , case model.selectedCell of
+                Just ( x, y ) ->
+                    Ui.el
+                        [ Ui.borderColor (Ui.rgb 0 200 255)
+                        , Ui.border 4
+                        , Ui.width (Ui.px cellSize)
+                        , Ui.height (Ui.px cellSize)
+                        , Ui.move { x = x * cellSize, y = y * cellSize, z = 0 }
+                        ]
+                        Ui.none
+                        |> Ui.inFront
 
-        Nothing ->
-            Ui.el
-                (Ui.Events.onClick (PressedGridCell position)
-                    :: Ui.background (Ui.rgb 250 250 250)
-                    :: commonAttributes
-                )
-                Ui.none
+                Nothing ->
+                    Ui.noAttr
+            ]
+            gameState.board
+        )
+        boardViewBackground
+
+
+boardViewBackground : List (Element GameMsg)
+boardViewBackground =
+    List.map
+        (\y ->
+            Ui.row
+                []
+                (List.map (\x -> cellView ( x, y )) (List.range 0 (gridSize - 1)))
+        )
+        (List.range 0 (gridSize - 1))
+
+
+cellSize : number
+cellSize =
+    30
+
+
+cellView : ( Int, Int ) -> Element GameMsg
+cellView position =
+    Ui.el
+        ((case SeqDict.get position bonusCells of
+            Just specialCell ->
+                case specialCell of
+                    DoubleWord ->
+                        Ui.background (Ui.rgb 225 163 163)
+
+                    TripleWord ->
+                        Ui.background (Ui.rgb 228 46 46)
+
+                    DoubleLetter ->
+                        Ui.background (Ui.rgb 123 208 232)
+
+                    TripleLetter ->
+                        Ui.background (Ui.rgb 24 116 191)
+
+                    CenterCell ->
+                        Ui.background (Ui.rgb 241 154 154)
+
+            Nothing ->
+                Ui.background (Ui.rgb 250 250 250)
+         )
+            :: [ Ui.width (Ui.px cellSize)
+               , Ui.height (Ui.px cellSize)
+               , Ui.border 1
+               , Ui.borderColor MyUi.inputBorder
+               , Ui.contentCenterX
+               , Ui.contentCenterY
+               , Ui.Events.onClick (PressedGridCell position)
+               ]
+        )
+        Ui.none
+
+
+type BonusCells
+    = DoubleWord
+    | TripleWord
+    | DoubleLetter
+    | TripleLetter
+    | CenterCell
+
+
+bonusCells : SeqDict ( Int, Int ) BonusCells
+bonusCells =
+    SeqDict.fromList
+        [ ( ( 0, 0 ), TripleWord )
+        , ( ( 7, 0 ), TripleWord )
+        , ( ( 14, 0 ), TripleWord )
+        , ( ( 0, 7 ), TripleWord )
+        , ( ( 0, 14 ), TripleWord )
+        , ( ( 7, 14 ), TripleWord )
+        , ( ( 14, 7 ), TripleWord )
+        , ( ( 14, 14 ), TripleWord )
+        , ( ( 7, 7 ), CenterCell )
+        ]
 
 
 trayView : Id UserId -> GameState -> Element GameMsg

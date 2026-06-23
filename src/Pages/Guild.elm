@@ -6435,7 +6435,7 @@ goMatchStartedCard messageId userId allUsers game =
                 MessageViewMsg_PressedGameStartedCard
                 (Ui.html Icons.go)
                 (User.toString userId allUsers)
-                "started a Word Spelling match"
+                "started a Word Spelling game"
 
 
 eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
