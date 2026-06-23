@@ -499,24 +499,15 @@ cellSize =
 
 cellView : ( Int, Int ) -> Element GameMsg
 cellView position =
+    let
+        maybeBonus : Maybe BonusCells
+        maybeBonus =
+            SeqDict.get position bonusCells
+    in
     Ui.el
-        ((case SeqDict.get position bonusCells of
+        ((case maybeBonus of
             Just specialCell ->
-                case specialCell of
-                    DoubleWord ->
-                        Ui.background (Ui.rgb 225 163 163)
-
-                    TripleWord ->
-                        Ui.background (Ui.rgb 228 46 46)
-
-                    DoubleLetter ->
-                        Ui.background (Ui.rgb 123 208 232)
-
-                    TripleLetter ->
-                        Ui.background (Ui.rgb 24 116 191)
-
-                    CenterCell ->
-                        Ui.background (Ui.rgb 241 154 154)
+                Ui.background (bonusCellColor specialCell)
 
             Nothing ->
                 Ui.background (Ui.rgb 250 250 250)
@@ -530,7 +521,19 @@ cellView position =
                , Ui.Events.onClick (PressedGridCell position)
                ]
         )
-        Ui.none
+        (case maybeBonus of
+            Just CenterCell ->
+                Ui.el
+                    [ Ui.centerX
+                    , Ui.centerY
+                    , Ui.Font.size 20
+                    , Ui.Font.color (Ui.rgb 0 0 0)
+                    ]
+                    (Ui.text "★")
+
+            _ ->
+                Ui.none
+        )
 
 
 type BonusCells
@@ -541,19 +544,115 @@ type BonusCells
     | CenterCell
 
 
+bonusCellColor : BonusCells -> Ui.Color
+bonusCellColor bonus =
+    case bonus of
+        DoubleWord ->
+            Ui.rgb 225 163 163
+
+        TripleWord ->
+            Ui.rgb 228 46 46
+
+        DoubleLetter ->
+            Ui.rgb 123 208 232
+
+        TripleLetter ->
+            Ui.rgb 24 116 191
+
+        CenterCell ->
+            Ui.rgb 241 154 154
+
+
 bonusCells : SeqDict ( Int, Int ) BonusCells
 bonusCells =
     SeqDict.fromList
-        [ ( ( 0, 0 ), TripleWord )
-        , ( ( 7, 0 ), TripleWord )
-        , ( ( 14, 0 ), TripleWord )
-        , ( ( 0, 7 ), TripleWord )
-        , ( ( 0, 14 ), TripleWord )
-        , ( ( 7, 14 ), TripleWord )
-        , ( ( 14, 7 ), TripleWord )
-        , ( ( 14, 14 ), TripleWord )
-        , ( ( 7, 7 ), CenterCell )
-        ]
+        ([ ( 7, 7 ) ]
+            |> List.map (\position -> ( position, CenterCell ))
+            |> (++) (List.map (\position -> ( position, TripleWord )) tripleWordCells)
+            |> (++) (List.map (\position -> ( position, DoubleWord )) doubleWordCells)
+            |> (++) (List.map (\position -> ( position, TripleLetter )) tripleLetterCells)
+            |> (++) (List.map (\position -> ( position, DoubleLetter )) doubleLetterCells)
+        )
+
+
+tripleWordCells : List ( Int, Int )
+tripleWordCells =
+    [ ( 0, 0 )
+    , ( 7, 0 )
+    , ( 14, 0 )
+    , ( 0, 7 )
+    , ( 14, 7 )
+    , ( 0, 14 )
+    , ( 7, 14 )
+    , ( 14, 14 )
+    ]
+
+
+doubleWordCells : List ( Int, Int )
+doubleWordCells =
+    [ ( 1, 1 )
+    , ( 2, 2 )
+    , ( 3, 3 )
+    , ( 4, 4 )
+    , ( 13, 1 )
+    , ( 12, 2 )
+    , ( 11, 3 )
+    , ( 10, 4 )
+    , ( 1, 13 )
+    , ( 2, 12 )
+    , ( 3, 11 )
+    , ( 4, 10 )
+    , ( 13, 13 )
+    , ( 12, 12 )
+    , ( 11, 11 )
+    , ( 10, 10 )
+    ]
+
+
+tripleLetterCells : List ( Int, Int )
+tripleLetterCells =
+    [ ( 5, 1 )
+    , ( 9, 1 )
+    , ( 1, 5 )
+    , ( 5, 5 )
+    , ( 9, 5 )
+    , ( 13, 5 )
+    , ( 1, 9 )
+    , ( 5, 9 )
+    , ( 9, 9 )
+    , ( 13, 9 )
+    , ( 5, 13 )
+    , ( 9, 13 )
+    ]
+
+
+doubleLetterCells : List ( Int, Int )
+doubleLetterCells =
+    [ ( 3, 0 )
+    , ( 11, 0 )
+    , ( 6, 2 )
+    , ( 8, 2 )
+    , ( 0, 3 )
+    , ( 7, 3 )
+    , ( 14, 3 )
+    , ( 2, 6 )
+    , ( 6, 6 )
+    , ( 8, 6 )
+    , ( 12, 6 )
+    , ( 3, 7 )
+    , ( 11, 7 )
+    , ( 2, 8 )
+    , ( 6, 8 )
+    , ( 8, 8 )
+    , ( 12, 8 )
+    , ( 0, 11 )
+    , ( 7, 11 )
+    , ( 14, 11 )
+    , ( 6, 12 )
+    , ( 8, 12 )
+    , ( 3, 14 )
+    , ( 11, 14 )
+    ]
 
 
 trayView : Id UserId -> GameState -> Element GameMsg
