@@ -1833,7 +1833,7 @@ guildSettingsForm model loggedIn local guildId guild =
 
                                 showQrCode : Bool
                                 showQrCode =
-                                    SeqSet.member inviteId loggedIn.showInviteLinkQrCode
+                                    Just inviteId == loggedIn.showInviteLinkQrCode
                             in
                             Ui.column
                                 [ Ui.spacing 8 ]
@@ -1875,7 +1875,7 @@ guildSettingsForm model loggedIn local guildId guild =
                                         Ui.none
                                     ]
                                 , if showQrCode then
-                                    inviteLinkQrCodeView inviteLink
+                                    Ui.Lazy.lazy2 inviteLinkQrCodeView (conversationWidth model) inviteLink
 
                                   else
                                     Ui.none
@@ -1993,10 +1993,14 @@ deleteGuildConfirmationInput guildId guildNameString form =
         ]
 
 
-inviteLinkQrCodeView : String -> Element msg
-inviteLinkQrCodeView inviteLink =
+inviteLinkQrCodeView : Int -> String -> Element msg
+inviteLinkQrCodeView containerWidth inviteLink =
     case QRCode.fromString inviteLink of
         Ok qrCode ->
+            let
+                size =
+                    min 300 containerWidth
+            in
             Ui.el
                 [ Ui.background MyUi.white
                 , Ui.padding 12
@@ -2004,7 +2008,7 @@ inviteLinkQrCodeView inviteLink =
                 , Ui.width Ui.shrink
                 ]
                 (QRCode.toSvgWithoutQuietZone
-                    [ MyUi.widthAttr 200, MyUi.heightAttr 200 ]
+                    [ MyUi.widthAttr size, MyUi.heightAttr size ]
                     qrCode
                     |> Ui.html
                 )

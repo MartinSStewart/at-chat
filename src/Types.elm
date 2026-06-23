@@ -244,7 +244,7 @@ type alias LoggedIn2 =
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
-    , showInviteLinkQrCode : SeqSet (SecretId InviteLinkId)
+    , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     }
 
 

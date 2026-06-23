@@ -443,7 +443,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
-            , showInviteLinkQrCode = SeqSet.empty
+            , showInviteLinkQrCode = Nothing
             }
     in
     ( loggedIn
@@ -1051,11 +1051,11 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | showInviteLinkQrCode =
-                            if SeqSet.member inviteLinkId loggedIn.showInviteLinkQrCode then
-                                SeqSet.remove inviteLinkId loggedIn.showInviteLinkQrCode
+                            if Just inviteLinkId == loggedIn.showInviteLinkQrCode then
+                                Nothing
 
                             else
-                                SeqSet.insert inviteLinkId loggedIn.showInviteLinkQrCode
+                                Just inviteLinkId
                       }
                     , Command.none
                     )
