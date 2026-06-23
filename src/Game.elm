@@ -228,11 +228,11 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         currentUserId
                         wordSpellingGameMsg
                         (case model of
-                            Just (WordSpellingGameModel wsModel2) ->
-                                Just wsModel2
+                            Just (WordSpellingGameModel gameModel) ->
+                                gameModel
 
                             _ ->
-                                Nothing
+                                WordSpellingGame.Setup WordSpellingGame.initSetup
                         )
 
                 matchId : Id ChannelMessageId
@@ -326,7 +326,17 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                         |> Ui.map GoMsg
 
                                 FrontendGameData_WordSpellingGame setup _ cache ->
-                                    WordSpellingGame.gameView localUser.session.userId setup cache
+                                    WordSpellingGame.gameView
+                                        localUser.session.userId
+                                        setup
+                                        cache
+                                        (case model of
+                                            Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
+                                                game
+
+                                            _ ->
+                                                WordSpellingGame.initGame
+                                        )
                                         |> Ui.map WordSpellingGameMsg
 
                         Nothing ->

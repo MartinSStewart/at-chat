@@ -11,6 +11,7 @@ module WordSpellingGame exposing
     , ValidatedSetup
     , foldActions
     , gameView
+    , initGame
     , initSetup
     , setupView
     , update
@@ -46,15 +47,23 @@ import Ui.Font
 
 type Model
     = Setup SetupModel
-    | Game { tray : Array Int }
+    | Game GameModel
+
+
+type alias GameModel =
+    { tray : Array Int, selectedCell : Maybe ( Int, Int ) }
 
 
 type Msg
-    = PressedGridCell ( Int, Int )
+    = GameMsg GameMsg
     | ChangedMainTimeInput String
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
     | PressedStartGame
+
+
+type GameMsg
+    = PressedGridCell ( Int, Int )
 
 
 type alias SetupModel =
@@ -82,6 +91,11 @@ initSetup =
     }
 
 
+initGame : GameModel
+initGame =
+    { tray = Array.empty, selectedCell = Nothing }
+
+
 type OutMsg
     = OutLocalChange LocalChange
 
@@ -92,7 +106,7 @@ type LocalChange
 
 
 type Action
-    = PlaceWord ( Int, Int ) Direction Letter
+    = PlaceWord ( Int, Int ) Direction (Nonempty Letter)
     | ReplaceTray
 
 
@@ -231,21 +245,8 @@ foldActions setup actions =
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action state =
     case action.change of
-        PlaceWord ( x, y ) _ letter ->
-            { state
-                | board = SeqDict.insert ( x, y ) { letter = letter, isWildcard = False } state.board
-                , players =
-                    NonemptyExtra.update
-                        state.turnCount
-                        (\player ->
-                            { player
-                                | tray = List.Extra.remove (Letter letter) player.tray
-                                , score = player.score + (letterData letter).score
-                            }
-                        )
-                        state.players
-                , turnCount = state.turnCount + 1
-            }
+        PlaceWord ( x, y ) direction letter ->
+            Debug.todo ""
 
         ReplaceTray ->
             { state
@@ -270,48 +271,66 @@ updateAction setup action state =
             }
 
 
-update : Time.Posix -> Id UserId -> Msg -> Maybe Model -> ( Maybe Model, List OutMsg )
+update : Time.Posix -> Id UserId -> Msg -> Model -> ( Maybe Model, List OutMsg )
 update time currentUserId msg model =
     case msg of
         ChangedMainTimeInput input ->
-            ( Maybe.map (mapSetup (\setup -> { setup | mainTimeInput = input, error = Nothing })) model, [] )
+            ( updateSetup (\setup -> { setup | mainTimeInput = input, error = Nothing }) model |> Just, [] )
 
         ChangedIncrementInput input ->
-            ( Maybe.map (mapSetup (\setup -> { setup | incrementInput = input, error = Nothing })) model, [] )
+            ( updateSetup (\setup -> { setup | incrementInput = input, error = Nothing }) model |> Just, [] )
 
         ChangedTraySizeInput input ->
-            ( Maybe.map
-                (mapSetup
-                    (\setup ->
-                        { setup
-                            | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
-                            , error = Nothing
-                        }
-                    )
+            ( updateSetup
+                (\setup ->
+                    { setup
+                        | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
+                        , error = Nothing
+                    }
                 )
                 model
+                |> Just
             , []
             )
 
         PressedStartGame ->
             case model of
-                Just (Setup setup) ->
+                Setup setup ->
                     case validateSetup currentUserId time setup of
                         Ok validated ->
-                            ( Just (Game { tray = Array.empty }), [ OutLocalChange (StartMatch time validated) ] )
+                            ( Just (Game initGame), [ OutLocalChange (StartMatch time validated) ] )
 
                         Err error ->
                             ( Just (Setup { setup | error = Just error }), [] )
 
-                _ ->
-                    ( model, [] )
+                Game _ ->
+                    ( Just model, [] )
 
-        PressedGridCell _ ->
-            ( model, [] )
+        GameMsg gameMsg ->
+            let
+                ( gameModel, outMsgs ) =
+                    updateGame
+                        gameMsg
+                        (case model of
+                            Setup _ ->
+                                initGame
+
+                            Game game ->
+                                game
+                        )
+            in
+            ( Game gameModel |> Just, outMsgs )
 
 
-mapSetup : (SetupModel -> SetupModel) -> Model -> Model
-mapSetup function model =
+updateGame : GameMsg -> GameModel -> ( GameModel, List OutMsg )
+updateGame msg model =
+    case msg of
+        PressedGridCell pos ->
+            ( { model | selectedCell = Just pos }, [] )
+
+
+updateSetup : (SetupModel -> SetupModel) -> Model -> Model
+updateSetup function model =
     case model of
         Setup setup ->
             Setup (function setup)
@@ -365,17 +384,18 @@ parseTimeControl setup =
                             Ok { mainTime = Duration.minutes minutes, increment = Duration.seconds increment }
 
 
-gameView : Id UserId -> ValidatedSetup -> GameState -> Element Msg
-gameView currentUserId validatedSetup gameState =
+gameView : Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView currentUserId validatedSetup gameState model =
     Ui.column
         [ Ui.spacing 16, Ui.padding 16 ]
         [ statusView currentUserId gameState
-        , boardView gameState
+        , boardView gameState model
         , trayView currentUserId gameState
         ]
+        |> Ui.map GameMsg
 
 
-statusView : Id UserId -> GameState -> Element Msg
+statusView : Id UserId -> GameState -> Element GameMsg
 statusView currentUserId gameState =
     let
         currentPlayer : Player
@@ -416,33 +436,37 @@ statusView currentUserId gameState =
         )
 
 
-boardView : GameState -> Element Msg
-boardView gameState =
+boardView : GameState -> GameModel -> Element GameMsg
+boardView gameState model =
     Ui.column
-        [ Ui.spacing 2, Ui.width Ui.shrink ]
+        [ Ui.width Ui.shrink, Ui.pointer ]
         (List.map
             (\y ->
                 Ui.row
-                    [ Ui.spacing 2 ]
-                    (List.map (\x -> cellView ( x, y ) gameState) (List.range 0 (gridSize - 1)))
+                    []
+                    (List.map (\x -> cellView ( x, y ) gameState model) (List.range 0 (gridSize - 1)))
             )
             (List.range 0 (gridSize - 1))
         )
 
 
-cellView : ( Int, Int ) -> GameState -> Element Msg
-cellView position gameState =
+cellView : ( Int, Int ) -> GameState -> GameModel -> Element GameMsg
+cellView position gameState model =
     let
         commonAttributes : List (Ui.Attribute msg)
         commonAttributes =
             [ Ui.width (Ui.px 28)
             , Ui.height (Ui.px 28)
-            , Ui.border 1
-            , Ui.borderColor MyUi.inputBorder
+            , Ui.border 2
+            , Ui.borderColor
+                (if model.selectedCell == Just position then
+                    Ui.rgb 255 0 0
+
+                 else
+                    MyUi.inputBorder
+                )
             , Ui.contentCenterX
             , Ui.contentCenterY
-            , Ui.Font.size 16
-            , Ui.Font.weight 600
             ]
     in
     case SeqDict.get position gameState.board of
@@ -461,14 +485,13 @@ cellView position gameState =
         Nothing ->
             Ui.el
                 (Ui.Events.onClick (PressedGridCell position)
-                    :: Ui.pointer
                     :: Ui.background (Ui.rgb 250 250 250)
                     :: commonAttributes
                 )
                 Ui.none
 
 
-trayView : Id UserId -> GameState -> Element Msg
+trayView : Id UserId -> GameState -> Element GameMsg
 trayView currentUserId gameState =
     case List.Extra.find (\player -> player.userId == currentUserId) (List.Nonempty.toList gameState.players) of
         Just player ->
@@ -480,7 +503,7 @@ trayView currentUserId gameState =
             Ui.none
 
 
-tileView : LetterOrWildcard -> Element Msg
+tileView : LetterOrWildcard -> Element GameMsg
 tileView letterOrWildcard =
     Ui.el
         [ Ui.width (Ui.px 32)
