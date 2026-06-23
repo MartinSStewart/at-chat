@@ -23,11 +23,24 @@ minimumBy minFunc (Nonempty head tail) =
 -}
 update : Int -> (a -> a) -> Nonempty a -> Nonempty a
 update int updateFunc nonempty =
-    Debug.todo ""
+    let
+        index : Int
+        index =
+            modBy (List.Nonempty.length nonempty) int
+    in
+    List.Nonempty.indexedMap
+        (\i value ->
+            if i == index then
+                updateFunc value
+
+            else
+                value
+        )
+        nonempty
 
 
 {-| Set value at index position. Index is modBy so that it wraps around if it's larger than the list.
 -}
 set : Int -> a -> Nonempty a -> Nonempty a
 set int value nonempty =
-    Debug.todo ""
+    update int (\_ -> value) nonempty

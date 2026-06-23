@@ -1,6 +1,7 @@
 module OneOrGreater exposing
     ( OneOrGreater(..)
     , decrement
+    , eight
     , five
     , four
     , fromInt
@@ -8,9 +9,11 @@ module OneOrGreater exposing
     , nine
     , one
     , plus
+    , six
     , three
     , toInt
     , toString
+    , twelve
     , two
     )
 
@@ -49,9 +52,24 @@ five =
     OneOrGreater 5
 
 
+six : OneOrGreater
+six =
+    OneOrGreater 6
+
+
+eight : OneOrGreater
+eight =
+    OneOrGreater 8
+
+
 nine : OneOrGreater
 nine =
     OneOrGreater 9
+
+
+twelve : OneOrGreater
+twelve =
+    OneOrGreater 12
 
 
 increment : OneOrGreater -> OneOrGreater

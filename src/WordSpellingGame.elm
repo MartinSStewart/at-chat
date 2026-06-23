@@ -40,6 +40,7 @@ import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Ui exposing (Element)
+import Ui.Events
 import Ui.Font
 
 
@@ -230,8 +231,21 @@ foldActions setup actions =
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action state =
     case action.change of
-        PlaceWord ( x, y ) direction letter ->
-            Debug.todo ""
+        PlaceWord ( x, y ) _ letter ->
+            { state
+                | board = SeqDict.insert ( x, y ) { letter = letter, isWildcard = False } state.board
+                , players =
+                    NonemptyExtra.update
+                        state.turnCount
+                        (\player ->
+                            { player
+                                | tray = List.Extra.remove (Letter letter) player.tray
+                                , score = player.score + (letterData letter).score
+                            }
+                        )
+                        state.players
+                , turnCount = state.turnCount + 1
+            }
 
         ReplaceTray ->
             { state
@@ -354,23 +368,140 @@ parseTimeControl setup =
 gameView : Id UserId -> ValidatedSetup -> GameState -> Element Msg
 gameView currentUserId validatedSetup gameState =
     Ui.column
-        []
-        [ statusView gameState
+        [ Ui.spacing 16, Ui.padding 16 ]
+        [ statusView currentUserId gameState
         , boardView gameState
         , trayView currentUserId gameState
         ]
 
 
-statusView gameState =
-    Debug.todo ""
+statusView : Id UserId -> GameState -> Element Msg
+statusView currentUserId gameState =
+    let
+        currentPlayer : Player
+        currentPlayer =
+            List.Nonempty.get gameState.turnCount gameState.players
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        (List.Nonempty.toList gameState.players
+            |> List.map
+                (\player ->
+                    let
+                        name : String
+                        name =
+                            if player.userId == currentUserId then
+                                "You"
+
+                            else
+                                "Opponent"
+
+                        turnMarker : String
+                        turnMarker =
+                            if player.userId == currentPlayer.userId then
+                                " (their turn)"
+
+                            else
+                                ""
+                    in
+                    Ui.el
+                        [ if player.userId == currentPlayer.userId then
+                            Ui.Font.weight 700
+
+                          else
+                            Ui.Font.weight 400
+                        ]
+                        (Ui.text (name ++ ": " ++ String.fromInt player.score ++ turnMarker))
+                )
+        )
 
 
+boardView : GameState -> Element Msg
 boardView gameState =
-    Debug.todo ""
+    Ui.column
+        [ Ui.spacing 2, Ui.width Ui.shrink ]
+        (List.map
+            (\y ->
+                Ui.row
+                    [ Ui.spacing 2 ]
+                    (List.map (\x -> cellView ( x, y ) gameState) (List.range 0 (gridSize - 1)))
+            )
+            (List.range 0 (gridSize - 1))
+        )
 
 
+cellView : ( Int, Int ) -> GameState -> Element Msg
+cellView position gameState =
+    let
+        commonAttributes : List (Ui.Attribute msg)
+        commonAttributes =
+            [ Ui.width (Ui.px 28)
+            , Ui.height (Ui.px 28)
+            , Ui.border 1
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , Ui.Font.size 16
+            , Ui.Font.weight 600
+            ]
+    in
+    case SeqDict.get position gameState.board of
+        Just tile ->
+            Ui.el
+                (Ui.background (Ui.rgb 240 220 130) :: commonAttributes)
+                (Ui.text
+                    (if tile.isWildcard then
+                        " "
+
+                     else
+                        (letterData tile.letter).text
+                    )
+                )
+
+        Nothing ->
+            Ui.el
+                (Ui.Events.onClick (PressedGridCell position)
+                    :: Ui.pointer
+                    :: Ui.background (Ui.rgb 250 250 250)
+                    :: commonAttributes
+                )
+                Ui.none
+
+
+trayView : Id UserId -> GameState -> Element Msg
 trayView currentUserId gameState =
-    Debug.todo ""
+    case List.Extra.find (\player -> player.userId == currentUserId) (List.Nonempty.toList gameState.players) of
+        Just player ->
+            Ui.row
+                [ Ui.spacing 4 ]
+                (List.map tileView player.tray)
+
+        Nothing ->
+            Ui.none
+
+
+tileView : LetterOrWildcard -> Element Msg
+tileView letterOrWildcard =
+    Ui.el
+        [ Ui.width (Ui.px 32)
+        , Ui.height (Ui.px 32)
+        , Ui.border 1
+        , Ui.borderColor MyUi.inputBorder
+        , Ui.background (Ui.rgb 240 220 130)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.Font.size 18
+        , Ui.Font.weight 600
+        ]
+        (Ui.text
+            (case letterOrWildcard of
+                Letter letter ->
+                    (letterData letter).text
+
+                Wildcard ->
+                    " "
+            )
+        )
 
 
 setupView : Coord CssPixels -> SetupModel -> Element Msg
@@ -497,85 +628,82 @@ letterData : Letter -> LetterData
 letterData letter =
     case letter of
         A ->
-            { score = 1
-            , text = "A"
-            , total = OneOrGreater.nine
-            }
+            { score = 1, text = "A", total = OneOrGreater.nine }
 
         B ->
-            3
+            { score = 3, text = "B", total = OneOrGreater.two }
 
         C ->
-            3
+            { score = 3, text = "C", total = OneOrGreater.two }
 
         D ->
-            2
+            { score = 2, text = "D", total = OneOrGreater.four }
 
         E ->
-            1
+            { score = 1, text = "E", total = OneOrGreater.twelve }
 
         F ->
-            4
+            { score = 4, text = "F", total = OneOrGreater.two }
 
         G ->
-            2
+            { score = 2, text = "G", total = OneOrGreater.three }
 
         H ->
-            4
+            { score = 4, text = "H", total = OneOrGreater.two }
 
         I ->
-            1
+            { score = 1, text = "I", total = OneOrGreater.nine }
 
         J ->
-            8
+            { score = 8, text = "J", total = OneOrGreater.one }
 
         K ->
-            5
+            { score = 5, text = "K", total = OneOrGreater.one }
 
         L ->
-            1
+            { score = 1, text = "L", total = OneOrGreater.four }
 
         M ->
-            3
+            { score = 3, text = "M", total = OneOrGreater.two }
 
         N ->
-            1
+            { score = 1, text = "N", total = OneOrGreater.six }
 
         O ->
-            1
+            { score = 1, text = "O", total = OneOrGreater.eight }
 
         P ->
-            3
+            { score = 3, text = "P", total = OneOrGreater.two }
 
         Q ->
-            10
+            { score = 10, text = "Q", total = OneOrGreater.one }
 
         R ->
-            1
+            { score = 1, text = "R", total = OneOrGreater.six }
 
         S ->
-            1
+            { score = 1, text = "S", total = OneOrGreater.four }
 
         T ->
-            1
+            { score = 1, text = "T", total = OneOrGreater.six }
 
         U ->
-            1
+            { score = 1, text = "U", total = OneOrGreater.four }
 
         V ->
-            4
+            { score = 4, text = "V", total = OneOrGreater.two }
 
         W ->
-            4
+            { score = 4, text = "W", total = OneOrGreater.two }
 
         X ->
-            8
+            { score = 8, text = "X", total = OneOrGreater.one }
 
         Y ->
-            4
+            { score = 4, text = "Y", total = OneOrGreater.two }
 
         Z ->
-            10
+            { score = 10, text = "Z", total = OneOrGreater.one }
 
 
 type Letter
