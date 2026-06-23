@@ -3810,9 +3810,10 @@ goMatchTest normalConfig =
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
-                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Go")
                         , admin.click 100 (Dom.id "go_start")
-                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
 
@@ -3834,7 +3835,8 @@ goMatchTest normalConfig =
                             (\user2 ->
                                 [ user2.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
-                                , user2.click 100 (Dom.id "guild_openGoMatch")
+                                , user2.click 100 (Dom.id "guild_openGamesTab")
+                                , user2.click 100 (Dom.id "game_select_Go")
                                 , user2.input 100 (Dom.id "go_matchSwitcher") "0"
 
                                 -- A few more moves to confirm the state persisted
@@ -3853,7 +3855,7 @@ goMatchTest normalConfig =
                                 -- Start a fresh match after the game has ended
                                 , admin.click 100 (Dom.id "go_reset")
                                 , admin.click 100 (Dom.id "go_start")
-                                , user2.click 100 (Dom.id "guild_goMatchStartedCard_1")
+                                , user2.click 100 (Dom.id "guild_gameStartedCard_1")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , admin.click 2000 (Dom.id "go_cell_3_3")
@@ -3893,13 +3895,14 @@ goTimeoutTest normalConfig =
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
-                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Go")
 
                         -- Set up a very short time control: 1 minute main time, no increment.
                         , admin.input 100 (Dom.id "go_mainTimeInput") "1"
                         , admin.input 100 (Dom.id "go_incrementInput") "0"
                         , admin.click 100 (Dom.id "go_start")
-                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
 
                         -- Admin is Black (creator default) and moves first. This starts
                         -- White's clock ticking, and both players see it's White's turn.
@@ -3961,9 +3964,10 @@ goTurnNotificationDotTest normalConfig =
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
-                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Go")
                         , admin.click 100 (Dom.id "go_start")
-                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
+                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
 
                         -- No dot for either user yet: admin is viewing the match,
                         -- and even though it's admin's turn, the user has no move pending
@@ -3996,7 +4000,7 @@ goTurnNotificationDotTest normalConfig =
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
 
                         -- User clicks back to the Go tab; the dot disappears
-                        , user.click 100 (Dom.id "guild_openGoMatch")
+                        , user.click 100 (Dom.id "guild_openGamesTab")
                         , user.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
@@ -4053,7 +4057,8 @@ publicGoMatchViewTest normalConfig =
                             )
                         , user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
-                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "guild_openGamesTab")
+                        , admin.click 100 (Dom.id "game_select_Go")
                         , admin.click 100 (Dom.id "go_start")
                         , admin.click 100 (Dom.id "go_cell_4_4")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "go_share" ])
