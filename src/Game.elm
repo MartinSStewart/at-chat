@@ -327,6 +327,7 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
 
                                 FrontendGameData_WordSpellingGame setup _ cache ->
                                     WordSpellingGame.gameView
+                                        windowSize
                                         localUser.session.userId
                                         setup
                                         cache

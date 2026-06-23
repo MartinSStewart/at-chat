@@ -43,6 +43,7 @@ import SeqDictHelper
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
+import Ui.Lazy
 
 
 type Model
@@ -384,12 +385,12 @@ parseTimeControl setup =
                             Ok { mainTime = Duration.minutes minutes, increment = Duration.seconds increment }
 
 
-gameView : Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
-gameView currentUserId validatedSetup gameState model =
+gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView windowSize currentUserId validatedSetup gameState model =
     Ui.column
-        [ Ui.spacing 16, Ui.padding 16 ]
+        [ Ui.spacing 16 ]
         [ statusView currentUserId gameState
-        , boardView gameState model
+        , boardView windowSize gameState model
         , trayView currentUserId gameState
         ]
         |> Ui.map GameMsg
@@ -403,7 +404,7 @@ statusView currentUserId gameState =
             List.Nonempty.get gameState.turnCount gameState.players
     in
     Ui.column
-        [ Ui.spacing 4 ]
+        [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         (List.Nonempty.toList gameState.players
             |> List.map
                 (\player ->
@@ -436,17 +437,21 @@ statusView currentUserId gameState =
         )
 
 
-boardView : GameState -> GameModel -> Element GameMsg
-boardView gameState model =
-    Ui.column
+boardView : Coord CssPixels -> GameState -> GameModel -> Element GameMsg
+boardView windowSize gameState model =
+    let
+        cellSize2 =
+            cellSize windowSize
+    in
+    Ui.el
         (SeqDict.foldl
             (\( x, y ) { letter, isWildcard } attributes ->
                 Ui.inFront
                     (Ui.el
                         [ Ui.background (Ui.rgb 240 220 130)
-                        , Ui.width (Ui.px cellSize)
-                        , Ui.height (Ui.px cellSize)
-                        , Ui.move { x = x * cellSize, y = y * cellSize, z = 0 }
+                        , Ui.width (Ui.px cellSize2)
+                        , Ui.height (Ui.px cellSize2)
+                        , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
                         ]
                         (Ui.text
                             (if isWildcard then
@@ -460,15 +465,16 @@ boardView gameState model =
                     :: attributes
             )
             [ Ui.width Ui.shrink
+            , Ui.centerX
             , Ui.pointer
             , case model.selectedCell of
                 Just ( x, y ) ->
                     Ui.el
                         [ Ui.borderColor (Ui.rgb 0 200 255)
                         , Ui.border 4
-                        , Ui.width (Ui.px cellSize)
-                        , Ui.height (Ui.px cellSize)
-                        , Ui.move { x = x * cellSize, y = y * cellSize, z = 0 }
+                        , Ui.width (Ui.px cellSize2)
+                        , Ui.height (Ui.px cellSize2)
+                        , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
                         ]
                         Ui.none
                         |> Ui.inFront
@@ -478,27 +484,32 @@ boardView gameState model =
             ]
             gameState.board
         )
-        boardViewBackground
+        (Ui.Lazy.lazy boardViewBackground cellSize2)
 
 
-boardViewBackground : List (Element GameMsg)
-boardViewBackground =
+boardViewBackground : Int -> Element GameMsg
+boardViewBackground cellSize2 =
     List.map
         (\y ->
             Ui.row
                 []
-                (List.map (\x -> cellView ( x, y )) (List.range 0 (gridSize - 1)))
+                (List.map (\x -> cellView cellSize2 ( x, y )) (List.range 0 (gridSize - 1)))
         )
         (List.range 0 (gridSize - 1))
+        |> Ui.column []
 
 
-cellSize : number
-cellSize =
-    30
+cellSize : Coord CssPixels -> Int
+cellSize windowSize =
+    if MyUi.isMobile { windowSize = windowSize } then
+        Coord.xRaw windowSize // gridSize
+
+    else
+        30
 
 
-cellView : ( Int, Int ) -> Element GameMsg
-cellView position =
+cellView : Int -> ( Int, Int ) -> Element GameMsg
+cellView cellSize2 position =
     let
         maybeBonus : Maybe BonusCells
         maybeBonus =
@@ -512,8 +523,8 @@ cellView position =
             Nothing ->
                 Ui.background (Ui.rgb 250 250 250)
          )
-            :: [ Ui.width (Ui.px cellSize)
-               , Ui.height (Ui.px cellSize)
+            :: [ Ui.width (Ui.px cellSize2)
+               , Ui.height (Ui.px cellSize2)
                , Ui.border 1
                , Ui.borderColor MyUi.inputBorder
                , Ui.contentCenterX
