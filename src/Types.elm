@@ -193,6 +193,7 @@ type Drag
 type DragTarget
     = Drag_Channel
     | Drag_CallThumbnail
+    | Drag_WordSpellingGameBoard
 
 
 type LoginStatus
@@ -241,7 +242,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
-    , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Game.Model
+    , currentDmGame : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)

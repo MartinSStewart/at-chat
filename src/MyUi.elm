@@ -51,6 +51,7 @@ module MyUi exposing
     , insetTop
     , isMobile
     , label
+    , matchSwitcherHeight
     , mentionColor
     , monthToInt
     , montserrat
@@ -1050,6 +1051,11 @@ channelAndGuildColumnWidth windowSize =
 channelHeaderHeight : number
 channelHeaderHeight =
     38
+
+
+matchSwitcherHeight : number
+matchSwitcherHeight =
+    60
 
 
 insetTop : String

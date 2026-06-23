@@ -87,6 +87,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import WordSpellingGame
 
 
 app :
@@ -441,7 +442,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
-            , currentDmGoMatch = SeqDict.empty
+            , currentDmGame = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
@@ -1194,7 +1195,7 @@ updateLoaded msg model =
                                                                         |> Maybe.withDefault DmChannel.frontendInit
                                                             in
                                                             ( { loggedIn
-                                                                | currentDmGoMatch =
+                                                                | currentDmGame =
                                                                     SeqDict.update
                                                                         ( otherUserId, maybeMatchId )
                                                                         (\maybeGameModel ->
@@ -1217,7 +1218,7 @@ updateLoaded msg model =
                                                                                 Nothing ->
                                                                                     maybeGameModel
                                                                         )
-                                                                        loggedIn.currentDmGoMatch
+                                                                        loggedIn.currentDmGame
                                                               }
                                                             , Command.none
                                                             )
@@ -1486,6 +1487,14 @@ updateLoaded msg model =
                                             Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
                                     }
 
+                                Drag_WordSpellingGameBoard ->
+                                    case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn model of
+                                        Just game ->
+                                            WordSpellingGame.dragging dragging.touches newTouches game
+
+                                        Nothing ->
+                                            loggedIn
+
                                 Drag_Channel ->
                                     case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
                                         ( Just _, _ ) ->
@@ -1592,6 +1601,14 @@ updateLoaded msg model =
 
                                             else
                                                 loggedIn
+
+                                        Drag_WordSpellingGameBoard ->
+                                            case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn model of
+                                                Just game ->
+                                                    WordSpellingGame.dragStart startTouches game
+
+                                                Nothing ->
+                                                    loggedIn
                                     , Command.none
                                     )
                                 )
@@ -1973,16 +1990,16 @@ updateLoaded msg model =
                                         gameMsg
                                         newMatchId
                                         maybeMatch
-                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
 
                                 loggedInWithModel : LoggedIn2
                                 loggedInWithModel =
                                     { loggedIn
-                                        | currentDmGoMatch =
+                                        | currentDmGame =
                                             SeqDict.update
                                                 ( otherUserId, maybeMatchId )
                                                 (\_ -> gameModel2)
-                                                loggedIn.currentDmGoMatch
+                                                loggedIn.currentDmGame
                                     }
 
                                 ( loggedIn2, localChangeCmd ) =
@@ -5748,10 +5765,29 @@ handleTouchEnd time model =
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-{-| Decide what a touch drag should manipulate based on where it started. If the
-call thumbnail is visible and the touch began on top of it, the drag moves the
-thumbnail; otherwise it falls back to dragging the channel sidebar.
--}
+getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGame.Model
+getWordSpellingGameModel local loggedIn model =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
+                    case SeqDict.get ( otherUserId, messageId ) loggedIn.currentDmGame of
+                        Just (Game.WordSpellingGameModel game) ->
+                            Just game
+
+                        Just (Game.GoModel _) ->
+                            Nothing
+
+                        Nothing ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
 dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
 dragTarget startTouches model =
     case model.loginStatus of
@@ -5770,11 +5806,23 @@ dragTarget startTouches model =
                         |> List.Nonempty.map .client
                         |> (\(Nonempty head rest) -> Point2d.centroid head rest)
                         |> Coord.roundPoint
+
+                insideBoard : Bool
+                insideBoard =
+                    case getWordSpellingGameModel local loggedIn model of
+                        Just game ->
+                            WordSpellingGame.insideBoard model.windowSize centroid game
+
+                        Nothing ->
+                            False
             in
             case Call.displayMode local.localUser.session.userId model.route local.calls of
                 Call.ShowLocalVideoAndCallThumbnail _ ->
                     if Call.insideThumbnail centroid model loggedIn.voiceChat then
                         Just Drag_CallThumbnail
+
+                    else if insideBoard then
+                        Just Drag_WordSpellingGameBoard
 
                     else if isMobile then
                         Just Drag_Channel
@@ -5783,7 +5831,10 @@ dragTarget startTouches model =
                         Nothing
 
                 _ ->
-                    if isMobile then
+                    if insideBoard then
+                        Just Drag_WordSpellingGameBoard
+
+                    else if isMobile then
                         Just Drag_Channel
 
                     else

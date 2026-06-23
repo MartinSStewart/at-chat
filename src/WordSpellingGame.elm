@@ -9,10 +9,13 @@ module WordSpellingGame exposing
     , Player
     , SetupModel
     , ValidatedSetup
+    , dragStart
+    , dragging
     , foldActions
     , gameView
     , initGame
     , initSetup
+    , insideBoard
     , setupView
     , update
     , validateSetup
@@ -35,11 +38,13 @@ import Id exposing (ChannelMessageId, Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -385,13 +390,69 @@ parseTimeControl setup =
                             Ok { mainTime = Duration.minutes minutes, increment = Duration.seconds increment }
 
 
+boardX : Coord CssPixels -> Int
+boardX windowSize =
+    MyUi.channelAndGuildColumnWidth windowSize
+
+
+boardY : number
+boardY =
+    MyUi.matchSwitcherHeight + MyUi.channelHeaderHeight
+
+
+trayX : Coord CssPixels -> Int
+trayX =
+    boardX
+
+
+trayY : Coord CssPixels -> Int
+trayY windowSize =
+    boardY + boardHeight windowSize
+
+
+boardWidth : Coord CssPixels -> Int
+boardWidth windowSize =
+    cellSize windowSize * gridSize
+
+
+boardHeight : Coord CssPixels -> Int
+boardHeight windowSize =
+    boardWidth windowSize + trayHeight
+
+
+insideBoard : Coord CssPixels -> Coord CssPixels -> Model -> Bool
+insideBoard windowSize coord model =
+    case model of
+        Game _ ->
+            let
+                x =
+                    boardX windowSize
+            in
+            (Coord.xRaw coord > x)
+                && (Coord.xRaw coord < (x + boardWidth windowSize))
+                && (Coord.yRaw coord > boardY)
+                && (Coord.yRaw coord < boardY + boardHeight windowSize)
+
+        Setup setupModel ->
+            False
+
+
+dragStart : NonemptyDict Int Touch -> Model -> Model
+dragStart touches model =
+    Debug.todo ""
+
+
+dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Model -> Model
+dragging oldTouches newTouches model =
+    Debug.todo ""
+
+
 gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
 gameView windowSize currentUserId validatedSetup gameState model =
     Ui.column
         [ Ui.spacing 16 ]
-        [ statusView currentUserId gameState
-        , boardView windowSize gameState model
-        , trayView currentUserId gameState
+        [ boardView windowSize currentUserId gameState model
+        , statusView currentUserId gameState
         ]
         |> Ui.map GameMsg
 
@@ -437,8 +498,13 @@ statusView currentUserId gameState =
         )
 
 
-boardView : Coord CssPixels -> GameState -> GameModel -> Element GameMsg
-boardView windowSize gameState model =
+trayHeight : number
+trayHeight =
+    40
+
+
+boardView : Coord CssPixels -> Id UserId -> GameState -> GameModel -> Element GameMsg
+boardView windowSize currentUserId gameState model =
     let
         cellSize2 =
             cellSize windowSize
@@ -452,6 +518,7 @@ boardView windowSize gameState model =
                         , Ui.width (Ui.px cellSize2)
                         , Ui.height (Ui.px cellSize2)
                         , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
+                        , MyUi.noPointerEvents
                         ]
                         (Ui.text
                             (if isWildcard then
@@ -465,6 +532,7 @@ boardView windowSize gameState model =
                     :: attributes
             )
             [ Ui.width Ui.shrink
+            , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight))
             , Ui.centerX
             , Ui.pointer
             , case model.selectedCell of
@@ -477,6 +545,15 @@ boardView windowSize gameState model =
                         , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
                         ]
                         Ui.none
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
+            , case List.Extra.find (\player -> player.userId == currentUserId) (List.Nonempty.toList gameState.players) of
+                Just player ->
+                    Ui.row
+                        [ Ui.spacing 4, Ui.move { x = 0, y = gridSize * cellSize2, z = 0 } ]
+                        (List.map tileView player.tray)
                         |> Ui.inFront
 
                 Nothing ->
@@ -496,7 +573,7 @@ boardViewBackground cellSize2 =
                 (List.map (\x -> cellView cellSize2 ( x, y )) (List.range 0 (gridSize - 1)))
         )
         (List.range 0 (gridSize - 1))
-        |> Ui.column []
+        |> Ui.column [ MyUi.noPointerEvents ]
 
 
 cellSize : Coord CssPixels -> Int
@@ -664,18 +741,6 @@ doubleLetterCells =
     , ( 3, 14 )
     , ( 11, 14 )
     ]
-
-
-trayView : Id UserId -> GameState -> Element GameMsg
-trayView currentUserId gameState =
-    case List.Extra.find (\player -> player.userId == currentUserId) (List.Nonempty.toList gameState.players) of
-        Just player ->
-            Ui.row
-                [ Ui.spacing 4 ]
-                (List.map tileView player.tray)
-
-        Nothing ->
-            Ui.none
 
 
 tileView : LetterOrWildcard -> Element GameMsg

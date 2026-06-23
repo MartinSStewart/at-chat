@@ -513,6 +513,9 @@ disableTextSelect isMobile model =
                     Drag_Channel ->
                         False
 
+                    Drag_WordSpellingGameBoard ->
+                        True
+
 
 canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
 canDropFiles currentUserId route =

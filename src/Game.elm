@@ -452,6 +452,7 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                     12
                 )
             , Ui.spacing 8
+            , Ui.height (Ui.px MyUi.matchSwitcherHeight)
             ]
             [ Ui.row
                 [ Ui.spacing 8
