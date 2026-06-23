@@ -106,7 +106,6 @@ import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (DmChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Sticker exposing (StickerData)
