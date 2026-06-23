@@ -106,6 +106,7 @@ import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (DmChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Sticker exposing (StickerData)
@@ -243,6 +244,7 @@ type alias LoggedIn2 =
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
+    , showInviteLinkQrCode : SeqSet (SecretId InviteLinkId)
     }
 
 
@@ -442,6 +444,7 @@ type FrontendMsg
     | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
+    | PressedToggleInviteLinkQrCode (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
     | PressedCopyImage String

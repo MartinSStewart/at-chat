@@ -60,6 +60,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
 import PersonName exposing (PersonName)
+import QRCode
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -1825,19 +1826,56 @@ guildSettingsForm model loggedIn local guildId guild =
                                 url : String
                                 url =
                                     Route.encode (GuildRoute guildId (JoinRoute inviteId))
-                            in
-                            Ui.row
-                                [ Ui.spacing 16 ]
-                                [ Ui.el [ Ui.widthMax 300 ] (copyableText (Env.domain ++ url) model)
-                                , if isOwner then
-                                    MyUi.deleteButton
-                                        (Dom.id ("guild_deleteInviteLink_" ++ SecretId.toString inviteId))
-                                        (PressedDeleteInviteLink guildId inviteId)
 
-                                  else
-                                    Ui.none
-                                , if Duration.from data.createdAt model.time |> Quantity.lessThan (Duration.minutes 5) then
-                                    Ui.text "Created just now!"
+                                inviteLink : String
+                                inviteLink =
+                                    Env.domain ++ url
+
+                                showQrCode : Bool
+                                showQrCode =
+                                    SeqSet.member inviteId loggedIn.showInviteLinkQrCode
+                            in
+                            Ui.column
+                                [ Ui.spacing 8 ]
+                                [ Ui.row
+                                    [ Ui.spacing 16 ]
+                                    [ Ui.el [ Ui.widthMax 300 ] (copyableText inviteLink model)
+                                    , MyUi.elButton
+                                        (Dom.id ("guild_inviteLinkQrCode_" ++ SecretId.toString inviteId))
+                                        (PressedToggleInviteLinkQrCode inviteId)
+                                        [ Ui.Font.color MyUi.font2
+                                        , Ui.rounded 4
+                                        , Ui.border 1
+                                        , Ui.borderColor MyUi.inputBorder
+                                        , Ui.paddingXY 6 0
+                                        , Ui.width Ui.shrink
+                                        , Ui.height Ui.fill
+                                        , Ui.contentCenterY
+                                        , Ui.Font.size 14
+                                        ]
+                                        (Ui.text
+                                            (if showQrCode then
+                                                "Hide QR code"
+
+                                             else
+                                                "Show QR code"
+                                            )
+                                        )
+                                    , if isOwner then
+                                        MyUi.deleteButton
+                                            (Dom.id ("guild_deleteInviteLink_" ++ SecretId.toString inviteId))
+                                            (PressedDeleteInviteLink guildId inviteId)
+
+                                      else
+                                        Ui.none
+                                    , if Duration.from data.createdAt model.time |> Quantity.lessThan (Duration.minutes 5) then
+                                        Ui.text "Created just now!"
+
+                                      else
+                                        Ui.none
+                                    ]
+                                , if showQrCode then
+                                    inviteLinkQrCodeView inviteLink
 
                                   else
                                     Ui.none
@@ -1953,6 +1991,26 @@ deleteGuildConfirmationInput guildId guildNameString form =
             , label = confirmLabel.id
             }
         ]
+
+
+inviteLinkQrCodeView : String -> Element msg
+inviteLinkQrCodeView inviteLink =
+    case QRCode.fromString inviteLink of
+        Ok qrCode ->
+            Ui.el
+                [ Ui.background MyUi.white
+                , Ui.padding 12
+                , Ui.rounded 8
+                , Ui.width Ui.shrink
+                ]
+                (QRCode.toSvgWithoutQuietZone
+                    [ MyUi.widthAttr 200, MyUi.heightAttr 200 ]
+                    qrCode
+                    |> Ui.html
+                )
+
+        Err _ ->
+            Ui.none
 
 
 copyableText : String -> LoadedFrontend -> Element FrontendMsg
