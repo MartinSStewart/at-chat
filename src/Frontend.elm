@@ -1490,7 +1490,11 @@ updateLoaded msg model =
                                 Drag_WordSpellingGameBoard ->
                                     case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn model of
                                         Just game ->
-                                            WordSpellingGame.dragging dragging.touches newTouches game
+                                            setWordSpellingGameModel
+                                                (Local.model loggedIn.localState)
+                                                model
+                                                (WordSpellingGame.dragging dragging.touches newTouches game)
+                                                loggedIn
 
                                         Nothing ->
                                             loggedIn
@@ -1603,11 +1607,30 @@ updateLoaded msg model =
                                                 loggedIn
 
                                         Drag_WordSpellingGameBoard ->
-                                            case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn model of
-                                                Just game ->
-                                                    WordSpellingGame.dragStart startTouches game
+                                            let
+                                                local2 : LocalState
+                                                local2 =
+                                                    Local.model loggedIn.localState
+                                            in
+                                            case
+                                                ( getWordSpellingGameModel local2 loggedIn model
+                                                , getWordSpellingGameState local2 model
+                                                )
+                                            of
+                                                ( Just game, Just ( _, gameState ) ) ->
+                                                    setWordSpellingGameModel
+                                                        local2
+                                                        model
+                                                        (WordSpellingGame.dragStart
+                                                            model.windowSize
+                                                            local2.localUser.session.userId
+                                                            startTouches
+                                                            gameState
+                                                            game
+                                                        )
+                                                        loggedIn
 
-                                                Nothing ->
+                                                _ ->
                                                     loggedIn
                                     , Command.none
                                     )
@@ -5704,61 +5727,63 @@ handleTouchEnd time model =
                         _ ->
                             loggedIn
             in
-            ( case loggedIn2.messageHover of
-                MessageMenu extraOptions ->
-                    case extraOptions.mobileMode of
-                        MessageMenuDragging dragging ->
-                            let
-                                delta : Duration
-                                delta =
-                                    Duration.from dragging.time time
+            ( finalizeWordSpellingDrag model
+                (case loggedIn2.messageHover of
+                    MessageMenu extraOptions ->
+                        case extraOptions.mobileMode of
+                            MessageMenuDragging dragging ->
+                                let
+                                    delta : Duration
+                                    delta =
+                                        Duration.from dragging.time time
 
-                                menuDelta : Quantity Float (Rate CssPixels Seconds)
-                                menuDelta =
-                                    dragging.offset
-                                        |> Quantity.minus dragging.previousOffset
-                                        |> Quantity.per delta
+                                    menuDelta : Quantity Float (Rate CssPixels Seconds)
+                                    menuDelta =
+                                        dragging.offset
+                                            |> Quantity.minus dragging.previousOffset
+                                            |> Quantity.per delta
 
-                                speedThreshold : Quantity Float (Rate CssPixels Seconds)
-                                speedThreshold =
-                                    Quantity.rate (CssPixels.cssPixels -100) Duration.second
+                                    speedThreshold : Quantity Float (Rate CssPixels Seconds)
+                                    speedThreshold =
+                                        Quantity.rate (CssPixels.cssPixels -100) Duration.second
 
-                                menuHeight : Quantity Float CssPixels
-                                menuHeight =
-                                    MessageMenu.mobileMenuMaxHeight
-                                        extraOptions
-                                        (Local.model loggedIn2.localState)
-                                        model
+                                    menuHeight : Quantity Float CssPixels
+                                    menuHeight =
+                                        MessageMenu.mobileMenuMaxHeight
+                                            extraOptions
+                                            (Local.model loggedIn2.localState)
+                                            model
 
-                                halfwayPoint : Quantity Float CssPixels
-                                halfwayPoint =
-                                    menuHeight |> Quantity.divideBy 2
-                            in
-                            if
-                                (dragging.offset |> Quantity.lessThan halfwayPoint)
-                                    || (menuDelta |> Quantity.lessThan speedThreshold)
-                            then
-                                MessageMenu.close model loggedIn2
+                                    halfwayPoint : Quantity Float CssPixels
+                                    halfwayPoint =
+                                        menuHeight |> Quantity.divideBy 2
+                                in
+                                if
+                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                        || (menuDelta |> Quantity.lessThan speedThreshold)
+                                then
+                                    MessageMenu.close model loggedIn2
 
-                            else
-                                { loggedIn2
-                                    | messageHover =
-                                        MessageMenu
-                                            { extraOptions
-                                                | mobileMode =
-                                                    MessageMenuFixed
-                                                        (Quantity.min menuHeight dragging.offset)
-                                            }
-                                }
+                                else
+                                    { loggedIn2
+                                        | messageHover =
+                                            MessageMenu
+                                                { extraOptions
+                                                    | mobileMode =
+                                                        MessageMenuFixed
+                                                            (Quantity.min menuHeight dragging.offset)
+                                                }
+                                    }
 
-                        _ ->
-                            loggedIn2
+                            _ ->
+                                loggedIn2
 
-                NoMessageHover ->
-                    loggedIn2
+                    NoMessageHover ->
+                        loggedIn2
 
-                MessageHover _ _ ->
-                    loggedIn2
+                    MessageHover _ _ ->
+                        loggedIn2
+                )
             , Process.sleep (Duration.milliseconds 30) |> Task.perform (\() -> OneFrameAfterDragEnd)
             )
         )
@@ -5780,6 +5805,70 @@ getWordSpellingGameModel local loggedIn model =
 
                         Nothing ->
                             Nothing
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
+setWordSpellingGameModel local model game loggedIn =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
+                    { loggedIn
+                        | currentDmGame =
+                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGameModel game) loggedIn.currentDmGame
+                    }
+
+                _ ->
+                    loggedIn
+
+        _ ->
+            loggedIn
+
+
+finalizeWordSpellingDrag : LoadedFrontend -> LoggedIn2 -> LoggedIn2
+finalizeWordSpellingDrag model loggedIn =
+    case model.drag of
+        Dragging { target } ->
+            case target of
+                Drag_WordSpellingGameBoard ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case ( getWordSpellingGameModel local loggedIn model, getWordSpellingGameState local model ) of
+                        ( Just game, Just ( _, gameState ) ) ->
+                            setWordSpellingGameModel
+                                local
+                                model
+                                (WordSpellingGame.dragEnd model.windowSize gameState game)
+                                loggedIn
+
+                        _ ->
+                            loggedIn
+
+                _ ->
+                    loggedIn
+
+        _ ->
+            loggedIn
+
+
+getWordSpellingGameState : LocalState -> LoadedFrontend -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState )
+getWordSpellingGameState local model =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                    SeqDict.get otherUserId local.dmChannels
+                        |> Maybe.andThen (\dmChannel -> SeqDict.get messageId dmChannel.games)
+                        |> Maybe.andThen Game.wordSpellingMatchData
 
                 _ ->
                     Nothing

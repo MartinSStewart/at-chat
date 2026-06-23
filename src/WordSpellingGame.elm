@@ -9,6 +9,7 @@ module WordSpellingGame exposing
     , Player
     , SetupModel
     , ValidatedSetup
+    , dragEnd
     , dragStart
     , dragging
     , foldActions
@@ -41,6 +42,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
+import Point2d
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -57,7 +59,26 @@ type Model
 
 
 type alias GameModel =
-    { tray : Array Int, selectedCell : Maybe ( Int, Int ) }
+    { selectedCell : Maybe ( Int, Int )
+    , placedTiles : SeqDict ( Int, Int ) PlacedTile
+    , dragging : Maybe DraggingTile
+    }
+
+
+{-| A tile the local player has dragged onto the board this turn but hasn't submitted yet.
+`trayIndex` is the slot in the player's tray it came from.
+-}
+type alias PlacedTile =
+    { trayIndex : Int
+    , letterOrWildcard : LetterOrWildcard
+    }
+
+
+type alias DraggingTile =
+    { trayIndex : Int
+    , letterOrWildcard : LetterOrWildcard
+    , position : Coord CssPixels
+    }
 
 
 type Msg
@@ -99,7 +120,7 @@ initSetup =
 
 initGame : GameModel
 initGame =
-    { tray = Array.empty, selectedCell = Nothing }
+    { selectedCell = Nothing, placedTiles = SeqDict.empty, dragging = Nothing }
 
 
 type OutMsg
@@ -251,8 +272,48 @@ foldActions setup actions =
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
 updateAction setup action state =
     case action.change of
-        PlaceWord ( x, y ) direction letter ->
-            Debug.todo ""
+        PlaceWord start direction letters ->
+            let
+                placement : Placement
+                placement =
+                    walkPlacement state.board start (directionDelta direction) (List.Nonempty.toList letters)
+
+                totalScore : Int
+                totalScore =
+                    placement.lettersScore * placement.wordMultiplier
+            in
+            { state
+                | board = placement.board
+                , players =
+                    NonemptyExtra.update
+                        state.turnCount
+                        (\player ->
+                            let
+                                remainingTray : List LetterOrWildcard
+                                remainingTray =
+                                    List.foldl removeFromTray player.tray (List.map Letter placement.placedLetters)
+
+                                drawn : List LetterOrWildcard
+                                drawn =
+                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                        Just drawCount ->
+                                            getLetters
+                                                drawCount
+                                                setup
+                                                placement.board
+                                                (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
+                                                    |> List.Nonempty.toList
+                                                )
+                                                state.turnCount
+
+                                        Nothing ->
+                                            []
+                            in
+                            { player | tray = remainingTray ++ drawn, score = player.score + totalScore }
+                        )
+                        state.players
+                , turnCount = state.turnCount + 1
+            }
 
         ReplaceTray ->
             { state
@@ -275,6 +336,107 @@ updateAction setup action state =
                         state.players
                 , turnCount = state.turnCount + 1
             }
+
+
+type alias Placement =
+    { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    , lettersScore : Int
+    , wordMultiplier : Int
+    , placedLetters : List Letter
+    }
+
+
+directionDelta : Direction -> ( Int, Int )
+directionDelta direction =
+    case direction of
+        Left ->
+            ( -1, 0 )
+
+        Right ->
+            ( 1, 0 )
+
+        Up ->
+            ( 0, -1 )
+
+        Down ->
+            ( 0, 1 )
+
+
+{-| Lay a word's new letters out along the direction starting from `start`, stepping over any
+tiles already on the board (which count toward the score but aren't placed again), and tallying
+the score using the bonus squares the new letters land on.
+-}
+walkPlacement : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ( Int, Int ) -> ( Int, Int ) -> List Letter -> Placement
+walkPlacement committedBoard start ( dx, dy ) letters =
+    let
+        go : ( Int, Int ) -> List Letter -> Placement -> Placement
+        go ( cx, cy ) remaining acc =
+            case remaining of
+                [] ->
+                    acc
+
+                letter :: rest ->
+                    if cx < 0 || cy < 0 || cx >= gridSize || cy >= gridSize then
+                        acc
+
+                    else
+                        case SeqDict.get ( cx, cy ) committedBoard of
+                            Just existing ->
+                                go ( cx + dx, cy + dy )
+                                    remaining
+                                    { acc | lettersScore = acc.lettersScore + (letterData existing.letter).score }
+
+                            Nothing ->
+                                go ( cx + dx, cy + dy )
+                                    rest
+                                    { board = SeqDict.insert ( cx, cy ) { letter = letter, isWildcard = False } acc.board
+                                    , lettersScore = acc.lettersScore + (letterData letter).score * letterScoreMultiplier ( cx, cy )
+                                    , wordMultiplier = acc.wordMultiplier * wordScoreMultiplier ( cx, cy )
+                                    , placedLetters = letter :: acc.placedLetters
+                                    }
+    in
+    go start letters { board = committedBoard, lettersScore = 0, wordMultiplier = 1, placedLetters = [] }
+
+
+letterScoreMultiplier : ( Int, Int ) -> Int
+letterScoreMultiplier position =
+    case SeqDict.get position bonusCells of
+        Just DoubleLetter ->
+            2
+
+        Just TripleLetter ->
+            3
+
+        _ ->
+            1
+
+
+wordScoreMultiplier : ( Int, Int ) -> Int
+wordScoreMultiplier position =
+    case SeqDict.get position bonusCells of
+        Just DoubleWord ->
+            2
+
+        Just TripleWord ->
+            3
+
+        Just CenterCell ->
+            2
+
+        _ ->
+            1
+
+
+{-| Remove one matching tile from the tray. If the exact letter isn't held a wildcard must have
+been used in its place, so remove a wildcard instead.
+-}
+removeFromTray : LetterOrWildcard -> List LetterOrWildcard -> List LetterOrWildcard
+removeFromTray letterOrWildcard tray =
+    if List.member letterOrWildcard tray then
+        List.Extra.remove letterOrWildcard tray
+
+    else
+        List.Extra.remove Wildcard tray
 
 
 update : Time.Posix -> Id UserId -> Msg -> Model -> ( Maybe Model, List OutMsg )
@@ -437,14 +599,186 @@ insideBoard windowSize coord model =
             False
 
 
-dragStart : NonemptyDict Int Touch -> Model -> Model
-dragStart touches model =
-    Debug.todo ""
+touchCentroid : NonemptyDict Int Touch -> Coord CssPixels
+touchCentroid touches =
+    NonemptyDict.values touches
+        |> List.Nonempty.map .client
+        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
+        |> Coord.roundPoint
+
+
+{-| Which board cell (if any) a screen position is over.
+-}
+cellAtPosition : Coord CssPixels -> Coord CssPixels -> Maybe ( Int, Int )
+cellAtPosition windowSize coord =
+    let
+        size : Int
+        size =
+            cellSize windowSize
+
+        relX : Int
+        relX =
+            Coord.xRaw coord - boardX windowSize
+
+        relY : Int
+        relY =
+            Coord.yRaw coord - boardY
+    in
+    if relX >= 0 && relY >= 0 && (relX // size) < gridSize && (relY // size) < gridSize then
+        Just ( relX // size, relY // size )
+
+    else
+        Nothing
+
+
+{-| Which tray slot (if any) a screen position is over.
+-}
+trayIndexAtPosition : Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
+trayIndexAtPosition windowSize coord trayLength =
+    let
+        size : Int
+        size =
+            cellSize windowSize
+
+        relX : Int
+        relX =
+            Coord.xRaw coord - trayX windowSize
+
+        relY : Int
+        relY =
+            Coord.yRaw coord - (boardY + boardWidth windowSize)
+    in
+    if relX >= 0 && relY >= 0 && relY < trayHeight && (relX // size) < trayLength then
+        Just (relX // size)
+
+    else
+        Nothing
+
+
+currentPlayerTray : Id UserId -> GameState -> List LetterOrWildcard
+currentPlayerTray userId gameState =
+    List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
+        |> Maybe.map .tray
+        |> Maybe.withDefault []
+
+
+{-| A tray slot is in use if its tile is currently on the board or being dragged.
+-}
+trayIndexInUse : GameModel -> Int -> Bool
+trayIndexInUse gameModel index =
+    List.any (\placed -> placed.trayIndex == index) (SeqDict.values gameModel.placedTiles)
+        || ((gameModel.dragging |> Maybe.map .trayIndex) == Just index)
+
+
+dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> GameState -> Model -> Model
+dragStart windowSize currentUserId touches gameState model =
+    case model of
+        Game gameModel ->
+            let
+                position : Coord CssPixels
+                position =
+                    touchCentroid touches
+            in
+            case cellAtPosition windowSize position of
+                Just cell ->
+                    -- Pick a tile we placed this turn back up off the board.
+                    case SeqDict.get cell gameModel.placedTiles of
+                        Just placed ->
+                            Game
+                                { gameModel
+                                    | dragging =
+                                        Just
+                                            { trayIndex = placed.trayIndex
+                                            , letterOrWildcard = placed.letterOrWildcard
+                                            , position = position
+                                            }
+                                    , placedTiles = SeqDict.remove cell gameModel.placedTiles
+                                }
+
+                        Nothing ->
+                            model
+
+                Nothing ->
+                    let
+                        tray : List LetterOrWildcard
+                        tray =
+                            currentPlayerTray currentUserId gameState
+                    in
+                    case trayIndexAtPosition windowSize position (List.length tray) of
+                        Just index ->
+                            case ( trayIndexInUse gameModel index, List.Extra.getAt index tray ) of
+                                ( False, Just letterOrWildcard ) ->
+                                    Game
+                                        { gameModel
+                                            | dragging =
+                                                Just
+                                                    { trayIndex = index
+                                                    , letterOrWildcard = letterOrWildcard
+                                                    , position = position
+                                                    }
+                                        }
+
+                                _ ->
+                                    model
+
+                        Nothing ->
+                            model
+
+        Setup _ ->
+            model
 
 
 dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Model -> Model
 dragging oldTouches newTouches model =
-    Debug.todo ""
+    case model of
+        Game gameModel ->
+            case gameModel.dragging of
+                Just dragTile ->
+                    Game { gameModel | dragging = Just { dragTile | position = touchCentroid newTouches } }
+
+                Nothing ->
+                    model
+
+        Setup _ ->
+            model
+
+
+dragEnd : Coord CssPixels -> GameState -> Model -> Model
+dragEnd windowSize gameState model =
+    case model of
+        Game gameModel ->
+            case gameModel.dragging of
+                Just dragTile ->
+                    let
+                        droppedModel : GameModel
+                        droppedModel =
+                            { gameModel | dragging = Nothing }
+                    in
+                    case cellAtPosition windowSize dragTile.position of
+                        Just cell ->
+                            if SeqDict.member cell gameState.board || SeqDict.member cell droppedModel.placedTiles then
+                                -- Occupied: the tile goes back to the tray.
+                                Game droppedModel
+
+                            else
+                                Game
+                                    { droppedModel
+                                        | placedTiles =
+                                            SeqDict.insert
+                                                cell
+                                                { trayIndex = dragTile.trayIndex, letterOrWildcard = dragTile.letterOrWildcard }
+                                                droppedModel.placedTiles
+                                    }
+
+                        Nothing ->
+                            -- Dropped off the board: returns to the tray.
+                            Game droppedModel
+
+                Nothing ->
+                    model
+
+        Setup _ ->
+            model
 
 
 gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
@@ -506,62 +840,152 @@ trayHeight =
 boardView : Coord CssPixels -> Id UserId -> GameState -> GameModel -> Element GameMsg
 boardView windowSize currentUserId gameState model =
     let
+        cellSize2 : Int
         cellSize2 =
             cellSize windowSize
+
+        committedTiles : List (Ui.Attribute GameMsg)
+        committedTiles =
+            List.map
+                (\( ( x, y ), { letter, isWildcard } ) ->
+                    tileInFront cellSize2
+                        { x = x * cellSize2, y = y * cellSize2 }
+                        []
+                        (if isWildcard then
+                            Wildcard
+
+                         else
+                            Letter letter
+                        )
+                )
+                (SeqDict.toList gameState.board)
+
+        pendingTiles : List (Ui.Attribute GameMsg)
+        pendingTiles =
+            List.map
+                (\( ( x, y ), placed ) ->
+                    tileInFront cellSize2
+                        { x = x * cellSize2, y = y * cellSize2 }
+                        [ Ui.border 2, Ui.borderColor (Ui.rgb 0 150 0) ]
+                        placed.letterOrWildcard
+                )
+                (SeqDict.toList model.placedTiles)
+
+        trayTiles : List (Ui.Attribute GameMsg)
+        trayTiles =
+            currentPlayerTray currentUserId gameState
+                |> List.indexedMap
+                    (\index letterOrWildcard ->
+                        if trayIndexInUse model index then
+                            Ui.noAttr
+
+                        else
+                            tileInFront cellSize2
+                                { x = index * cellSize2, y = gridSize * cellSize2 }
+                                []
+                                letterOrWildcard
+                    )
+
+        dragHighlight : Ui.Attribute GameMsg
+        dragHighlight =
+            case model.dragging of
+                Just dragTile ->
+                    case cellAtPosition windowSize dragTile.position of
+                        Just ( x, y ) ->
+                            if SeqDict.member ( x, y ) gameState.board || SeqDict.member ( x, y ) model.placedTiles then
+                                Ui.noAttr
+
+                            else
+                                Ui.inFront
+                                    (Ui.el
+                                        [ Ui.borderColor (Ui.rgb 0 200 255)
+                                        , Ui.border 3
+                                        , Ui.width (Ui.px cellSize2)
+                                        , Ui.height (Ui.px cellSize2)
+                                        , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
+                                        , MyUi.noPointerEvents
+                                        ]
+                                        Ui.none
+                                    )
+
+                        Nothing ->
+                            Ui.noAttr
+
+                Nothing ->
+                    Ui.noAttr
+
+        draggingTile : Ui.Attribute GameMsg
+        draggingTile =
+            case model.dragging of
+                Just dragTile ->
+                    tileInFront cellSize2
+                        { x = Coord.xRaw dragTile.position - boardX windowSize - cellSize2 // 2
+                        , y = Coord.yRaw dragTile.position - boardY - cellSize2 // 2
+                        }
+                        []
+                        dragTile.letterOrWildcard
+
+                Nothing ->
+                    Ui.noAttr
+
+        selectedHighlight : Ui.Attribute GameMsg
+        selectedHighlight =
+            case model.selectedCell of
+                Just ( x, y ) ->
+                    Ui.inFront
+                        (Ui.el
+                            [ Ui.borderColor (Ui.rgb 0 200 255)
+                            , Ui.border 4
+                            , Ui.width (Ui.px cellSize2)
+                            , Ui.height (Ui.px cellSize2)
+                            , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
+                            , MyUi.noPointerEvents
+                            ]
+                            Ui.none
+                        )
+
+                Nothing ->
+                    Ui.noAttr
     in
     Ui.el
-        (SeqDict.foldl
-            (\( x, y ) { letter, isWildcard } attributes ->
-                Ui.inFront
-                    (Ui.el
-                        [ Ui.background (Ui.rgb 240 220 130)
-                        , Ui.width (Ui.px cellSize2)
-                        , Ui.height (Ui.px cellSize2)
-                        , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
-                        , MyUi.noPointerEvents
-                        ]
-                        (Ui.text
-                            (if isWildcard then
-                                " "
-
-                             else
-                                (letterData letter).text
-                            )
-                        )
-                    )
-                    :: attributes
-            )
-            [ Ui.width Ui.shrink
-            , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight))
-            , Ui.centerX
-            , Ui.pointer
-            , case model.selectedCell of
-                Just ( x, y ) ->
-                    Ui.el
-                        [ Ui.borderColor (Ui.rgb 0 200 255)
-                        , Ui.border 4
-                        , Ui.width (Ui.px cellSize2)
-                        , Ui.height (Ui.px cellSize2)
-                        , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
-                        ]
-                        Ui.none
-                        |> Ui.inFront
-
-                Nothing ->
-                    Ui.noAttr
-            , case List.Extra.find (\player -> player.userId == currentUserId) (List.Nonempty.toList gameState.players) of
-                Just player ->
-                    Ui.row
-                        [ Ui.spacing 4, Ui.move { x = 0, y = gridSize * cellSize2, z = 0 } ]
-                        (List.map tileView player.tray)
-                        |> Ui.inFront
-
-                Nothing ->
-                    Ui.noAttr
-            ]
-            gameState.board
+        ([ Ui.width Ui.shrink
+         , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight))
+         , Ui.pointer
+         ]
+            ++ (committedTiles ++ pendingTiles ++ trayTiles)
+            ++ [ selectedHighlight, dragHighlight, draggingTile ]
         )
         (Ui.Lazy.lazy boardViewBackground cellSize2)
+
+
+tileInFront : Int -> { x : Int, y : Int } -> List (Ui.Attribute GameMsg) -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront cellSize2 offset extraAttributes letterOrWildcard =
+    Ui.inFront
+        (Ui.el
+            ([ Ui.background (Ui.rgb 240 220 130)
+             , Ui.width (Ui.px cellSize2)
+             , Ui.height (Ui.px cellSize2)
+             , Ui.contentCenterX
+             , Ui.contentCenterY
+             , Ui.Font.size 16
+             , Ui.Font.weight 600
+             , Ui.move { x = offset.x, y = offset.y, z = 0 }
+             , MyUi.noPointerEvents
+             ]
+                ++ extraAttributes
+            )
+            (Ui.text (letterOrWildcardText letterOrWildcard))
+        )
+
+
+letterOrWildcardText : LetterOrWildcard -> String
+letterOrWildcardText letterOrWildcard =
+    case letterOrWildcard of
+        Letter letter ->
+            (letterData letter).text
+
+        Wildcard ->
+            " "
 
 
 boardViewBackground : Int -> Element GameMsg
@@ -741,30 +1165,6 @@ doubleLetterCells =
     , ( 3, 14 )
     , ( 11, 14 )
     ]
-
-
-tileView : LetterOrWildcard -> Element GameMsg
-tileView letterOrWildcard =
-    Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.height (Ui.px 32)
-        , Ui.border 1
-        , Ui.borderColor MyUi.inputBorder
-        , Ui.background (Ui.rgb 240 220 130)
-        , Ui.contentCenterX
-        , Ui.contentCenterY
-        , Ui.Font.size 18
-        , Ui.Font.weight 600
-        ]
-        (Ui.text
-            (case letterOrWildcard of
-                Letter letter ->
-                    (letterData letter).text
-
-                Wildcard ->
-                    " "
-            )
-        )
 
 
 setupView : Coord CssPixels -> SetupModel -> Element Msg

@@ -13,6 +13,7 @@ module Game exposing
     , initMatchData
     , update
     , view
+    , wordSpellingMatchData
     )
 
 import Array exposing (Array)
@@ -101,6 +102,18 @@ goMatchData (MatchData match) =
             Just ( setup, state )
 
         FrontendGameData_WordSpellingGame _ _ _ ->
+            Nothing
+
+
+{-| Extract the word spelling setup and current game state from a match, if it is one.
+-}
+wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState )
+wordSpellingMatchData (MatchData match) =
+    case match.data of
+        FrontendGameData_WordSpellingGame setup _ state ->
+            Just ( setup, state )
+
+        FrontendGameData_Go _ _ _ ->
             Nothing
 
 
