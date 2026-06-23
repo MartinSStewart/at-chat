@@ -1685,6 +1685,9 @@ isPressMsg msg =
         PressedDeleteInviteLink _ _ ->
             True
 
+        PressedToggleInviteLinkQrCode _ ->
+            True
+
         FrontendNoOp ->
             False
 

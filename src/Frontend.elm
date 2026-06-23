@@ -443,6 +443,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
+            , showInviteLinkQrCode = Nothing
             }
     in
     ( loggedIn
@@ -1042,6 +1043,22 @@ updateLoaded msg model =
                         (Local_DeleteInviteLink guildId inviteLinkId |> Just)
                         loggedIn
                         Command.none
+                )
+                model
+
+        PressedToggleInviteLinkQrCode inviteLinkId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | showInviteLinkQrCode =
+                            if Just inviteLinkId == loggedIn.showInviteLinkQrCode then
+                                Nothing
+
+                            else
+                                Just inviteLinkId
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
