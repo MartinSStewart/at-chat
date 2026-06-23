@@ -1465,7 +1465,7 @@ publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
 
-setupView : Bool -> Coord CssPixels -> SetupModel -> Element SetupMsg
+setupView : Bool -> Coord CssPixels -> SetupModel -> Element Msg
 setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
@@ -1557,6 +1557,7 @@ setupView playingAgainstSelf windowSize model =
                 Ui.none
         , MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
         ]
+        |> Ui.map SetupMsg
 
 
 sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg

@@ -1,4 +1,4 @@
-module SeqDictHelper exposing (addToDict, addToList, addToSet, increment, updateOrInsert)
+module SeqDictHelper exposing (addToDict, addToList, addToSet, decrement, increment, updateOrInsert)
 
 import List.Nonempty exposing (Nonempty)
 import NonemptyDict exposing (NonemptyDict)
@@ -23,6 +23,21 @@ increment key dict =
 
                 Nothing ->
                     Just OneOrGreater.one
+        )
+        dict
+
+
+decrement : a -> SeqDict a OneOrGreater -> SeqDict a OneOrGreater
+decrement key dict =
+    SeqDict.update
+        key
+        (\maybe ->
+            case maybe of
+                Just value ->
+                    OneOrGreater.decrement value
+
+                Nothing ->
+                    Nothing
         )
         dict
 

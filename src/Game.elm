@@ -223,7 +223,9 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
         WordSpellingGameMsg wordSpellingGameMsg ->
             let
                 ( wsModel, outMsgs ) =
-                    WordSpellingGame.update time
+                    WordSpellingGame.update
+                        time
+                        currentUserId
                         wordSpellingGameMsg
                         (case model of
                             Just (WordSpellingGameModel wsModel2) ->
@@ -323,11 +325,12 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                         )
                                         |> Ui.map GoMsg
 
-                                FrontendGameData_WordSpellingGame _ _ _ ->
-                                    Ui.text "Unsupported game"
+                                FrontendGameData_WordSpellingGame setup _ cache ->
+                                    WordSpellingGame.gameView localUser.session.userId setup cache
+                                        |> Ui.map WordSpellingGameMsg
 
                         Nothing ->
-                            Ui.text "Match not found"
+                            Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
 
                 Nothing ->
                     case model of
@@ -342,7 +345,6 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                     _ ->
                                         Go.initSetup
                                 )
-                                |> Ui.map Go.SetupMsg
                                 |> Ui.map GoMsg
 
                         Just (WordSpellingGameModel model2) ->

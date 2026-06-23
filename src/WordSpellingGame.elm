@@ -10,6 +10,7 @@ module WordSpellingGame exposing
     , SetupModel
     , ValidatedSetup
     , foldActions
+    , gameView
     , initSetup
     , setupView
     , update
@@ -30,9 +31,14 @@ import Html
 import Html.Attributes
 import Html.Events
 import Id exposing (ChannelMessageId, Id, UserId)
+import List.Extra
+import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
+import Random
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import Ui exposing (Element)
 import Ui.Font
 
@@ -61,6 +67,8 @@ type alias SetupModel =
 type alias ValidatedSetup =
     { timeControls : TimeControl
     , traySize : OneOrGreater
+    , createdBy : Id UserId
+    , seed : Int
     }
 
 
@@ -93,7 +101,8 @@ type alias ActionWithTime =
 
 type alias GameState =
     { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
-    , players : List Player
+    , players : Nonempty Player
+    , turnCount : Int
     }
 
 
@@ -123,9 +132,94 @@ type LetterOrWildcard
 
 initGameState : ValidatedSetup -> GameState
 initGameState setup =
-    { board = SeqDict.empty
-    , players = []
+    let
+        initialBoard : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+        initialBoard =
+            SeqDict.empty
+    in
+    { board = initialBoard
+    , players =
+        Nonempty
+            { userId = setup.createdBy
+            , tray = getLetters setup.traySize setup initialBoard [] 0
+            , score = 0
+            }
+            []
+    , turnCount = 0
     }
+
+
+getLetters :
+    OneOrGreater
+    -> ValidatedSetup
+    -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    -> List Player
+    -> Int
+    -> List LetterOrWildcard
+getLetters count setup board players turnCount =
+    let
+        startingLetters : SeqDict LetterOrWildcard OneOrGreater
+        startingLetters =
+            ( Wildcard, OneOrGreater.two )
+                :: List.map (\letter -> ( Letter letter, (letterData letter).total )) allLetters
+                |> SeqDict.fromList
+
+        remainingLetters : SeqDict LetterOrWildcard OneOrGreater
+        remainingLetters =
+            SeqDict.foldl
+                (\_ { letter, isWildcard } startingLetters2 ->
+                    SeqDictHelper.decrement
+                        (if isWildcard then
+                            Wildcard
+
+                         else
+                            Letter letter
+                        )
+                        startingLetters2
+                )
+                startingLetters
+                board
+
+        remainingLetters3 : SeqDict LetterOrWildcard OneOrGreater
+        remainingLetters3 =
+            List.foldl
+                (\player remainingLetters2 -> List.foldl SeqDictHelper.decrement remainingLetters2 player.tray)
+                remainingLetters
+                players
+    in
+    Random.step
+        (SeqDict.foldl
+            (\letter count2 list -> List.repeat (OneOrGreater.toInt count2) letter ++ list)
+            []
+            remainingLetters3
+            |> shuffle
+        )
+        (Random.initialSeed (setup.seed + turnCount))
+        |> Tuple.first
+        |> List.take (OneOrGreater.toInt count)
+
+
+{-| Shuffle the list. Takes O(_n_ log _n_) time and no extra space. Original code found here <https://github.com/elm-community/random-extra/blob/d52055975644ad401709c2aff14dab9ca93e44a0/src/Random/List.elm#L88>
+-}
+shuffle : List a -> Random.Generator (List a)
+shuffle list =
+    Random.map
+        (\independentSeed ->
+            list
+                |> List.foldl
+                    (\item ( acc, seed ) ->
+                        let
+                            ( tag, nextSeed ) =
+                                Random.step (Random.int Random.minInt Random.maxInt) seed
+                        in
+                        ( ( item, tag ) :: acc, nextSeed )
+                    )
+                    ( [], independentSeed )
+                |> Tuple.first
+                |> List.sortBy Tuple.second
+                |> List.map Tuple.first
+        )
+        Random.independentSeed
 
 
 foldActions : ValidatedSetup -> Array ActionWithTime -> GameState
@@ -134,12 +228,36 @@ foldActions setup actions =
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
-updateAction setup action model =
-    Debug.todo ""
+updateAction setup action state =
+    case action.change of
+        PlaceWord ( x, y ) direction letter ->
+            Debug.todo ""
+
+        ReplaceTray ->
+            { state
+                | players =
+                    NonemptyExtra.update
+                        state.turnCount
+                        (\player ->
+                            { player
+                                | tray =
+                                    getLetters
+                                        setup.traySize
+                                        setup
+                                        state.board
+                                        (NonemptyExtra.set state.turnCount { player | tray = [] } state.players
+                                            |> List.Nonempty.toList
+                                        )
+                                        state.turnCount
+                            }
+                        )
+                        state.players
+                , turnCount = state.turnCount + 1
+            }
 
 
-update : Time.Posix -> Msg -> Maybe Model -> ( Maybe Model, List OutMsg )
-update time msg model =
+update : Time.Posix -> Id UserId -> Msg -> Maybe Model -> ( Maybe Model, List OutMsg )
+update time currentUserId msg model =
     case msg of
         ChangedMainTimeInput input ->
             ( Maybe.map (mapSetup (\setup -> { setup | mainTimeInput = input, error = Nothing })) model, [] )
@@ -164,7 +282,7 @@ update time msg model =
         PressedStartGame ->
             case model of
                 Just (Setup setup) ->
-                    case validateSetup setup of
+                    case validateSetup currentUserId time setup of
                         Ok validated ->
                             ( Just (Game { tray = Array.empty }), [ OutLocalChange (StartMatch time validated) ] )
 
@@ -188,8 +306,8 @@ mapSetup function model =
             model
 
 
-validateSetup : SetupModel -> Result String ValidatedSetup
-validateSetup setup =
+validateSetup : Id UserId -> Time.Posix -> SetupModel -> Result String ValidatedSetup
+validateSetup createdBy time setup =
     case parseTimeControl setup of
         Err error ->
             Err error
@@ -197,7 +315,14 @@ validateSetup setup =
         Ok timeControls ->
             case OneOrGreater.fromInt setup.traySize of
                 Just traySize ->
-                    Ok { timeControls = timeControls, traySize = traySize }
+                    Ok
+                        { createdBy = createdBy
+                        , timeControls = timeControls
+                        , traySize = traySize
+                        , seed =
+                            -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
+                            Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
+                        }
 
                 Nothing ->
                     Err "Tray size must be at least 1"
@@ -224,6 +349,28 @@ parseTimeControl setup =
 
                         else
                             Ok { mainTime = Duration.minutes minutes, increment = Duration.seconds increment }
+
+
+gameView : Id UserId -> ValidatedSetup -> GameState -> Element Msg
+gameView currentUserId validatedSetup gameState =
+    Ui.column
+        []
+        [ statusView gameState
+        , boardView gameState
+        , trayView currentUserId gameState
+        ]
+
+
+statusView gameState =
+    Debug.todo ""
+
+
+boardView gameState =
+    Debug.todo ""
+
+
+trayView currentUserId gameState =
+    Debug.todo ""
 
 
 setupView : Coord CssPixels -> SetupModel -> Element Msg
@@ -339,11 +486,21 @@ allLetters =
     [ A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z ]
 
 
-letterScore : Letter -> Int
-letterScore letter =
+type alias LetterData =
+    { score : Int
+    , text : String
+    , total : OneOrGreater
+    }
+
+
+letterData : Letter -> LetterData
+letterData letter =
     case letter of
         A ->
-            1
+            { score = 1
+            , text = "A"
+            , total = OneOrGreater.nine
+            }
 
         B ->
             3
