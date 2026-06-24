@@ -34,7 +34,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
 import Thread
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
+import Types exposing (Drag(..), FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Anim
@@ -578,6 +578,16 @@ tabBodyView local loggedIn model =
                             Game.view
                                 model.time
                                 model.windowSize
+                                (case model.drag of
+                                    NoDrag ->
+                                        Nothing
+
+                                    DragStart _ dragging ->
+                                        Just dragging
+
+                                    Dragging dragging ->
+                                        Just dragging.touches
+                                )
                                 model.lastCopied
                                 local.localUser
                                 otherUserId

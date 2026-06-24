@@ -29,9 +29,11 @@ import Html.Events
 import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
 import Message exposing (Game(..))
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
@@ -42,7 +44,7 @@ import WordSpellingGame
 
 type Model
     = GoModel Go.Model
-    | WordSpellingGameModel WordSpellingGame.Model
+    | WordSpellingGameModel WordSpellingGame.NotShared
 
 
 type BackendGameData
@@ -52,7 +54,7 @@ type BackendGameData
 
 type FrontendGameData
     = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.GameState
-    | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.GameState
+    | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
 
 
 type Msg
@@ -107,7 +109,7 @@ goMatchData (MatchData match) =
 
 {-| Extract the word spelling setup and current game state from a match, if it is one.
 -}
-wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState )
+wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared )
 wordSpellingMatchData (MatchData match) =
     case match.data of
         FrontendGameData_WordSpellingGame setup _ state ->
@@ -235,7 +237,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         WordSpellingGameMsg wordSpellingGameMsg ->
             let
-                ( wsModel, outMsgs ) =
+                ( notSharedModel, outMsgs ) =
                     WordSpellingGame.update
                         time
                         currentUserId
@@ -257,7 +259,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         Nothing ->
                             newMatchId
             in
-            ( Maybe.map WordSpellingGameModel wsModel
+            ( Maybe.map WordSpellingGameModel notSharedModel
             , List.concatMap
                 (\outMsg ->
                     case outMsg of
@@ -293,6 +295,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 view :
     Time.Posix
     -> Coord CssPixels
+    -> Maybe (NonemptyDict Int Touch)
     -> Maybe MyUi.LastCopy
     -> LocalUser
     -> Id UserId
@@ -300,7 +303,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
+view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -341,6 +344,7 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                 FrontendGameData_WordSpellingGame setup _ cache ->
                                     WordSpellingGame.gameView
                                         windowSize
+                                        maybeDragging
                                         localUser.session.userId
                                         setup
                                         cache
@@ -349,7 +353,7 @@ view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matche
                                                 game
 
                                             _ ->
-                                                WordSpellingGame.initGame
+                                                WordSpellingGame.initGame setup
                                         )
                                         |> Ui.map WordSpellingGameMsg
 

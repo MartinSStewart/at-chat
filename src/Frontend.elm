@@ -5789,7 +5789,7 @@ getWordSpellingGameModel :
     LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState, WordSpellingGame.GameModel )
+    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameNotShared )
 getWordSpellingGameModel local loggedIn model =
     case model.route of
         DmRoute dmRoute ->
@@ -5808,7 +5808,7 @@ getWordSpellingGameModel local loggedIn model =
                                                     gameModel
 
                                                 _ ->
-                                                    WordSpellingGame.initGame
+                                                    WordSpellingGame.initGame setup
                                             )
                                                 |> Just
 
@@ -5828,7 +5828,7 @@ getWordSpellingGameModel local loggedIn model =
             Nothing
 
 
-setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
+setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.NotShared -> LoggedIn2 -> LoggedIn2
 setWordSpellingGameModel local model game loggedIn =
     case model.route of
         DmRoute dmRoute ->
@@ -5849,8 +5849,8 @@ setWordSpellingGameModel local model game loggedIn =
 finalizeWordSpellingDrag : LoadedFrontend -> LoggedIn2 -> LoggedIn2
 finalizeWordSpellingDrag model loggedIn =
     case model.drag of
-        Dragging { target } ->
-            case target of
+        Dragging dragging ->
+            case dragging.target of
                 Drag_WordSpellingGameBoard ->
                     let
                         local : LocalState
@@ -5862,7 +5862,7 @@ finalizeWordSpellingDrag model loggedIn =
                             setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd model.windowSize game)
+                                (WordSpellingGame.dragEnd model.windowSize dragging.touches game)
                                 loggedIn
 
                         Nothing ->
