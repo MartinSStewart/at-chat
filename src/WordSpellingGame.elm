@@ -865,6 +865,11 @@ gameView windowSize maybeDragging currentUserId validatedSetup shared model =
         [ Ui.spacing 16 ]
         [ boardView windowSize maybeDragging currentUserId shared model
         , statusView currentUserId shared
+        , if List.Nonempty.any (\player -> player.userId == currentUserId) shared.players then
+            MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+
+          else
+            Ui.none
         , if List.Nonempty.all (\player -> player.userId == currentUserId) shared.players then
             Ui.none
 
