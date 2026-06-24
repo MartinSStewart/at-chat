@@ -1989,17 +1989,6 @@ updateLoaded msg model =
                                 newMatchId =
                                     DmChannel.latestMessageId dmChannel |> Id.increment
 
-                                maybeMatch : Maybe ( Id Id.ChannelMessageId, Go.ValidatedSetup, Go.GameState )
-                                maybeMatch =
-                                    case maybeMatchId of
-                                        Just matchId ->
-                                            SeqDict.get matchId dmChannel.games
-                                                |> Maybe.andThen Game.goMatchData
-                                                |> Maybe.map (\( setup, state ) -> ( matchId, setup, state ))
-
-                                        Nothing ->
-                                            Nothing
-
                                 ( gameModel2, outMsgs ) =
                                     Game.update
                                         model.time
@@ -2007,7 +1996,18 @@ updateLoaded msg model =
                                         otherUserId
                                         gameMsg
                                         newMatchId
-                                        maybeMatch
+                                        (case maybeMatchId of
+                                            Just matchId ->
+                                                case SeqDict.get matchId dmChannel.games of
+                                                    Just matchData ->
+                                                        Just ( matchId, matchData )
+
+                                                    Nothing ->
+                                                        Nothing
+
+                                            Nothing ->
+                                                Nothing
+                                        )
                                         (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
 
                                 loggedInWithModel : LoggedIn2
@@ -5789,7 +5789,7 @@ getWordSpellingGameModel :
     LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameNotShared )
+    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameData )
 getWordSpellingGameModel local loggedIn model =
     case model.route of
         DmRoute dmRoute ->
@@ -5828,7 +5828,7 @@ getWordSpellingGameModel local loggedIn model =
             Nothing
 
 
-setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.NotShared -> LoggedIn2 -> LoggedIn2
+setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
 setWordSpellingGameModel local model game loggedIn =
     case model.route of
         DmRoute dmRoute ->

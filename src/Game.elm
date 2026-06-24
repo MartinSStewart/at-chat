@@ -44,7 +44,7 @@ import WordSpellingGame
 
 type Model
     = GoModel Go.Model
-    | WordSpellingGameModel WordSpellingGame.NotShared
+    | WordSpellingGameModel WordSpellingGame.Model
 
 
 type BackendGameData
@@ -178,7 +178,7 @@ update :
     -> Id UserId
     -> Msg
     -> Id ChannelMessageId
-    -> Maybe ( Id ChannelMessageId, Go.ValidatedSetup, Go.GameState )
+    -> Maybe ( Id ChannelMessageId, MatchData )
     -> Maybe Model
     -> ( Maybe Model, List OutMsg )
 update time currentUserId otherUserId msg newMatchId maybeMatch model =
@@ -192,11 +192,23 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
         GoMsg goMsg ->
             let
                 ( goModel, outMsgs ) =
-                    Go.update time
+                    Go.update
+                        time
                         currentUserId
                         otherUserId
                         goMsg
-                        maybeMatch
+                        (case maybeMatch of
+                            Just ( messageId, MatchData matchData ) ->
+                                case matchData.data of
+                                    FrontendGameData_Go setup _ gameState ->
+                                        Just ( messageId, setup, gameState )
+
+                                    _ ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                        )
                         (case model of
                             Just (GoModel goModel2) ->
                                 Just goModel2
@@ -208,7 +220,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                 matchId : Id ChannelMessageId
                 matchId =
                     case maybeMatch of
-                        Just ( id, _, _ ) ->
+                        Just ( id, _ ) ->
                             id
 
                         Nothing ->
@@ -241,6 +253,18 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                     WordSpellingGame.update
                         time
                         currentUserId
+                        (case maybeMatch of
+                            Just ( messageId, MatchData matchData ) ->
+                                case matchData.data of
+                                    FrontendGameData_WordSpellingGame setup _ gameState ->
+                                        Just ( messageId, setup, gameState )
+
+                                    _ ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                        )
                         wordSpellingGameMsg
                         (case model of
                             Just (WordSpellingGameModel gameModel) ->
@@ -253,7 +277,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                 matchId : Id ChannelMessageId
                 matchId =
                     case maybeMatch of
-                        Just ( id, _, _ ) ->
+                        Just ( id, _ ) ->
                             id
 
                         Nothing ->

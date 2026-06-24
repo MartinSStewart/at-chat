@@ -1,11 +1,12 @@
 module WordSpellingGame exposing
     ( Action
     , ActionWithTime
-    , GameNotShared
+    , GameData
     , LocalChange(..)
+    , Model(..)
     , Msg(..)
-    , NotShared(..)
     , OutMsg(..)
+    , PlacedWord
     , Player
     , SetupModel
     , Shared
@@ -44,23 +45,21 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
-import Point2d
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Touch exposing (Touch)
 import Ui exposing (Element)
-import Ui.Events
 import Ui.Font
 import Ui.Lazy
 
 
-type NotShared
+type Model
     = Setup SetupModel
-    | Game GameNotShared
+    | Game GameData
 
 
-type alias GameNotShared =
+type alias GameData =
     { selectedCell : Maybe ( Int, Int )
     , tiles : Array Tile
     , dragging : Maybe Int
@@ -117,7 +116,7 @@ initSetup =
     }
 
 
-initGame : ValidatedSetup -> GameNotShared
+initGame : ValidatedSetup -> GameData
 initGame setup =
     { selectedCell = Nothing
     , tiles =
@@ -138,8 +137,16 @@ type LocalChange
 
 
 type Action
-    = PlaceWord ( Int, Int ) Direction (Nonempty Letter)
+    = PlaceWord PlacedWord
     | ReplaceTray
+    | JoinGame (Id UserId)
+
+
+type alias PlacedWord =
+    { start : ( Int, Int )
+    , isVertical : Bool
+    , letters : Nonempty Letter
+    }
 
 
 type alias ActionWithTime =
@@ -165,13 +172,6 @@ gridSize =
     15
 
 
-type Direction
-    = Left
-    | Right
-    | Up
-    | Down
-
-
 type LetterOrWildcard
     = Letter Letter
     | Wildcard
@@ -185,13 +185,7 @@ initGameState setup =
             SeqDict.empty
     in
     { board = initialBoard
-    , players =
-        Nonempty
-            { userId = setup.createdBy
-            , tray = getLetters setup.traySize setup initialBoard [] 0
-            , score = 0
-            }
-            []
+    , players = Nonempty (initPlayer setup.createdBy initialBoard setup []) []
     , turnCount = 0
     }
 
@@ -277,11 +271,20 @@ foldActions setup actions =
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action state =
     case action.change of
-        PlaceWord start direction letters ->
+        PlaceWord { start, isVertical, letters } ->
             let
                 placement : Placement
                 placement =
-                    walkPlacement state.board start (directionDelta direction) (List.Nonempty.toList letters)
+                    walkPlacement
+                        state.board
+                        start
+                        (if isVertical then
+                            ( 0, 1 )
+
+                         else
+                            ( 1, 0 )
+                        )
+                        (List.Nonempty.toList letters)
 
                 totalScore : Int
                 totalScore =
@@ -342,6 +345,26 @@ updateAction setup action state =
                 , turnCount = state.turnCount + 1
             }
 
+        JoinGame userId ->
+            if state.turnCount > List.Nonempty.length state.players then
+                state
+
+            else
+                { state
+                    | players =
+                        List.Nonempty.append
+                            state.players
+                            (Nonempty (initPlayer userId state.board setup (List.Nonempty.toList state.players)) [])
+                }
+
+
+initPlayer : Id UserId -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ValidatedSetup -> List Player -> Player
+initPlayer userId board setup existingPlayers =
+    { userId = userId
+    , tray = getLetters setup.traySize setup board existingPlayers 0
+    , score = 0
+    }
+
 
 type alias Placement =
     { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
@@ -349,22 +372,6 @@ type alias Placement =
     , wordMultiplier : Int
     , placedLetters : List Letter
     }
-
-
-directionDelta : Direction -> ( Int, Int )
-directionDelta direction =
-    case direction of
-        Left ->
-            ( -1, 0 )
-
-        Right ->
-            ( 1, 0 )
-
-        Up ->
-            ( 0, -1 )
-
-        Down ->
-            ( 0, 1 )
 
 
 {-| Lay a word's new letters out along the direction starting from `start`, stepping over any
@@ -444,8 +451,14 @@ removeFromTray letterOrWildcard tray =
         List.Extra.remove Wildcard tray
 
 
-update : Time.Posix -> Id UserId -> Msg -> NotShared -> ( Maybe NotShared, List OutMsg )
-update time currentUserId msg model =
+update :
+    Time.Posix
+    -> Id UserId
+    -> Maybe ( Id ChannelMessageId, ValidatedSetup, Shared )
+    -> Msg
+    -> Model
+    -> ( Maybe Model, List OutMsg )
+update time currentUserId maybeShared msg model =
     case msg of
         ChangedMainTimeInput input ->
             ( updateSetup (\setup -> { setup | mainTimeInput = input, error = Nothing }) model |> Just, [] )
@@ -480,26 +493,36 @@ update time currentUserId msg model =
                     ( Just model, [] )
 
         GameMsg gameMsg ->
-            case model of
-                Game game ->
+            case ( model, maybeShared ) of
+                ( Game game, Just ( _, _, shared ) ) ->
                     let
                         ( gameModel, outMsgs ) =
-                            updateGame gameMsg game
+                            updateGame time shared gameMsg game
                     in
                     ( Game gameModel |> Just, outMsgs )
 
-                Setup setupModel ->
+                _ ->
                     ( Just model, [] )
 
 
-updateGame : GameMsg -> GameNotShared -> ( GameNotShared, List OutMsg )
-updateGame msg model =
+updateGame : Time.Posix -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame time shared msg model =
     case msg of
         PressedSubmitWord ->
-            Debug.todo ""
+            case checkValidPlacement shared model of
+                Ok placement ->
+                    ( model, [ OutLocalChange (Action { change = PlaceWord placement, time = time }) ] )
+
+                Err () ->
+                    ( model, [] )
 
 
-updateSetup : (SetupModel -> SetupModel) -> NotShared -> NotShared
+checkValidPlacement : Shared -> GameData -> Result () PlacedWord
+checkValidPlacement shared notShared =
+    Debug.todo ""
+
+
+updateSetup : (SetupModel -> SetupModel) -> Model -> Model
 updateSetup function model =
     case model of
         Setup setup ->
@@ -584,7 +607,7 @@ boardHeight windowSize =
     boardWidth windowSize + trayHeight
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> ( ValidatedSetup, Shared, GameNotShared ) -> Bool
+insideBoard : Coord CssPixels -> Coord CssPixels -> ( ValidatedSetup, Shared, GameData ) -> Bool
 insideBoard windowSize coord _ =
     let
         x =
@@ -667,7 +690,7 @@ getPlayer userId gameState =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
 
 
-dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameNotShared ) -> NotShared
+dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
 dragStart windowSize currentUserId touches ( setup, gameState, gameModel ) =
     let
         touchPosition : Coord CssPixels
@@ -722,7 +745,7 @@ dragStart windowSize currentUserId touches ( setup, gameState, gameModel ) =
                     Game gameModel
 
 
-dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameNotShared ) -> NotShared
+dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
 dragging oldTouches newTouches ( _, _, gameModel ) =
     Game gameModel
 
@@ -736,7 +759,7 @@ dragging oldTouches newTouches ( _, _, gameModel ) =
 --        Game gameModel
 
 
-dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameNotShared ) -> NotShared
+dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
 dragEnd windowSize newTouches ( _, gameState, gameModel ) =
     case gameModel.dragging of
         Just tileIndex ->
@@ -745,7 +768,7 @@ dragEnd windowSize newTouches ( _, gameState, gameModel ) =
                 position =
                     Touch.touchCentroid newTouches
 
-                returnToTray : NotShared
+                returnToTray : Model
                 returnToTray =
                     Game
                         { gameModel
@@ -826,7 +849,7 @@ gameView :
     -> Id UserId
     -> ValidatedSetup
     -> Shared
-    -> GameNotShared
+    -> GameData
     -> Element Msg
 gameView windowSize maybeDragging currentUserId validatedSetup gameState model =
     Ui.column
@@ -883,7 +906,7 @@ trayHeight =
     trayTileSize
 
 
-boardView : Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameNotShared -> Element GameMsg
+boardView : Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
 boardView windowSize maybeDragging currentUserId gameState model =
     let
         cellSize2 : Int
