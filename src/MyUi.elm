@@ -967,6 +967,11 @@ body {
   opacity: 0;
   transition: opacity 0.05s ease 0s;
 }
+@starting-style {
+  .reaction-emoji-popup {
+    opacity: 0;
+  }
+}
 .reaction-emoji-button:hover .reaction-emoji-popup {
   opacity: 1;
   transition: opacity 0.2s ease 1s;
