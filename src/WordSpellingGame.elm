@@ -1,6 +1,7 @@
 module WordSpellingGame exposing
     ( Action
     , ActionWithTime
+    , GameModel
     , GameState
     , LocalChange(..)
     , Model(..)
@@ -569,7 +570,7 @@ trayX =
 
 trayY : Coord CssPixels -> Int
 trayY windowSize =
-    boardY + boardHeight windowSize
+    boardY + boardWidth windowSize
 
 
 boardWidth : Coord CssPixels -> Int
@@ -582,29 +583,19 @@ boardHeight windowSize =
     boardWidth windowSize + trayHeight
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> Model -> Bool
-insideBoard windowSize coord model =
-    case model of
-        Game _ ->
-            let
-                x =
-                    boardX windowSize
-            in
-            (Coord.xRaw coord > x)
-                && (Coord.xRaw coord < (x + boardWidth windowSize))
-                && (Coord.yRaw coord > boardY)
-                && (Coord.yRaw coord < boardY + boardHeight windowSize)
+insideBoard : Coord CssPixels -> Coord CssPixels -> ( ValidatedSetup, GameState, GameModel ) -> Bool
+insideBoard windowSize coord _ =
+    let
+        x =
+            boardX windowSize
 
-        Setup setupModel ->
-            False
-
-
-touchCentroid : NonemptyDict Int Touch -> Coord CssPixels
-touchCentroid touches =
-    NonemptyDict.values touches
-        |> List.Nonempty.map .client
-        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
-        |> Coord.roundPoint
+        _ =
+            Debug.log "" ( coord, x, boardY )
+    in
+    (Coord.xRaw coord > x)
+        && (Coord.xRaw coord < (x + boardWidth windowSize))
+        && (Coord.yRaw coord > boardY)
+        && (Coord.yRaw coord < boardY + boardHeight windowSize)
 
 
 {-| Which board cell (if any) a screen position is over.
@@ -631,25 +622,43 @@ cellAtPosition windowSize coord =
         Nothing
 
 
+trayTileSize : number
+trayTileSize =
+    50
+
+
+trayTileSpacing =
+    4
+
+
+trayTileX : Coord CssPixels -> Int -> Int
+trayTileX windowSize index =
+    boardX windowSize + index * (trayTileSize + trayTileSpacing)
+
+
+trayTileY : Coord CssPixels -> Int -> Int
+trayTileY windowSize index =
+    trayY windowSize
+
+
 {-| Which tray slot (if any) a screen position is over.
 -}
 trayIndexAtPosition : Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
 trayIndexAtPosition windowSize coord trayLength =
     let
-        size : Int
-        size =
-            cellSize windowSize
-
         relX : Int
         relX =
             Coord.xRaw coord - trayX windowSize
 
         relY : Int
         relY =
-            Coord.yRaw coord - (boardY + boardWidth windowSize)
+            Coord.yRaw coord - trayY windowSize
+
+        index =
+            relX // (trayTileSize + trayTileSpacing)
     in
-    if relX >= 0 && relY >= 0 && relY < trayHeight && (relX // size) < trayLength then
-        Just (relX // size)
+    if relX >= 0 && relY >= 0 && relY < trayHeight && index < trayLength then
+        Just index
 
     else
         Nothing
@@ -670,115 +679,100 @@ trayIndexInUse gameModel index =
         || ((gameModel.dragging |> Maybe.map .trayIndex) == Just index)
 
 
-dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> GameState -> Model -> Model
-dragStart windowSize currentUserId touches gameState model =
-    case model of
-        Game gameModel ->
+dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ( ValidatedSetup, GameState, GameModel ) -> Model
+dragStart windowSize currentUserId touches ( _, gameState, gameModel ) =
+    let
+        position : Coord CssPixels
+        position =
+            Touch.touchCentroid touches
+    in
+    case cellAtPosition windowSize position of
+        Just cell ->
+            -- Pick a tile we placed this turn back up off the board.
+            case SeqDict.get cell gameModel.placedTiles of
+                Just placed ->
+                    Game
+                        { gameModel
+                            | dragging =
+                                Just
+                                    { trayIndex = placed.trayIndex
+                                    , letterOrWildcard = placed.letterOrWildcard
+                                    , position = position
+                                    }
+                            , placedTiles = SeqDict.remove cell gameModel.placedTiles
+                        }
+
+                Nothing ->
+                    Game gameModel
+
+        Nothing ->
             let
-                position : Coord CssPixels
-                position =
-                    touchCentroid touches
+                tray : List LetterOrWildcard
+                tray =
+                    currentPlayerTray currentUserId gameState
             in
-            case cellAtPosition windowSize position of
-                Just cell ->
-                    -- Pick a tile we placed this turn back up off the board.
-                    case SeqDict.get cell gameModel.placedTiles of
-                        Just placed ->
+            case trayIndexAtPosition windowSize position (List.length tray) of
+                Just index ->
+                    case ( trayIndexInUse gameModel index, List.Extra.getAt index tray ) of
+                        ( False, Just letterOrWildcard ) ->
                             Game
                                 { gameModel
                                     | dragging =
                                         Just
-                                            { trayIndex = placed.trayIndex
-                                            , letterOrWildcard = placed.letterOrWildcard
+                                            { trayIndex = index
+                                            , letterOrWildcard = letterOrWildcard
                                             , position = position
                                             }
-                                    , placedTiles = SeqDict.remove cell gameModel.placedTiles
                                 }
 
-                        Nothing ->
-                            model
+                        _ ->
+                            Game gameModel
 
                 Nothing ->
-                    let
-                        tray : List LetterOrWildcard
-                        tray =
-                            currentPlayerTray currentUserId gameState
-                    in
-                    case trayIndexAtPosition windowSize position (List.length tray) of
-                        Just index ->
-                            case ( trayIndexInUse gameModel index, List.Extra.getAt index tray ) of
-                                ( False, Just letterOrWildcard ) ->
-                                    Game
-                                        { gameModel
-                                            | dragging =
-                                                Just
-                                                    { trayIndex = index
-                                                    , letterOrWildcard = letterOrWildcard
-                                                    , position = position
-                                                    }
-                                        }
-
-                                _ ->
-                                    model
-
-                        Nothing ->
-                            model
-
-        Setup _ ->
-            model
+                    Game gameModel
 
 
-dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Model -> Model
-dragging oldTouches newTouches model =
-    case model of
-        Game gameModel ->
-            case gameModel.dragging of
-                Just dragTile ->
-                    Game { gameModel | dragging = Just { dragTile | position = touchCentroid newTouches } }
+dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> ( ValidatedSetup, GameState, GameModel ) -> Model
+dragging oldTouches newTouches ( _, _, gameModel ) =
+    case gameModel.dragging of
+        Just dragTile ->
+            Game { gameModel | dragging = Just { dragTile | position = Touch.touchCentroid newTouches } }
 
-                Nothing ->
-                    model
-
-        Setup _ ->
-            model
+        Nothing ->
+            Game gameModel
 
 
-dragEnd : Coord CssPixels -> GameState -> Model -> Model
-dragEnd windowSize gameState model =
-    case model of
-        Game gameModel ->
-            case gameModel.dragging of
-                Just dragTile ->
-                    let
-                        droppedModel : GameModel
-                        droppedModel =
-                            { gameModel | dragging = Nothing }
-                    in
-                    case cellAtPosition windowSize dragTile.position of
-                        Just cell ->
-                            if SeqDict.member cell gameState.board || SeqDict.member cell droppedModel.placedTiles then
-                                -- Occupied: the tile goes back to the tray.
-                                Game droppedModel
+dragEnd : Coord CssPixels -> ( ValidatedSetup, GameState, GameModel ) -> Model
+dragEnd windowSize ( _, gameState, gameModel ) =
+    case gameModel.dragging of
+        Just dragTile ->
+            let
+                droppedModel : GameModel
+                droppedModel =
+                    { gameModel | dragging = Nothing }
+            in
+            case cellAtPosition windowSize dragTile.position of
+                Just cell ->
+                    if SeqDict.member cell gameState.board || SeqDict.member cell droppedModel.placedTiles then
+                        -- Occupied: the tile goes back to the tray.
+                        Game droppedModel
 
-                            else
-                                Game
-                                    { droppedModel
-                                        | placedTiles =
-                                            SeqDict.insert
-                                                cell
-                                                { trayIndex = dragTile.trayIndex, letterOrWildcard = dragTile.letterOrWildcard }
-                                                droppedModel.placedTiles
-                                    }
-
-                        Nothing ->
-                            -- Dropped off the board: returns to the tray.
-                            Game droppedModel
+                    else
+                        Game
+                            { droppedModel
+                                | placedTiles =
+                                    SeqDict.insert
+                                        cell
+                                        { trayIndex = dragTile.trayIndex, letterOrWildcard = dragTile.letterOrWildcard }
+                                        droppedModel.placedTiles
+                            }
 
                 Nothing ->
-                    model
+                    -- Dropped off the board: returns to the tray.
+                    Game droppedModel
 
-        Setup _ ->
-            model
+        Nothing ->
+            Game gameModel
 
 
 gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
@@ -834,7 +828,7 @@ statusView currentUserId gameState =
 
 trayHeight : number
 trayHeight =
-    40
+    trayTileSize
 
 
 boardView : Coord CssPixels -> Id UserId -> GameState -> GameModel -> Element GameMsg
@@ -880,8 +874,11 @@ boardView windowSize currentUserId gameState model =
                             Ui.noAttr
 
                         else
-                            tileInFront cellSize2
-                                { x = index * cellSize2, y = gridSize * cellSize2 }
+                            tileInFront
+                                trayTileSize
+                                { x = index * (trayTileSize + trayTileSpacing)
+                                , y = gridSize * cellSize2
+                                }
                                 []
                                 letterOrWildcard
                     )

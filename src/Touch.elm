@@ -1,9 +1,18 @@
-module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, decodeTouchEvent, decoderPointerEvent)
+module Touch exposing
+    ( ScreenCoordinate(..)
+    , Touch
+    , averageTouchMove
+    , decodeTouchEvent
+    , decoderPointerEvent
+    , touchCentroid
+    )
 
+import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Json.Decode exposing (Decoder)
+import List.Nonempty exposing (Nonempty(..))
 import NonemptyDict exposing (NonemptyDict)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity)
@@ -14,6 +23,14 @@ type alias Touch =
     { client : Point2d CssPixels ScreenCoordinate
     , target : Maybe HtmlId
     }
+
+
+touchCentroid : NonemptyDict Int Touch -> Coord CssPixels
+touchCentroid touches =
+    NonemptyDict.values touches
+        |> List.Nonempty.map .client
+        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
+        |> Coord.roundPoint
 
 
 type ScreenCoordinate

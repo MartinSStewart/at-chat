@@ -1612,12 +1612,8 @@ updateLoaded msg model =
                                                 local2 =
                                                     Local.model loggedIn.localState
                                             in
-                                            case
-                                                ( getWordSpellingGameModel local2 loggedIn model
-                                                , getWordSpellingGameState local2 model
-                                                )
-                                            of
-                                                ( Just game, Just ( _, gameState ) ) ->
+                                            case getWordSpellingGameModel local2 loggedIn model of
+                                                Just game ->
                                                     setWordSpellingGameModel
                                                         local2
                                                         model
@@ -1625,7 +1621,6 @@ updateLoaded msg model =
                                                             model.windowSize
                                                             local2.localUser.session.userId
                                                             startTouches
-                                                            gameState
                                                             game
                                                         )
                                                         loggedIn
@@ -5790,18 +5785,38 @@ handleTouchEnd time model =
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGame.Model
+getWordSpellingGameModel :
+    LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState, WordSpellingGame.GameModel )
 getWordSpellingGameModel local loggedIn model =
     case model.route of
         DmRoute dmRoute ->
             case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
-                    case SeqDict.get ( otherUserId, messageId ) loggedIn.currentDmGame of
-                        Just (Game.WordSpellingGameModel game) ->
-                            Just game
+                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case SeqDict.get messageId dmChannel.games of
+                                Just matchData ->
+                                    case Game.wordSpellingMatchData matchData of
+                                        Just ( setup, state ) ->
+                                            ( setup
+                                            , state
+                                            , case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
+                                                Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
+                                                    gameModel
 
-                        Just (Game.GoModel _) ->
-                            Nothing
+                                                _ ->
+                                                    WordSpellingGame.initGame
+                                            )
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
 
                         Nothing ->
                             Nothing
@@ -5842,15 +5857,15 @@ finalizeWordSpellingDrag model loggedIn =
                         local =
                             Local.model loggedIn.localState
                     in
-                    case ( getWordSpellingGameModel local loggedIn model, getWordSpellingGameState local model ) of
-                        ( Just game, Just ( _, gameState ) ) ->
+                    case getWordSpellingGameModel local loggedIn model of
+                        Just game ->
                             setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd model.windowSize gameState game)
+                                (WordSpellingGame.dragEnd model.windowSize game)
                                 loggedIn
 
-                        _ ->
+                        Nothing ->
                             loggedIn
 
                 _ ->
@@ -5858,23 +5873,6 @@ finalizeWordSpellingDrag model loggedIn =
 
         _ ->
             loggedIn
-
-
-getWordSpellingGameState : LocalState -> LoadedFrontend -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.GameState )
-getWordSpellingGameState local model =
-    case model.route of
-        DmRoute dmRoute ->
-            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
-                    SeqDict.get otherUserId local.dmChannels
-                        |> Maybe.andThen (\dmChannel -> SeqDict.get messageId dmChannel.games)
-                        |> Maybe.andThen Game.wordSpellingMatchData
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
 
 
 dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
@@ -5891,10 +5889,7 @@ dragTarget startTouches model =
 
                 centroid : Coord CssPixels
                 centroid =
-                    NonemptyDict.values startTouches
-                        |> List.Nonempty.map .client
-                        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
-                        |> Coord.roundPoint
+                    Touch.touchCentroid startTouches
 
                 insideBoard : Bool
                 insideBoard =
