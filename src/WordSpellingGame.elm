@@ -2,13 +2,14 @@ module WordSpellingGame exposing
     ( Action
     , ActionWithTime
     , GameData
+    , GameMsg
     , LocalChange(..)
     , Model(..)
-    , Msg(..)
     , OutMsg(..)
     , PlacedWord
     , Player
     , SetupModel
+    , SetupMsg
     , Shared
     , ValidatedSetup
     , dragEnd
@@ -20,7 +21,8 @@ module WordSpellingGame exposing
     , initSetup
     , insideBoard
     , setupView
-    , update
+    , updateGame
+    , updateSetup
     , validateSetup
     )
 
@@ -79,9 +81,8 @@ type TrayIndex
     = TrayIndex Int
 
 
-type Msg
-    = GameMsg GameMsg
-    | ChangedMainTimeInput String
+type SetupMsg
+    = ChangedMainTimeInput String
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
     | PressedStartGame
@@ -455,58 +456,36 @@ removeFromTray letterOrWildcard tray =
         List.Extra.remove Wildcard tray
 
 
-update :
+updateSetup :
     Time.Posix
     -> Id UserId
-    -> Maybe ( Id ChannelMessageId, ValidatedSetup, Shared )
-    -> Msg
-    -> Model
-    -> ( Maybe Model, List OutMsg )
-update time currentUserId maybeShared msg model =
+    -> SetupMsg
+    -> SetupModel
+    -> ( Model, List OutMsg )
+updateSetup time currentUserId msg setup =
     case msg of
         ChangedMainTimeInput input ->
-            ( updateSetup (\setup -> { setup | mainTimeInput = input, error = Nothing }) model |> Just, [] )
+            ( Setup { setup | mainTimeInput = input, error = Nothing }, [] )
 
         ChangedIncrementInput input ->
-            ( updateSetup (\setup -> { setup | incrementInput = input, error = Nothing }) model |> Just, [] )
+            ( Setup { setup | incrementInput = input, error = Nothing }, [] )
 
         ChangedTraySizeInput input ->
-            ( updateSetup
-                (\setup ->
-                    { setup
-                        | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
-                        , error = Nothing
-                    }
-                )
-                model
-                |> Just
+            ( { setup
+                | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
+                , error = Nothing
+              }
+                |> Setup
             , []
             )
 
         PressedStartGame ->
-            case model of
-                Setup setup ->
-                    case validateSetup currentUserId time setup of
-                        Ok validated ->
-                            ( Just (Game (initGame validated)), [ OutLocalChange (StartMatch time validated) ] )
+            case validateSetup currentUserId time setup of
+                Ok validated ->
+                    ( Game (initGame validated), [ OutLocalChange (StartMatch time validated) ] )
 
-                        Err error ->
-                            ( Just (Setup { setup | error = Just error }), [] )
-
-                Game _ ->
-                    ( Just model, [] )
-
-        GameMsg gameMsg ->
-            case ( model, maybeShared ) of
-                ( Game game, Just ( _, _, shared ) ) ->
-                    let
-                        ( gameModel, outMsgs ) =
-                            updateGame time currentUserId shared gameMsg game
-                    in
-                    ( Game gameModel |> Just, outMsgs )
-
-                _ ->
-                    ( Just model, [] )
+                Err error ->
+                    ( Setup { setup | error = Just error }, [] )
 
 
 updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
@@ -529,16 +508,6 @@ updateGame time currentUserId shared msg model =
 checkValidPlacement : Shared -> GameData -> Result () PlacedWord
 checkValidPlacement shared notShared =
     Err ()
-
-
-updateSetup : (SetupModel -> SetupModel) -> Model -> Model
-updateSetup function model =
-    case model of
-        Setup setup ->
-            Setup (function setup)
-
-        Game _ ->
-            model
 
 
 validateSetup : Id UserId -> Time.Posix -> SetupModel -> Result String ValidatedSetup
@@ -856,7 +825,7 @@ gameView :
     -> ValidatedSetup
     -> Shared
     -> GameData
-    -> Element Msg
+    -> Element GameMsg
 gameView windowSize maybeDragging currentUserId validatedSetup shared model =
     Ui.column
         [ Ui.spacing 16 ]
@@ -873,7 +842,6 @@ gameView windowSize maybeDragging currentUserId validatedSetup shared model =
           else
             MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
         ]
-        |> Ui.map GameMsg
 
 
 statusView : Id UserId -> Shared -> Element GameMsg
@@ -1244,7 +1212,7 @@ doubleLetterCells =
     ]
 
 
-setupView : Coord CssPixels -> SetupModel -> Element Msg
+setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
 setupView windowSize setup =
     let
         isMobile : Bool
@@ -1295,7 +1263,7 @@ setupView windowSize setup =
         ]
 
 
-setupSection : String -> Element Msg -> Element Msg
+setupSection : String -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
         [ Ui.spacing 8 ]
@@ -1309,9 +1277,9 @@ numberInput :
     , minValue : Int
     , maxValue : Int
     , value : String
-    , onChange : String -> Msg
+    , onChange : String -> SetupMsg
     }
-    -> Element Msg
+    -> Element SetupMsg
 numberInput args =
     Html.input
         [ Html.Attributes.id args.htmlId
@@ -1330,7 +1298,7 @@ numberInput args =
         |> Ui.html
 
 
-timeInput : String -> String -> String -> (String -> Msg) -> Element Msg
+timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
 timeInput htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)

@@ -59,7 +59,8 @@ type FrontendGameData
 
 type Msg
     = GoMsg Go.Msg
-    | WordSpellingGameMsg WordSpellingGame.Msg
+    | WordSpellingGameMsg WordSpellingGame.GameMsg
+    | WordSpellingSetupMsg WordSpellingGame.SetupMsg
     | PressedShareMatch (Id ChannelMessageId)
     | PressedCopyLink String
     | SelectedMatch (Id ChannelMessageId)
@@ -250,7 +251,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
         WordSpellingGameMsg wordSpellingGameMsg ->
             let
                 ( notSharedModel, outMsgs ) =
-                    WordSpellingGame.update
+                    WordSpellingGame.updateGame
                         time
                         currentUserId
                         (case maybeMatch of
