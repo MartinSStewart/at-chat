@@ -3330,12 +3330,21 @@ sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordSt
 uploadAttachments : List ( Id FileId, FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
 uploadAttachments files uploadAttachmentsResponses =
     List.map2
-        (\( _, _, bytes ) uploadAttachmentsResponse ->
+        (\( _, fileData, bytes ) uploadAttachmentsResponse ->
             Http.task
                 { method = "PUT"
                 , headers = []
                 , url = uploadAttachmentsResponse.uploadUrl
-                , body = Http.bytesBody "application/octet-stream" bytes
+                , body =
+                    -- Upload with the file's actual content type. Discord derives the
+                    -- attachment's content_type from the uploaded object, so using
+                    -- application/octet-stream here makes Discord report an unknown
+                    -- content type for files it can't sniff itself (e.g. audio).
+                    Http.bytesBody
+                        (OneToOne.second fileData.contentType FileStatus.contentTypes
+                            |> Maybe.withDefault "application/octet-stream"
+                        )
+                        bytes
                 , resolver =
                     Http.bytesResolver
                         (\response ->
