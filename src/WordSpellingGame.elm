@@ -528,7 +528,7 @@ updateGame time currentUserId shared msg model =
 
 checkValidPlacement : Shared -> GameData -> Result () PlacedWord
 checkValidPlacement shared notShared =
-    Debug.todo ""
+    Err ()
 
 
 updateSetup : (SetupModel -> SetupModel) -> Model -> Model
@@ -621,9 +621,6 @@ insideBoard windowSize coord _ =
     let
         x =
             boardX windowSize
-
-        _ =
-            Debug.log "" ( coord, x, boardY )
     in
     (Coord.xRaw coord > x)
         && (Coord.xRaw coord < (x + boardWidth windowSize))

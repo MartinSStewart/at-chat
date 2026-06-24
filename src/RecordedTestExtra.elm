@@ -73,6 +73,7 @@ module RecordedTestExtra exposing
     , startTest
     , startTime
     , startupDataJson
+    , tallDesktopWindow
     , tallSnapshot
     , userEmail
     , videoAttachmentTest

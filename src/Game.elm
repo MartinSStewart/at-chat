@@ -295,7 +295,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                     , OutSelectMatch (Just matchId)
                                     ]
 
-                                _ ->
+                                WordSpellingGame.Action action ->
                                     [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
                 )
                 outMsgs

@@ -1494,7 +1494,7 @@ routeRequest previousRoute newRoute model =
 
                 model3 : LoadedFrontend
                 model3 =
-                    if Debug.log "sameDmRoute" sameDmRoute then
+                    if sameDmRoute then
                         model2
 
                     else

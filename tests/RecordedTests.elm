@@ -2227,7 +2227,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         RecordedTestExtra.startTime
         normalConfig
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+            RecordedTestExtra.tallDesktopWindow
             (\admin user ->
                 let
                     pointerEvent : ( Float, Float ) -> Json.Encode.Value

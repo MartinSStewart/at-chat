@@ -2010,16 +2010,6 @@ updateLoaded msg model =
                                         )
                                         (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
 
-                                loggedInWithModel : LoggedIn2
-                                loggedInWithModel =
-                                    { loggedIn
-                                        | currentDmGame =
-                                            SeqDict.update
-                                                ( otherUserId, maybeMatchId )
-                                                (\_ -> gameModel2)
-                                                loggedIn.currentDmGame
-                                    }
-
                                 ( loggedIn2, localChangeCmd ) =
                                     List.foldl
                                         (\outMsg ( accLoggedIn, accCmd ) ->
@@ -2034,22 +2024,30 @@ updateLoaded msg model =
                                                 _ ->
                                                     ( accLoggedIn, accCmd )
                                         )
-                                        ( loggedInWithModel, Command.none )
-                                        outMsgs
+                                        ( { loggedIn
+                                            | currentDmGame =
+                                                SeqDict.update
+                                                    ( otherUserId, maybeMatchId )
+                                                    (\_ -> gameModel2)
+                                                    loggedIn.currentDmGame
+                                          }
+                                        , Command.none
+                                        )
+                                        (Debug.log "outMsgs" outMsgs)
 
                                 ( model2, effectCmd ) =
                                     List.foldl
-                                        (\outMsg ( accModel, accCmd ) ->
+                                        (\outMsg ( accModel, cmds ) ->
                                             case outMsg of
                                                 Game.PlaySound sound ->
-                                                    ( accModel, Command.batch [ accCmd, Ports.playSound sound ] )
+                                                    ( accModel, Ports.playSound sound :: cmds )
 
                                                 Game.CopyText text ->
                                                     let
                                                         ( copyModel, copyCmd ) =
                                                             copyText text accModel
                                                     in
-                                                    ( copyModel, Command.batch [ accCmd, copyCmd ] )
+                                                    ( copyModel, copyCmd :: cmds )
 
                                                 Game.OutSelectMatch newSelected ->
                                                     let
@@ -2058,15 +2056,15 @@ updateLoaded msg model =
                                                                 accModel
                                                                 (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
                                                     in
-                                                    ( pushModel, Command.batch [ accCmd, pushCmd ] )
+                                                    ( pushModel, pushCmd :: cmds )
 
                                                 Game.OutLocalChange _ ->
-                                                    ( accModel, accCmd )
+                                                    ( accModel, cmds )
                                         )
-                                        ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                        ( { model | loginStatus = LoggedIn loggedIn2 }, [] )
                                         outMsgs
                             in
-                            ( model2, Command.batch [ localChangeCmd, effectCmd ] )
+                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
                         _ ->
                             ( model, Command.none )
