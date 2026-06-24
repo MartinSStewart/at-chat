@@ -89,7 +89,7 @@ type Msg
 
 
 type GameMsg
-    = PressedGridCell ( Int, Int )
+    = PressedSubmitWord
 
 
 type alias SetupModel =
@@ -495,8 +495,8 @@ update time currentUserId msg model =
 updateGame : GameMsg -> GameNotShared -> ( GameNotShared, List OutMsg )
 updateGame msg model =
     case msg of
-        PressedGridCell pos ->
-            ( { model | selectedCell = Just pos }, [] )
+        PressedSubmitWord ->
+            Debug.todo ""
 
 
 updateSetup : (SetupModel -> SetupModel) -> NotShared -> NotShared
@@ -931,7 +931,7 @@ boardView windowSize maybeDragging currentUserId gameState model =
 
                                     TileOnBoard ( x, y ) ->
                                         tileInFront
-                                            trayTileSize
+                                            cellSize2
                                             (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
                                             []
                                             letter
@@ -1075,7 +1075,6 @@ cellView cellSize2 position =
                , Ui.borderColor MyUi.inputBorder
                , Ui.contentCenterX
                , Ui.contentCenterY
-               , Ui.Events.onClick (PressedGridCell position)
                ]
         )
         (case maybeBonus of
