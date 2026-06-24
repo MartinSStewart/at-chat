@@ -89,6 +89,7 @@ type Msg
 
 type GameMsg
     = PressedSubmitWord
+    | PressedJoinGame
 
 
 type alias SetupModel =
@@ -139,7 +140,7 @@ type LocalChange
 type Action
     = PlaceWord PlacedWord
     | ReplaceTray
-    | JoinGame (Id UserId)
+    | JoinGame
 
 
 type alias PlacedWord =
@@ -150,7 +151,7 @@ type alias PlacedWord =
 
 
 type alias ActionWithTime =
-    { time : Time.Posix, change : Action }
+    { userId : Id UserId, time : Time.Posix, change : Action }
 
 
 type alias Shared =
@@ -345,7 +346,7 @@ updateAction setup action state =
                 , turnCount = state.turnCount + 1
             }
 
-        JoinGame userId ->
+        JoinGame ->
             if state.turnCount > List.Nonempty.length state.players then
                 state
 
@@ -354,7 +355,10 @@ updateAction setup action state =
                     | players =
                         List.Nonempty.append
                             state.players
-                            (Nonempty (initPlayer userId state.board setup (List.Nonempty.toList state.players)) [])
+                            (Nonempty
+                                (initPlayer action.userId state.board setup (List.Nonempty.toList state.players))
+                                []
+                            )
                 }
 
 
@@ -497,7 +501,7 @@ update time currentUserId maybeShared msg model =
                 ( Game game, Just ( _, _, shared ) ) ->
                     let
                         ( gameModel, outMsgs ) =
-                            updateGame time shared gameMsg game
+                            updateGame time currentUserId shared gameMsg game
                     in
                     ( Game gameModel |> Just, outMsgs )
 
@@ -505,16 +509,21 @@ update time currentUserId maybeShared msg model =
                     ( Just model, [] )
 
 
-updateGame : Time.Posix -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
-updateGame time shared msg model =
+updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame time currentUserId shared msg model =
     case msg of
         PressedSubmitWord ->
             case checkValidPlacement shared model of
                 Ok placement ->
-                    ( model, [ OutLocalChange (Action { change = PlaceWord placement, time = time }) ] )
+                    ( model
+                    , [ OutLocalChange (Action { userId = currentUserId, change = PlaceWord placement, time = time }) ]
+                    )
 
                 Err () ->
                     ( model, [] )
+
+        PressedJoinGame ->
+            ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
 
 checkValidPlacement : Shared -> GameData -> Result () PlacedWord
@@ -851,52 +860,51 @@ gameView :
     -> Shared
     -> GameData
     -> Element Msg
-gameView windowSize maybeDragging currentUserId validatedSetup gameState model =
+gameView windowSize maybeDragging currentUserId validatedSetup shared model =
     Ui.column
         [ Ui.spacing 16 ]
-        [ boardView windowSize maybeDragging currentUserId gameState model
-        , statusView currentUserId gameState
+        [ boardView windowSize maybeDragging currentUserId shared model
+        , statusView currentUserId shared
+        , if List.Nonempty.all (\player -> player.userId == currentUserId) shared.players then
+            Ui.none
+
+          else
+            MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
         ]
         |> Ui.map GameMsg
 
 
 statusView : Id UserId -> Shared -> Element GameMsg
-statusView currentUserId gameState =
+statusView currentUserId shared =
     let
         currentPlayer : Player
         currentPlayer =
-            List.Nonempty.get gameState.turnCount gameState.players
+            List.Nonempty.get shared.turnCount shared.players
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
-        (List.Nonempty.toList gameState.players
+        (List.Nonempty.toList shared.players
             |> List.map
                 (\player ->
-                    let
-                        name : String
-                        name =
-                            if player.userId == currentUserId then
-                                "You"
+                    (if player.userId == currentUserId then
+                        "You"
 
-                            else
-                                "Opponent"
+                     else
+                        "Opponent"
+                    )
+                        ++ ": "
+                        ++ String.fromInt player.score
+                        ++ " ("
+                        ++ String.fromInt (List.Nonempty.length shared.players)
+                        ++ " player(s) in game)"
+                        |> Ui.text
+                        |> Ui.el
+                            [ if player.userId == currentPlayer.userId then
+                                Ui.Font.weight 700
 
-                        turnMarker : String
-                        turnMarker =
-                            if player.userId == currentPlayer.userId then
-                                " (their turn)"
-
-                            else
-                                ""
-                    in
-                    Ui.el
-                        [ if player.userId == currentPlayer.userId then
-                            Ui.Font.weight 700
-
-                          else
-                            Ui.Font.weight 400
-                        ]
-                        (Ui.text (name ++ ": " ++ String.fromInt player.score ++ turnMarker))
+                              else
+                                Ui.Font.weight 400
+                            ]
                 )
         )
 

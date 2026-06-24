@@ -5110,12 +5110,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Game.LocalChange_WordSpellingGame matchId wsChange ->
                                     case wsChange of
-                                        WordSpellingGame.StartMatch createdAt setup ->
+                                        WordSpellingGame.StartMatch _ setup ->
                                             let
                                                 ( messageId, dmChannel2 ) =
                                                     LocalState.createChannelMessageBackend
                                                         (GameStarted
-                                                            createdAt
+                                                            time
                                                             session.userId
                                                             SeqDict.empty
                                                             Drawing.emptyDrawing
@@ -5155,8 +5155,33 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        WordSpellingGame.Action _ ->
-                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                        WordSpellingGame.Action action ->
+                                            if action.userId == session.userId then
+                                                let
+                                                    localMsg2 : Game.LocalChange
+                                                    localMsg2 =
+                                                        Game.LocalChange_WordSpellingGame
+                                                            matchId
+                                                            (WordSpellingGame.Action { action | time = time })
+                                                in
+                                                ( model
+                                                , Command.batch
+                                                    [ Local_Game otherUserId localMsg2
+                                                        |> LocalChangeResponse changeId
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    , Broadcast.toDmChannelExcludingOne
+                                                        clientId
+                                                        session.userId
+                                                        otherUserId.otherUserId
+                                                        (\otherUserId2 ->
+                                                            Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                                                        )
+                                                        model
+                                                    ]
+                                                )
+
+                                            else
+                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_Drawing guildOrDmId anchor drawingChange ->
