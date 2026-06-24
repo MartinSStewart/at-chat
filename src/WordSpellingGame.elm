@@ -741,34 +741,83 @@ dragEnd windowSize newTouches ( _, gameState, gameModel ) =
     case gameModel.dragging of
         Just tileIndex ->
             let
+                position : Coord CssPixels
                 position =
                     Touch.touchCentroid newTouches
-            in
-            case cellAtPosition windowSize position of
-                Just cell ->
-                    { gameModel
-                        | dragging = Nothing
-                        , tiles =
-                            Array.Extra.update
-                                tileIndex
-                                (\tile -> { tile | position = TileOnBoard cell })
-                                gameModel.tiles
-                    }
-                        |> Game
 
-                Nothing ->
+                returnToTray : NotShared
+                returnToTray =
                     Game
                         { gameModel
                             | dragging = Nothing
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
-                                    (\tile -> { tile | position = TileInTray })
+                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex tileIndex gameModel.tiles) })
                                     gameModel.tiles
                         }
+            in
+            case cellAtPosition windowSize position of
+                Just cell ->
+                    if SeqDict.member cell gameState.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
+                        returnToTray
+
+                    else
+                        Game
+                            { gameModel
+                                | dragging = Nothing
+                                , tiles =
+                                    Array.Extra.update
+                                        tileIndex
+                                        (\tile -> { tile | position = TileOnBoard cell })
+                                        gameModel.tiles
+                            }
+
+                Nothing ->
+                    returnToTray
 
         Nothing ->
             Game gameModel
+
+
+{-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
+the tray.
+-}
+firstOpenTrayIndex : Int -> Array Tile -> TrayIndex
+firstOpenTrayIndex draggedIndex tiles =
+    let
+        occupied : List Int
+        occupied =
+            Array.toIndexedList tiles
+                |> List.filterMap
+                    (\( index, tile ) ->
+                        if index == draggedIndex then
+                            Nothing
+
+                        else
+                            case tile.position of
+                                TileInTray (TrayIndex trayIndex) ->
+                                    Just trayIndex
+
+                                TileOnBoard _ ->
+                                    Nothing
+                    )
+
+        find : Int -> Int
+        find n =
+            if List.member n occupied then
+                find (n + 1)
+
+            else
+                n
+    in
+    TrayIndex (find 0)
+
+
+cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
+cellOccupiedByOtherTile draggedIndex cell tiles =
+    Array.toIndexedList tiles
+        |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
 
 
 gameView :
@@ -857,9 +906,17 @@ boardView windowSize maybeDragging currentUserId gameState model =
                     (\index ( tile, letter ) ->
                         case ( maybeDragging, Just index == model.dragging ) of
                             ( Just dragging2, True ) ->
+                                let
+                                    center : Coord CssPixels
+                                    center =
+                                        Touch.touchCentroid dragging2
+                                in
                                 tileInFront
-                                    trayTileSize
-                                    (Touch.touchCentroid dragging2)
+                                    cellSize2
+                                    (Coord.xy
+                                        (Coord.xRaw center - cellSize2 // 2)
+                                        (Coord.yRaw center - cellSize2 // 2)
+                                    )
                                     []
                                     letter
 
