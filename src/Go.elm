@@ -5,7 +5,6 @@ module Go exposing
     , DeadContext
     , GameModel
     , GameMsg(..)
-    , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
     , Model(..)
@@ -16,6 +15,7 @@ module Go exposing
     , PublicGoMatchResponse
     , SetupModel
     , SetupMsg(..)
+    , Shared
     , SizeSelection(..)
     , Snapshot
     , SpectatorMsg(..)
@@ -72,7 +72,7 @@ import User exposing (FrontendUser, LocalUser)
 type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
-    , cache : GameState
+    , cache : Shared
     , blackPlayer : FrontendUser
     , whitePlayer : FrontendUser
     }
@@ -114,7 +114,7 @@ type alias TimeControl =
     }
 
 
-type alias GameState =
+type alias Shared =
     { board : Dict ( Int, Int ) Stone
     , lastMove : Maybe ( Int, Int )
     , blackCaptures : Int
@@ -367,7 +367,7 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing }
 
 
-initGameState : ValidatedSetup -> GameState
+initGameState : ValidatedSetup -> Shared
 initGameState setup =
     let
         positions : List ( Int, Int )
@@ -603,7 +603,7 @@ regionFlood setup board queue visited =
             regionFlood setup board newQueue newVisited
 
 
-currentSnapshot : GameState -> Snapshot
+currentSnapshot : Shared -> Snapshot
 currentSnapshot model =
     { board = model.board
     , currentPlayer = model.currentPlayer
@@ -612,7 +612,7 @@ currentSnapshot model =
     }
 
 
-actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> GameState -> Duration
+actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> Shared -> Duration
 actualTimeLeft currentTime player currentPlayer timeLeft model =
     case model.phase of
         Playing _ ->
@@ -636,7 +636,7 @@ actualTimeLeft currentTime player currentPlayer timeLeft model =
             timeLeft
 
 
-applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> GameState -> GameState
+applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> Shared -> Shared
 applyIncrement currentTime setup mover model =
     case ( setup.timeControl, model.timeLeft ) of
         ( Just tc, Just { white, black } ) ->
@@ -665,7 +665,7 @@ applyIncrement currentTime setup mover model =
             { model | lastAction = Just currentTime }
 
 
-performPass : Time.Posix -> ValidatedSetup -> GameState -> GameState
+performPass : Time.Posix -> ValidatedSetup -> Shared -> Shared
 performPass currentTime setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
@@ -691,7 +691,7 @@ performPass currentTime setup model =
             model
 
 
-viewingSnapshot : GameState -> GameModel -> Snapshot
+viewingSnapshot : Shared -> GameModel -> Snapshot
 viewingSnapshot state model =
     if model.viewingMovesBack <= 0 then
         currentSnapshot state
@@ -715,7 +715,7 @@ jumpToLatest model =
     { model | viewingMovesBack = 0, lastError = Nothing }
 
 
-tryPlace : ValidatedSetup -> Int -> Int -> GameState -> Result String GameState
+tryPlace : ValidatedSetup -> Int -> Int -> Shared -> Result String Shared
 tryPlace setup x y model =
     if Dict.member ( x, y ) model.board then
         Err "There's already a stone there"
@@ -812,7 +812,7 @@ cycleOwner current =
             Nothing
 
 
-cycleTerritory : ValidatedSetup -> Int -> Int -> GameState -> GameState
+cycleTerritory : ValidatedSetup -> Int -> Int -> Shared -> Shared
 cycleTerritory setup x y model =
     if Dict.member ( x, y ) model.board then
         model
@@ -849,7 +849,7 @@ cycleTerritory setup x y model =
         { model | territoryMarks = newMarks }
 
 
-computeScore : ValidatedSetup -> GameState -> ( Float, Float )
+computeScore : ValidatedSetup -> Shared -> ( Float, Float )
 computeScore setup model =
     let
         ( blackTerritory, whiteTerritory ) =
@@ -935,7 +935,7 @@ deadStones ctx =
         ctx.board
 
 
-gameDeadContext : ValidatedSetup -> GameState -> DeadContext
+gameDeadContext : ValidatedSetup -> Shared -> DeadContext
 gameDeadContext setup model =
     { setup = setup
     , board = model.board
@@ -943,7 +943,7 @@ gameDeadContext setup model =
     }
 
 
-deadStonePositions : ValidatedSetup -> GameState -> Set ( Int, Int )
+deadStonePositions : ValidatedSetup -> Shared -> Set ( Int, Int )
 deadStonePositions setup model =
     deadStones (gameDeadContext setup model)
 
@@ -1011,7 +1011,7 @@ update :
     -> Id UserId
     -> Id UserId
     -> Msg
-    -> Maybe ( Id ChannelMessageId, ValidatedSetup, GameState )
+    -> Maybe ( Id ChannelMessageId, ValidatedSetup, Shared )
     -> Maybe Model
     -> ( Maybe Model, List OutMsg )
 update time currentUserId otherUserId msg maybeMatch model =
@@ -1075,7 +1075,7 @@ update time currentUserId otherUserId msg maybeMatch model =
 
 pressedKey :
     String
-    -> GameState
+    -> Shared
     -> Maybe Model
     -> Maybe Model
 pressedKey key state model =
@@ -1095,7 +1095,7 @@ pressedKey key state model =
             model
 
 
-stepBack : GameState -> GameModel -> GameModel
+stepBack : Shared -> GameModel -> GameModel
 stepBack state model =
     { model
         | viewingMovesBack = min (List.length state.history) (model.viewingMovesBack + 1)
@@ -1219,12 +1219,12 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-foldActions : ValidatedSetup -> Array ActionWithTime -> GameState
+foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions setup actions =
     Array.foldl (updateAction setup) (initGameState setup) actions
 
 
-updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
+updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action model =
     let
         currentPlayer =
@@ -1294,7 +1294,7 @@ updateAction setup action model =
         model
 
 
-hasTimeToDoAction : Time.Posix -> GameState -> Bool
+hasTimeToDoAction : Time.Posix -> Shared -> Bool
 hasTimeToDoAction time model =
     case model.timeLeft of
         Just { black, white } ->
@@ -1321,7 +1321,7 @@ updateGame :
     -> Id UserId
     -> GameMsg
     -> ValidatedSetup
-    -> GameState
+    -> Shared
     -> GameModel
     -> ( Model, List OutMsg )
 updateGame currentTime currentUserId msg setup state model =
@@ -1415,7 +1415,7 @@ updateGame currentTime currentUserId msg setup state model =
             ( Game (updateSpectator spectatorMsg state model), [] )
 
 
-updateSpectator : SpectatorMsg -> GameState -> GameModel -> GameModel
+updateSpectator : SpectatorMsg -> Shared -> GameModel -> GameModel
 updateSpectator msg state model =
     case msg of
         ChangedViewingMove moveNumber ->
@@ -1698,7 +1698,7 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
+clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> Shared -> ValidatedSetup -> Element msg
 clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
@@ -1750,7 +1750,7 @@ clockView currentTime blackUser whiteUser state setup =
         ]
 
 
-currentScore : ValidatedSetup -> GameState -> Stone -> Float
+currentScore : ValidatedSetup -> Shared -> Stone -> Float
 currentScore setup state stone =
     case state.phase of
         Scored s ->
@@ -1874,7 +1874,7 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
         ]
 
 
-isLocalUsersTurn : Id UserId -> ValidatedSetup -> GameState -> Bool
+isLocalUsersTurn : Id UserId -> ValidatedSetup -> Shared -> Bool
 isLocalUsersTurn currentUserId setup state =
     case state.phase of
         Scored _ ->
@@ -1896,7 +1896,7 @@ spectatorView currentTime windowSize data model =
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
 
-        state : GameState
+        state : Shared
         state =
             data.cache
     in
@@ -1940,7 +1940,7 @@ gameView :
     -> Coord CssPixels
     -> LocalUser
     -> ValidatedSetup
-    -> GameState
+    -> Shared
     -> GameModel
     -> Element Msg
 gameView currentTime windowSize localUser setup state model =
@@ -2036,7 +2036,7 @@ gameView currentTime windowSize localUser setup state model =
         |> Ui.map GameMsg
 
 
-statusView : Time.Posix -> GameState -> Element msg
+statusView : Time.Posix -> Shared -> Element msg
 statusView currentTime state =
     Ui.el
         [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
@@ -2091,7 +2091,7 @@ winnerSuffix b w =
         " (tie)"
 
 
-historyView : GameState -> GameModel -> Element SpectatorMsg
+historyView : Shared -> GameModel -> Element SpectatorMsg
 historyView state model =
     let
         total : Int
@@ -2125,7 +2125,7 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element ( Int, Int )
+boardView : Coord CssPixels -> ValidatedSetup -> Shared -> GameModel -> Element ( Int, Int )
 boardView windowSize setup state model =
     let
         isMobile : Bool
@@ -2307,7 +2307,7 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameState -> List (Svg msg)
+lastMoveMarker : Bool -> Shared -> List (Svg msg)
 lastMoveMarker viewingPast state =
     case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->

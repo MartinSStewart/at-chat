@@ -53,8 +53,13 @@ type BackendGameData
 
 
 type FrontendGameData
-    = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.GameState
-    | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
+    = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) (Cache Go.Shared)
+    | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) (Cache WordSpellingGame.Shared)
+
+
+type Cache a
+    = Cached a
+    | NotCached
 
 
 type Msg
@@ -87,10 +92,13 @@ initMatchData gameData publicLink =
     { data =
         case gameData of
             GameData_Go setup actions ->
-                FrontendGameData_Go setup actions (Go.foldActions setup actions)
+                FrontendGameData_Go setup actions NotCached
 
+            --(Go.foldActions setup actions)
             GameData_WordSpellingGame setup actions ->
-                FrontendGameData_WordSpellingGame setup actions (WordSpellingGame.foldActions Set.empty setup actions)
+                FrontendGameData_WordSpellingGame setup actions NotCached
+
+    -- (WordSpellingGame.foldActions wordList setup actions)
     , publicLink = publicLink
     }
         |> MatchData
@@ -98,7 +106,7 @@ initMatchData gameData publicLink =
 
 {-| Extract the Go setup and current game state from a match, if it is a Go match.
 -}
-goMatchData : MatchData -> Maybe ( Go.ValidatedSetup, Go.GameState )
+goMatchData : MatchData -> Maybe ( Go.ValidatedSetup, Go.Shared )
 goMatchData (MatchData match) =
     case match.data of
         FrontendGameData_Go setup _ state ->
@@ -126,7 +134,10 @@ addGoAction action (MatchData match) =
         | data =
             case match.data of
                 FrontendGameData_Go setup actions cache ->
-                    FrontendGameData_Go setup (Array.push action actions) (Go.updateAction setup action cache)
+                    FrontendGameData_Go
+                        setup
+                        (Array.push action actions)
+                        (goCachedValue setup actions cache |> Go.updateAction setup action |> Cached)
 
                 FrontendGameData_WordSpellingGame _ _ _ ->
                     match.data
@@ -134,8 +145,33 @@ addGoAction action (MatchData match) =
         |> MatchData
 
 
-addWordSpellingGameAction : WordSpellingGame.ActionWithTime -> MatchData -> MatchData
-addWordSpellingGameAction action (MatchData match) =
+goCachedValue : Go.ValidatedSetup -> Array Go.ActionWithTime -> Cache Go.Shared -> Go.Shared
+goCachedValue setup actions cache =
+    case cache of
+        Cached shared ->
+            shared
+
+        NotCached ->
+            Go.foldActions setup actions
+
+
+wordSpellingGameCachedValue :
+    Maybe (Set String)
+    -> WordSpellingGame.ValidatedSetup
+    -> Array WordSpellingGame.ActionWithTime
+    -> Cache WordSpellingGame.Shared
+    -> WordSpellingGame.Shared
+wordSpellingGameCachedValue wordList setup actions cache =
+    case cache of
+        Cached shared ->
+            shared
+
+        NotCached ->
+            WordSpellingGame.foldActions wordList setup actions
+
+
+addWordSpellingGameAction : Maybe (Set String) -> WordSpellingGame.ActionWithTime -> MatchData -> MatchData
+addWordSpellingGameAction wordList action (MatchData match) =
     { match
         | data =
             case match.data of
@@ -146,7 +182,10 @@ addWordSpellingGameAction action (MatchData match) =
                     FrontendGameData_WordSpellingGame
                         setup
                         (Array.push action actions)
-                        (WordSpellingGame.updateAction Set.empty setup action cache)
+                        (wordSpellingGameCachedValue wordList setup actions cache
+                            |> WordSpellingGame.updateAction wordList setup action
+                            |> Cached
+                        )
     }
         |> MatchData
 
@@ -156,15 +195,25 @@ hasPendingTurn userId matches =
     SeqDict.foldl
         (\matchId (MatchData match) set ->
             case match.data of
-                FrontendGameData_Go setup _ cache ->
-                    if Go.isLocalUsersTurn userId setup cache then
+                FrontendGameData_Go setup actions cache ->
+                    if Go.isLocalUsersTurn userId setup (goCachedValue setup actions cache) then
                         SeqSet.insert matchId set
 
                     else
                         set
 
-                FrontendGameData_WordSpellingGame _ _ shared ->
-                    case WordSpellingGame.isPlayerTurn userId shared of
+                FrontendGameData_WordSpellingGame setup actions cache ->
+                    case
+                        WordSpellingGame.isPlayerTurn
+                            userId
+                            (wordSpellingGameCachedValue
+                                -- Not including word list shouldn't affect pending turn
+                                Nothing
+                                setup
+                                actions
+                                cache
+                            )
+                    of
                         WordSpellingGame.NotJoined ->
                             set
 

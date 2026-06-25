@@ -276,12 +276,12 @@ shuffle list =
         Random.independentSeed
 
 
-foldActions : Set String -> ValidatedSetup -> Array ActionWithTime -> Shared
+foldActions : Maybe (Set String) -> ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions wordList setup actions =
     Array.foldl (updateAction wordList setup) (initGameState setup) actions
 
 
-updateAction : Set String -> ValidatedSetup -> ActionWithTime -> Shared -> Shared
+updateAction : Maybe (Set String) -> ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction wordList setup action state =
     case action.change of
         PlaceWord placedWord ->
@@ -592,18 +592,15 @@ validatePlacement wordList board placedWord =
             Err ()
 
 
-{-| Apply a placement during action replay. When `wordList` is empty (the word list isn't
-available, e.g. on the backend or before it has loaded), the action is trusted and applied
-without checking that the formed words exist, since committed actions are validated at submit
-time.
--}
-applyPlacement : Set String -> Board -> PlacedWord -> Maybe PlacementResult
+applyPlacement : Maybe (Set String) -> Board -> PlacedWord -> Maybe PlacementResult
 applyPlacement wordList board placedWord =
-    if Set.isEmpty wordList then
-        placeWord board placedWord
+    case wordList of
+        Just wordList2 ->
+            validatePlacement wordList2 board placedWord |> Result.toMaybe
 
-    else
-        validatePlacement wordList board placedWord |> Result.toMaybe
+        Nothing ->
+            -- We should always have a word list but fall back to assuming the word exists if we don't
+            placeWord board placedWord
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int

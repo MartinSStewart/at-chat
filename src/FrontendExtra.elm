@@ -87,6 +87,7 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Set exposing (Set)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -1163,6 +1164,16 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             let
                 ( changeId, localState2 ) =
                     Local.update
+                        (case loggedIn.wordSpellingGameWords of
+                            WordSpellingGameWords_NotLoaded ->
+                                Nothing
+
+                            WordSpellingGameWords_Loaded set ->
+                                Just set
+
+                            WordSpellingGameWords_Error error ->
+                                Nothing
+                        )
                         changeUpdate
                         time
                         (LocalChange (Local.model loggedIn.localState).localUser.session.userId localChange)
@@ -2158,8 +2169,8 @@ textToDiscordRichText text memberIds local =
         text
 
 
-changeUpdate : LocalMsg -> LocalState -> LocalState
-changeUpdate localMsg local =
+changeUpdate : Maybe (Set String) -> LocalMsg -> LocalState -> LocalState
+changeUpdate wordSpellingGameWordList localMsg local =
     case localMsg of
         LocalChange changedBy localChange ->
             case localChange of
@@ -3110,7 +3121,12 @@ changeUpdate localMsg local =
                             local
 
                 Local_Game { otherUserId } gameChange ->
-                    gameChangeUpdate local.localUser.session.userId otherUserId gameChange local
+                    gameChangeUpdate
+                        wordSpellingGameWordList
+                        local.localUser.session.userId
+                        otherUserId
+                        gameChange
+                        local
 
                 Local_Drawing guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
@@ -4273,19 +4289,20 @@ changeUpdate localMsg local =
                             }
 
                 Server_Game changeBy { otherUserId } gameChange ->
-                    gameChangeUpdate changeBy otherUserId gameChange local
+                    gameChangeUpdate wordSpellingGameWordList changeBy otherUserId gameChange local
 
                 Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
 gameChangeUpdate :
-    Id UserId
+    Maybe (Set String)
+    -> Id UserId
     -> Id UserId
     -> Game.LocalChange
     -> LocalState
     -> LocalState
-gameChangeUpdate changeBy otherUserId gameChange local =
+gameChangeUpdate wordList changeBy otherUserId gameChange local =
     { local
         | dmChannels =
             SeqDict.update
@@ -4364,7 +4381,7 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                 WordSpellingGame.Action action ->
                                     { dmChannel
                                         | games =
-                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) dmChannel.games
+                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction wordList action) dmChannel.games
                                     }
                     )
                         |> Just
