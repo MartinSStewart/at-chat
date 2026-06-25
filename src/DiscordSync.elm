@@ -3336,10 +3336,6 @@ uploadAttachments files uploadAttachmentsResponses =
                 , headers = []
                 , url = uploadAttachmentsResponse.uploadUrl
                 , body =
-                    -- Upload with the file's actual content type. Discord derives the
-                    -- attachment's content_type from the uploaded object, so using
-                    -- application/octet-stream here makes Discord report an unknown
-                    -- content type for files it can't sniff itself (e.g. audio).
                     Http.bytesBody
                         (OneToOne.second fileData.contentType FileStatus.contentTypes
                             |> Maybe.withDefault "application/octet-stream"
