@@ -41,7 +41,6 @@ module Types exposing
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
-    , WordSpellingGameWords(..)
     , messageMenuMobileOffset
     )
 
@@ -248,14 +247,7 @@ type alias LoggedIn2 =
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
-    , wordSpellingGameWords : WordSpellingGameWords
     }
-
-
-type WordSpellingGameWords
-    = WordSpellingGameWords_NotLoaded
-    | WordSpellingGameWords_Loaded (Set String)
-    | WordSpellingGameWords_Error Http.Error
 
 
 type FileDrag
@@ -561,7 +553,6 @@ type FrontendMsg
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
-    | GotWordSpellingGameWords (Result Http.Error String)
 
 
 type ScrollPosition

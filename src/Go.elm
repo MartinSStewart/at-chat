@@ -8,7 +8,6 @@ module Go exposing
     , KomiHalfPoints(..)
     , LocalChange(..)
     , Model(..)
-    , Msg(..)
     , OutMsg(..)
     , Phase(..)
     , PublicGoMatchData
@@ -34,8 +33,9 @@ module Go exposing
     , publicGoMatchUrl
     , setupView
     , spectatorView
-    , update
     , updateAction
+    , updateGame
+    , updateSetup
     , updateSpectator
     , viewHeight
     )
@@ -417,13 +417,7 @@ maxDimension =
     25
 
 
-type Msg
-    = GameMsg GameMsg
-    | SetupMsg SetupMsg
-    | NoOpMsg
-
-
-{-| Opaque
+{-| OpaqueVariants
 -}
 type SetupMsg
     = ChangedWidthInput String
@@ -437,7 +431,7 @@ type SetupMsg
     | PressedStartGame
 
 
-{-| Opaque
+{-| OpaqueVariants
 -}
 type GameMsg
     = PressedCell ( Int, Int )
@@ -1006,84 +1000,13 @@ parseTimeControl model =
                                 Ok (Just { mainTime = Duration.minutes minutes, increment = Duration.seconds inc })
 
 
-update :
-    Time.Posix
-    -> Id UserId
-    -> Id UserId
-    -> Msg
-    -> Maybe ( Id ChannelMessageId, ValidatedSetup, Shared )
-    -> Maybe Model
-    -> ( Maybe Model, List OutMsg )
-update time currentUserId otherUserId msg maybeMatch model =
-    case msg of
-        GameMsg gameMsg ->
-            case maybeMatch of
-                Just ( _, setup, state ) ->
-                    let
-                        ( game2, outMsg ) =
-                            updateGame
-                                time
-                                currentUserId
-                                gameMsg
-                                setup
-                                state
-                                (case model of
-                                    Just (Game game) ->
-                                        game
-
-                                    Just (Setup _) ->
-                                        initGame
-
-                                    Nothing ->
-                                        initGame
-                                )
-                    in
-                    ( Just game2, outMsg )
-
-                Nothing ->
-                    ( model, [] )
-
-        SetupMsg setupMsg ->
-            case maybeMatch of
-                Just _ ->
-                    ( model, [] )
-
-                Nothing ->
-                    let
-                        ( model2, outMsgs ) =
-                            updateSetup
-                                time
-                                currentUserId
-                                otherUserId
-                                setupMsg
-                                (case model of
-                                    Just (Game _) ->
-                                        initSetup
-
-                                    Just (Setup setup2) ->
-                                        setup2
-
-                                    Nothing ->
-                                        initSetup
-                                )
-                    in
-                    ( Just model2, outMsgs )
-
-        NoOpMsg ->
-            ( model, [] )
-
-
-pressedKey :
-    String
-    -> Shared
-    -> Maybe Model
-    -> Maybe Model
-pressedKey key state model =
+pressedKey : String -> Shared -> Maybe Model -> Maybe Model
+pressedKey key shared model =
     case model of
         Just (Game model2) ->
             case key of
                 "ArrowLeft" ->
-                    stepBack state model2 |> Game |> Just
+                    stepBack shared model2 |> Game |> Just
 
                 "ArrowRight" ->
                     stepForward model2 |> Game |> Just
@@ -1096,9 +1019,9 @@ pressedKey key state model =
 
 
 stepBack : Shared -> GameModel -> GameModel
-stepBack state model =
+stepBack shared model =
     { model
-        | viewingMovesBack = min (List.length state.history) (model.viewingMovesBack + 1)
+        | viewingMovesBack = min (List.length shared.history) (model.viewingMovesBack + 1)
         , lastError = Nothing
     }
 
@@ -1460,7 +1383,7 @@ publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
 
-setupView : Bool -> Coord CssPixels -> SetupModel -> Element Msg
+setupView : Bool -> Coord CssPixels -> SetupModel -> Element SetupMsg
 setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
@@ -1552,7 +1475,6 @@ setupView playingAgainstSelf windowSize model =
                 Ui.none
         , MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
         ]
-        |> Ui.map SetupMsg
 
 
 sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg
@@ -1942,7 +1864,7 @@ gameView :
     -> ValidatedSetup
     -> Shared
     -> GameModel
-    -> Element Msg
+    -> Element GameMsg
 gameView currentTime windowSize localUser setup state model =
     let
         isMobile : Bool
@@ -2033,7 +1955,6 @@ gameView currentTime windowSize localUser setup state model =
             Nothing ->
                 Ui.none
         ]
-        |> Ui.map GameMsg
 
 
 statusView : Time.Posix -> Shared -> Element msg

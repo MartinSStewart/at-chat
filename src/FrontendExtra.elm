@@ -93,7 +93,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), WordSpellingGameWords(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1164,16 +1164,6 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
             let
                 ( changeId, localState2 ) =
                     Local.update
-                        (case loggedIn.wordSpellingGameWords of
-                            WordSpellingGameWords_NotLoaded ->
-                                Nothing
-
-                            WordSpellingGameWords_Loaded set ->
-                                Just set
-
-                            WordSpellingGameWords_Error error ->
-                                Nothing
-                        )
                         changeUpdate
                         time
                         (LocalChange (Local.model loggedIn.localState).localUser.session.userId localChange)
@@ -1606,29 +1596,8 @@ openChannelCmds :
     -> LoadedFrontend
     -> Command FrontendOnly ToBackend FrontendMsg
 openChannelCmds sameChannel tab threadRoute loggedIn model3 =
-    let
-        gameTabCmd : Command FrontendOnly ToBackend FrontendMsg
-        gameTabCmd =
-            case tab of
-                Just (Route.DmChannelHeaderTab_Games _) ->
-                    case loggedIn.wordSpellingGameWords of
-                        WordSpellingGameWords_NotLoaded ->
-                            Http.get { url = "/word-list.txt", expect = Http.expectString GotWordSpellingGameWords }
-
-                        WordSpellingGameWords_Loaded set ->
-                            Command.none
-
-                        WordSpellingGameWords_Error error ->
-                            Http.get { url = "/word-list.txt", expect = Http.expectString GotWordSpellingGameWords }
-
-                _ ->
-                    Command.none
-    in
     if sameChannel then
-        Command.batch
-            [ Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-            , gameTabCmd
-            ]
+        Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
     else
         let
@@ -1658,7 +1627,6 @@ openChannelCmds sameChannel tab threadRoute loggedIn model3 =
 
                         Nothing ->
                             scrollToBottom
-            , gameTabCmd
             ]
 
 
@@ -2077,9 +2045,6 @@ isPressMsg msg =
                 _ ->
                     False
 
-        GotWordSpellingGameWords result ->
-            False
-
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
@@ -2169,8 +2134,8 @@ textToDiscordRichText text memberIds local =
         text
 
 
-changeUpdate : Maybe (Set String) -> LocalMsg -> LocalState -> LocalState
-changeUpdate wordSpellingGameWordList localMsg local =
+changeUpdate : LocalMsg -> LocalState -> LocalState
+changeUpdate localMsg local =
     case localMsg of
         LocalChange changedBy localChange ->
             case localChange of
@@ -3122,7 +3087,6 @@ changeUpdate wordSpellingGameWordList localMsg local =
 
                 Local_Game { otherUserId } gameChange ->
                     gameChangeUpdate
-                        wordSpellingGameWordList
                         local.localUser.session.userId
                         otherUserId
                         gameChange
@@ -4289,20 +4253,19 @@ changeUpdate wordSpellingGameWordList localMsg local =
                             }
 
                 Server_Game changeBy { otherUserId } gameChange ->
-                    gameChangeUpdate wordSpellingGameWordList changeBy otherUserId gameChange local
+                    gameChangeUpdate changeBy otherUserId gameChange local
 
                 Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
 gameChangeUpdate :
-    Maybe (Set String)
-    -> Id UserId
+    Id UserId
     -> Id UserId
     -> Game.LocalChange
     -> LocalState
     -> LocalState
-gameChangeUpdate wordList changeBy otherUserId gameChange local =
+gameChangeUpdate changeBy otherUserId gameChange local =
     { local
         | dmChannels =
             SeqDict.update
@@ -4381,7 +4344,7 @@ gameChangeUpdate wordList changeBy otherUserId gameChange local =
                                 WordSpellingGame.Action action ->
                                     { dmChannel
                                         | games =
-                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction wordList action) dmChannel.games
+                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) dmChannel.games
                                     }
                     )
                         |> Just

@@ -67,7 +67,6 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
-import Set
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -76,7 +75,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel, WordSpellingGameWords(..))
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -447,7 +446,6 @@ loadedInitHelper timezone userAgent loginData loading =
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
-            , wordSpellingGameWords = WordSpellingGameWords_NotLoaded
             }
     in
     ( loggedIn
@@ -1206,7 +1204,7 @@ updateLoaded msg model =
                                                                                     |> Maybe.andThen (\matchId -> SeqDict.get matchId dmChannel.games)
                                                                                     |> Maybe.andThen Game.goMatchData
                                                                             of
-                                                                                Just ( _, state ) ->
+                                                                                Just ( _, shared ) ->
                                                                                     (case maybeGameModel of
                                                                                         Just (Game.GoModel m) ->
                                                                                             Just m
@@ -1214,7 +1212,7 @@ updateLoaded msg model =
                                                                                         _ ->
                                                                                             Nothing
                                                                                     )
-                                                                                        |> Go.pressedKey key state
+                                                                                        |> Go.pressedKey key shared
                                                                                         |> Maybe.map Game.GoModel
 
                                                                                 Nothing ->
@@ -1606,11 +1604,11 @@ updateLoaded msg model =
                                                     Local.model loggedIn.localState
                                             in
                                             case getWordSpellingGameModel local2 loggedIn model of
-                                                Just game ->
+                                                Just ( setup, _, gameData ) ->
                                                     setWordSpellingGameModel
                                                         local2
                                                         model
-                                                        (WordSpellingGame.dragStart model.windowSize startTouches game)
+                                                        (WordSpellingGame.dragStart model.windowSize startTouches setup gameData)
                                                         loggedIn
 
                                                 _ ->
@@ -1979,13 +1977,6 @@ updateLoaded msg model =
 
                                 ( gameModel2, outMsgs ) =
                                     Game.update
-                                        (case loggedIn.wordSpellingGameWords of
-                                            WordSpellingGameWords_Loaded set ->
-                                                set
-
-                                            _ ->
-                                                Set.empty
-                                        )
                                         model.time
                                         local.localUser.session.userId
                                         otherUserId
@@ -4435,23 +4426,6 @@ updateLoaded msg model =
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
 
-        GotWordSpellingGameWords result ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( case result of
-                        Ok ok ->
-                            { loggedIn
-                                | wordSpellingGameWords =
-                                    String.split "\n" ok |> Set.fromList |> WordSpellingGameWords_Loaded
-                            }
-
-                        Err error ->
-                            { loggedIn | wordSpellingGameWords = WordSpellingGameWords_Error error }
-                    , Command.none
-                    )
-                )
-                model
-
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
 they only select a drawing anchor while the drawing tab is open.
@@ -5799,7 +5773,7 @@ getWordSpellingGameModel :
     LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameData )
+    -> Maybe ( WordSpellingGame.ValidatedSetup, Game.Cache WordSpellingGame.Shared, WordSpellingGame.GameData )
 getWordSpellingGameModel local loggedIn model =
     case model.route of
         DmRoute dmRoute ->
@@ -5810,9 +5784,9 @@ getWordSpellingGameModel local loggedIn model =
                             case SeqDict.get messageId dmChannel.games of
                                 Just matchData ->
                                     case Game.wordSpellingMatchData matchData of
-                                        Just ( setup, state ) ->
+                                        Just ( setup, shared ) ->
                                             ( setup
-                                            , state
+                                            , shared
                                             , case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
                                                 Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
                                                     gameModel

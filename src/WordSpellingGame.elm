@@ -4,6 +4,7 @@ module WordSpellingGame exposing
     , Board
     , GameData
     , GameMsg
+    , IsValid(..)
     , Letter(..)
     , LetterOrWildcard
     , LocalChange(..)
@@ -64,6 +65,7 @@ import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
+import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 type Model
@@ -150,9 +152,14 @@ type LocalChange
 
 
 type Action
-    = PlaceWord PlacedWord
+    = PlaceWord PlacedWord (ToBeFilledInByBackend IsValid)
     | ReplaceTray
     | JoinGame
+
+
+type IsValid
+    = IsValid
+    | IsNotValid
 
 
 type alias PlacedWord =
@@ -276,16 +283,16 @@ shuffle list =
         Random.independentSeed
 
 
-foldActions : Maybe (Set String) -> ValidatedSetup -> Array ActionWithTime -> Shared
-foldActions wordList setup actions =
-    Array.foldl (updateAction wordList setup) (initGameState setup) actions
+foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
+foldActions setup actions =
+    Array.foldl (updateAction setup) (initGameState setup) actions
 
 
-updateAction : Maybe (Set String) -> ValidatedSetup -> ActionWithTime -> Shared -> Shared
-updateAction wordList setup action state =
+updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
+updateAction setup action state =
     case action.change of
-        PlaceWord placedWord ->
-            case applyPlacement wordList state.board placedWord of
+        PlaceWord placedWord isValid ->
+            case placeWord state.board placedWord of
                 Just result ->
                     { state
                         | board = result.board
@@ -592,17 +599,6 @@ validatePlacement wordList board placedWord =
             Err ()
 
 
-applyPlacement : Maybe (Set String) -> Board -> PlacedWord -> Maybe PlacementResult
-applyPlacement wordList board placedWord =
-    case wordList of
-        Just wordList2 ->
-            validatePlacement wordList2 board placedWord |> Result.toMaybe
-
-        Nothing ->
-            -- We should always have a word list but fall back to assuming the word exists if we don't
-            placeWord board placedWord
-
-
 letterScoreMultiplier : ( Int, Int ) -> Int
 letterScoreMultiplier position =
     case SeqDict.get position bonusCells of
@@ -676,11 +672,11 @@ updateSetup time currentUserId msg setup =
                     ( Setup { setup | error = Just error }, [] )
 
 
-updateGame : Set String -> Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
-updateGame wordList time currentUserId shared msg model =
+updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame time currentUserId shared msg model =
     case msg of
         PressedSubmitWord ->
-            case checkValidPlacement wordList currentUserId shared model of
+            case checkValidPlacement currentUserId shared model of
                 Ok placement ->
                     ( { model
                         | tiles =
@@ -705,7 +701,10 @@ updateGame wordList time currentUserId shared msg model =
                                 model.tiles
                                 |> Tuple.second
                       }
-                    , [ OutLocalChange (Action { userId = currentUserId, change = PlaceWord placement, time = time }) ]
+                    , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
+                            |> Action
+                            |> OutLocalChange
+                      ]
                     )
 
                 Err () ->
@@ -733,8 +732,8 @@ Wildcard tiles aren't supported yet (there's no way to pick which letter they re
 placement containing one is rejected.
 
 -}
-checkValidPlacement : Set String -> Id UserId -> Shared -> GameData -> Result () PlacedWord
-checkValidPlacement wordList currentUserId shared notShared =
+checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
+checkValidPlacement currentUserId shared notShared =
     let
         placed : List ( ( Int, Int ), LetterOrWildcard )
         placed =
@@ -771,11 +770,9 @@ checkValidPlacement wordList currentUserId shared notShared =
             in
             if sameRow then
                 buildPlacedWord False shared placed
-                    |> Result.andThen (validateWord wordList shared.board)
 
             else if sameColumn then
                 buildPlacedWord True shared placed
-                    |> Result.andThen (validateWord wordList shared.board)
 
             else
                 Err ()
@@ -1023,8 +1020,8 @@ getPlayer userId gameState =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
 
 
-dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
-dragStart windowSize touches ( setup, _, gameModel ) =
+dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> Model
+dragStart windowSize touches setup gameModel =
     let
         touchPosition : Coord CssPixels
         touchPosition =
@@ -1079,7 +1076,7 @@ dragStart windowSize touches ( setup, _, gameModel ) =
 
 
 dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
-dragEnd windowSize newTouches ( _, gameState, gameModel ) =
+dragEnd windowSize newTouches ( _, shared, gameModel ) =
     case gameModel.dragging of
         Just tileIndex ->
             let
@@ -1101,7 +1098,7 @@ dragEnd windowSize newTouches ( _, gameState, gameModel ) =
             in
             case cellAtPosition windowSize position of
                 Just cell ->
-                    if SeqDict.member cell gameState.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
+                    if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
                         returnToTray
 
                     else
