@@ -1979,6 +1979,13 @@ updateLoaded msg model =
 
                                 ( gameModel2, outMsgs ) =
                                     Game.update
+                                        (case loggedIn.wordSpellingGameWords of
+                                            WordSpellingGameWords_Loaded set ->
+                                                set
+
+                                            _ ->
+                                                Set.empty
+                                        )
                                         model.time
                                         local.localUser.session.userId
                                         otherUserId

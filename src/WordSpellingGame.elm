@@ -1,14 +1,16 @@
 module WordSpellingGame exposing
     ( Action
     , ActionWithTime
+    , Board
     , GameData
     , GameMsg
-    , Letter
+    , Letter(..)
     , LetterOrWildcard
     , LocalChange(..)
     , Model(..)
     , OutMsg(..)
     , PlacedWord
+    , PlacementResult
     , Player
     , SetupModel
     , SetupMsg
@@ -25,10 +27,12 @@ module WordSpellingGame exposing
     , initSetup
     , insideBoard
     , isPlayerTurn
+    , placeWord
     , setupView
     , updateAction
     , updateGame
     , updateSetup
+    , validatePlacement
     )
 
 {-| Were calling it this to avoid the Scrabble trademark
@@ -280,57 +284,47 @@ foldActions wordList setup actions =
 updateAction : Set String -> ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction wordList setup action state =
     case action.change of
-        PlaceWord { start, isVertical, letters } ->
-            let
-                placement : Placement
-                placement =
-                    walkPlacement
-                        state.board
-                        start
-                        (if isVertical then
-                            ( 0, 1 )
+        PlaceWord placedWord ->
+            case applyPlacement wordList state.board placedWord of
+                Just result ->
+                    { state
+                        | board = result.board
+                        , players =
+                            NonemptyExtra.update
+                                state.turnCount
+                                (\player ->
+                                    let
+                                        remainingTray : List LetterOrWildcard
+                                        remainingTray =
+                                            List.foldl
+                                                removeFromTray
+                                                player.tray
+                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
 
-                         else
-                            ( 1, 0 )
-                        )
-                        (List.Nonempty.toList letters)
+                                        drawn : List LetterOrWildcard
+                                        drawn =
+                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                                Just drawCount ->
+                                                    getLetters
+                                                        drawCount
+                                                        setup
+                                                        result.board
+                                                        (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
+                                                            |> List.Nonempty.toList
+                                                        )
+                                                        state.turnCount
 
-                totalScore : Int
-                totalScore =
-                    placement.lettersScore * placement.wordMultiplier
-            in
-            { state
-                | board = placement.board
-                , players =
-                    NonemptyExtra.update
-                        state.turnCount
-                        (\player ->
-                            let
-                                remainingTray : List LetterOrWildcard
-                                remainingTray =
-                                    List.foldl removeFromTray player.tray (List.map Letter placement.placedLetters)
+                                                Nothing ->
+                                                    []
+                                    in
+                                    { player | tray = remainingTray ++ drawn, score = player.score + result.score }
+                                )
+                                state.players
+                        , turnCount = state.turnCount + 1
+                    }
 
-                                drawn : List LetterOrWildcard
-                                drawn =
-                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                        Just drawCount ->
-                                            getLetters
-                                                drawCount
-                                                setup
-                                                placement.board
-                                                (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
-                                                    |> List.Nonempty.toList
-                                                )
-                                                state.turnCount
-
-                                        Nothing ->
-                                            []
-                            in
-                            { player | tray = remainingTray ++ drawn, score = player.score + totalScore }
-                        )
-                        state.players
-                , turnCount = state.turnCount + 1
-            }
+                Nothing ->
+                    state
 
         ReplaceTray ->
             { state
@@ -378,48 +372,238 @@ initPlayer userId board setup existingPlayers =
     }
 
 
-type alias Placement =
-    { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
-    , lettersScore : Int
-    , wordMultiplier : Int
-    , placedLetters : List Letter
+type alias Board =
+    SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+
+
+type alias PlacementResult =
+    { board : Board
+    , words : List String
+    , score : Int
     }
 
 
-{-| Lay a word's new letters out along the direction starting from `start`, stepping over any
-tiles already on the board (which count toward the score but aren't placed again), and tallying
-the score using the bonus squares the new letters land on.
+{-| Lay a word's new letters out along the placement direction starting from `start`, stepping
+over any tiles already on the board (which aren't placed again), then work out every word that
+the placement forms: the main word along the placement direction, plus any perpendicular
+cross-word that runs through a newly-placed tile. Returns `Nothing` if the letters run off the
+edge of the board.
+
+The returned `words` are lowercased so they can be looked up directly in the word list, and
+`score` is the combined Scrabble score of all the formed words (letter and word multipliers only
+apply to the squares the new tiles land on; wildcards score zero).
+
 -}
-walkPlacement : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ( Int, Int ) -> ( Int, Int ) -> List Letter -> Placement
-walkPlacement committedBoard start ( dx, dy ) letters =
+placeWord : Board -> PlacedWord -> Maybe PlacementResult
+placeWord board placedWord =
     let
-        go : ( Int, Int ) -> List Letter -> Placement -> Placement
-        go ( cx, cy ) remaining acc =
+        ( dx, dy ) =
+            if placedWord.isVertical then
+                ( 0, 1 )
+
+            else
+                ( 1, 0 )
+
+        -- Lay out the new letters, stepping over tiles already committed to the board.
+        layout : ( Int, Int ) -> List Letter -> List ( ( Int, Int ), Letter ) -> Maybe (List ( ( Int, Int ), Letter ))
+        layout ( cx, cy ) remaining acc =
             case remaining of
                 [] ->
-                    acc
+                    Just (List.reverse acc)
 
                 letter :: rest ->
                     if cx < 0 || cy < 0 || cx >= gridSize || cy >= gridSize then
-                        acc
+                        Nothing
 
                     else
-                        case SeqDict.get ( cx, cy ) committedBoard of
-                            Just existing ->
-                                go ( cx + dx, cy + dy )
-                                    remaining
-                                    { acc | lettersScore = acc.lettersScore + (letterData existing.letter).score }
+                        case SeqDict.get ( cx, cy ) board of
+                            Just _ ->
+                                layout ( cx + dx, cy + dy ) remaining acc
 
                             Nothing ->
-                                go ( cx + dx, cy + dy )
-                                    rest
-                                    { board = SeqDict.insert ( cx, cy ) { letter = letter, isWildcard = False } acc.board
-                                    , lettersScore = acc.lettersScore + (letterData letter).score * letterScoreMultiplier ( cx, cy )
-                                    , wordMultiplier = acc.wordMultiplier * wordScoreMultiplier ( cx, cy )
-                                    , placedLetters = letter :: acc.placedLetters
-                                    }
+                                layout ( cx + dx, cy + dy ) rest (( ( cx, cy ), letter ) :: acc)
     in
-    go start letters { board = committedBoard, lettersScore = 0, wordMultiplier = 1, placedLetters = [] }
+    case layout placedWord.start (List.Nonempty.toList placedWord.letters) [] of
+        Just placedCells ->
+            let
+                newBoard : Board
+                newBoard =
+                    List.foldl
+                        (\( cell, letter ) acc -> SeqDict.insert cell { letter = letter, isWildcard = False } acc)
+                        board
+                        placedCells
+
+                placedCoords : List ( Int, Int )
+                placedCoords =
+                    List.map Tuple.first placedCells
+
+                placedSet : Set ( Int, Int )
+                placedSet =
+                    Set.fromList placedCoords
+
+                -- The main word runs along the placement direction through the first placed tile.
+                mainWord : List ( Int, Int )
+                mainWord =
+                    case placedCoords of
+                        first :: _ ->
+                            lineWord newBoard ( dx, dy ) first
+
+                        [] ->
+                            []
+
+                -- A cross word runs perpendicular to the placement direction through a placed tile.
+                crossWords : List (List ( Int, Int ))
+                crossWords =
+                    List.filterMap
+                        (\cell ->
+                            let
+                                word : List ( Int, Int )
+                                word =
+                                    lineWord newBoard ( dy, dx ) cell
+                            in
+                            if List.length word >= 2 then
+                                Just word
+
+                            else
+                                Nothing
+                        )
+                        placedCoords
+
+                allWords : List (List ( Int, Int ))
+                allWords =
+                    (if List.length mainWord >= 2 then
+                        [ mainWord ]
+
+                     else
+                        []
+                    )
+                        ++ crossWords
+            in
+            Just
+                { board = newBoard
+                , words = List.map (wordString newBoard) allWords
+                , score = List.sum (List.map (wordScore newBoard placedSet) allWords)
+                }
+
+        Nothing ->
+            Nothing
+
+
+{-| The maximal contiguous run of tiles through `cell` in the direction `( dirX, dirY )`.
+-}
+lineWord : Board -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
+lineWord board ( dirX, dirY ) cell =
+    let
+        walkBack : ( Int, Int ) -> ( Int, Int )
+        walkBack ( cx, cy ) =
+            let
+                prev : ( Int, Int )
+                prev =
+                    ( cx - dirX, cy - dirY )
+            in
+            if SeqDict.member prev board then
+                walkBack prev
+
+            else
+                ( cx, cy )
+
+        walkForward : ( Int, Int ) -> List ( Int, Int ) -> List ( Int, Int )
+        walkForward ( cx, cy ) acc =
+            if SeqDict.member ( cx, cy ) board then
+                walkForward ( cx + dirX, cy + dirY ) (( cx, cy ) :: acc)
+
+            else
+                List.reverse acc
+    in
+    walkForward (walkBack cell) []
+
+
+{-| The lowercased text of the word formed by the given cells.
+-}
+wordString : Board -> List ( Int, Int ) -> String
+wordString board cells =
+    List.filterMap
+        (\cell -> SeqDict.get cell board |> Maybe.map (\{ letter } -> (letterData letter).text))
+        cells
+        |> String.concat
+        |> String.toLower
+
+
+{-| The Scrabble score of a single word. Letter and word multipliers only apply to the squares
+that the newly-placed tiles (`placedSet`) land on; wildcards always score zero.
+-}
+wordScore : Board -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
+wordScore board placedSet cells =
+    let
+        letterSum : Int
+        letterSum =
+            List.map
+                (\cell ->
+                    case SeqDict.get cell board of
+                        Just { letter, isWildcard } ->
+                            if isWildcard then
+                                0
+
+                            else if Set.member cell placedSet then
+                                (letterData letter).score * letterScoreMultiplier cell
+
+                            else
+                                (letterData letter).score
+
+                        Nothing ->
+                            0
+                )
+                cells
+                |> List.sum
+
+        wordMultiplier : Int
+        wordMultiplier =
+            List.map
+                (\cell ->
+                    if Set.member cell placedSet then
+                        wordScoreMultiplier cell
+
+                    else
+                        1
+                )
+                cells
+                |> List.product
+    in
+    letterSum * wordMultiplier
+
+
+{-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
+exists in `wordList`.
+-}
+validatePlacement : Set String -> Board -> PlacedWord -> Result () PlacementResult
+validatePlacement wordList board placedWord =
+    case placeWord board placedWord of
+        Just result ->
+            if List.isEmpty result.words then
+                Err ()
+
+            else if List.all (\word -> Set.member word wordList) result.words then
+                Ok result
+
+            else
+                Err ()
+
+        Nothing ->
+            Err ()
+
+
+{-| Apply a placement during action replay. When `wordList` is empty (the word list isn't
+available, e.g. on the backend or before it has loaded), the action is trusted and applied
+without checking that the formed words exist, since committed actions are validated at submit
+time.
+-}
+applyPlacement : Set String -> Board -> PlacedWord -> Maybe PlacementResult
+applyPlacement wordList board placedWord =
+    if Set.isEmpty wordList then
+        placeWord board placedWord
+
+    else
+        validatePlacement wordList board placedWord |> Result.toMaybe
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -495,11 +679,11 @@ updateSetup time currentUserId msg setup =
                     ( Setup { setup | error = Just error }, [] )
 
 
-updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
-updateGame time currentUserId shared msg model =
+updateGame : Set String -> Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame wordList time currentUserId shared msg model =
     case msg of
         PressedSubmitWord ->
-            case checkValidPlacement currentUserId shared model of
+            case checkValidPlacement wordList currentUserId shared model of
                 Ok placement ->
                     ( { model
                         | tiles =
@@ -552,8 +736,8 @@ Wildcard tiles aren't supported yet (there's no way to pick which letter they re
 placement containing one is rejected.
 
 -}
-checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
-checkValidPlacement currentUserId shared notShared =
+checkValidPlacement : Set String -> Id UserId -> Shared -> GameData -> Result () PlacedWord
+checkValidPlacement wordList currentUserId shared notShared =
     let
         placed : List ( ( Int, Int ), LetterOrWildcard )
         placed =
@@ -590,15 +774,29 @@ checkValidPlacement currentUserId shared notShared =
             in
             if sameRow then
                 buildPlacedWord False shared placed
+                    |> Result.andThen (validateWord wordList shared.board)
 
             else if sameColumn then
                 buildPlacedWord True shared placed
+                    |> Result.andThen (validateWord wordList shared.board)
 
             else
                 Err ()
 
         [] ->
             Err ()
+
+
+{-| Reject a structurally-valid placement unless every word it forms exists in `wordList`. When
+`wordList` is empty (e.g. it hasn't loaded yet) the words aren't checked.
+-}
+validateWord : Set String -> Board -> PlacedWord -> Result () PlacedWord
+validateWord wordList board placedWord =
+    if Set.isEmpty wordList then
+        Ok placedWord
+
+    else
+        validatePlacement wordList board placedWord |> Result.map (\_ -> placedWord)
 
 
 buildPlacedWord : Bool -> Shared -> List ( ( Int, Int ), LetterOrWildcard ) -> Result () PlacedWord

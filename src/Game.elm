@@ -32,6 +32,7 @@ import NonemptyDict exposing (NonemptyDict)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Set exposing (Set)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -89,7 +90,7 @@ initMatchData gameData publicLink =
                 FrontendGameData_Go setup actions (Go.foldActions setup actions)
 
             GameData_WordSpellingGame setup actions ->
-                FrontendGameData_WordSpellingGame setup actions (WordSpellingGame.foldActions setup actions)
+                FrontendGameData_WordSpellingGame setup actions (WordSpellingGame.foldActions Set.empty setup actions)
     , publicLink = publicLink
     }
         |> MatchData
@@ -145,7 +146,7 @@ addWordSpellingGameAction action (MatchData match) =
                     FrontendGameData_WordSpellingGame
                         setup
                         (Array.push action actions)
-                        (WordSpellingGame.updateAction setup action cache)
+                        (WordSpellingGame.updateAction Set.empty setup action cache)
     }
         |> MatchData
 
@@ -191,7 +192,8 @@ type OutMsg
 
 
 update :
-    Time.Posix
+    Set String
+    -> Time.Posix
     -> Id UserId
     -> Id UserId
     -> Msg
@@ -199,7 +201,7 @@ update :
     -> Maybe ( Id ChannelMessageId, MatchData )
     -> Maybe Model
     -> ( Maybe Model, List OutMsg )
-update time currentUserId otherUserId msg newMatchId maybeMatch model =
+update wordList time currentUserId otherUserId msg newMatchId maybeMatch model =
     case msg of
         PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -273,6 +275,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                             let
                                 ( notSharedModel, outMsgs ) =
                                     WordSpellingGame.updateGame
+                                        wordList
                                         time
                                         currentUserId
                                         shared
