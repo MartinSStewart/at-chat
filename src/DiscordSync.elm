@@ -3330,12 +3330,17 @@ sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordSt
 uploadAttachments : List ( Id FileId, FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
 uploadAttachments files uploadAttachmentsResponses =
     List.map2
-        (\( _, _, bytes ) uploadAttachmentsResponse ->
+        (\( _, fileData, bytes ) uploadAttachmentsResponse ->
             Http.task
                 { method = "PUT"
                 , headers = []
                 , url = uploadAttachmentsResponse.uploadUrl
-                , body = Http.bytesBody "application/octet-stream" bytes
+                , body =
+                    Http.bytesBody
+                        (OneToOne.second fileData.contentType FileStatus.contentTypes
+                            |> Maybe.withDefault "application/octet-stream"
+                        )
+                        bytes
                 , resolver =
                     Http.bytesResolver
                         (\response ->
