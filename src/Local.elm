@@ -6,7 +6,6 @@ import Quantity
 import Time
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Prose
 import Ui.Shadow
 
 
@@ -120,7 +119,6 @@ networkError msgToString currentTime (Local localModel_) =
                     , Ui.Font.size 14
                     , Ui.paddingLeft 16
                     , Ui.scrollable
-                    , Ui.width Ui.fill
                     , Ui.heightMax 100
                     ]
                 |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 4 } ]

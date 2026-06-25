@@ -67,7 +67,6 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
-import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 type alias PublicGoMatchData =
@@ -248,8 +247,6 @@ type SizeSelection
     | CustomSize
 
 
-{-| OpaqueVariants
--}
 type Model
     = Setup SetupModel
     | Game GameModel
@@ -420,8 +417,6 @@ maxDimension =
     25
 
 
-{-| OpaqueVariants
--}
 type Msg
     = GameMsg GameMsg
     | SetupMsg SetupMsg
@@ -1023,7 +1018,7 @@ update time currentUserId otherUserId msg maybeMatch model =
     case msg of
         GameMsg gameMsg ->
             case maybeMatch of
-                Just ( matchId, setup, state ) ->
+                Just ( _, setup, state ) ->
                     let
                         ( game2, outMsg ) =
                             updateGame
@@ -1340,7 +1335,7 @@ updateGame currentTime currentUserId msg setup state model =
                     Playing _ ->
                         if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
-                                Ok updated ->
+                                Ok _ ->
                                     ( Game model
                                     , [ PlaySound "pop"
                                       , Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
@@ -1881,12 +1876,17 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
 
 isLocalUsersTurn : Id UserId -> ValidatedSetup -> GameState -> Bool
 isLocalUsersTurn currentUserId setup state =
-    case state.currentPlayer of
-        Black ->
-            setup.blackPlayer == currentUserId
+    case state.phase of
+        Scored _ ->
+            False
 
-        White ->
-            setup.whitePlayer == currentUserId
+        _ ->
+            case state.currentPlayer of
+                Black ->
+                    setup.blackPlayer == currentUserId
+
+                White ->
+                    setup.whitePlayer == currentUserId
 
 
 spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg

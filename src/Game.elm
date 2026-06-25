@@ -1,6 +1,5 @@
 module Game exposing
     ( BackendGameData(..)
-    , FrontendGameData
     , LocalChange(..)
     , MatchData
     , Model(..)
@@ -21,7 +20,6 @@ import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
-import Effect.Command as Command
 import Effect.Time as Time
 import Go
 import Html
@@ -129,7 +127,7 @@ addGoAction action (MatchData match) =
                 FrontendGameData_Go setup actions cache ->
                     FrontendGameData_Go setup (Array.push action actions) (Go.updateAction setup action cache)
 
-                FrontendGameData_WordSpellingGame setup actions cache ->
+                FrontendGameData_WordSpellingGame _ _ _ ->
                     match.data
     }
         |> MatchData
@@ -140,7 +138,7 @@ addWordSpellingGameAction action (MatchData match) =
     { match
         | data =
             case match.data of
-                FrontendGameData_Go setup actions cache ->
+                FrontendGameData_Go _ _ _ ->
                     match.data
 
                 FrontendGameData_WordSpellingGame setup actions cache ->
@@ -157,20 +155,23 @@ hasPendingTurn userId matches =
     SeqDict.foldl
         (\matchId (MatchData match) set ->
             case match.data of
-                FrontendGameData_Go setup actions cache ->
-                    case cache.phase of
-                        Go.Scored _ ->
+                FrontendGameData_Go setup _ cache ->
+                    if Go.isLocalUsersTurn userId setup cache then
+                        SeqSet.insert matchId set
+
+                    else
+                        set
+
+                FrontendGameData_WordSpellingGame _ _ shared ->
+                    case WordSpellingGame.isPlayerTurn userId shared of
+                        WordSpellingGame.NotJoined ->
                             set
 
-                        _ ->
-                            if Go.isLocalUsersTurn userId setup cache then
-                                SeqSet.insert matchId set
+                        WordSpellingGame.Joined ->
+                            set
 
-                            else
-                                set
-
-                FrontendGameData_WordSpellingGame _ _ _ ->
-                    set
+                        WordSpellingGame.JoinedAndItsTheirTurn ->
+                            SeqSet.insert matchId set
         )
         SeqSet.empty
         matches
@@ -266,7 +267,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         WordSpellingGameMsg wordSpellingGameMsg ->
             case maybeMatch of
-                Just ( messageId, MatchData matchData ) ->
+                Just ( _, MatchData matchData ) ->
                     case matchData.data of
                         FrontendGameData_WordSpellingGame setup _ shared ->
                             let
@@ -305,13 +306,13 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                                     , OutSelectMatch (Just matchId)
                                                     ]
 
-                                                WordSpellingGame.Action action ->
+                                                WordSpellingGame.Action _ ->
                                                     [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
                                 )
                                 outMsgs
                             )
 
-                        FrontendGameData_Go validatedSetup array gameState ->
+                        FrontendGameData_Go _ _ _ ->
                             ( model, [] )
 
                 _ ->
@@ -353,7 +354,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                     , OutSelectMatch (Just matchId)
                                     ]
 
-                                WordSpellingGame.Action action ->
+                                WordSpellingGame.Action _ ->
                                     [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
                 )
                 outMsgs
@@ -428,7 +429,6 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                         windowSize
                                         maybeDragging
                                         localUser.session.userId
-                                        setup
                                         cache
                                         (case model of
                                             Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->

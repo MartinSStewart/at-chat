@@ -3,6 +3,8 @@ module WordSpellingGame exposing
     , ActionWithTime
     , GameData
     , GameMsg
+    , Letter
+    , LetterOrWildcard
     , LocalChange(..)
     , Model(..)
     , OutMsg(..)
@@ -11,20 +13,22 @@ module WordSpellingGame exposing
     , SetupModel
     , SetupMsg
     , Shared
+    , Tile
+    , TilePosition
+    , UserStatus(..)
     , ValidatedSetup
     , dragEnd
     , dragStart
-    , dragging
     , foldActions
     , gameView
     , initGame
     , initSetup
     , insideBoard
+    , isPlayerTurn
     , setupView
     , updateAction
     , updateGame
     , updateSetup
-    , validateSetup
     )
 
 {-| Were calling it this to avoid the Scrabble trademark
@@ -41,7 +45,7 @@ import Go exposing (TimeControl)
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -92,6 +96,7 @@ type SetupMsg
 type GameMsg
     = PressedSubmitWord
     | PressedJoinGame
+    | PressedReplaceTray
 
 
 type alias SetupModel =
@@ -505,6 +510,9 @@ updateGame time currentUserId shared msg model =
         PressedJoinGame ->
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
+        PressedReplaceTray ->
+            ( model, [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTray, time = time }) ] )
+
 
 {-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
 the placement isn't a valid word. The tiles the player holds are the current player's tray, in
@@ -757,6 +765,7 @@ trayTileSize =
     50
 
 
+trayTileSpacing : number
 trayTileSpacing =
     4
 
@@ -796,8 +805,8 @@ getPlayer userId gameState =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
 
 
-dragStart : Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
-dragStart windowSize currentUserId touches ( setup, gameState, gameModel ) =
+dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
+dragStart windowSize touches ( setup, _, gameModel ) =
     let
         touchPosition : Coord CssPixels
         touchPosition =
@@ -849,20 +858,6 @@ dragStart windowSize currentUserId touches ( setup, gameState, gameModel ) =
 
                 Nothing ->
                     Game gameModel
-
-
-dragging : NonemptyDict Int Touch -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
-dragging oldTouches newTouches ( _, _, gameModel ) =
-    Game gameModel
-
-
-
---case gameModel.dragging of
---    Just dragTile ->
---        Game { gameModel | dragging = Just { dragTile | position = Touch.touchCentroid newTouches } }
---
---    Nothing ->
---        Game gameModel
 
 
 dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
@@ -949,29 +944,51 @@ cellOccupiedByOtherTile draggedIndex cell tiles =
         |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
 
 
+type UserStatus
+    = NotJoined
+    | Joined
+    | JoinedAndItsTheirTurn
+
+
+isPlayerTurn : Id UserId -> Shared -> UserStatus
+isPlayerTurn userId shared =
+    case List.Extra.findIndex (\player -> player.userId == userId) (List.Nonempty.toList shared.players) of
+        Just index ->
+            if index == modBy (List.Nonempty.length shared.players) shared.turnCount then
+                JoinedAndItsTheirTurn
+
+            else
+                Joined
+
+        Nothing ->
+            NotJoined
+
+
 gameView :
     Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
     -> Id UserId
-    -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView windowSize maybeDragging currentUserId validatedSetup shared model =
+gameView windowSize maybeDragging currentUserId shared model =
     Ui.column
         [ Ui.spacing 16 ]
         [ boardView windowSize maybeDragging currentUserId shared model
         , statusView currentUserId shared
-        , if List.Nonempty.any (\player -> player.userId == currentUserId) shared.players then
-            MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+        , case isPlayerTurn currentUserId shared of
+            JoinedAndItsTheirTurn ->
+                Ui.row
+                    [ Ui.spacing 16 ]
+                    [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+                    , MyUi.simpleButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTray (Ui.text "Replace tray")
+                    ]
 
-          else
-            Ui.none
-        , if List.Nonempty.all (\player -> player.userId == currentUserId) shared.players then
-            Ui.none
+            Joined ->
+                Ui.none
 
-          else
-            MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+            NotJoined ->
+                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
         ]
 
 
@@ -981,12 +998,15 @@ statusView currentUserId shared =
         currentPlayer : Player
         currentPlayer =
             List.Nonempty.get shared.turnCount shared.players
+
+        playerCount =
+            List.Nonempty.length shared.players
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         (List.Nonempty.toList shared.players
-            |> List.map
-                (\player ->
+            |> List.indexedMap
+                (\index player ->
                     (if player.userId == currentUserId then
                         "You"
 
@@ -995,9 +1015,16 @@ statusView currentUserId shared =
                     )
                         ++ ": "
                         ++ String.fromInt player.score
-                        ++ " ("
-                        ++ String.fromInt (List.Nonempty.length shared.players)
-                        ++ " player(s) in game)"
+                        ++ (if index == modBy playerCount shared.turnCount then
+                                if player.userId == currentUserId then
+                                    " (your turn)"
+
+                                else
+                                    " (their turn)"
+
+                            else
+                                ""
+                           )
                         |> Ui.text
                         |> Ui.el
                             [ if player.userId == currentPlayer.userId then
@@ -1072,7 +1099,7 @@ boardView windowSize maybeDragging currentUserId gameState model =
         dragHighlight : Ui.Attribute GameMsg
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
-                ( Just dragTile, Just dragging2 ) ->
+                ( Just _, Just dragging2 ) ->
                     case cellAtPosition windowSize (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
@@ -1194,21 +1221,19 @@ cellView cellSize2 position =
             SeqDict.get position bonusCells
     in
     Ui.el
-        ((case maybeBonus of
+        [ case maybeBonus of
             Just specialCell ->
                 Ui.background (bonusCellColor specialCell)
 
             Nothing ->
                 Ui.background (Ui.rgb 250 250 250)
-         )
-            :: [ Ui.width (Ui.px cellSize2)
-               , Ui.height (Ui.px cellSize2)
-               , Ui.border 1
-               , Ui.borderColor MyUi.inputBorder
-               , Ui.contentCenterX
-               , Ui.contentCenterY
-               ]
-        )
+        , Ui.width (Ui.px cellSize2)
+        , Ui.height (Ui.px cellSize2)
+        , Ui.border 1
+        , Ui.borderColor MyUi.inputBorder
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        ]
         (case maybeBonus of
             Just CenterCell ->
                 Ui.el
@@ -1253,14 +1278,12 @@ bonusCellColor bonus =
 
 bonusCells : SeqDict ( Int, Int ) BonusCells
 bonusCells =
-    SeqDict.fromList
-        ([ ( 7, 7 ) ]
-            |> List.map (\position -> ( position, CenterCell ))
-            |> (++) (List.map (\position -> ( position, TripleWord )) tripleWordCells)
-            |> (++) (List.map (\position -> ( position, DoubleWord )) doubleWordCells)
-            |> (++) (List.map (\position -> ( position, TripleLetter )) tripleLetterCells)
-            |> (++) (List.map (\position -> ( position, DoubleLetter )) doubleLetterCells)
-        )
+    ( ( 7, 7 ), CenterCell )
+        :: List.map (\position -> ( position, TripleWord )) tripleWordCells
+        ++ List.map (\position -> ( position, DoubleWord )) doubleWordCells
+        ++ List.map (\position -> ( position, TripleLetter )) tripleLetterCells
+        ++ List.map (\position -> ( position, DoubleLetter )) doubleLetterCells
+        |> SeqDict.fromList
 
 
 tripleWordCells : List ( Int, Int )

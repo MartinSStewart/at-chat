@@ -1488,16 +1488,7 @@ updateLoaded msg model =
                                     }
 
                                 Drag_WordSpellingGameBoard ->
-                                    case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn model of
-                                        Just game ->
-                                            setWordSpellingGameModel
-                                                (Local.model loggedIn.localState)
-                                                model
-                                                (WordSpellingGame.dragging dragging.touches newTouches game)
-                                                loggedIn
-
-                                        Nothing ->
-                                            loggedIn
+                                    loggedIn
 
                                 Drag_Channel ->
                                     case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
@@ -1617,12 +1608,7 @@ updateLoaded msg model =
                                                     setWordSpellingGameModel
                                                         local2
                                                         model
-                                                        (WordSpellingGame.dragStart
-                                                            model.windowSize
-                                                            local2.localUser.session.userId
-                                                            startTouches
-                                                            game
-                                                        )
+                                                        (WordSpellingGame.dragStart model.windowSize startTouches game)
                                                         loggedIn
 
                                                 _ ->

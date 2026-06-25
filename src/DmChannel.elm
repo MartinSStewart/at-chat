@@ -29,7 +29,6 @@ import Date exposing (Date)
 import Discord
 import Drawing exposing (Drawing)
 import Game exposing (BackendGameData)
-import Go
 import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
@@ -39,7 +38,6 @@ import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
-import WordSpellingGame
 
 
 type alias DmChannel =

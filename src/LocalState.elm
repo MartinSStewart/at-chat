@@ -435,7 +435,12 @@ callStartedText endedAt =
 
 gameStartedText : Message.Game -> String
 gameStartedText game =
-    "Go match started"
+    case game of
+        Message.Game_Go ->
+            "Go match started"
+
+        Message.Game_WordSpellingGame ->
+            "Word Spelling Game started"
 
 
 messageDeleted : String

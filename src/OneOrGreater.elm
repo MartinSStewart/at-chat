@@ -2,7 +2,6 @@ module OneOrGreater exposing
     ( OneOrGreater(..)
     , decrement
     , eight
-    , five
     , four
     , fromInt
     , increment
@@ -45,11 +44,6 @@ three =
 four : OneOrGreater
 four =
     OneOrGreater 4
-
-
-five : OneOrGreater
-five =
-    OneOrGreater 5
 
 
 six : OneOrGreater

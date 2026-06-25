@@ -16,8 +16,7 @@ import ChannelName exposing (ChannelName)
 import DmChannel
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Game exposing (MatchData)
-import Go
+import Game
 import GuildIcon
 import Html.Attributes
 import Icons
