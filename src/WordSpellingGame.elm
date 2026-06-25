@@ -55,6 +55,7 @@ import OneOrGreater exposing (OneOrGreater)
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
+import Set exposing (Set)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -271,13 +272,13 @@ shuffle list =
         Random.independentSeed
 
 
-foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
-foldActions setup actions =
-    Array.foldl (updateAction setup) (initGameState setup) actions
+foldActions : Set String -> ValidatedSetup -> Array ActionWithTime -> Shared
+foldActions wordList setup actions =
+    Array.foldl (updateAction wordList setup) (initGameState setup) actions
 
 
-updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
-updateAction setup action state =
+updateAction : Set String -> ValidatedSetup -> ActionWithTime -> Shared -> Shared
+updateAction wordList setup action state =
     case action.change of
         PlaceWord { start, isVertical, letters } ->
             let
