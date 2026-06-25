@@ -968,8 +968,11 @@ body {
   transition: opacity 0.05s ease 0s;
 }
 .reaction-emoji-button:hover .reaction-emoji-popup {
-  opacity: 1;
-  transition: opacity 0.2s ease 1s;
+  animation: reaction-emoji-popup-fade-in 0.2s ease 0.5s forwards;
+}
+@keyframes reaction-emoji-popup-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 """
             )
