@@ -500,7 +500,29 @@ updateGame time currentUserId shared msg model =
         PressedSubmitWord ->
             case checkValidPlacement currentUserId shared model of
                 Ok placement ->
-                    ( model
+                    ( { model
+                        | tiles =
+                            Array.foldl
+                                (\tile ( index, tiles ) ->
+                                    ( index + 1
+                                    , Array.set
+                                        index
+                                        { tile
+                                            | position =
+                                                case tile.position of
+                                                    TileInTray _ ->
+                                                        tile.position
+
+                                                    TileOnBoard _ ->
+                                                        firstOpenTrayIndex index tiles |> TileInTray
+                                        }
+                                        tiles
+                                    )
+                                )
+                                ( 0, model.tiles )
+                                model.tiles
+                                |> Tuple.second
+                      }
                     , [ OutLocalChange (Action { userId = currentUserId, change = PlaceWord placement, time = time }) ]
                     )
 
@@ -1043,18 +1065,36 @@ trayHeight =
 
 
 boardView : Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
-boardView windowSize maybeDragging currentUserId gameState model =
+boardView windowSize maybeDragging currentUserId shared model =
     let
         cellSize2 : Int
         cellSize2 =
             cellSize windowSize
+
+        boardTiles : List (Ui.Attribute GameMsg)
+        boardTiles =
+            SeqDict.foldl
+                (\( x, y ) { letter, isWildcard } list ->
+                    boardTileInFront
+                        cellSize2
+                        (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
+                        (if isWildcard then
+                            Wildcard
+
+                         else
+                            Letter letter
+                        )
+                        :: list
+                )
+                []
+                shared.board
 
         trayTiles : List (Ui.Attribute GameMsg)
         trayTiles =
             List.map2
                 Tuple.pair
                 (Array.toList model.tiles)
-                (case getPlayer currentUserId gameState of
+                (case getPlayer currentUserId shared of
                     Just player ->
                         player.tray
 
@@ -1076,7 +1116,6 @@ boardView windowSize maybeDragging currentUserId gameState model =
                                         (Coord.xRaw center - cellSize2 // 2)
                                         (Coord.yRaw center - cellSize2 // 2)
                                     )
-                                    []
                                     letter
 
                             _ ->
@@ -1085,14 +1124,12 @@ boardView windowSize maybeDragging currentUserId gameState model =
                                         tileInFront
                                             trayTileSize
                                             (trayTilePos windowSize trayIndex)
-                                            []
                                             letter
 
                                     TileOnBoard ( x, y ) ->
                                         tileInFront
                                             cellSize2
                                             (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
-                                            []
                                             letter
                     )
 
@@ -1103,7 +1140,7 @@ boardView windowSize maybeDragging currentUserId gameState model =
                     case cellAtPosition windowSize (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
-                                SeqDict.member ( x, y ) gameState.board
+                                SeqDict.member ( x, y ) shared.board
                                     || Array.Extra.any (\tile -> tile.position == TileOnBoard ( x, y )) model.tiles
                             then
                                 Ui.noAttr
@@ -1153,6 +1190,7 @@ boardView windowSize maybeDragging currentUserId gameState model =
         , Ui.el
             (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
                 :: trayTiles
+                ++ boardTiles
                 ++ [ selectedHighlight, dragHighlight ]
             )
             Ui.none
@@ -1161,23 +1199,40 @@ boardView windowSize maybeDragging currentUserId gameState model =
         (Ui.Lazy.lazy boardViewBackground cellSize2)
 
 
-tileInFront : Int -> Coord CssPixels -> List (Ui.Attribute GameMsg) -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront cellSize2 offset extraAttributes letterOrWildcard =
+tileInFront : Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
-            ([ Ui.background (Ui.rgb 240 220 130)
-             , Ui.width (Ui.px cellSize2)
-             , Ui.height (Ui.px cellSize2)
-             , Ui.contentCenterX
-             , Ui.contentCenterY
-             , Ui.Font.size 16
-             , Ui.Font.weight 600
-             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
-             , Ui.Font.color (Ui.rgb 0 0 0)
-             , MyUi.noPointerEvents
-             ]
-                ++ extraAttributes
-            )
+            [ Ui.background (Ui.rgb 240 220 130)
+            , Ui.width (Ui.px cellSize2)
+            , Ui.height (Ui.px cellSize2)
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+            , Ui.Font.bold
+            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+            , Ui.Font.color (Ui.rgb 0 0 0)
+            , MyUi.noPointerEvents
+            ]
+            (Ui.text (letterOrWildcardText letterOrWildcard))
+        )
+
+
+boardTileInFront : Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+boardTileInFront cellSize2 offset letterOrWildcard =
+    Ui.inFront
+        (Ui.el
+            [ Ui.background (Ui.rgb 186 171 103)
+            , Ui.width (Ui.px cellSize2)
+            , Ui.height (Ui.px cellSize2)
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+            , Ui.Font.bold
+            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+            , Ui.Font.color (Ui.rgb 0 0 0)
+            , MyUi.noPointerEvents
+            ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 

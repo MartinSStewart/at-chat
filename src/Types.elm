@@ -41,6 +41,7 @@ module Types exposing
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
+    , WordSpellingGameWords(..)
     , messageMenuMobileOffset
     )
 
@@ -104,10 +105,11 @@ import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (DmChannelHeaderTab, Route)
+import Route exposing (ChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
+import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -246,7 +248,14 @@ type alias LoggedIn2 =
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
+    , wordSpellingGameWords : WordSpellingGameWords
     }
+
+
+type WordSpellingGameWords
+    = WordSpellingGameWords_NotLoaded
+    | WordSpellingGameWords_Loaded (Set String)
+    | WordSpellingGameWords_Error Http.Error
 
 
 type FileDrag
@@ -544,7 +553,7 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
-    | PressedChannelHeaderTab DmChannelHeaderTab
+    | PressedChannelHeaderTab ChannelHeaderTab
     | FileDragEnter Duration
     | FileDragLeave
     | FileDropped (List File)
@@ -552,6 +561,7 @@ type FrontendMsg
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
+    | GotWordSpellingGameWords (Result Http.Error String)
 
 
 type ScrollPosition

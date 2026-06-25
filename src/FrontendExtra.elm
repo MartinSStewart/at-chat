@@ -43,6 +43,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
@@ -91,7 +92,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), WordSpellingGameWords(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1227,13 +1228,14 @@ enterSidebarRoute sameGuild previousRoute viewCmd model =
 
 enterChannelRoute :
     ThreadRouteWithFriends
+    -> Maybe Route.ChannelHeaderTab
     -> Bool
     -> Bool
     -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model =
+enterChannelRoute threadRoute tab sameGuild sameChannel previousRoute viewCmd model =
     let
         showMembers : ShowMembersTab
         showMembers =
@@ -1256,7 +1258,7 @@ enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model 
 
                     else
                         loggedIn
-            , Command.batch [ viewCmd, openChannelCmds sameChannel threadRoute loggedIn model ]
+            , Command.batch [ viewCmd, openChannelCmds sameChannel tab threadRoute loggedIn model ]
             )
         )
         model
@@ -1357,9 +1359,10 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                ChannelRoute channelId threadRoute _ ->
+                ChannelRoute channelId threadRoute tab ->
                     enterChannelRoute
                         threadRoute
+                        tab
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
@@ -1442,9 +1445,10 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute _ ->
+                DiscordChannel_ChannelRoute channelId threadRoute tab ->
                     enterChannelRoute
                         threadRoute
+                        tab
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
@@ -1503,7 +1507,7 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , openChannelCmds sameDmRoute dmRoute.threadRoute loggedIn model3
+                    , openChannelCmds sameDmRoute dmRoute.tab dmRoute.threadRoute loggedIn model3
                     )
                 )
                 model3
@@ -1531,6 +1535,7 @@ routeRequest previousRoute newRoute model =
                     ( startOpeningChannelSidebar loggedIn
                     , openChannelCmds
                         sameDmRoute
+                        routeData.tab
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         loggedIn
                         model3
@@ -1584,13 +1589,35 @@ updateLoggedIn updateFunc model =
 
 openChannelCmds :
     Bool
+    -> Maybe Route.ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> LoggedIn2
     -> LoadedFrontend
     -> Command FrontendOnly ToBackend FrontendMsg
-openChannelCmds sameChannel threadRoute loggedIn model3 =
+openChannelCmds sameChannel tab threadRoute loggedIn model3 =
+    let
+        gameTabCmd : Command FrontendOnly ToBackend FrontendMsg
+        gameTabCmd =
+            case tab of
+                Just (Route.DmChannelHeaderTab_Games _) ->
+                    case loggedIn.wordSpellingGameWords of
+                        WordSpellingGameWords_NotLoaded ->
+                            Http.get { url = "/word-list.txt", expect = Http.expectString GotWordSpellingGameWords }
+
+                        WordSpellingGameWords_Loaded set ->
+                            Command.none
+
+                        WordSpellingGameWords_Error error ->
+                            Http.get { url = "/word-list.txt", expect = Http.expectString GotWordSpellingGameWords }
+
+                _ ->
+                    Command.none
+    in
     if sameChannel then
-        Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+        Command.batch
+            [ Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+            , gameTabCmd
+            ]
 
     else
         let
@@ -1620,6 +1647,7 @@ openChannelCmds sameChannel threadRoute loggedIn model3 =
 
                         Nothing ->
                             scrollToBottom
+            , gameTabCmd
             ]
 
 
@@ -2037,6 +2065,9 @@ isPressMsg msg =
 
                 _ ->
                     False
+
+        GotWordSpellingGameWords result ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg

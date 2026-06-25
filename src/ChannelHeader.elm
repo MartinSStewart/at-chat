@@ -28,7 +28,7 @@ import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
+import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
@@ -201,7 +201,7 @@ chattingWithYourself data local =
 {-| Toggles a mode where the user can draw freehand on top of messages.
 Only available on non-mobile since it requires a mouse.
 -}
-drawButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
+drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg
 drawButton isMobile currentTab =
     if isMobile then
         Ui.none
@@ -310,8 +310,8 @@ headerBackButton htmlId onPress =
 channelHeaderTabRow :
     Bool
     -> HtmlId
-    -> DmChannelHeaderTab
-    -> Maybe DmChannelHeaderTab
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> List (Element FrontendMsg)
     -> Element FrontendMsg
 channelHeaderTabRow isMobile htmlId tab currentTab content =
@@ -322,7 +322,7 @@ channelHeaderTabRow isMobile htmlId tab currentTab content =
         content
 
 
-channelHeaderTabAttributes : Int -> Int -> Bool -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> List (Ui.Attribute msg)
+channelHeaderTabAttributes : Int -> Int -> Bool -> ChannelHeaderTab -> Maybe ChannelHeaderTab -> List (Ui.Attribute msg)
 channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
     let
         isSelected =
@@ -355,15 +355,15 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
 channelHeaderTab :
     Bool
     -> HtmlId
-    -> DmChannelHeaderTab
-    -> Maybe DmChannelHeaderTab
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> Element FrontendMsg
     -> Element FrontendMsg
 channelHeaderTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
 
 
-privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> Element FrontendMsg
+privateChatWithYourself : Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg
 privateChatWithYourself isMobile currentTab local =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -381,7 +381,7 @@ privateChatWithYourself isMobile currentTab local =
         ]
 
 
-privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
+privateChatWith : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
 privateChatWith isMobile currentTab otherUserId local name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -404,7 +404,7 @@ privateChatWith isMobile currentTab otherUserId local name =
 
 gameButton :
     Bool
-    -> Maybe DmChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> Id UserId
     -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> Element FrontendMsg
@@ -454,7 +454,7 @@ gameButton isMobile currentTab userId goMatches =
         )
 
 
-voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
+voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
 voiceChatButton isMobile currentTab otherUserId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) OneOrGreater
@@ -517,7 +517,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         ]
 
 
-discordPrivateChatWith : Bool -> Maybe DmChannelHeaderTab -> String -> Element FrontendMsg
+discordPrivateChatWith : Bool -> Maybe ChannelHeaderTab -> String -> Element FrontendMsg
 discordPrivateChatWith isMobile currentTab name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]

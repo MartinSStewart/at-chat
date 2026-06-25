@@ -1,9 +1,9 @@
 module Route exposing
-    ( ChannelRoute(..)
+    ( ChannelHeaderTab(..)
+    , ChannelRoute(..)
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
-    , DmChannelHeaderTab(..)
     , DmRouteData
     , LinkDiscordError(..)
     , Route(..)
@@ -60,15 +60,15 @@ type alias DiscordDmRouteData =
     , channelId : Discord.Id Discord.PrivateChannelId
     , viewingMessage : Maybe (Id ChannelMessageId)
     , showMembersTab : ShowMembersTab
-    , tab : Maybe DmChannelHeaderTab
+    , tab : Maybe ChannelHeaderTab
     }
 
 
 type alias DmRouteData =
-    { channelId : DmChannelId, threadRoute : ThreadRouteWithFriends, tab : Maybe DmChannelHeaderTab }
+    { channelId : DmChannelId, threadRoute : ThreadRouteWithFriends, tab : Maybe ChannelHeaderTab }
 
 
-type DmChannelHeaderTab
+type ChannelHeaderTab
     = DmChannelHeaderTab_VoiceChat
     | DmChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
     | DmChannelHeaderTab_ChannelDescription
@@ -83,7 +83,7 @@ type alias DiscordGuildRouteData =
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends (Maybe DmChannelHeaderTab)
+    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends (Maybe ChannelHeaderTab)
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | GuildSettingsRoute
@@ -91,7 +91,7 @@ type ChannelRoute
 
 
 type DiscordChannelRoute
-    = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends (Maybe DmChannelHeaderTab)
+    = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends (Maybe ChannelHeaderTab)
     | DiscordChannel_NewChannelRoute
     | DiscordChannel_EditChannelRoute (Discord.Id Discord.ChannelId)
     | DiscordChannel_GuildSettingsRoute
@@ -355,7 +355,7 @@ decode url =
             HomePageRoute
 
 
-decodeChannelHeaderTab : AppUrl -> Maybe DmChannelHeaderTab
+decodeChannelHeaderTab : AppUrl -> Maybe ChannelHeaderTab
 decodeChannelHeaderTab url2 =
     let
         goMatchId : Maybe (Id ChannelMessageId)
@@ -389,7 +389,7 @@ decodeChannelHeaderTab url2 =
             Nothing
 
 
-toChannelHeaderTab : Route -> Maybe DmChannelHeaderTab
+toChannelHeaderTab : Route -> Maybe ChannelHeaderTab
 toChannelHeaderTab route =
     case route of
         DmRoute dmRoute ->
@@ -453,7 +453,7 @@ toChannelHeaderTab route =
 
 {-| Replaces the channel header tab for routes that can have one, leaves other routes unchanged.
 -}
-setChannelHeaderTab : Maybe DmChannelHeaderTab -> Route -> Route
+setChannelHeaderTab : Maybe ChannelHeaderTab -> Route -> Route
 setChannelHeaderTab tab route =
     case route of
         DmRoute dmRoute ->
@@ -478,7 +478,7 @@ setChannelHeaderTab tab route =
             route
 
 
-sameChannelHeaderTab : DmChannelHeaderTab -> DmChannelHeaderTab -> Bool
+sameChannelHeaderTab : ChannelHeaderTab -> ChannelHeaderTab -> Bool
 sameChannelHeaderTab tabA tabB =
     case tabA of
         DmChannelHeaderTab_VoiceChat ->
@@ -682,7 +682,7 @@ encodeShowMembers showMembers =
             []
 
 
-encodeChannelHeaderTab : Maybe DmChannelHeaderTab -> List Url.Builder.QueryParameter
+encodeChannelHeaderTab : Maybe ChannelHeaderTab -> List Url.Builder.QueryParameter
 encodeChannelHeaderTab tab =
     case tab of
         Just DmChannelHeaderTab_VoiceChat ->

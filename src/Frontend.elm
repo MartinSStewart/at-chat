@@ -62,11 +62,12 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Set
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -75,7 +76,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel, WordSpellingGameWords(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -446,6 +447,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
+            , wordSpellingGameWords = WordSpellingGameWords_NotLoaded
             }
     in
     ( loggedIn
@@ -4309,7 +4311,7 @@ updateLoaded msg model =
 
         PressedChannelHeaderTab tab ->
             let
-                sameTab : DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Maybe DmChannelHeaderTab
+                sameTab : ChannelHeaderTab -> Maybe ChannelHeaderTab -> Maybe ChannelHeaderTab
                 sameTab tabA tabB =
                     case tabB of
                         Just tabB2 ->
@@ -4425,6 +4427,23 @@ updateLoaded msg model =
 
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
+
+        GotWordSpellingGameWords result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( case result of
+                        Ok ok ->
+                            { loggedIn
+                                | wordSpellingGameWords =
+                                    String.split "\n" ok |> Set.fromList |> WordSpellingGameWords_Loaded
+                            }
+
+                        Err error ->
+                            { loggedIn | wordSpellingGameWords = WordSpellingGameWords_Error error }
+                    , Command.none
+                    )
+                )
+                model
 
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
