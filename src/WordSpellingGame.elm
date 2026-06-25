@@ -493,7 +493,7 @@ updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameD
 updateGame time currentUserId shared msg model =
     case msg of
         PressedSubmitWord ->
-            case checkValidPlacement shared model of
+            case checkValidPlacement currentUserId shared model of
                 Ok placement ->
                     ( model
                     , [ OutLocalChange (Action { userId = currentUserId, change = PlaceWord placement, time = time }) ]
@@ -506,9 +506,139 @@ updateGame time currentUserId shared msg model =
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
 
-checkValidPlacement : Shared -> GameData -> Result () PlacedWord
-checkValidPlacement shared notShared =
-    Err ()
+{-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
+the placement isn't a valid word. The tiles the player holds are the current player's tray, in
+the same order as `GameData.tiles` (see `boardView`).
+
+A placement is valid when:
+
+  - at least one tile was placed on the board,
+  - the placed tiles all lie in a single row or column, and
+  - the run from the first to the last placed tile has no gaps (any cell between them that wasn't
+    placed must already hold a committed tile).
+
+Wildcard tiles aren't supported yet (there's no way to pick which letter they represent), so a
+placement containing one is rejected.
+
+-}
+checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
+checkValidPlacement currentUserId shared notShared =
+    let
+        placed : List ( ( Int, Int ), LetterOrWildcard )
+        placed =
+            case getPlayer currentUserId shared of
+                Just player ->
+                    List.map2 Tuple.pair (Array.toList notShared.tiles) player.tray
+                        |> List.filterMap
+                            (\( tile, letter ) ->
+                                case tile.position of
+                                    TileOnBoard cell ->
+                                        Just ( cell, letter )
+
+                                    TileInTray _ ->
+                                        Nothing
+                            )
+
+                Nothing ->
+                    []
+    in
+    case placed of
+        ( firstCell, _ ) :: _ ->
+            let
+                cells : List ( Int, Int )
+                cells =
+                    List.map Tuple.first placed
+
+                sameRow : Bool
+                sameRow =
+                    List.all (\( _, y ) -> y == Tuple.second firstCell) cells
+
+                sameColumn : Bool
+                sameColumn =
+                    List.all (\( x, _ ) -> x == Tuple.first firstCell) cells
+            in
+            if sameRow then
+                buildPlacedWord False shared placed
+
+            else if sameColumn then
+                buildPlacedWord True shared placed
+
+            else
+                Err ()
+
+        [] ->
+            Err ()
+
+
+buildPlacedWord : Bool -> Shared -> List ( ( Int, Int ), LetterOrWildcard ) -> Result () PlacedWord
+buildPlacedWord isVertical shared placed =
+    let
+        lineCoord : ( Int, Int ) -> Int
+        lineCoord ( x, y ) =
+            if isVertical then
+                y
+
+            else
+                x
+
+        sorted : List ( ( Int, Int ), LetterOrWildcard )
+        sorted =
+            List.sortBy (\( cell, _ ) -> lineCoord cell) placed
+
+        placedCells : List ( Int, Int )
+        placedCells =
+            List.map Tuple.first sorted
+    in
+    case ( List.head placedCells, List.Extra.last placedCells ) of
+        ( Just startCell, Just endCell ) ->
+            let
+                -- Every cell between the first and last placed tile must be filled, either by a
+                -- tile placed this turn or a committed tile.
+                contiguous : Bool
+                contiguous =
+                    List.range (lineCoord startCell) (lineCoord endCell)
+                        |> List.all
+                            (\n ->
+                                let
+                                    cell : ( Int, Int )
+                                    cell =
+                                        if isVertical then
+                                            ( Tuple.first startCell, n )
+
+                                        else
+                                            ( n, Tuple.second startCell )
+                                in
+                                List.member cell placedCells || SeqDict.member cell shared.board
+                            )
+            in
+            case ( contiguous, nonemptyLetters sorted ) of
+                ( True, Just letters ) ->
+                    Ok { start = startCell, isVertical = isVertical, letters = letters }
+
+                _ ->
+                    Err ()
+
+        _ ->
+            Err ()
+
+
+{-| Pull the letters out of the placed tiles in order, failing if any tile is a wildcard or if
+there are no tiles.
+-}
+nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty Letter)
+nonemptyLetters list =
+    List.foldr
+        (\( _, letterOrWildcard ) acc ->
+            case letterOrWildcard of
+                Letter letter ->
+                    Maybe.map ((::) letter) acc
+
+                Wildcard ->
+                    Nothing
+        )
+        (Just [])
+        list
+        |> Maybe.andThen List.Nonempty.fromList
 
 
 validateSetup : Id UserId -> Time.Posix -> SetupModel -> Result String ValidatedSetup
