@@ -48,7 +48,7 @@ type Model
 
 type BackendGameData
     = GameData_Go Go.ValidatedSetup (Array Go.ActionWithTime)
-    | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime)
+    | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
 
 
 type FrontendGameData
@@ -90,8 +90,8 @@ initMatchData gameData publicLink =
             GameData_Go setup actions ->
                 FrontendGameData_Go setup actions (Go.foldActions setup actions)
 
-            GameData_WordSpellingGame setup actions ->
-                FrontendGameData_WordSpellingGame setup actions (WordSpellingGame.foldActions setup actions)
+            GameData_WordSpellingGame setup actions shared ->
+                FrontendGameData_WordSpellingGame setup actions shared
     , publicLink = publicLink
     }
         |> MatchData

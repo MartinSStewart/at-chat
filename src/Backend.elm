@@ -83,6 +83,7 @@ import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewi
 import VisibleMessages
 import WireHelper
 import WordSpellingGame
+import WordSpellingGameList
 
 
 app :
@@ -5109,79 +5110,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 Game.LocalChange_WordSpellingGame matchId wsChange ->
-                                    case wsChange of
-                                        WordSpellingGame.StartMatch _ setup ->
-                                            let
-                                                ( messageId, dmChannel2 ) =
-                                                    LocalState.createChannelMessageBackend
-                                                        (GameStarted
-                                                            time
-                                                            session.userId
-                                                            SeqDict.empty
-                                                            Drawing.emptyDrawing
-                                                            Game_WordSpellingGame
-                                                        )
-                                                        dmChannel
-
-                                                localMsg2 : Game.LocalChange
-                                                localMsg2 =
-                                                    Game.LocalChange_WordSpellingGame messageId (WordSpellingGame.StartMatch time setup)
-                                            in
-                                            ( { model
-                                                | dmChannels =
-                                                    SeqDict.insert
-                                                        dmChannelId
-                                                        { dmChannel2
-                                                            | games =
-                                                                SeqDict.insert
-                                                                    messageId
-                                                                    (Game.GameData_WordSpellingGame setup Array.empty)
-                                                                    dmChannel2.games
-                                                        }
-                                                        model.dmChannels
-                                              }
-                                            , Command.batch
-                                                [ Local_Game otherUserId localMsg2
-                                                    |> LocalChangeResponse changeId
-                                                    |> Lamdera.sendToFrontend clientId
-                                                , Broadcast.toDmChannelExcludingOne
-                                                    clientId
-                                                    session.userId
-                                                    otherUserId.otherUserId
-                                                    (\otherUserId2 ->
-                                                        Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
-                                                    )
-                                                    model
-                                                ]
-                                            )
-
-                                        WordSpellingGame.Action action ->
-                                            if action.userId == session.userId then
-                                                let
-                                                    localMsg2 : Game.LocalChange
-                                                    localMsg2 =
-                                                        Game.LocalChange_WordSpellingGame
-                                                            matchId
-                                                            (WordSpellingGame.Action { action | time = time })
-                                                in
-                                                ( model
-                                                , Command.batch
-                                                    [ Local_Game otherUserId localMsg2
-                                                        |> LocalChangeResponse changeId
-                                                        |> Lamdera.sendToFrontend clientId
-                                                    , Broadcast.toDmChannelExcludingOne
-                                                        clientId
-                                                        session.userId
-                                                        otherUserId.otherUserId
-                                                        (\otherUserId2 ->
-                                                            Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
-                                                        )
-                                                        model
-                                                    ]
-                                                )
-
-                                            else
-                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                    handleWordSpellingGame
+                                        time
+                                        session
+                                        clientId
+                                        changeId
+                                        otherUserId
+                                        dmChannelId
+                                        dmChannel
+                                        matchId
+                                        wsChange
+                                        model
                         )
 
                 Local_Drawing guildOrDmId anchor drawingChange ->
@@ -5363,6 +5302,126 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
+
+
+handleWordSpellingGame :
+    Time.Posix
+    -> UserSession
+    -> ClientId
+    -> ChangeId
+    -> { otherUserId : Id UserId }
+    -> DmChannelId
+    -> DmChannel
+    -> Id ChannelMessageId
+    -> WordSpellingGame.LocalChange
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dmChannel matchId wsChange model =
+    case wsChange of
+        WordSpellingGame.StartMatch _ setup ->
+            let
+                ( messageId, dmChannel2 ) =
+                    LocalState.createChannelMessageBackend
+                        (GameStarted
+                            time
+                            session.userId
+                            SeqDict.empty
+                            Drawing.emptyDrawing
+                            Game_WordSpellingGame
+                        )
+                        dmChannel
+
+                localMsg2 : Game.LocalChange
+                localMsg2 =
+                    Game.LocalChange_WordSpellingGame messageId (WordSpellingGame.StartMatch time setup)
+            in
+            ( { model
+                | dmChannels =
+                    SeqDict.insert
+                        dmChannelId
+                        { dmChannel2
+                            | games =
+                                SeqDict.insert
+                                    messageId
+                                    (Game.GameData_WordSpellingGame
+                                        setup
+                                        Array.empty
+                                        (WordSpellingGame.initShared setup)
+                                    )
+                                    dmChannel2.games
+                        }
+                        model.dmChannels
+              }
+            , Command.batch
+                [ Local_Game otherUserId localMsg2
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                , Broadcast.toDmChannelExcludingOne
+                    clientId
+                    session.userId
+                    otherUserId.otherUserId
+                    (\otherUserId2 ->
+                        Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                    )
+                    model
+                ]
+            )
+
+        WordSpellingGame.Action action ->
+            case ( action.userId == session.userId, SeqDict.get matchId dmChannel.games ) of
+                ( True, Just (Game.GameData_WordSpellingGame _ _ shared) ) ->
+                    let
+                        localMsg2 : Game.LocalChange
+                        localMsg2 =
+                            Game.LocalChange_WordSpellingGame
+                                matchId
+                                (WordSpellingGame.Action
+                                    { action
+                                        | time = time
+                                        , change =
+                                            case action.change of
+                                                WordSpellingGame.PlaceWord placed _ ->
+                                                    WordSpellingGame.PlaceWord
+                                                        placed
+                                                        (case
+                                                            WordSpellingGame.validatePlacement
+                                                                WordSpellingGameList.words
+                                                                shared.board
+                                                                placed
+                                                         of
+                                                            Ok _ ->
+                                                                FilledInByBackend WordSpellingGame.IsValid
+
+                                                            Err () ->
+                                                                FilledInByBackend WordSpellingGame.IsNotValid
+                                                        )
+
+                                                WordSpellingGame.ReplaceTray ->
+                                                    action.change
+
+                                                WordSpellingGame.JoinGame ->
+                                                    action.change
+                                    }
+                                )
+                    in
+                    ( model
+                    , Command.batch
+                        [ Local_Game otherUserId localMsg2
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toDmChannelExcludingOne
+                            clientId
+                            session.userId
+                            otherUserId.otherUserId
+                            (\otherUserId2 ->
+                                Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                            )
+                            model
+                        ]
+                    )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 textToDiscordRichText :

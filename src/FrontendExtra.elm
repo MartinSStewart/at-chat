@@ -4337,7 +4337,10 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                         | games =
                                             SeqDict.insert
                                                 newMatchId
-                                                (Game.initMatchData (Game.GameData_WordSpellingGame setup Array.empty) Nothing)
+                                                (Game.initMatchData
+                                                    (Game.GameData_WordSpellingGame setup Array.empty (WordSpellingGame.initShared setup))
+                                                    Nothing
+                                                )
                                                 dmChannel2.games
                                     }
 

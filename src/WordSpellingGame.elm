@@ -1,5 +1,5 @@
 module WordSpellingGame exposing
-    ( Action
+    ( Action(..)
     , ActionWithTime
     , Board
     , GameData
@@ -26,6 +26,7 @@ module WordSpellingGame exposing
     , gameView
     , initGame
     , initSetup
+    , initShared
     , insideBoard
     , isPlayerTurn
     , placeWord
@@ -197,8 +198,8 @@ type LetterOrWildcard
     | Wildcard
 
 
-initGameState : ValidatedSetup -> Shared
-initGameState setup =
+initShared : ValidatedSetup -> Shared
+initShared setup =
     let
         initialBoard : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
         initialBoard =
@@ -285,7 +286,7 @@ shuffle list =
 
 foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions setup actions =
-    Array.foldl (updateAction setup) (initGameState setup) actions
+    Array.foldl (updateAction setup) (initShared setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
