@@ -8,6 +8,7 @@ module Game exposing
     , OutMsg(..)
     , addGoAction
     , addPublicLink
+    , addWordSpellingGameAction
     , goMatchData
     , hasPendingTurn
     , initMatchData
@@ -130,8 +131,23 @@ addGoAction action (MatchData match) =
 
                 FrontendGameData_WordSpellingGame setup actions cache ->
                     match.data
+    }
+        |> MatchData
 
-        --FrontendGameData_WordSpellingGame setup (Array.push action actions) (WordSpellingGame.updateAction setup action cache)
+
+addWordSpellingGameAction : WordSpellingGame.ActionWithTime -> MatchData -> MatchData
+addWordSpellingGameAction action (MatchData match) =
+    { match
+        | data =
+            case match.data of
+                FrontendGameData_Go setup actions cache ->
+                    match.data
+
+                FrontendGameData_WordSpellingGame setup actions cache ->
+                    FrontendGameData_WordSpellingGame
+                        setup
+                        (Array.push action actions)
+                        (WordSpellingGame.updateAction setup action cache)
     }
         |> MatchData
 
@@ -249,30 +265,71 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
             )
 
         WordSpellingGameMsg wordSpellingGameMsg ->
+            case maybeMatch of
+                Just ( messageId, MatchData matchData ) ->
+                    case matchData.data of
+                        FrontendGameData_WordSpellingGame setup _ shared ->
+                            let
+                                ( notSharedModel, outMsgs ) =
+                                    WordSpellingGame.updateGame
+                                        time
+                                        currentUserId
+                                        shared
+                                        wordSpellingGameMsg
+                                        (case model of
+                                            Just (WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
+                                                gameModel
+
+                                            _ ->
+                                                WordSpellingGame.initGame setup
+                                        )
+
+                                matchId : Id ChannelMessageId
+                                matchId =
+                                    case maybeMatch of
+                                        Just ( id, _ ) ->
+                                            id
+
+                                        Nothing ->
+                                            newMatchId
+                            in
+                            ( WordSpellingGameModel (WordSpellingGame.Game notSharedModel) |> Just
+                            , List.concatMap
+                                (\outMsg ->
+                                    case outMsg of
+                                        WordSpellingGame.OutLocalChange localChange ->
+                                            case localChange of
+                                                WordSpellingGame.StartMatch _ _ ->
+                                                    -- A brand new match takes the next message id, then we navigate to it.
+                                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange)
+                                                    , OutSelectMatch (Just matchId)
+                                                    ]
+
+                                                WordSpellingGame.Action action ->
+                                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
+                                )
+                                outMsgs
+                            )
+
+                        FrontendGameData_Go validatedSetup array gameState ->
+                            ( model, [] )
+
+                _ ->
+                    ( model, [] )
+
+        WordSpellingSetupMsg wordSpellingGameMsg ->
             let
                 ( notSharedModel, outMsgs ) =
-                    WordSpellingGame.updateGame
+                    WordSpellingGame.updateSetup
                         time
                         currentUserId
-                        (case maybeMatch of
-                            Just ( messageId, MatchData matchData ) ->
-                                case matchData.data of
-                                    FrontendGameData_WordSpellingGame setup _ gameState ->
-                                        Just ( messageId, setup, gameState )
-
-                                    _ ->
-                                        Nothing
-
-                            _ ->
-                                Nothing
-                        )
                         wordSpellingGameMsg
                         (case model of
-                            Just (WordSpellingGameModel gameModel) ->
+                            Just (WordSpellingGameModel (WordSpellingGame.Setup gameModel)) ->
                                 gameModel
 
                             _ ->
-                                WordSpellingGame.Setup WordSpellingGame.initSetup
+                                WordSpellingGame.initSetup
                         )
 
                 matchId : Id ChannelMessageId
@@ -284,7 +341,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         Nothing ->
                             newMatchId
             in
-            ( Maybe.map WordSpellingGameModel notSharedModel
+            ( WordSpellingGameModel notSharedModel |> Just
             , List.concatMap
                 (\outMsg ->
                     case outMsg of
@@ -410,7 +467,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                     _ ->
                                         WordSpellingGame.initSetup
                                 )
-                                |> Ui.map WordSpellingGameMsg
+                                |> Ui.map WordSpellingSetupMsg
 
                         Nothing ->
                             Ui.row

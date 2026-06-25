@@ -21,6 +21,7 @@ module WordSpellingGame exposing
     , initSetup
     , insideBoard
     , setupView
+    , updateAction
     , updateGame
     , updateSetup
     , validateSetup

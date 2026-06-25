@@ -4288,10 +4288,10 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                                 dmChannel2.games
                                     }
 
-                                Go.Action actionWithTime ->
+                                Go.Action action ->
                                     { dmChannel
                                         | games =
-                                            SeqDict.updateIfExists matchId (Game.addGoAction actionWithTime) dmChannel.games
+                                            SeqDict.updateIfExists matchId (Game.addGoAction action) dmChannel.games
                                     }
 
                         Game.CreatePublicLink matchId data ->
@@ -4308,7 +4308,7 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                 EmptyPlaceholder ->
                                     dmChannel
 
-                        Game.LocalChange_WordSpellingGame _ wsChange ->
+                        Game.LocalChange_WordSpellingGame matchId wsChange ->
                             case wsChange of
                                 WordSpellingGame.StartMatch createdAt setup ->
                                     let
@@ -4330,8 +4330,11 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                                 dmChannel2.games
                                     }
 
-                                WordSpellingGame.Action _ ->
-                                    dmChannel
+                                WordSpellingGame.Action action ->
+                                    { dmChannel
+                                        | games =
+                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) dmChannel.games
+                                    }
                     )
                         |> Just
                 )
