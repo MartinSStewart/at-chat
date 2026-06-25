@@ -5773,7 +5773,7 @@ getWordSpellingGameModel :
     LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Maybe ( WordSpellingGame.ValidatedSetup, Game.Cache WordSpellingGame.Shared, WordSpellingGame.GameData )
+    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameData )
 getWordSpellingGameModel local loggedIn model =
     case model.route of
         DmRoute dmRoute ->
