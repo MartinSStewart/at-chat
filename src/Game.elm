@@ -476,6 +476,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
 
                                 FrontendGameData_WordSpellingGame setup _ cache ->
                                     WordSpellingGame.gameView
+                                        currentTime
                                         windowSize
                                         maybeDragging
                                         localUser.session.userId

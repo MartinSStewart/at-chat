@@ -192,6 +192,16 @@ subscriptions model =
 
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
+                                , case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
+                                    Just ( _, shared, _ ) ->
+                                        if WordSpellingGame.isAnimating loaded.time shared then
+                                            Effect.Browser.Events.onAnimationFrame GotTime
+
+                                        else
+                                            Subscription.none
+
+                                    Nothing ->
+                                        Subscription.none
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none

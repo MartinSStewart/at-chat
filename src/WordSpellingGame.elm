@@ -20,6 +20,7 @@ module WordSpellingGame exposing
     , TilePosition
     , UserStatus(..)
     , ValidatedSetup
+    , animatedTilePlacement
     , dragEnd
     , dragStart
     , foldActions
@@ -28,6 +29,7 @@ module WordSpellingGame exposing
     , initSetup
     , initShared
     , insideBoard
+    , isAnimating
     , isPlayerTurn
     , placeWord
     , setupView
@@ -178,6 +180,19 @@ type alias Shared =
     { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
     , players : Nonempty Player
     , turnCount : Int
+    , lastPlacement : Maybe AnimatedPlacement
+    }
+
+
+{-| The most recent placement, kept so the freshly placed tiles can be animated sliding onto the
+board. This is derived from the action list (the start time comes from the `ActionWithTime`), so
+the animated tiles themselves aren't tracked in the model; their on-screen positions are computed
+purely from the current time (see `animatedTilePlacement`).
+-}
+type alias AnimatedPlacement =
+    { startTime : Time.Posix
+    , cells : List ( ( Int, Int ), Letter )
+    , isValid : ToBeFilledInByBackend IsValid
     }
 
 
@@ -208,6 +223,7 @@ initShared setup =
     { board = initialBoard
     , players = Nonempty (initPlayer setup.createdBy initialBoard setup []) []
     , turnCount = 0
+    , lastPlacement = Nothing
     }
 
 
@@ -295,41 +311,54 @@ updateAction setup action state =
         PlaceWord placedWord isValid ->
             case placeWord state.board placedWord of
                 Just result ->
-                    { state
-                        | board = result.board
-                        , players =
-                            NonemptyExtra.update
-                                state.turnCount
-                                (\player ->
-                                    let
-                                        remainingTray : List LetterOrWildcard
-                                        remainingTray =
-                                            List.foldl
-                                                removeFromTray
-                                                player.tray
-                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
+                    let
+                        animatedPlacement : Maybe AnimatedPlacement
+                        animatedPlacement =
+                            Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
+                    in
+                    case isValid of
+                        FilledInByBackend IsNotValid ->
+                            -- The backend rejected the word, so the tiles don't end up on the
+                            -- board (they animate in, turn red and leave) and the turn isn't taken.
+                            { state | lastPlacement = animatedPlacement }
 
-                                        drawn : List LetterOrWildcard
-                                        drawn =
-                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                Just drawCount ->
-                                                    getLetters
-                                                        drawCount
-                                                        setup
-                                                        result.board
-                                                        (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
-                                                            |> List.Nonempty.toList
-                                                        )
-                                                        state.turnCount
+                        _ ->
+                            { state
+                                | board = result.board
+                                , players =
+                                    NonemptyExtra.update
+                                        state.turnCount
+                                        (\player ->
+                                            let
+                                                remainingTray : List LetterOrWildcard
+                                                remainingTray =
+                                                    List.foldl
+                                                        removeFromTray
+                                                        player.tray
+                                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
 
-                                                Nothing ->
-                                                    []
-                                    in
-                                    { player | tray = remainingTray ++ drawn, score = player.score + result.score }
-                                )
-                                state.players
-                        , turnCount = state.turnCount + 1
-                    }
+                                                drawn : List LetterOrWildcard
+                                                drawn =
+                                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                                        Just drawCount ->
+                                                            getLetters
+                                                                drawCount
+                                                                setup
+                                                                result.board
+                                                                (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
+                                                                    |> List.Nonempty.toList
+                                                                )
+                                                                state.turnCount
+
+                                                        Nothing ->
+                                                            []
+                                            in
+                                            { player | tray = remainingTray ++ drawn, score = player.score + result.score }
+                                        )
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , lastPlacement = animatedPlacement
+                            }
 
                 Nothing ->
                     state
@@ -388,6 +417,7 @@ type alias PlacementResult =
     { board : Board
     , words : List String
     , score : Int
+    , placedCells : List ( ( Int, Int ), Letter )
     }
 
 
@@ -491,6 +521,7 @@ placeWord board placedWord =
                 { board = newBoard
                 , words = List.map (wordString newBoard) allWords
                 , score = List.sum (List.map (wordScore newBoard placedSet) allWords)
+                , placedCells = placedCells
                 }
 
         Nothing ->
@@ -1180,17 +1211,161 @@ isPlayerTurn userId shared =
             NotJoined
 
 
+{-| How long, in milliseconds, a single tile takes to slide from the board's top-left corner to
+its destination cell.
+-}
+tileSlideDuration : Float
+tileSlideDuration =
+    250
+
+
+{-| How long, in milliseconds, each successive tile waits before it starts sliding in, so the
+tiles arrive one after another rather than all at once.
+-}
+tileSlideStagger : Float
+tileSlideStagger =
+    80
+
+
+{-| How long, in milliseconds, rejected tiles sit on the board (turned red) before sliding back
+off again.
+-}
+invalidHoldDuration : Float
+invalidHoldDuration =
+    500
+
+
+elapsedMs : Time.Posix -> Time.Posix -> Float
+elapsedMs currentTime startTime =
+    toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
+
+
+{-| The moment, in milliseconds since the placement started, at which the last tile has finished
+sliding in.
+-}
+slideInEnd : Int -> Float
+slideInEnd tileCount =
+    toFloat (max 0 (tileCount - 1)) * tileSlideStagger + tileSlideDuration
+
+
+{-| The total length of a placement's animation. A valid placement just slides in; a rejected one
+also holds and then slides back off.
+-}
+placementAnimationDuration : ToBeFilledInByBackend IsValid -> Int -> Float
+placementAnimationDuration isValid tileCount =
+    case isValid of
+        FilledInByBackend IsNotValid ->
+            slideInEnd tileCount + invalidHoldDuration + slideInEnd tileCount
+
+        _ ->
+            slideInEnd tileCount
+
+
+{-| Whether a placement animation is currently in progress, so the view should keep redrawing
+each animation frame.
+-}
+isAnimating : Time.Posix -> Shared -> Bool
+isAnimating currentTime shared =
+    case shared.lastPlacement of
+        Just placement ->
+            elapsedMs currentTime placement.startTime
+                < placementAnimationDuration placement.isValid (List.length placement.cells)
+
+        Nothing ->
+            False
+
+
+easeOutCubic : Float -> Float
+easeOutCubic t =
+    let
+        clamped : Float
+        clamped =
+            clamp 0 1 t
+    in
+    1 - (1 - clamped) ^ 3
+
+
+{-| Where one placed tile is in its animation, given the time elapsed since the placement, the
+total number of tiles (for the staggering) and the tile's index. `progress` is 0 when the tile is
+at the board's top-left corner and 1 when it's resting on its destination cell; `red` is set once
+a rejected tile has landed and is on its way back off. `Nothing` means the tile shouldn't be drawn
+(a rejected tile that has finished leaving).
+-}
+animatedTilePlacement : Float -> ToBeFilledInByBackend IsValid -> Int -> Int -> Maybe { progress : Float, red : Bool }
+animatedTilePlacement elapsed isValid tileCount index =
+    let
+        launch : Float
+        launch =
+            toFloat index * tileSlideStagger
+
+        slideEnd : Float
+        slideEnd =
+            launch + tileSlideDuration
+
+        slideInProgress : Float
+        slideInProgress =
+            if elapsed < launch then
+                0
+
+            else
+                easeOutCubic ((elapsed - launch) / tileSlideDuration)
+    in
+    case isValid of
+        FilledInByBackend IsNotValid ->
+            let
+                leaveStart : Float
+                leaveStart =
+                    slideInEnd tileCount + invalidHoldDuration + toFloat index * tileSlideStagger
+
+                leaveEnd : Float
+                leaveEnd =
+                    leaveStart + tileSlideDuration
+            in
+            if elapsed < slideEnd then
+                Just { progress = slideInProgress, red = False }
+
+            else if elapsed < leaveStart then
+                Just { progress = 1, red = True }
+
+            else if elapsed < leaveEnd then
+                Just { progress = 1 - easeOutCubic ((elapsed - leaveStart) / tileSlideDuration), red = True }
+
+            else
+                Nothing
+
+        _ ->
+            Just { progress = slideInProgress, red = False }
+
+
+{-| The board cells currently being drawn by the placement animation, which are therefore left out
+of the ordinary committed-tile rendering to avoid drawing them twice.
+-}
+animatingCells : Time.Posix -> Shared -> Set ( Int, Int )
+animatingCells currentTime shared =
+    case shared.lastPlacement of
+        Just placement ->
+            if isAnimating currentTime shared then
+                List.map Tuple.first placement.cells |> Set.fromList
+
+            else
+                Set.empty
+
+        Nothing ->
+            Set.empty
+
+
 gameView :
-    Coord CssPixels
+    Time.Posix
+    -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
     -> Id UserId
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView windowSize maybeDragging currentUserId shared model =
+gameView currentTime windowSize maybeDragging currentUserId shared model =
     Ui.column
         [ Ui.spacing 16 ]
-        [ boardView windowSize maybeDragging currentUserId shared model
+        [ boardView currentTime windowSize maybeDragging currentUserId shared model
         , statusView currentUserId shared
         , case isPlayerTurn currentUserId shared of
             JoinedAndItsTheirTurn ->
@@ -1258,30 +1433,90 @@ trayHeight =
     trayTileSize
 
 
-boardView : Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
-boardView windowSize maybeDragging currentUserId shared model =
+boardView : Time.Posix -> Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
+boardView currentTime windowSize maybeDragging currentUserId shared model =
     let
         cellSize2 : Int
         cellSize2 =
             cellSize windowSize
 
+        animatingCellSet : Set ( Int, Int )
+        animatingCellSet =
+            animatingCells currentTime shared
+
         boardTiles : List (Ui.Attribute GameMsg)
         boardTiles =
             SeqDict.foldl
                 (\( x, y ) { letter, isWildcard } list ->
-                    boardTileInFront
-                        cellSize2
-                        (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
-                        (if isWildcard then
-                            Wildcard
+                    if Set.member ( x, y ) animatingCellSet then
+                        -- This tile is being animated into place, so the animation layer draws it.
+                        list
 
-                         else
-                            Letter letter
-                        )
-                        :: list
+                    else
+                        boardTileInFront
+                            cellSize2
+                            (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
+                            (if isWildcard then
+                                Wildcard
+
+                             else
+                                Letter letter
+                            )
+                            :: list
                 )
                 []
                 shared.board
+
+        animatedTiles : List (Ui.Attribute GameMsg)
+        animatedTiles =
+            case shared.lastPlacement of
+                Just placement ->
+                    if isAnimating currentTime shared then
+                        let
+                            elapsed : Float
+                            elapsed =
+                                elapsedMs currentTime placement.startTime
+
+                            tileCount : Int
+                            tileCount =
+                                List.length placement.cells
+                        in
+                        List.indexedMap
+                            (\index ( ( x, y ), letter ) ->
+                                animatedTilePlacement elapsed placement.isValid tileCount index
+                                    |> Maybe.map
+                                        (\{ progress, red } ->
+                                            let
+                                                cornerX : Int
+                                                cornerX =
+                                                    boardX windowSize
+
+                                                destX : Int
+                                                destX =
+                                                    boardX windowSize + cellSize2 * x
+
+                                                destY : Int
+                                                destY =
+                                                    boardY + cellSize2 * y
+                                            in
+                                            animatedTileInFront
+                                                cellSize2
+                                                (Coord.xy
+                                                    (round (toFloat cornerX + progress * toFloat (destX - cornerX)))
+                                                    (round (toFloat boardY + progress * toFloat (destY - boardY)))
+                                                )
+                                                red
+                                                (Letter letter)
+                                        )
+                            )
+                            placement.cells
+                            |> List.filterMap identity
+
+                    else
+                        []
+
+                Nothing ->
+                    []
 
         trayTiles : List (Ui.Attribute GameMsg)
         trayTiles =
@@ -1385,6 +1620,7 @@ boardView windowSize maybeDragging currentUserId shared model =
             (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
                 :: trayTiles
                 ++ boardTiles
+                ++ animatedTiles
                 ++ [ selectedHighlight, dragHighlight ]
             )
             Ui.none
@@ -1425,6 +1661,40 @@ boardTileInFront cellSize2 offset letterOrWildcard =
             , Ui.Font.bold
             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
             , Ui.Font.color (Ui.rgb 0 0 0)
+            , MyUi.noPointerEvents
+            ]
+            (Ui.text (letterOrWildcardText letterOrWildcard))
+        )
+
+
+{-| A tile drawn by the placement animation. It looks like a committed board tile, except a
+rejected tile (on its way back off the board) is shown in red.
+-}
+animatedTileInFront : Int -> Coord CssPixels -> Bool -> LetterOrWildcard -> Ui.Attribute GameMsg
+animatedTileInFront cellSize2 offset red letterOrWildcard =
+    Ui.inFront
+        (Ui.el
+            [ Ui.background
+                (if red then
+                    Ui.rgb 214 69 69
+
+                 else
+                    Ui.rgb 186 171 103
+                )
+            , Ui.width (Ui.px cellSize2)
+            , Ui.height (Ui.px cellSize2)
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+            , Ui.Font.bold
+            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+            , Ui.Font.color
+                (if red then
+                    Ui.rgb 255 255 255
+
+                 else
+                    Ui.rgb 0 0 0
+                )
             , MyUi.noPointerEvents
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
