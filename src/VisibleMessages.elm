@@ -68,8 +68,8 @@ slice :
     -> IdArray messageId (MessageState messageId userId)
 slice { visibleMessages, messages } =
     IdArray.slice
-        (Id.toInt visibleMessages.oldest)
-        (Id.toInt visibleMessages.oldest + visibleMessages.count)
+        visibleMessages.oldest
+        (Id.toInt visibleMessages.oldest + visibleMessages.count |> Id.fromInt)
         messages
 
 

@@ -1,4 +1,23 @@
-module IdArray exposing (IdArray, empty, foldl, foldr, fromList, get, initialize, isEmpty, last, length, push, set, slice, toArray, toList)
+module IdArray exposing
+    ( IdArray
+    , empty
+    , foldl
+    , foldr
+    , fromList
+    , get
+    , initialize
+    , isEmpty
+    , last
+    , length
+    , push
+    , set
+    , slice
+    , toArray
+    , toList
+    )
+
+{-| Just a normal array except you use an Id instead of a raw Int to access indices.
+-}
 
 import Array exposing (Array)
 import Id exposing (Id)
@@ -73,6 +92,6 @@ push value (IdArray array) =
     Array.push value array |> IdArray
 
 
-slice : Int -> Int -> IdArray k v -> IdArray k v
+slice : Id k -> Id k -> IdArray k v -> IdArray k v
 slice start end (IdArray array) =
-    Array.slice start end array |> IdArray
+    Array.slice (Id.toInt start) (Id.toInt end) array |> IdArray

@@ -6305,7 +6305,7 @@ loadMessagesHelper channel =
         indexStart =
             max (messageCount - VisibleMessages.pageSize) 0
     in
-    IdArray.slice indexStart messageCount channel.messages
+    IdArray.slice (Id.fromInt indexStart) (Id.fromInt messageCount) channel.messages
         |> IdArray.toList
         |> List.indexedMap
             (\index message ->
@@ -6321,12 +6321,12 @@ handleMessagesRequest :
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
-            Id.toInt oldestVisibleMessage
+            oldestVisibleMessage
 
         nextOldestVisible =
-            max (oldestVisibleMessage2 - VisibleMessages.pageSize) 0
+            max (Id.toInt oldestVisibleMessage2 - VisibleMessages.pageSize) 0
     in
-    IdArray.slice nextOldestVisible oldestVisibleMessage2 channel.messages
+    IdArray.slice (Id.fromInt nextOldestVisible) oldestVisibleMessage2 channel.messages
         |> IdArray.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
