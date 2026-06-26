@@ -1214,7 +1214,7 @@ off again.
 -}
 invalidHoldDuration : Float
 invalidHoldDuration =
-    500
+    2000
 
 
 elapsedMs : Time.Posix -> Time.Posix -> Float
@@ -1273,8 +1273,8 @@ at the board's top-left corner and 1 when it's resting on its destination cell; 
 a rejected tile has landed and is on its way back off. `Nothing` means the tile shouldn't be drawn
 (a rejected tile that has finished leaving).
 -}
-animatedTilePlacement : Float -> ToBeFilledInByBackend IsValid -> Int -> Int -> Maybe { progress : Float, red : Bool }
-animatedTilePlacement elapsed isValid tileCount index =
+animatedTilePlacement : Bool -> Float -> ToBeFilledInByBackend IsValid -> Int -> Int -> Maybe { progress : Float, red : Bool }
+animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
     let
         launch : Float
         launch =
@@ -1286,7 +1286,10 @@ animatedTilePlacement elapsed isValid tileCount index =
 
         slideInProgress : Float
         slideInProgress =
-            if elapsed < launch then
+            if isPlayerWhoPlacedTiles then
+                1
+
+            else if elapsed < launch then
                 0
 
             else
@@ -1305,6 +1308,9 @@ animatedTilePlacement elapsed isValid tileCount index =
             in
             if elapsed < slideEnd then
                 Just { progress = slideInProgress, red = False }
+
+            else if elapsed < (leaveStart + slideEnd) * 0.5 then
+                Just { progress = 1, red = False }
 
             else if elapsed < leaveStart then
                 Just { progress = 1, red = True }
@@ -1449,6 +1455,10 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                 []
                 shared.board
 
+        isPreviousPlayer : Bool
+        isPreviousPlayer =
+            List.Nonempty.get (shared.turnCount - 1) shared.players |> .userId |> (==) currentUserId
+
         animatedTiles : List (Ui.Attribute GameMsg)
         animatedTiles =
             case shared.lastPlacement of
@@ -1465,7 +1475,7 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                         in
                         List.indexedMap
                             (\index ( ( x, y ), letter ) ->
-                                animatedTilePlacement elapsed placement.isValid tileCount index
+                                animatedTilePlacement isPreviousPlayer elapsed placement.isValid tileCount index
                                     |> Maybe.map
                                         (\{ progress, red } ->
                                             let
