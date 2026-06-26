@@ -57,7 +57,6 @@ setup =
         |> T.addStringFile "/tests/data/discord-sticker-packs.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
         |> T.addStringFile "/public/compact-emoji.json"
-        |> T.addStringFile "/public/word-list.txt"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -71,9 +70,8 @@ tests :
     -> String
     -> Bytes
     -> String
-    -> String
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson wordList =
+tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
         handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests =
@@ -83,9 +81,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             case String.split "/" currentRequest.url of
                 [ "", "_i" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 E2EHelper.infoEndpointResponse
-
-                [ "", "word-list.txt" ] ->
-                    E2EHelper.httpBasic currentRequest.url 200 wordList
 
                 [ "", "compact-emoji.json" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 emojiJson

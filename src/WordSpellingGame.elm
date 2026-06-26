@@ -23,7 +23,6 @@ module WordSpellingGame exposing
     , animatedTilePlacement
     , dragEnd
     , dragStart
-    , foldActions
     , gameView
     , initGame
     , initSetup
@@ -298,11 +297,6 @@ shuffle list =
                 |> List.map Tuple.first
         )
         Random.independentSeed
-
-
-foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
-foldActions setup actions =
-    Array.foldl (updateAction setup) (initShared setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
@@ -811,18 +805,6 @@ checkValidPlacement currentUserId shared notShared =
 
         [] ->
             Err ()
-
-
-{-| Reject a structurally-valid placement unless every word it forms exists in `wordList`. When
-`wordList` is empty (e.g. it hasn't loaded yet) the words aren't checked.
--}
-validateWord : Set String -> Board -> PlacedWord -> Result () PlacedWord
-validateWord wordList board placedWord =
-    if Set.isEmpty wordList then
-        Ok placedWord
-
-    else
-        validatePlacement wordList board placedWord |> Result.map (\_ -> placedWord)
 
 
 buildPlacedWord : Bool -> Shared -> List ( ( Int, Int ), LetterOrWildcard ) -> Result () PlacedWord
@@ -1487,9 +1469,12 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                                     |> Maybe.map
                                         (\{ progress, red } ->
                                             let
-                                                cornerX : Int
-                                                cornerX =
-                                                    boardX windowSize
+                                                startX : Int
+                                                startX =
+                                                    boardX windowSize - cellSize2
+
+                                                startY =
+                                                    boardY - cellSize2
 
                                                 destX : Int
                                                 destX =
@@ -1502,8 +1487,8 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                                             animatedTileInFront
                                                 cellSize2
                                                 (Coord.xy
-                                                    (round (toFloat cornerX + progress * toFloat (destX - cornerX)))
-                                                    (round (toFloat boardY + progress * toFloat (destY - boardY)))
+                                                    (round (toFloat startX + progress * toFloat (destX - startX)))
+                                                    (round (toFloat startY + progress * toFloat (destY - startY)))
                                                 )
                                                 red
                                                 (Letter letter)

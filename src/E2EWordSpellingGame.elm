@@ -35,12 +35,12 @@ wordSpellingGameTests normalConfig =
                     -- Drag a tile from one screen position to another. Two move events are
                     -- needed: the first transitions the drag into the Dragging state (which
                     -- records the start position), the second sets the drop position.
-                    dragTile from to =
+                    dragTile delay tab from to =
                         T.group
-                            [ admin.custom 100 (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
-                            , admin.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
-                            , admin.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
-                            , admin.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                            [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
                             ]
 
                     -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
@@ -72,10 +72,11 @@ wordSpellingGameTests normalConfig =
 
                 -- Admin drags three tiles from the tray onto a row of the board to form a
                 -- word, then submits it.
-                , dragTile (trayTile 0) (boardCell 7 7)
-                , dragTile (trayTile 1) (boardCell 8 7)
-                , dragTile (trayTile 2) (boardCell 9 7)
+                , dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                , dragTile 100 admin (trayTile 3) (boardCell 9 7)
                 , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                , dragTile 1000 user (trayTile 0) (boardCell 7 6)
                 ]
             )
         ]
