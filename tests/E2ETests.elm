@@ -28,6 +28,7 @@ import FileStatus
 import Frontend
 import Html.Attributes
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
+import IdArray
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
@@ -2285,7 +2286,7 @@ sendMessageRateLimitTest config =
                             Just guild ->
                                 case SeqDict.get channelId guild.channels of
                                     Just channel ->
-                                        Array.length channel.messages
+                                        IdArray.length channel.messages
 
                                     Nothing ->
                                         -1

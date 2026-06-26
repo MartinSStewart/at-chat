@@ -14,6 +14,7 @@ import Effect.Websocket as Websocket
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import IdArray
 import Iso8601
 import LinkedAndOtherDiscordUsers
 import Local
@@ -83,7 +84,7 @@ checkDmVisibleMessageCount admin isExpected data =
                             ("Discord DM visibleMessages.count="
                                 ++ String.fromInt dmChannel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (Array.length dmChannel.messages)
+                                ++ String.fromInt (IdArray.length dmChannel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
                             )
 
@@ -125,7 +126,7 @@ checkGuildVisibleMessageCount admin isExpected data =
                             ("Discord guild channel visibleMessages.count="
                                 ++ String.fromInt channel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (Array.length channel.messages)
+                                ++ String.fromInt (IdArray.length channel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open guild channel, so they disappear from view."
                             )
 
@@ -1012,7 +1013,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Just guild ->
                                     case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
-                                            case Array.length channel.messages of
+                                            case IdArray.length channel.messages of
                                                 1 ->
                                                     Ok ()
 
@@ -1062,7 +1063,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Just guild ->
                                     case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
-                                            case Array.length channel.messages of
+                                            case IdArray.length channel.messages of
                                                 2 ->
                                                     Ok ()
 
@@ -1711,9 +1712,9 @@ lastDiscordDmMessage : BackendModel -> Maybe ( Id.Id Id.ChannelMessageId, Messag
 lastDiscordDmMessage backend =
     case SeqDict.get discordDmChannelId backend.discordDmChannels of
         Just channel ->
-            case Array.get (Array.length channel.messages - 1) channel.messages of
+            case IdArray.last channel.messages of
                 Just message ->
-                    Just ( Id.fromInt (Array.length channel.messages - 1), message )
+                    Just ( Id.fromInt (IdArray.length channel.messages - 1), message )
 
                 Nothing ->
                     Nothing

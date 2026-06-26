@@ -110,6 +110,7 @@ import Game
 import Go
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray
 import IdString
 import ImageEditor
 import Json.Decode
@@ -2861,9 +2862,9 @@ lastGuildChannelMessage backend =
         Just ( guildId, guild ) ->
             case SeqDict.get (Id.fromInt 0) guild.channels of
                 Just channel ->
-                    case Array.get (Array.length channel.messages - 1) channel.messages of
+                    case IdArray.last channel.messages of
                         Just message ->
-                            Just ( guildId, Id.fromInt (Array.length channel.messages - 1), message )
+                            Just ( guildId, Id.fromInt (IdArray.length channel.messages - 1), message )
 
                         Nothing ->
                             Nothing
@@ -2879,7 +2880,7 @@ lastGuildChannelMessageAt : Id ChannelMessageId -> BackendModel -> Maybe (Messag
 lastGuildChannelMessageAt messageId backend =
     case lastGuildChannel backend of
         Just channel ->
-            Array.get (Id.toInt messageId) channel.messages
+            IdArray.get messageId channel.messages
 
         Nothing ->
             Nothing
@@ -2891,7 +2892,7 @@ findImageMessage : BackendModel -> Maybe ( Id ChannelMessageId, Id FileStatus.Fi
 findImageMessage backend =
     case lastGuildChannel backend of
         Just channel ->
-            Array.toList channel.messages
+            IdArray.toList channel.messages
                 |> List.indexedMap Tuple.pair
                 |> List.filterMap
                     (\( index, message ) ->
@@ -2925,7 +2926,7 @@ findEmbedImageMessage : BackendModel -> Maybe (Id ChannelMessageId)
 findEmbedImageMessage backend =
     case lastGuildChannel backend of
         Just channel ->
-            Array.toList channel.messages
+            IdArray.toList channel.messages
                 |> List.indexedMap Tuple.pair
                 |> List.filterMap
                     (\( index, message ) ->

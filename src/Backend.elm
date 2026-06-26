@@ -41,6 +41,7 @@ import Game
 import Go
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
 import LinkedAndOtherDiscordUsers
@@ -131,7 +132,7 @@ init =
                         , createdBy = Broadcast.adminUserId
                         , name = Unsafe.channelName "Welcome"
                         , description = ChannelDescription.fromStringLossy "The welcome channel!"
-                        , messages = Array.empty
+                        , messages = IdArray.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
@@ -143,7 +144,7 @@ init =
                         , createdBy = Broadcast.adminUserId
                         , name = Unsafe.channelName "General"
                         , description = ChannelDescription.empty
-                        , messages = Array.empty
+                        , messages = IdArray.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
@@ -884,7 +885,7 @@ update msg model =
                                                                     maybe
 
                                                                 Nothing ->
-                                                                    { messages = Array.empty
+                                                                    { messages = IdArray.empty
                                                                     , lastTypedAt = SeqDict.empty
                                                                     , linkedMessageIds = OneToOne.empty
                                                                     , members =
@@ -1167,7 +1168,7 @@ update msg model =
                                                 | messages = messages2
                                                 , linkedMessageIds = linkedMessageIds
                                                 , members =
-                                                    Array.foldl
+                                                    IdArray.foldl
                                                         (\message members ->
                                                             case message of
                                                                 UserTextMessage message2 ->
@@ -6292,20 +6293,20 @@ threadRouteToDiscordMessageId channelId channel threadRoute =
 
 
 loadMessagesHelper :
-    { a | messages : Array (Message messageId userId) }
+    { a | messages : IdArray messageId (Message messageId userId) }
     -> SeqDict (Id messageId) (Message messageId userId)
 loadMessagesHelper channel =
     let
         messageCount : Int
         messageCount =
-            Array.length channel.messages
+            IdArray.length channel.messages
 
         indexStart : Int
         indexStart =
             max (messageCount - VisibleMessages.pageSize) 0
     in
-    Array.slice indexStart messageCount channel.messages
-        |> Array.toList
+    IdArray.slice indexStart messageCount channel.messages
+        |> IdArray.toList
         |> List.indexedMap
             (\index message ->
                 ( index + indexStart |> Id.fromInt, message )
@@ -6315,7 +6316,7 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : Array (Message messageId userId) }
+    -> { b | messages : IdArray messageId (Message messageId userId) }
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
@@ -6325,8 +6326,8 @@ handleMessagesRequest oldestVisibleMessage channel =
         nextOldestVisible =
             max (oldestVisibleMessage2 - VisibleMessages.pageSize) 0
     in
-    Array.slice nextOldestVisible oldestVisibleMessage2 channel.messages
-        |> Array.toList
+    IdArray.slice nextOldestVisible oldestVisibleMessage2 channel.messages
+        |> IdArray.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
         |> FilledInByBackend

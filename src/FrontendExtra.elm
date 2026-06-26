@@ -57,6 +57,7 @@ import Html exposing (Html)
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -1023,7 +1024,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -1081,7 +1082,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -2185,7 +2186,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (IdArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2280,7 +2281,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (IdArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2331,7 +2332,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length dmChannel.messages |> Id.fromInt)
+                                                                (IdArray.length dmChannel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -3146,7 +3147,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (GuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (IdArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3289,7 +3290,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (IdArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3795,7 +3796,7 @@ changeUpdate localMsg local =
                                                                 LocalState.discordTopicToDescription
                                                                     topic
                                                                     ChannelDescription.empty
-                                                            , messages = Array.empty
+                                                            , messages = IdArray.empty
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
@@ -3820,7 +3821,7 @@ changeUpdate localMsg local =
                                             maybeChannel
 
                                         Nothing ->
-                                            { messages = Array.empty
+                                            { messages = IdArray.empty
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members

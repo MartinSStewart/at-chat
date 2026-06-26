@@ -17,8 +17,6 @@ module Pages.Guild exposing
     , typingDebouncerDelay
     )
 
-import Array exposing (Array)
-import Array.Extra
 import Bitwise
 import Call
 import ChannelDescription
@@ -42,6 +40,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
@@ -96,7 +95,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : IdArray messageId (MessageState messageId userId) }
     -> ChannelNotificationType
 channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -121,14 +120,14 @@ channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelI
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId userId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : IdArray messageId (MessageState messageId userId) } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
-            Array.length channel.messages - 1 - Id.toInt lastViewed
+            IdArray.length channel.messages - 1 - Id.toInt lastViewed
 
         Nothing ->
-            Array.length channel.messages
+            IdArray.length channel.messages
 
 
 channelNewMessageCount :
@@ -136,8 +135,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : Array (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId) }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =
@@ -1567,7 +1566,7 @@ pageMissingMobile text =
 threadPreviewText :
     SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> { b | messages : Array (MessageState ChannelMessageId userId) }
+    -> { b | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId) }
     -> String
 threadPreviewText allUsers threadMessageIndex channel =
     case IdArray.get threadMessageIndex channel.messages of
@@ -2108,7 +2107,7 @@ conversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -2170,7 +2169,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2368,12 +2367,12 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( IdArray.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
 
-maybeRepliedTo : Message messageId userId -> { a | messages : Array (MessageState messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
+maybeRepliedTo : Message messageId userId -> { a | messages : IdArray messageId (MessageState messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
@@ -2414,7 +2413,7 @@ discordConversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -2476,7 +2475,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2668,7 +2667,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( IdArray.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
@@ -2802,7 +2801,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2952,7 +2951,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( IdArray.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -3020,7 +3019,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -3169,7 +3168,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( IdArray.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -3485,12 +3484,12 @@ replyToHeader :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Maybe (Id messageId)
     -> SeqDict userId { a | name : PersonName }
-    -> { b | messages : Array (MessageState messageId2 userId) }
+    -> { b | messages : IdArray messageId2 (MessageState messageId2 userId) }
     -> Element FrontendMsg
 replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
         Just messageIndex ->
-            case IdArray.get messageIndex channel.messages of
+            case IdArray.get (Id.changeType messageIndex) channel.messages of
                 Just (MessageLoaded message) ->
                     case message of
                         UserTextMessage data ->
@@ -3607,7 +3606,7 @@ conversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -3782,7 +3781,7 @@ discordConversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -4399,7 +4398,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) }
+    -> { a | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -4513,7 +4512,7 @@ discordThreadStarterMessage :
     Bool
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
+    -> { a | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -6786,7 +6785,7 @@ previewThreadLastMessage :
 previewThreadLastMessage timezone customEmojis allUsers messageId thread =
     let
         lastMessage =
-            Array.Extra.last thread.messages
+            IdArray.last thread.messages
     in
     Html.button
         [ Html.Attributes.style "white-space" "nowrap"
@@ -6812,7 +6811,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
             ]
             [ Icons.hashtag
-            , case Array.length thread.messages of
+            , case IdArray.length thread.messages of
                 1 ->
                     Html.text "1 message"
 
@@ -7284,7 +7283,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                                 )
                                 thread
                     in
-                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                    case ( hasNotifications, isSelected, IdArray.last thread.messages ) of
                         ( NoNotification, False, Just (MessageLoaded message) ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
                                 Just ( threadMessageIndex, hasNotifications, isSelected )
@@ -7426,7 +7425,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                                 )
                                 thread
                     in
-                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                    case ( hasNotifications, isSelected, IdArray.last thread.messages ) of
                         ( NoNotification, False, Just (MessageLoaded message) ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
                                 Just ( threadMessageIndex, hasNotifications, isSelected )
@@ -7799,7 +7798,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (\( otherUserId, dmChannel ) ->
                 case User.getUser otherUserId localUser of
                     Just otherUser ->
-                        ( case Array.Extra.last dmChannel.messages of
+                        ( case IdArray.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
                                 Message.createdAt message2
 
@@ -7833,7 +7832,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (SeqDict.toList dmChannelsIncludingCurrentUser)
             ++ List.map
                 (\( channelId, dmChannel ) ->
-                    ( case Array.Extra.last dmChannel.messages of
+                    ( case IdArray.last dmChannel.messages of
                         Just (MessageLoaded message2) ->
                             Message.createdAt message2
 
@@ -7938,7 +7937,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
 
         message : MessageState ChannelMessageId (Id UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            IdArray.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -8062,7 +8061,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         message : MessageState ChannelMessageId (Discord.Id Discord.UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            IdArray.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -8244,7 +8243,7 @@ editChannelFormView isMobile2 guildId channelId channel form =
     let
         isEmpty : Bool
         isEmpty =
-            Array.isEmpty channel.messages
+            IdArray.isEmpty channel.messages
 
         channelNameString : String
         channelNameString =

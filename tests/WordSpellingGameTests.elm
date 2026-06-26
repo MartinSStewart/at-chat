@@ -121,24 +121,29 @@ tests =
                         |> Expect.equal (Err ())
             ]
         , Test.describe "animatedTilePlacement positions tiles from the start time"
-            [ Test.test "a tile starts at the top-left corner and slides to its cell" <|
+            [ Test.test "an observer's tile starts at the top-left corner and slides to its cell" <|
                 \_ ->
-                    -- At time 0 the first tile is at the corner (progress 0); well after the
-                    -- slide it rests on its cell (progress 1).
-                    ( WordSpellingGame.animatedTilePlacement 0 EmptyPlaceholder 3 0
-                    , WordSpellingGame.animatedTilePlacement 1000 EmptyPlaceholder 3 0
+                    -- For a player who didn't place the tiles, at time 0 the first tile is at the
+                    -- corner (progress 0); well after the slide it rests on its cell (progress 1).
+                    ( WordSpellingGame.animatedTilePlacement False 0 EmptyPlaceholder 3 0
+                    , WordSpellingGame.animatedTilePlacement False 1000 EmptyPlaceholder 3 0
                     )
                         |> Expect.equal
                             ( Just { progress = 0, red = False }
                             , Just { progress = 1, red = False }
                             )
+            , Test.test "the player who placed the tiles sees them resting in place immediately" <|
+                \_ ->
+                    -- They placed the tiles locally, so there's no slide-in for them.
+                    WordSpellingGame.animatedTilePlacement True 0 EmptyPlaceholder 3 0
+                        |> Expect.equal (Just { progress = 1, red = False })
             , Test.test "later tiles are staggered, so they haven't started while an earlier one moves" <|
                 \_ ->
                     -- 250ms in, tile 0 (launched at 0) has arrived but tile 2 (launches at 160)
                     -- has only just started, so it is still well short of its cell.
                     case
-                        ( WordSpellingGame.animatedTilePlacement 250 EmptyPlaceholder 3 0
-                        , WordSpellingGame.animatedTilePlacement 250 EmptyPlaceholder 3 2
+                        ( WordSpellingGame.animatedTilePlacement False 250 EmptyPlaceholder 3 0
+                        , WordSpellingGame.animatedTilePlacement False 250 EmptyPlaceholder 3 2
                         )
                     of
                         ( Just first, Just third ) ->
@@ -149,17 +154,17 @@ tests =
                             Expect.fail "expected both tiles to be visible"
             , Test.test "a valid placement's tiles never disappear" <|
                 \_ ->
-                    WordSpellingGame.animatedTilePlacement 100000 EmptyPlaceholder 3 0
+                    WordSpellingGame.animatedTilePlacement False 100000 EmptyPlaceholder 3 0
                         |> Expect.equal (Just { progress = 1, red = False })
             , Test.test "a rejected tile turns red after landing" <|
                 \_ ->
-                    -- After the whole word has slid in (3 tiles => 410ms) but before it leaves,
-                    -- the tile is resting on its cell and drawn red.
-                    WordSpellingGame.animatedTilePlacement 600 (FilledInByBackend IsNotValid) 3 0
+                    -- After the whole word has slid in and held briefly, the tile is resting on its
+                    -- cell and drawn red before it leaves.
+                    WordSpellingGame.animatedTilePlacement False 1500 (FilledInByBackend IsNotValid) 3 0
                         |> Expect.equal (Just { progress = 1, red = True })
             , Test.test "a rejected tile is gone once the animation has finished" <|
                 \_ ->
-                    WordSpellingGame.animatedTilePlacement 100000 (FilledInByBackend IsNotValid) 3 0
+                    WordSpellingGame.animatedTilePlacement False 100000 (FilledInByBackend IsNotValid) 3 0
                         |> Expect.equal Nothing
             ]
         ]

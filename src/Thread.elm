@@ -14,7 +14,6 @@ module Thread exposing
     , toFrontend
     )
 
-import Array exposing (Array)
 import Date exposing (Date)
 import Discord
 import Drawing
@@ -135,7 +134,7 @@ loadMessages preloadMessages messages =
             messageCount
             (\index ->
                 if messageCount - index <= VisibleMessages.pageSize then
-                    case Array.get index messages of
+                    case IdArray.get (Id.fromInt index) messages of
                         Just message ->
                             MessageLoaded message
 
@@ -148,10 +147,10 @@ loadMessages preloadMessages messages =
 
     else
         -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
-        Array.repeat messageCount MessageUnloaded
-            |> Array.set
-                (messageCount - 1)
-                (case Array.get (messageCount - 1) messages of
+        IdArray.initialize messageCount (\_ -> MessageUnloaded)
+            |> IdArray.set
+                (Id.fromInt (messageCount - 1))
+                (case IdArray.get (Id.fromInt (messageCount - 1)) messages of
                     Just message ->
                         MessageLoaded message
 

@@ -1,4 +1,4 @@
-module IdArray exposing (IdArray, empty, foldl, foldr, fromList, get, initialize, length, set, toList)
+module IdArray exposing (IdArray, empty, foldl, foldr, fromList, get, initialize, isEmpty, last, length, push, set, slice, toArray, toList)
 
 import Array exposing (Array)
 import Id exposing (Id)
@@ -38,9 +38,24 @@ length (IdArray array) =
     Array.length array
 
 
+isEmpty : IdArray k v -> Bool
+isEmpty (IdArray array) =
+    Array.isEmpty array
+
+
+last : IdArray k v -> Maybe v
+last (IdArray array) =
+    Array.get (Array.length array - 1) array
+
+
 toList : IdArray k v -> List v
 toList (IdArray array) =
     Array.toList array
+
+
+toArray : IdArray k v -> Array v
+toArray (IdArray array) =
+    array
 
 
 fromList : List v -> IdArray k v
@@ -51,3 +66,13 @@ fromList list =
 initialize : Int -> (Int -> v) -> IdArray k v
 initialize len fn =
     Array.initialize len fn |> IdArray
+
+
+push : v -> IdArray k v -> IdArray k v
+push value (IdArray array) =
+    Array.push value array |> IdArray
+
+
+slice : Int -> Int -> IdArray k v -> IdArray k v
+slice start end (IdArray array) =
+    Array.slice start end array |> IdArray
