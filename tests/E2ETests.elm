@@ -1,4 +1,4 @@
-module RecordedTests exposing (main, setup)
+module E2ETests exposing (main, setup)
 
 import Array exposing (Array)
 import Backend
@@ -6,8 +6,9 @@ import Bytes exposing (Bytes)
 import Codec
 import Coord
 import Dict
-import DiscordRecordedTests
 import Duration
+import E2EDiscord
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera as Lamdera
@@ -29,7 +30,6 @@ import NonemptyDict
 import Pages.Home
 import PersonName
 import RateLimit
-import RecordedTestExtra
 import RichText
 import Route
 import SecretId
@@ -75,20 +75,20 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         handleHttpRequestsWithUploadedImageSize uploadedImageSize ({ currentRequest } as httpRequests) =
             case String.split "/" currentRequest.url of
                 [ "", "_i" ] ->
-                    RecordedTestExtra.httpBasic currentRequest.url 200 RecordedTestExtra.infoEndpointResponse
+                    E2EHelper.httpBasic currentRequest.url 200 E2EHelper.infoEndpointResponse
 
                 [ "", "word-list.txt" ] ->
-                    RecordedTestExtra.httpBasic currentRequest.url 200 wordList
+                    E2EHelper.httpBasic currentRequest.url 200 wordList
 
                 [ "", "compact-emoji.json" ] ->
-                    RecordedTestExtra.httpBasic currentRequest.url 200 emojiJson
+                    E2EHelper.httpBasic currentRequest.url 200 emojiJson
 
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
-                    RecordedTestExtra.mockCloudflareSfu rest httpRequests
+                    E2EHelper.mockCloudflareSfu rest httpRequests
 
                 [ "https:", "", "api.cloudflare.com", "client", "v4", "graphql" ] ->
                     -- Realtime egress usage query. 1100 GB of SFU egress => (1100 - 1000) * $0.05 = $5.00
-                    RecordedTestExtra.httpBasic
+                    E2EHelper.httpBasic
                         currentRequest.url
                         200
                         """{"data":{"viewer":{"accounts":[{"sfu":[{"sum":{"egressBytes":1100000000000}}],"turn":[{"sum":{"egressBytes":0}}]}]}}}"""
@@ -96,10 +96,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 "http:" :: "" :: "localhost:3000" :: "file" :: rest ->
                     case rest of
                         "internal" :: rest2 ->
-                            RecordedTestExtra.handleInternalRequests discordStickerPacks currentRequest rest2
+                            E2EHelper.handleInternalRequests discordStickerPacks currentRequest rest2
 
                         [ "upload" ] ->
-                            RecordedTestExtra.httpBasic
+                            E2EHelper.httpBasic
                                 currentRequest.url
                                 200
                                 (Codec.encodeToString
@@ -137,7 +137,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                 UnhandledHttpRequest
 
                                             else
-                                                RecordedTestExtra.httpBasic
+                                                E2EHelper.httpBasic
                                                     currentRequest.url
                                                     200
                                                     (Codec.encodeToString
@@ -163,10 +163,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                     )
 
                                         Err _ ->
-                                            RecordedTestExtra.httpBasic currentRequest.url 500 ""
+                                            E2EHelper.httpBasic currentRequest.url 500 ""
 
                                 _ ->
-                                    RecordedTestExtra.httpBasic currentRequest.url 500 ""
+                                    E2EHelper.httpBasic currentRequest.url 500 ""
 
                         _ ->
                             UnhandledHttpRequest
@@ -176,7 +176,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         T.JsonBody json ->
                             case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
                                 Ok email ->
-                                    RecordedTestExtra.httpBasic
+                                    E2EHelper.httpBasic
                                         currentRequest.url
                                         200
                                         ("""{"To":\""""
@@ -221,10 +221,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 handleNormalHttpRequests
-                RecordedTestExtra.handlePortToJs
+                E2EHelper.handlePortToJs
                 handleFileRequest
                 handleMultiFileUpload
-                RecordedTestExtra.domain
+                E2EHelper.domain
 
         imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         imageUploadConfig =
@@ -232,14 +232,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 handleNormalHttpRequests
-                RecordedTestExtra.handlePortToJs
+                E2EHelper.handlePortToJs
                 handleFileRequest
                 (\_ ->
                     UploadMultipleFiles
-                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon E2EHelper.startTime)
                         []
                 )
-                RecordedTestExtra.domain
+                E2EHelper.domain
 
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
@@ -249,14 +249,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 (handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 800 100)))
-                RecordedTestExtra.handlePortToJs
+                E2EHelper.handlePortToJs
                 handleFileRequest
                 (\_ ->
                     UploadMultipleFiles
-                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon E2EHelper.startTime)
                         []
                 )
-                RecordedTestExtra.domain
+                E2EHelper.domain
 
         -- Uploads a video file. The upload response reports no image size, just
         -- like the Rust server does for files it can't decode as an image.
@@ -266,14 +266,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 (handleHttpRequestsWithUploadedImageSize Nothing)
-                RecordedTestExtra.handlePortToJs
+                E2EHelper.handlePortToJs
                 handleFileRequest
                 (\_ ->
                     UploadMultipleFiles
-                        (T.uploadBytesFile "test-video.mp4" "video/mp4" atUserIcon RecordedTestExtra.startTime)
+                        (T.uploadBytesFile "test-video.mp4" "video/mp4" atUserIcon E2EHelper.startTime)
                         []
                 )
-                RecordedTestExtra.domain
+                E2EHelper.domain
 
         -- Uploads an audio file. Like videoUploadConfig, the upload response
         -- reports no image size.
@@ -283,49 +283,49 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 Frontend.app_
                 Backend.app_
                 (handleHttpRequestsWithUploadedImageSize Nothing)
-                RecordedTestExtra.handlePortToJs
+                E2EHelper.handlePortToJs
                 handleFileRequest
                 (\_ ->
                     UploadMultipleFiles
-                        (T.uploadBytesFile "test-audio.mp3" "audio/mpeg" atUserIcon RecordedTestExtra.startTime)
+                        (T.uploadBytesFile "test-audio.mp3" "audio/mpeg" atUserIcon E2EHelper.startTime)
                         []
                 )
-                RecordedTestExtra.domain
+                E2EHelper.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
-    , RecordedTestExtra.videoAttachmentTest videoUploadConfig
-    , RecordedTestExtra.audioAttachmentTest audioUploadConfig
-    , RecordedTestExtra.inviteUserAndDmChat normalConfig
-    , RecordedTestExtra.imageViewerTests imageUploadConfig
-    , RecordedTestExtra.startTest
+    , E2EHelper.videoAttachmentTest videoUploadConfig
+    , E2EHelper.audioAttachmentTest audioUploadConfig
+    , E2EHelper.inviteUserAndDmChat normalConfig
+    , E2EHelper.imageViewerTests imageUploadConfig
+    , E2EHelper.startTest
         "Admin can open admin page"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_goToHomepage")
                 ]
             )
         ]
-    , RecordedTestExtra.inactiveThreadsAreHiddenTest normalConfig
-    , RecordedTestExtra.startTest
+    , E2EHelper.inactiveThreadsAreHiddenTest normalConfig
+    , E2EHelper.startTest
         "Admin can disable Discord account linking"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
@@ -359,11 +359,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         , T.connectFrontend
             100
             (Lamdera.sessionIdFromString "JoeSession")
-            RecordedTestExtra.linkDiscordUrl
-            RecordedTestExtra.desktopWindow
+            E2EHelper.linkDiscordUrl
+            E2EHelper.desktopWindow
             (\user ->
-                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
-                , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail user
+                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                , E2EHelper.handleLoginFromLoginPage E2EHelper.joeEmail user
                 , user.input 100 (Dom.id "loginForm_name") "Joe"
                 , user.click 100 (Dom.id "loginForm_submit")
 
@@ -384,17 +384,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Regenerate server secret button hits rust-server and applies response"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
@@ -425,7 +425,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkState
                     100
                     (\data ->
-                        if SecretId.toString data.backend.serverSecret == RecordedTestExtra.regeneratedServerSecretValue then
+                        if SecretId.toString data.backend.serverSecret == E2EHelper.regeneratedServerSecretValue then
                             Ok ()
 
                         else
@@ -445,12 +445,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Create message with embeds and then edit that message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -488,7 +488,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         ]
                             |> T.collapsableGroup "Check cards"
                 in
-                [ RecordedTestExtra.writeMessage admin 100 "Test https://elm.camp/ https://elm.camp/ https://meetdown.app/"
+                [ E2EHelper.writeMessage admin 100 "Test https://elm.camp/ https://elm.camp/ https://meetdown.app/"
                 , checkCards 2 1
                 , T.collapsableGroup
                     "Edit message"
@@ -515,47 +515,47 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message with bullet points and rich text formatting"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin _ ->
                 [ -- Focus the channel text input and type a message that uses bullet
                   -- points along with various other rich text formatting.
-                  RecordedTestExtra.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                  E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
                 , admin.input 100 (Dom.id "channel_textinput") "# Rich text demo"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.input 100 (Dom.id "channel_textinput") "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)"
 
                 -- Snapshot the formatted preview while the message is still in the text input.
-                , RecordedTestExtra.tallSnapshot admin 100 { name = "Rich text message in text input" }
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text message in text input" }
 
                 -- Send the message and snapshot how it renders in the channel.
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , RecordedTestExtra.focusEvent admin 100 Nothing Nothing
-                , RecordedTestExtra.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
+                , E2EHelper.focusEvent admin 100 Nothing Nothing
+                , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
                 , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
                 , admin.click 100 (Dom.id "miniView_reply")
                 , admin.input 100 (Dom.id "channel_textinput") "Reply"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , RecordedTestExtra.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
+                , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message previewed in reply" }
                 ]
             )
         ]
-    , RecordedTestExtra.drawOnMessages imageUploadConfig
-    , RecordedTestExtra.drawingScalesWithImages wideImageUploadConfig
-    , RecordedTestExtra.startTest
+    , E2EHelper.drawOnMessages imageUploadConfig
+    , E2EHelper.drawingScalesWithImages wideImageUploadConfig
+    , E2EHelper.startTest
         "Friend label shows typing indicator"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ admin.click 100 (Dom.id "guild_openDm_2")
-                , RecordedTestExtra.writeMessage admin 100 "Hello from admin"
+                , E2EHelper.writeMessage admin 100 "Hello from admin"
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , user.checkView
                     100
@@ -596,12 +596,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Emoji selector arrow key navigation"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin _ ->
                 let
                     checkHover :
@@ -685,12 +685,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message length limit and counter"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     shortText : String
@@ -709,7 +709,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     overLimit =
                         String.repeat 2001 "d"
                 in
-                [ RecordedTestExtra.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                [ E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
 
                 -- Below the counter threshold: no counter is rendered.
@@ -772,12 +772,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message length limit and counter mobile"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.mobileWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.mobileWindow
             (\admin user ->
                 let
                     shortText : String
@@ -796,7 +796,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     overLimit =
                         String.repeat 2001 "d"
                 in
-                [ RecordedTestExtra.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                [ E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
 
                 -- Below the counter threshold: no counter is rendered.
@@ -845,44 +845,44 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , T.testGroup "Discord" (DiscordRecordedTests.discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental)
-    , RecordedTestExtra.startTest
+    , T.testGroup "Discord" (E2EDiscord.discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental)
+    , E2EHelper.startTest
         "Connect multiple devices"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\adminA ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail adminA
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
-                , RecordedTestExtra.hasExactText adminA [ "Desktop • Firefox (current device)" ]
+                , E2EHelper.hasExactText adminA [ "Desktop • Firefox (current device)" ]
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId1
+                    E2EHelper.sessionId1
                     "/"
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.desktopWindow
                     (\adminB ->
-                        [ RecordedTestExtra.handleLogin RecordedTestExtra.safariIphone RecordedTestExtra.adminEmail adminB
-                        , RecordedTestExtra.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox (current device)" ]
+                        [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
+                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox (current device)" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , T.connectFrontend
                             100
-                            RecordedTestExtra.sessionId2
+                            E2EHelper.sessionId2
                             "/"
-                            RecordedTestExtra.desktopWindow
+                            E2EHelper.desktopWindow
                             (\adminC ->
-                                [ RecordedTestExtra.handleLogin RecordedTestExtra.chromeDesktop RecordedTestExtra.adminEmail adminC
-                                , RecordedTestExtra.hasExactText
+                                [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.adminEmail adminC
+                                , E2EHelper.hasExactText
                                     adminA
                                     [ "Mobile • Safari"
                                     , "Desktop • Firefox (current device)"
                                     , "Desktop • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
-                                , RecordedTestExtra.hasExactText
+                                , E2EHelper.hasExactText
                                     adminC
                                     [ "Mobile • Safari"
                                     , "Desktop • Firefox"
@@ -891,21 +891,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
-                        , RecordedTestExtra.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , RecordedTestExtra.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox (current device)" ]
+                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox (current device)" ]
                         ]
                     )
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "spoilers"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
-                [ RecordedTestExtra.writeMessage admin 100 "This message is ||very|| ||secret||"
+                [ E2EHelper.writeMessage admin 100 "This message is ||very|| ||secret||"
                 , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , admin.custom
                     100
@@ -916,34 +916,34 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , ( "clientY", Json.Encode.int 300 )
                         ]
                     )
-                , RecordedTestExtra.writeMessage admin 100 "Another ||*super*|| *||secret||* message"
-                , RecordedTestExtra.clickSpoiler user (Dom.id "spoiler_1_0")
-                , RecordedTestExtra.clickSpoiler user (Dom.id "spoiler_1_1")
-                , RecordedTestExtra.clickSpoiler user (Dom.id "spoiler_2_1")
-                , RecordedTestExtra.clickSpoiler user (Dom.id "spoiler_2_0")
-                , RecordedTestExtra.createThread admin (Id.fromInt 2)
-                , RecordedTestExtra.clickSpoiler admin (Dom.id "spoiler_2_0")
-                , RecordedTestExtra.clickSpoiler admin (Dom.id "spoiler_2_1")
-                , RecordedTestExtra.writeMessage admin 100 "||*super*|| ||duper|| *||secret||* text"
+                , E2EHelper.writeMessage admin 100 "Another ||*super*|| *||secret||* message"
+                , E2EHelper.clickSpoiler user (Dom.id "spoiler_1_0")
+                , E2EHelper.clickSpoiler user (Dom.id "spoiler_1_1")
+                , E2EHelper.clickSpoiler user (Dom.id "spoiler_2_1")
+                , E2EHelper.clickSpoiler user (Dom.id "spoiler_2_0")
+                , E2EHelper.createThread admin (Id.fromInt 2)
+                , E2EHelper.clickSpoiler admin (Dom.id "spoiler_2_0")
+                , E2EHelper.clickSpoiler admin (Dom.id "spoiler_2_1")
+                , E2EHelper.writeMessage admin 100 "||*super*|| ||duper|| *||secret||* text"
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                , RecordedTestExtra.clickSpoiler admin (Dom.id "threadSpoiler_0_0")
-                , RecordedTestExtra.clickSpoiler admin (Dom.id "threadSpoiler_0_2")
+                , E2EHelper.clickSpoiler admin (Dom.id "threadSpoiler_0_0")
+                , E2EHelper.clickSpoiler admin (Dom.id "threadSpoiler_0_2")
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Mobile edit message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId2
+            E2EHelper.sessionId2
             "/"
-            RecordedTestExtra.mobileWindow
+            E2EHelper.mobileWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.safariIphone RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_openGuild_0")
-                , RecordedTestExtra.writeMessageMobile admin "Test"
+                , E2EHelper.writeMessageMobile admin "Test"
                 , admin.custom
                     100
                     (Dom.id "guild_message_0")
@@ -960,19 +960,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Desktop edit message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId2
+            E2EHelper.sessionId2
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.safariIphone RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_openGuild_0")
-                , RecordedTestExtra.writeMessageMobile admin "Test"
+                , E2EHelper.writeMessageMobile admin "Test"
                 , admin.custom
                     100
                     (Dom.id "guild_message_0")
@@ -982,34 +982,34 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , ( "clientY", Json.Encode.float 150 )
                         ]
                     )
-                , RecordedTestExtra.hasExactText admin [ "Edit message" ]
+                , E2EHelper.hasExactText admin [ "Edit message" ]
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
-                , RecordedTestExtra.hasNotExactText admin [ "Edit message" ]
+                , E2EHelper.hasNotExactText admin [ "Edit message" ]
                 , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
                 , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
-                , RecordedTestExtra.hasText admin [ "to cancel edit" ]
+                , E2EHelper.hasText admin [ "to cancel edit" ]
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
-                , RecordedTestExtra.hasNotText admin [ "to cancel edit" ]
+                , E2EHelper.hasNotText admin [ "to cancel edit" ]
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Edit guild message by pressing up arrow in channel input"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 -- More than five messages, interleaved between both users, and the most recent
                 -- message overall is from the other user. Pressing up should still skip the other
                 -- user's messages and edit the admin's own most recent message.
-                [ RecordedTestExtra.writeMessage admin 100 "Admin message one"
-                , RecordedTestExtra.writeMessage user 100 "User message one"
-                , RecordedTestExtra.writeMessage admin 100 "Admin message two"
-                , RecordedTestExtra.writeMessage user 100 "User message two"
-                , RecordedTestExtra.writeMessage admin 100 "Admin message three"
-                , RecordedTestExtra.writeMessage user 100 "User message three"
-                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Admin message three" "Admin message three edited"
+                [ E2EHelper.writeMessage admin 100 "Admin message one"
+                , E2EHelper.writeMessage user 100 "User message one"
+                , E2EHelper.writeMessage admin 100 "Admin message two"
+                , E2EHelper.writeMessage user 100 "User message two"
+                , E2EHelper.writeMessage admin 100 "Admin message three"
+                , E2EHelper.writeMessage user 100 "User message three"
+                , E2EHelper.editMostRecentMessageViaArrowUp admin "Admin message three" "Admin message three edited"
 
                 -- Only the admin's most recent message was edited; earlier messages are untouched.
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Admin message three" ])
@@ -1024,26 +1024,26 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Edit DM message by pressing up arrow in channel input"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
-                , RecordedTestExtra.inviteUser
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , RecordedTestExtra.writeMessage user 100 "Hello from user"
+                        , E2EHelper.writeMessage user 100 "Hello from user"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_2")
-                        , RecordedTestExtra.writeMessage admin 100 "First DM"
-                        , RecordedTestExtra.writeMessage admin 100 "Second DM"
-                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
+                        , E2EHelper.writeMessage admin 100 "First DM"
+                        , E2EHelper.writeMessage admin 100 "Second DM"
+                        , E2EHelper.editMostRecentMessageViaArrowUp admin "Second DM" "Second DM edited"
 
                         -- Only the most recent message we wrote was edited.
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Second DM" ])
@@ -1056,25 +1056,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Edit thread message by pressing up arrow in channel input"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 -- More than five thread messages, interleaved, with the other user sending the
                 -- most recent message.
-                [ RecordedTestExtra.writeMessage admin 100 "Thread starter"
-                , RecordedTestExtra.createThread admin (Id.fromInt 1)
-                , RecordedTestExtra.writeMessage admin 100 "Admin thread one"
+                [ E2EHelper.writeMessage admin 100 "Thread starter"
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "Admin thread one"
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_1")
-                , RecordedTestExtra.writeMessage user 100 "User thread one"
-                , RecordedTestExtra.writeMessage admin 100 "Admin thread two"
-                , RecordedTestExtra.writeMessage user 100 "User thread two"
-                , RecordedTestExtra.writeMessage admin 100 "Admin thread three"
-                , RecordedTestExtra.writeMessage user 100 "User thread three"
-                , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Admin thread three" "Admin thread three edited"
+                , E2EHelper.writeMessage user 100 "User thread one"
+                , E2EHelper.writeMessage admin 100 "Admin thread two"
+                , E2EHelper.writeMessage user 100 "User thread two"
+                , E2EHelper.writeMessage admin 100 "Admin thread three"
+                , E2EHelper.writeMessage user 100 "User thread three"
+                , E2EHelper.editMostRecentMessageViaArrowUp admin "Admin thread three" "Admin thread three edited"
 
                 -- Only the admin's most recent thread message was edited; the earlier replies are untouched.
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Admin thread three" ])
@@ -1083,31 +1083,31 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Change notification level"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
-                , RecordedTestExtra.writeMessage admin 100 "Test"
-                , RecordedTestExtra.checkNotification "Test"
-                , RecordedTestExtra.writeMessage admin 100 "Test 2"
+                , E2EHelper.writeMessage admin 100 "Test"
+                , E2EHelper.checkNotification "Test"
+                , E2EHelper.writeMessage admin 100 "Test 2"
                 , user.click 100 (Dom.id "guild_openChannel_0")
-                , RecordedTestExtra.writeMessage user 100 "I shouldn't get notified"
-                , RecordedTestExtra.checkNoNotification "I shouldn't get notified"
+                , E2EHelper.writeMessage user 100 "I shouldn't get notified"
+                , E2EHelper.checkNoNotification "I shouldn't get notified"
                 ]
             )
         ]
 
-    --, RecordedTestExtra.startTest
+    --, E2EHelper.startTest
     --    "Remove direct mention when viewed on another session"
-    --    RecordedTestExtra.startTime
+    --    E2EHelper.startTime
     --    normalConfig
-    --    [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-    --       RecordedTestExtra.desktopWindow (\admin user ->
+    --    [ E2EHelper.connectTwoUsersAndJoinNewGuild
+    --       E2EHelper.desktopWindow (\admin user ->
     --            [ user.click 100 (Dom.id "guildIcon_showFriends")
     --            , writeMessage admin 100 "@Stevie Steve"
     --            , writeMessage admin 100 "@Stevie Steve"
@@ -1117,9 +1117,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --                100
     --                sessionId1
     --                (Route.encode Route.HomePageRoute)
-    --                RecordedTestExtra.desktopWindow
+    --                E2EHelper.desktopWindow
     --                (\userReload ->
-    --                    [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+    --                    [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
     --                    , userReload.click 100 (Dom.id "guild_openGuild_1")
     --                    , hasExactText user [ "3" ]
     --                    , userReload.click 100 (Dom.id "guildIcon_showFriends")
@@ -1129,33 +1129,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --            ]
     --        )
     --    ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Check notification icons appear"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "Second-channel-goes-here"
                 , admin.click 100 (Dom.id "guild_createChannel")
-                , RecordedTestExtra.writeMessage admin 100 "First message"
-                , RecordedTestExtra.writeMessage admin 100 "Next message"
-                , RecordedTestExtra.writeMessage admin 100 "Third message"
+                , E2EHelper.writeMessage admin 100 "First message"
+                , E2EHelper.writeMessage admin 100 "Next message"
+                , E2EHelper.writeMessage admin 100 "Third message"
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
                 , user.click 100 (Dom.id "guild_openGuild_1")
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
-                , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello!"
-                , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello again!"
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve Hello!"
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve Hello again!"
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId1
+                    E2EHelper.sessionId1
                     (Route.encode Route.HomePageRoute)
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
@@ -1164,55 +1164,55 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Guild icon notification is shown"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
-                , RecordedTestExtra.writeMessage admin 100 "See if notification appears next to guild icon"
-                , RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new message notification" }
+                , E2EHelper.writeMessage admin 100 "See if notification appears next to guild icon"
+                , E2EHelper.tallSnapshot user 100 { name = "Guild icon new message notification" }
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId1
+                    E2EHelper.sessionId1
                     (Route.encode Route.HomePageRoute)
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.desktopWindow
                     (\_ ->
-                        [ RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new message notification on reload" } ]
+                        [ E2EHelper.tallSnapshot user 100 { name = "Guild icon new message notification on reload" } ]
                     )
-                , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve now you should see a red icon"
-                , RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new mention notification" }
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve now you should see a red icon"
+                , E2EHelper.tallSnapshot user 100 { name = "Guild icon new mention notification" }
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\_ user ->
                 [ List.range 0 (VisibleMessages.pageSize * 2)
-                    |> List.map (\index -> RecordedTestExtra.writeMessage user 1000 ("Message " ++ String.fromInt (index + 1)))
+                    |> List.map (\index -> E2EHelper.writeMessage user 1000 ("Message " ++ String.fromInt (index + 1)))
                     |> T.group
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId1
+                    E2EHelper.sessionId1
                     (Route.encode Route.HomePageRoute)
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
-                        , RecordedTestExtra.writeMessage userReload 100 "Another message"
+                        , E2EHelper.writeMessage userReload 100 "Another message"
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
-                        , RecordedTestExtra.hasNotExactText userReload [ "This is the start of #general", "Message 31" ]
-                        , RecordedTestExtra.hasExactText userReload [ "Message 32", "Message 61" ]
-                        , RecordedTestExtra.noMissingMessages 100 userReload
-                        , RecordedTestExtra.scrollToTop userReload
+                        , E2EHelper.hasNotExactText userReload [ "This is the start of #general", "Message 31" ]
+                        , E2EHelper.hasExactText userReload [ "Message 32", "Message 61" ]
+                        , E2EHelper.noMissingMessages 100 userReload
+                        , E2EHelper.scrollToTop userReload
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot
@@ -1227,21 +1227,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 , Test.Html.Selector.exactText "Message 61"
                                 ]
                             )
-                        , RecordedTestExtra.noMissingMessages 100 userReload
-                        , RecordedTestExtra.scrollToMiddle userReload
+                        , E2EHelper.noMissingMessages 100 userReload
+                        , E2EHelper.scrollToMiddle userReload
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "This is the start of #general" ])
-                        , RecordedTestExtra.scrollToTop userReload
+                        , E2EHelper.scrollToTop userReload
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "This is the start of #general" ])
                         , T.backendUpdate
                             5000
-                            (Types.UserDisconnected RecordedTestExtra.sessionId1 userReload.clientId)
+                            (Types.UserDisconnected E2EHelper.sessionId1 userReload.clientId)
                         , T.backendUpdate
                             100
-                            (Types.UserConnected RecordedTestExtra.sessionId1 userReload.clientId)
+                            (Types.UserConnected E2EHelper.sessionId1 userReload.clientId)
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
@@ -1250,12 +1250,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Notifications"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
                 , user.checkView
@@ -1269,8 +1269,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
-                , RecordedTestExtra.checkNoNotification "@Stevie Steve Hi!"
-                , RecordedTestExtra.enableNotifications False admin
+                , E2EHelper.checkNoNotification "@Stevie Steve Hi!"
+                , E2EHelper.enableNotifications False admin
                 , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , user.custom
                     100
@@ -1293,8 +1293,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
                     )
-                , RecordedTestExtra.checkNoNotification "Hello admin!"
-                , RecordedTestExtra.createThread admin (Id.fromInt 2)
+                , E2EHelper.checkNoNotification "Hello admin!"
+                , E2EHelper.createThread admin (Id.fromInt 2)
                 , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
                 , user.checkView
                     100
@@ -1302,21 +1302,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , RecordedTestExtra.checkNotification "Lets move this to a thread..."
+                , E2EHelper.checkNotification "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , admin.click 100 (Dom.id "guild_openDm_2")
-                , RecordedTestExtra.writeMessage admin 100 "Here's a DM to you"
+                , E2EHelper.writeMessage admin 100 "Here's a DM to you"
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
-                , RecordedTestExtra.writeMessage user 100 "Here's a reply!"
-                , RecordedTestExtra.writeMessage user 100 "And another reply"
+                , E2EHelper.writeMessage user 100 "Here's a reply!"
+                , E2EHelper.writeMessage user 100 "And another reply"
                 , user.update 100 (Types.VisibilityChanged Hidden)
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId1
+                    E2EHelper.sessionId1
                     (Route.encode Route.HomePageRoute)
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot
@@ -1324,71 +1324,71 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             )
                         , userReload.click 100 (Dom.id "guildIcon_showFriends")
                         , userReload.click 100 (Dom.id "guild_friendLabel_0")
-                        , RecordedTestExtra.noMissingMessages 20 userReload
+                        , E2EHelper.noMissingMessages 20 userReload
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
-                        , RecordedTestExtra.noMissingMessages 20 userReload
+                        , E2EHelper.noMissingMessages 20 userReload
                         , userReload.click 100 (Dom.id "guild_openChannel_0")
-                        , RecordedTestExtra.noMissingMessages 20 userReload
+                        , E2EHelper.noMissingMessages 20 userReload
                         ]
                     )
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "No DM push notification while viewing the channel"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 -- `user` has push notifications enabled and is currently viewing the guild channel (not the DM).
                 [ admin.click 100 (Dom.id "guild_openDm_2")
 
                 -- Positive control: while the user isn't viewing the DM they should get a push notification.
-                , RecordedTestExtra.writeMessage admin 100 "DM while away"
-                , RecordedTestExtra.checkNotification "DM while away"
+                , E2EHelper.writeMessage admin 100 "DM while away"
+                , E2EHelper.checkNotification "DM while away"
 
                 -- Now the user opens (and is therefore viewing) the DM channel.
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
-                , RecordedTestExtra.writeMessage admin 100 "DM while viewing"
+                , E2EHelper.writeMessage admin 100 "DM while viewing"
 
                 -- The user is looking at the channel the message arrived in, so no push notification should be sent.
-                , RecordedTestExtra.checkNoNotification "DM while viewing"
+                , E2EHelper.checkNoNotification "DM while viewing"
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "No guild push notification while viewing the channel"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 -- `user` has push notifications enabled and is currently viewing the guild channel.
-                [ RecordedTestExtra.writeMessage admin 100 "@Stevie Steve while viewing"
+                [ E2EHelper.writeMessage admin 100 "@Stevie Steve while viewing"
 
                 -- The user is looking at the channel the message arrived in, so no push notification should be sent.
-                , RecordedTestExtra.checkNoNotification "@Stevie Steve while viewing"
+                , E2EHelper.checkNoNotification "@Stevie Steve while viewing"
 
                 -- Navigate the user away from the channel.
                 , user.click 100 (Dom.id "guildIcon_showFriends")
 
                 -- Positive control: while the user isn't viewing the channel they should get a push notification.
-                , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve while away"
-                , RecordedTestExtra.checkNotification "@Stevie Steve while away"
+                , E2EHelper.writeMessage admin 100 "@Stevie Steve while away"
+                , E2EHelper.checkNotification "@Stevie Steve while away"
                 ]
             )
         ]
-    , RecordedTestExtra.voiceChatTest normalConfig
-    , RecordedTestExtra.cloudflareCostTest normalConfig
-    , RecordedTestExtra.startTest "Logins are rate limited"
-        RecordedTestExtra.startTime
+    , E2EHelper.voiceChatTest normalConfig
+    , E2EHelper.cloudflareCostTest normalConfig
+    , E2EHelper.startTest "Logins are rate limited"
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\user ->
                 let
                     openLoginAndSubmitEmail isFirst delay =
@@ -1399,7 +1399,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                               else
                                 user.click delay (Dom.id "loginForm_cancelButton")
                             , user.click delay Pages.Home.loginButtonId
-                            , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
+                            , user.input 100 LoginForm.emailInputId (EmailAddress.toString E2EHelper.adminEmail)
                             , user.click 100 LoginForm.submitEmailButtonId
                             ]
 
@@ -1407,7 +1407,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     tooManyIncorrectAttempts =
                         [ Test.Html.Selector.text "Too many incorrect attempts." ]
                 in
-                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                 , openLoginAndSubmitEmail True 100
                 , List.range 0 9
                     |> List.map
@@ -1422,11 +1422,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         )
                     |> T.group
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
-                , RecordedTestExtra.tallSnapshot user 100 { name = "Too many incorrect attempts" }
+                , E2EHelper.tallSnapshot user 100 { name = "Too many incorrect attempts" }
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (RecordedTestExtra.isLoginEmail RecordedTestExtra.adminEmail) data.httpRequests of
+                        case List.filterMap (E2EHelper.isLoginEmail E2EHelper.adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ user.input 100 LoginForm.loginCodeInputId (String.fromInt loginCode) ]
 
@@ -1434,33 +1434,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
-                , [ RecordedTestExtra.hasNotText user [ "Too many login attempts have been made." ]
+                , [ E2EHelper.hasNotText user [ "Too many login attempts have been made." ]
                   , openLoginAndSubmitEmail False 100
                   ]
                     |> T.group
                     |> List.repeat 6
                     |> T.group
-                , RecordedTestExtra.hasText user [ "Too many login attempts have been made." ]
-                , RecordedTestExtra.tallSnapshot user 100 { name = "Too many login attempts" }
+                , E2EHelper.hasText user [ "Too many login attempts have been made." ]
+                , E2EHelper.tallSnapshot user 100 { name = "Too many login attempts" }
                 , -- Should be able to log in again after some time has passed
                   openLoginAndSubmitEmail False (5 * 60 * 1000)
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (RecordedTestExtra.isLoginEmail RecordedTestExtra.adminEmail) data.httpRequests of
+                        case List.filterMap (E2EHelper.isLoginEmail E2EHelper.adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ user.input 100 LoginForm.loginCodeInputId (String.fromInt loginCode) ]
 
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
-                , RecordedTestExtra.hasExactText user [ PersonName.toString Backend.adminUser.name ]
+                , E2EHelper.hasExactText user [ PersonName.toString Backend.adminUser.name ]
                 ]
             )
         , T.checkState
             (Duration.hours 4.01 |> Duration.inMilliseconds)
             (\data ->
-                case List.filterMap (RecordedTestExtra.isLogErrorEmail RecordedTestExtra.adminEmail) data.httpRequests of
+                case List.filterMap (E2EHelper.isLogErrorEmail E2EHelper.adminEmail) data.httpRequests of
                     [ "LoginsRateLimited" ] ->
                         Ok ()
 
@@ -1468,18 +1468,18 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         Err "Expected to only see LoginsRateLimited as an error email"
             )
         ]
-    , RecordedTestExtra.startTest "Cancel login code then retry with new code"
-        RecordedTestExtra.startTime
+    , E2EHelper.startTest "Cancel login code then retry with new code"
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\user ->
-                [ user.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                 , user.click 100 Pages.Home.loginButtonId
-                , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
+                , user.input 100 LoginForm.emailInputId (EmailAddress.toString E2EHelper.adminEmail)
                 , user.click 100 LoginForm.submitEmailButtonId
 
                 -- We should now be on the login code screen. Press cancel instead of entering the code.
@@ -1489,27 +1489,27 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Try again with the same email and use the new login code that gets sent.
                 , user.click 100 Pages.Home.loginButtonId
-                , user.input 100 LoginForm.emailInputId (EmailAddress.toString RecordedTestExtra.adminEmail)
+                , user.input 100 LoginForm.emailInputId (EmailAddress.toString E2EHelper.adminEmail)
                 , user.click 100 LoginForm.submitEmailButtonId
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (RecordedTestExtra.isLoginEmail RecordedTestExtra.adminEmail) data.httpRequests of
+                        case List.filterMap (E2EHelper.isLoginEmail E2EHelper.adminEmail) data.httpRequests of
                             newLoginCode :: _ ->
                                 [ user.input 100 LoginForm.loginCodeInputId (String.fromInt newLoginCode) ]
 
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
-                , RecordedTestExtra.hasExactText user [ PersonName.toString Backend.adminUser.name ]
+                , E2EHelper.hasExactText user [ PersonName.toString Backend.adminUser.name ]
                 ]
             )
-        , RecordedTestExtra.checkNoErrorLogs
+        , E2EHelper.checkNoErrorLogs
         ]
     , T.testGroup
         "Login tests"
-        (RecordedTestExtra.loginTests False normalConfig ++ RecordedTestExtra.loginTests True normalConfig)
-    , RecordedTestExtra.startTest
+        (E2EHelper.loginTests False normalConfig ++ E2EHelper.loginTests True normalConfig)
+    , E2EHelper.startTest
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
         normalConfig
@@ -1523,7 +1523,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , tabA.portEvent
                     2
                     "load_startup_data_from_js"
-                    (RecordedTestExtra.startupDataJson "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
+                    (E2EHelper.startupDataJson "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
@@ -1533,21 +1533,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
-                        , RecordedTestExtra.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" RecordedTestExtra.adminEmail tabB
+                        , E2EHelper.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" E2EHelper.adminEmail tabB
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
-                        , RecordedTestExtra.writeMessage tabA 100 "Test"
+                        , E2EHelper.writeMessage tabA 100 "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
-                        , RecordedTestExtra.focusEvent tabB 25 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                        , E2EHelper.focusEvent tabB 25 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                         , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
-                        , RecordedTestExtra.focusEvent tabA 921 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
-                        , RecordedTestExtra.focusEvent tabA 4 Nothing Nothing
-                        , RecordedTestExtra.focusEvent tabB 17 Nothing Nothing
+                        , E2EHelper.focusEvent tabA 921 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                        , E2EHelper.focusEvent tabA 4 Nothing Nothing
+                        , E2EHelper.focusEvent tabB 17 Nothing Nothing
                         , tabA.click 28 (Dom.id "miniView_reply")
-                        , RecordedTestExtra.focusEvent tabA 8 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                        , E2EHelper.focusEvent tabA 8 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                         , tabA.mouseLeave 375 (Dom.id "guild_message_0") ( 1286, 57 ) []
                         , tabA.click 457 (Dom.id "channel_textinput")
                         , tabA.input 781 (Dom.id "channel_textinput") "Test2"
-                        , RecordedTestExtra.focusEvent tabA 4 Nothing Nothing
+                        , E2EHelper.focusEvent tabA 4 Nothing Nothing
                         , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
                         , T.collapsableGroup
                             "Add emoji to guild channel message"
@@ -1565,7 +1565,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
                             , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
                             ]
-                        , RecordedTestExtra.createThread tabA (Id.fromInt 0)
+                        , E2EHelper.createThread tabA (Id.fromInt 0)
                         , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
@@ -1577,7 +1577,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
                         , tabA.click 457 (Dom.id "channel_textinput")
                         , tabA.input 781 (Dom.id "channel_textinput") "Test3"
-                        , RecordedTestExtra.focusEvent tabA 2357 Nothing Nothing
+                        , E2EHelper.focusEvent tabA 2357 Nothing Nothing
                         , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
                         , tabB.click 100 (Dom.id "guild_viewThread_0_0")
                         , tabA.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
@@ -1599,7 +1599,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
         (Time.millisToPosix 1757158297558)
         normalConfig
@@ -1611,29 +1611,29 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\tabA ->
                 [ tabA.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tabA.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
-                , RecordedTestExtra.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" RecordedTestExtra.adminEmail tabA
+                , E2EHelper.handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" E2EHelper.adminEmail tabA
                 , tabA.click 17660 (Dom.id "guild_openGuild_0")
-                , RecordedTestExtra.focusEvent tabA 17 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
-                , RecordedTestExtra.focusEvent tabA 3994 Nothing Nothing
+                , E2EHelper.focusEvent tabA 17 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , E2EHelper.focusEvent tabA 3994 Nothing Nothing
                 , tabA.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Export and import backend round-trip"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         (T.Config
             Frontend.app_
             Backend.app_
             handleNormalHttpRequests
-            RecordedTestExtra.handlePortToJs
+            E2EHelper.handlePortToJs
             (\requestData ->
                 case requestData.data.downloads of
                     [ backup ] ->
                         case backup.content of
                             T.BytesFile bytes ->
                                 UploadFile
-                                    (T.uploadBytesFile backup.filename backup.mimeType bytes RecordedTestExtra.startTime)
+                                    (T.uploadBytesFile backup.filename backup.mimeType bytes E2EHelper.startTime)
 
                             T.StringFile _ ->
                                 UnhandledFileUpload
@@ -1642,18 +1642,18 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         UnhandledFileUpload
             )
             handleMultiFileUpload
-            RecordedTestExtra.domain
+            E2EHelper.domain
         )
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
-                [ RecordedTestExtra.writeMessage admin 100 "Hello export test!"
+                [ E2EHelper.writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
-                , RecordedTestExtra.writeMessage user 100 "Hello!"
-                , RecordedTestExtra.linkDiscordAndLogin
+                , E2EHelper.writeMessage user 100 "Hello!"
+                , E2EHelper.linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
                     "Joe"
-                    RecordedTestExtra.joeEmail
+                    E2EHelper.joeEmail
                     True
                     discordOp0Ready
                     discordOp0ReadySupplemental
@@ -1728,14 +1728,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , sendMessageRateLimitTest normalConfig
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Scheduled backend export uploads bytes"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         (T.Config
             Frontend.app_
             Backend.app_
             handleNormalHttpRequests
-            RecordedTestExtra.handlePortToJs
+            E2EHelper.handlePortToJs
             (\requestData ->
                 case backupRequests requestData.data of
                     [ backupA, backupB ] ->
@@ -1750,7 +1750,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         case oldestBackup.body of
                             T.BytesBody mimeType bytes ->
                                 UploadFile
-                                    (T.uploadBytesFile "backup.bin" mimeType bytes RecordedTestExtra.startTime)
+                                    (T.uploadBytesFile "backup.bin" mimeType bytes E2EHelper.startTime)
 
                             _ ->
                                 UnhandledFileUpload
@@ -1759,18 +1759,18 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         UnhandledFileUpload
             )
             handleMultiFileUpload
-            RecordedTestExtra.domain
+            E2EHelper.domain
         )
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
-                [ RecordedTestExtra.writeMessage admin 100 "Hello export test!"
+                [ E2EHelper.writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
-                , RecordedTestExtra.writeMessage user 100 "Hello!"
-                , RecordedTestExtra.linkDiscordAndLogin
+                , E2EHelper.writeMessage user 100 "Hello!"
+                , E2EHelper.linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
                     "Joe"
-                    RecordedTestExtra.joeEmail
+                    E2EHelper.joeEmail
                     True
                     discordOp0Ready
                     discordOp0ReadySupplemental
@@ -1869,12 +1869,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Owner creates an empty channel and deletes it"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
@@ -1898,15 +1898,15 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Owner deletes an invite link and a later user cannot join through it"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
                 let
                     guildId : Id GuildId
@@ -1921,7 +1921,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     thirdUserId =
                         Id.fromInt 3
                 in
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_openGuild_0")
                 , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , admin.click 100 (Dom.id "guild_createInviteLink")
@@ -1951,12 +1951,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                         in
                                         [ T.connectFrontend
                                             100
-                                            RecordedTestExtra.sessionId1
+                                            E2EHelper.sessionId1
                                             urlPath
-                                            RecordedTestExtra.desktopWindow
+                                            E2EHelper.desktopWindow
                                             (\secondUser ->
-                                                [ secondUser.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
-                                                , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.userEmail secondUser
+                                                [ secondUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                                , E2EHelper.handleLoginFromLoginPage E2EHelper.userEmail secondUser
                                                 , secondUser.input 100 (Dom.id "loginForm_name") "Sven"
                                                 , secondUser.click 100 (Dom.id "loginForm_submit")
                                                 , T.checkBackend
@@ -1991,12 +1991,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                     )
                                                 , T.connectFrontend
                                                     100
-                                                    RecordedTestExtra.sessionId2
+                                                    E2EHelper.sessionId2
                                                     urlPath
-                                                    RecordedTestExtra.desktopWindow
+                                                    E2EHelper.desktopWindow
                                                     (\thirdUser ->
-                                                        [ thirdUser.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
-                                                        , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail thirdUser
+                                                        [ thirdUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                                        , E2EHelper.handleLoginFromLoginPage E2EHelper.joeEmail thirdUser
                                                         , thirdUser.input 100 (Dom.id "loginForm_name") "Joe"
                                                         , thirdUser.click 100 (Dom.id "loginForm_submit")
                                                         , T.checkBackend
@@ -2014,7 +2014,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                                     Nothing ->
                                                                         Err "Guild missing"
                                                             )
-                                                        , RecordedTestExtra.hasText thirdUser [ "Guild not found" ]
+                                                        , E2EHelper.hasText thirdUser [ "Guild not found" ]
                                                         ]
                                                     )
                                                 ]
@@ -2030,12 +2030,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Owner must confirm deletion of a non-empty channel by typing its name"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
@@ -2049,7 +2049,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "with-message"
                 , admin.click 100 (Dom.id "guild_createChannel")
-                , RecordedTestExtra.writeMessage admin 100 "I have content"
+                , E2EHelper.writeMessage admin 100 "I have content"
                 , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
 
@@ -2088,17 +2088,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.start
         "Owner deletes a guild and it is purged after 30 days"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
                     guildId =
                         Id.fromInt 1
                 in
-                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                [ E2EHelper.writeMessage admin 100 "hello world"
                 , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , admin.click 100 (Dom.id "guild_deleteGuild")
                 , admin.checkView
@@ -2169,17 +2169,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.start
         "Admin restores a deleted guild"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin _ ->
                 let
                     guildId : Id GuildId
                     guildId =
                         Id.fromInt 1
                 in
-                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                [ E2EHelper.writeMessage admin 100 "hello world"
                 , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , admin.click 100 (Dom.id "guild_deleteGuild")
                 , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
@@ -2219,12 +2219,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.testGroup
         "Go matches"
-        [ RecordedTestExtra.goMatchTest normalConfig
-        , RecordedTestExtra.goTimeoutTest normalConfig
-        , RecordedTestExtra.goTurnNotificationDotTest normalConfig
-        , RecordedTestExtra.publicGoMatchViewTest normalConfig
+        [ E2EHelper.goMatchTest normalConfig
+        , E2EHelper.goTimeoutTest normalConfig
+        , E2EHelper.goTurnNotificationDotTest normalConfig
+        , E2EHelper.publicGoMatchViewTest normalConfig
         ]
-    , RecordedTestExtra.wordSpellingGameTests normalConfig
+    , E2EHelper.wordSpellingGameTests normalConfig
     ]
 
 
@@ -2243,12 +2243,12 @@ sendMessageRateLimitTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 sendMessageRateLimitTest config =
-    RecordedTestExtra.startTest
+    E2EHelper.startTest
         "SendMessage rate limiting"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         config
-        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
-            RecordedTestExtra.desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
@@ -2363,31 +2363,31 @@ attackerTriesToLeakSensitiveData :
 attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
     T.start
         "Attacker tries to leak/modify sensitive data"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         config
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             "AT"
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOpReady
             discordOpSupplemental
             (\admin ->
-                [ RecordedTestExtra.inviteUser
+                [ E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ RecordedTestExtra.writeMessage user 100 "sensitive guild message"
+                        [ E2EHelper.writeMessage user 100 "sensitive guild message"
                         , admin.click 100 (Dom.id "guild_openChannel_0")
-                        , RecordedTestExtra.writeMessage admin 100 "sensitive guild message 2"
+                        , E2EHelper.writeMessage admin 100 "sensitive guild message 2"
                         , user.click 1000 (Dom.id "guild_openDm_0")
-                        , RecordedTestExtra.writeMessage user 100 "sensitive DM message"
+                        , E2EHelper.writeMessage user 100 "sensitive DM message"
                         , T.connectFrontend
                             100
-                            RecordedTestExtra.sessionIdAttacker
+                            E2EHelper.sessionIdAttacker
                             "/"
-                            RecordedTestExtra.desktopWindow
+                            E2EHelper.desktopWindow
                             (\attacker ->
-                                [ RecordedTestExtra.handleLogin RecordedTestExtra.chromeDesktop RecordedTestExtra.attackerEmail attacker
+                                [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.attackerEmail attacker
                                 , attacker.update 0 Types.EnableToFrontendLogging
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
@@ -2407,9 +2407,9 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                             (\index localChange ->
                                                 attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId index) localChange)
                                             )
-                                            RecordedTestExtra.allAttackerLocalChanges
+                                            E2EHelper.allAttackerLocalChanges
                                             |> T.collapsableGroup "attacks"
-                                        , List.map (attacker.sendToBackend 100) RecordedTestExtra.allAttackerToBackendChanges
+                                        , List.map (attacker.sendToBackend 100) E2EHelper.allAttackerToBackendChanges
                                             |> T.collapsableGroup "attacks"
                                         , T.checkState
                                             500
@@ -2519,7 +2519,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                                 let
                                                                     invalidToFrontends : Array ToFrontend
                                                                     invalidToFrontends =
-                                                                        Array.filter RecordedTestExtra.attackerShouldNotGetThisToFrontend toFrontendLogs
+                                                                        Array.filter E2EHelper.attackerShouldNotGetThisToFrontend toFrontendLogs
                                                                 in
                                                                 if Array.isEmpty invalidToFrontends then
                                                                     Ok ()

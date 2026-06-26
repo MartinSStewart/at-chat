@@ -1,4 +1,4 @@
-module RecordedTestExtra exposing
+module E2EHelper exposing
     ( CustomRequest
     , adminEmail
     , allAttackerLocalChanges
