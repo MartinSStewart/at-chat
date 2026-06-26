@@ -5,7 +5,6 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Json.Encode
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
-import WordSpellingGame
 
 
 wordSpellingGameTests :

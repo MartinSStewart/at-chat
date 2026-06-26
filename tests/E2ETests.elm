@@ -8,8 +8,13 @@ import Coord
 import Dict
 import Duration
 import E2EDiscord
+import E2EDrawing
 import E2EGo
 import E2EHelper
+import E2ELogin
+import E2EMedia
+import E2EMisc
+import E2EVoiceChat
 import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
 import Effect.Browser.Events exposing (Visibility(..))
@@ -295,10 +300,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 E2EHelper.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
-    , E2EHelper.videoAttachmentTest videoUploadConfig
-    , E2EHelper.audioAttachmentTest audioUploadConfig
-    , E2EHelper.inviteUserAndDmChat normalConfig
-    , E2EHelper.imageViewerTests imageUploadConfig
+    , E2EMedia.videoAttachmentTest videoUploadConfig
+    , E2EMedia.audioAttachmentTest audioUploadConfig
+    , E2EMisc.inviteUserAndDmChat normalConfig
+    , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"
         E2EHelper.startTime
@@ -316,7 +321,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , E2EHelper.inactiveThreadsAreHiddenTest normalConfig
+    , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
         "Admin can disable Discord account linking"
         E2EHelper.startTime
@@ -547,8 +552,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , E2EHelper.drawOnMessages imageUploadConfig
-    , E2EHelper.drawingScalesWithImages wideImageUploadConfig
+    , E2EDrawing.drawOnMessages imageUploadConfig
+    , E2EDrawing.drawingScalesWithImages wideImageUploadConfig
     , E2EHelper.startTest
         "Friend label shows typing indicator"
         E2EHelper.startTime
@@ -1381,8 +1386,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , E2EHelper.voiceChatTest normalConfig
-    , E2EHelper.cloudflareCostTest normalConfig
+    , E2EVoiceChat.voiceChatTest normalConfig
+    , E2EVoiceChat.cloudflareCostTest normalConfig
     , E2EHelper.startTest "Logins are rate limited"
         E2EHelper.startTime
         normalConfig
@@ -1510,7 +1515,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.testGroup
         "Login tests"
-        (E2EHelper.loginTests False normalConfig ++ E2EHelper.loginTests True normalConfig)
+        (E2ELogin.loginTests False normalConfig ++ E2ELogin.loginTests True normalConfig)
     , E2EHelper.startTest
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
