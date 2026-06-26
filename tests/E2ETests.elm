@@ -8,7 +8,9 @@ import Coord
 import Dict
 import Duration
 import E2EDiscord
+import E2EGo
 import E2EHelper
+import E2EWordSpellingGame
 import Effect.Browser.Dom as Dom
 import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera as Lamdera
@@ -2219,12 +2221,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , T.testGroup
         "Go matches"
-        [ E2EHelper.goMatchTest normalConfig
-        , E2EHelper.goTimeoutTest normalConfig
-        , E2EHelper.goTurnNotificationDotTest normalConfig
-        , E2EHelper.publicGoMatchViewTest normalConfig
+        [ E2EGo.goMatchTest normalConfig
+        , E2EGo.goTimeoutTest normalConfig
+        , E2EGo.goTurnNotificationDotTest normalConfig
+        , E2EGo.publicGoMatchViewTest normalConfig
         ]
-    , E2EHelper.wordSpellingGameTests normalConfig
+    , E2EWordSpellingGame.wordSpellingGameTests normalConfig
     ]
 
 
