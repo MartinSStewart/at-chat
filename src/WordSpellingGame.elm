@@ -6,6 +6,7 @@ module WordSpellingGame exposing
     , GameMsg
     , IsValid(..)
     , Letter(..)
+    , LetterId
     , LetterOrWildcard
     , LocalChange(..)
     , Model(..)
@@ -53,6 +54,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Id exposing (Id, UserId)
+import IdArray exposing (IdArray)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -197,7 +199,7 @@ type alias AnimatedPlacement =
 
 type alias Player =
     { userId : Id UserId
-    , tray : List LetterOrWildcard
+    , tray : IdArray LetterId LetterOrWildcard
     , score : Int
     }
 
@@ -205,6 +207,10 @@ type alias Player =
 gridSize : number
 gridSize =
     15
+
+
+type LetterId
+    = LetterId Never
 
 
 type LetterOrWildcard
@@ -260,7 +266,7 @@ getLetters count setup board players turnCount =
         remainingLetters3 : SeqDict LetterOrWildcard OneOrGreater
         remainingLetters3 =
             List.foldl
-                (\player remainingLetters2 -> List.foldl SeqDictHelper.decrement remainingLetters2 player.tray)
+                (\player remainingLetters2 -> IdArray.foldl SeqDictHelper.decrement remainingLetters2 player.tray)
                 remainingLetters
                 players
     in
@@ -369,7 +375,7 @@ updateAction setup action state =
                                         setup.traySize
                                         setup
                                         state.board
-                                        (NonemptyExtra.set state.turnCount { player | tray = [] } state.players
+                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
                                             |> List.Nonempty.toList
                                         )
                                         state.turnCount
@@ -398,7 +404,7 @@ updateAction setup action state =
 initPlayer : Id UserId -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ValidatedSetup -> List Player -> Player
 initPlayer userId board setup existingPlayers =
     { userId = userId
-    , tray = getLetters setup.traySize setup board existingPlayers 0
+    , tray = getLetters setup.traySize setup board existingPlayers 0 |> IdArray.fromList
     , score = 0
     }
 
@@ -765,7 +771,7 @@ checkValidPlacement currentUserId shared notShared =
         placed =
             case getPlayer currentUserId shared of
                 Just player ->
-                    List.map2 Tuple.pair (Array.toList notShared.tiles) player.tray
+                    List.map2 Tuple.pair (Array.toList notShared.tiles) (IdArray.toList player.tray)
                         |> List.filterMap
                             (\( tile, letter ) ->
                                 case tile.position of
@@ -1520,7 +1526,7 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                 (Array.toList model.tiles)
                 (case getPlayer currentUserId shared of
                     Just player ->
-                        player.tray
+                        IdArray.toList player.tray
 
                     Nothing ->
                         []
