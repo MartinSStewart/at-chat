@@ -1570,7 +1570,7 @@ threadPreviewText :
     -> { b | messages : Array (MessageState ChannelMessageId userId) }
     -> String
 threadPreviewText allUsers threadMessageIndex channel =
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             LocalState.messageToString allUsers message
 
@@ -2379,7 +2379,7 @@ maybeRepliedTo message channel =
         UserTextMessage data ->
             case data.repliedTo of
                 Just repliedToIndex ->
-                    case DmChannel.getArray repliedToIndex channel.messages of
+                    case IdArray.get repliedToIndex channel.messages of
                         Just (MessageLoaded message2) ->
                             Just ( repliedToIndex, message2 )
 
@@ -3490,7 +3490,7 @@ replyToHeader :
 replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
         Just messageIndex ->
-            case DmChannel.getArray messageIndex channel.messages of
+            case IdArray.get messageIndex channel.messages of
                 Just (MessageLoaded message) ->
                     case message of
                         UserTextMessage data ->
@@ -4431,7 +4431,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just edit ->
@@ -4554,7 +4554,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just edit ->

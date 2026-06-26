@@ -20,6 +20,7 @@ import Discord
 import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
+import IdArray exposing (IdArray)
 import Message exposing (Message, MessageState(..))
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -27,14 +28,14 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 type alias BackendThread =
-    { messages : Array (Message ThreadMessageId (Id UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
     }
 
 
 type alias DiscordBackendThread =
-    { messages : Array (Message ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -42,7 +43,7 @@ type alias DiscordBackendThread =
 
 
 type alias FrontendGenericThread userId =
-    { messages : Array (MessageState ThreadMessageId userId)
+    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
@@ -50,7 +51,7 @@ type alias FrontendGenericThread userId =
 
 
 type alias FrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Id UserId))
+    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId (Id UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
@@ -58,7 +59,7 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -71,7 +72,7 @@ type alias LastTypedAt messageId =
 
 backendInit : BackendThread
 backendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
@@ -79,7 +80,7 @@ backendInit =
 
 frontendInit : FrontendGenericThread userId
 frontendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
@@ -88,7 +89,7 @@ frontendInit =
 
 discordBackendInit : DiscordBackendThread
 discordBackendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
     , dateDividerDrawings = SeqDict.empty
@@ -97,7 +98,7 @@ discordBackendInit =
 
 discordFrontendInit : DiscordFrontendThread
 discordFrontendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
@@ -122,15 +123,15 @@ discordToFrontend preloadMessages thread =
     }
 
 
-loadMessages : Bool -> Array (Message messageId userId) -> Array (MessageState messageId userId)
+loadMessages : Bool -> IdArray messageId (Message messageId userId) -> IdArray messageId (MessageState messageId userId)
 loadMessages preloadMessages messages =
     let
         messageCount : Int
         messageCount =
-            Array.length messages
+            IdArray.length messages
     in
     if preloadMessages then
-        Array.initialize
+        IdArray.initialize
             messageCount
             (\index ->
                 if messageCount - index <= VisibleMessages.pageSize then

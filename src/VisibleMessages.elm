@@ -12,6 +12,7 @@ module VisibleMessages exposing
 
 import Array exposing (Array)
 import Id exposing (Id)
+import IdArray exposing (IdArray)
 import Message exposing (Message, MessageState)
 
 
@@ -19,10 +20,10 @@ type alias VisibleMessages messageId =
     { oldest : Id messageId, count : Int }
 
 
-init : Bool -> { a | messages : Array (Message messageId userId) } -> VisibleMessages messageId
+init : Bool -> { a | messages : IdArray messageId (Message messageId userId) } -> VisibleMessages messageId
 init preloadMessages channel =
     if preloadMessages then
-        { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
+        { oldest = IdArray.length channel.messages - pageSize |> max 0 |> Id.fromInt
         , count = pageSize
         }
 

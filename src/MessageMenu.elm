@@ -428,7 +428,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case IdArray.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
@@ -446,7 +446,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
         discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         discordHelper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case IdArray.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->

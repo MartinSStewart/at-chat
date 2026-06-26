@@ -566,12 +566,12 @@ deleteMessageHelper :
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
         Just messageId ->
-            case DmChannel.getArray messageId channel.messages of
+            case IdArray.get messageId channel.messages of
                 Just (UserTextMessage message) ->
                     ( messageId
                     , { channel
                         | messages =
-                            DmChannel.setArray
+                            IdArray.set
                                 messageId
                                 (DeletedMessage message.createdAt)
                                 channel.messages

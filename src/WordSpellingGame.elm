@@ -334,7 +334,7 @@ updateAction setup action state =
                                                 remainingTray =
                                                     List.foldl
                                                         removeFromTray
-                                                        player.tray
+                                                        (IdArray.toList player.tray)
                                                         (List.map Letter (List.Nonempty.toList placedWord.letters))
 
                                                 drawn : List LetterOrWildcard
@@ -345,7 +345,7 @@ updateAction setup action state =
                                                                 drawCount
                                                                 setup
                                                                 result.board
-                                                                (NonemptyExtra.set state.turnCount { player | tray = remainingTray } state.players
+                                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
                                                                     |> List.Nonempty.toList
                                                                 )
                                                                 state.turnCount
@@ -353,7 +353,10 @@ updateAction setup action state =
                                                         Nothing ->
                                                             []
                                             in
-                                            { player | tray = remainingTray ++ drawn, score = player.score + result.score }
+                                            { player
+                                                | tray = remainingTray ++ drawn |> IdArray.fromList
+                                                , score = player.score + result.score
+                                            }
                                         )
                                         state.players
                                 , turnCount = state.turnCount + 1
@@ -379,6 +382,7 @@ updateAction setup action state =
                                             |> List.Nonempty.toList
                                         )
                                         state.turnCount
+                                        |> IdArray.fromList
                             }
                         )
                         state.players

@@ -9,17 +9,14 @@ module DmChannel exposing
     , channelIdFromUserIds
     , channelIdToString
     , frontendInit
-    , getArray
     , latestMessageId
     , latestThreadMessageId
     , loadMessages
     , loadOlderMessages
     , otherUserId
-    , setArray
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
-    , updateArray
     , userIdsFromChannelId
     )
 
@@ -30,6 +27,7 @@ import Discord
 import Drawing exposing (Drawing)
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import IdArray exposing (IdArray)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -144,14 +142,14 @@ latestThreadMessageId thread =
 
 toFrontendHelper :
     Bool
-    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
-    -> Array (MessageState messageId userId)
+    -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
+    -> IdArray messageId (MessageState messageId userId)
 toFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
-            setArray
+            IdArray.set
                 threadId
-                (case getArray threadId channel.messages of
+                (case IdArray.get threadId channel.messages of
                     Just message ->
                         MessageLoaded message
 
@@ -171,9 +169,9 @@ toDiscordFrontendHelper :
 toDiscordFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
-            setArray
+            IdArray.set
                 threadId
-                (case getArray threadId channel.messages of
+                (case IdArray.get threadId channel.messages of
                     Just message ->
                         MessageLoaded message
 
@@ -184,21 +182,6 @@ toDiscordFrontendHelper preloadMessages channel =
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
-
-
-getArray : Id messageId -> Array a -> Maybe a
-getArray id array =
-    Array.get (Id.toInt id) array
-
-
-setArray : Id messageId -> a -> Array a -> Array a
-setArray id message array =
-    Array.set (Id.toInt id) message array
-
-
-updateArray : Id messageId -> (a -> a) -> Array a -> Array a
-updateArray id message array =
-    Array.Extra.update (Id.toInt id) message array
 
 
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
@@ -255,7 +238,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
                 | messages =
                     SeqDict.foldl
                         (\messageId message messages ->
-                            setArray messageId (MessageLoaded message) messages
+                            IdArray.set messageId (MessageLoaded message) messages
                         )
                         channel.messages
                         messagesLoaded2
@@ -276,7 +259,7 @@ loadMessages messagesLoaded channel =
             { channel
                 | messages =
                     SeqDict.foldl
-                        (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
+                        (\messageId message messages -> IdArray.set messageId (MessageLoaded message) messages)
                         channel.messages
                         messagesLoaded2
                 , visibleMessages = VisibleMessages.firstLoad channel

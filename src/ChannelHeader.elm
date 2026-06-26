@@ -739,7 +739,7 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
     let
         noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
         noThreadHelper userId anchor2 messageId channel2 =
-            case DmChannel.getArray messageId channel2.messages of
+            case IdArray.get messageId channel2.messages of
                 Just (MessageLoaded message) ->
                     let
                         drawing : Drawing.Drawing userId

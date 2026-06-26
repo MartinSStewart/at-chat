@@ -2205,7 +2205,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
         { channelId = channelId
         , messageId = messageId
         , name =
-            case DmChannel.getArray threadId channel.messages of
+            case IdArray.get threadId channel.messages of
                 Just message ->
                     case message of
                         UserTextMessage a ->
