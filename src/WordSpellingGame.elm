@@ -22,6 +22,7 @@ module WordSpellingGame exposing
     , UserStatus(..)
     , ValidatedSetup
     , animatedTilePlacement
+    , anyTileAnimating
     , dragEnd
     , dragStart
     , gameView
@@ -1233,6 +1234,21 @@ invalidHoldDuration =
     2000
 
 
+{-| How long, in milliseconds, a freshly created tile takes to fade and drift into place.
+-}
+tileFadeDuration : Float
+tileFadeDuration =
+    1000
+
+
+{-| How far, as a fraction of a tile's size, a new tile starts above its final spot before it
+descends into place.
+-}
+tileFadeDrift : Float
+tileFadeDrift =
+    0.2
+
+
 elapsedMs : Time.Posix -> Time.Posix -> Float
 elapsedMs currentTime startTime =
     toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
@@ -1271,6 +1287,27 @@ isAnimating currentTime shared =
 
         Nothing ->
             False
+
+
+{-| Whether any tile is still fading in, so the view should keep redrawing each animation frame.
+-}
+anyTileAnimating : Time.Posix -> GameData -> Bool
+anyTileAnimating currentTime model =
+    Array.Extra.any (\tile -> elapsedMs currentTime tile.createdAt < tileFadeDuration) model.tiles
+
+
+{-| The opacity and downward drift of a tile as it fades into place over the second after it was
+created. `opacity` runs 0 to 1; `drift` is the fraction of a tile's size the tile still sits above
+its final spot (1 just after creation, easing to 0 once settled).
+-}
+tileFade : Time.Posix -> Time.Posix -> { opacity : Float, drift : Float }
+tileFade currentTime createdAt =
+    let
+        progress : Float
+        progress =
+            clamp 0 1 (elapsedMs currentTime createdAt / tileFadeDuration)
+    in
+    { opacity = progress, drift = 1 - easeOutCubic progress }
 
 
 easeOutCubic : Float -> Float
@@ -1551,6 +1588,8 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                                         Touch.touchCentroid dragging2
                                 in
                                 tileInFront
+                                    currentTime
+                                    tile.createdAt
                                     cellSize2
                                     (Coord.xy
                                         (Coord.xRaw center - cellSize2 // 2)
@@ -1562,12 +1601,16 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                                 case tile.position of
                                     TileInTray trayIndex ->
                                         tileInFront
+                                            currentTime
+                                            tile.createdAt
                                             trayTileSize
                                             (trayTilePos windowSize trayIndex)
                                             letter
 
                                     TileOnBoard ( x, y ) ->
                                         tileInFront
+                                            currentTime
+                                            tile.createdAt
                                             cellSize2
                                             (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
                                             letter
@@ -1640,8 +1683,13 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
         (Ui.Lazy.lazy boardViewBackground cellSize2)
 
 
-tileInFront : Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront cellSize2 offset letterOrWildcard =
+tileInFront : Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
+    let
+        fade : { opacity : Float, drift : Float }
+        fade =
+            tileFade currentTime createdAt
+    in
     Ui.inFront
         (Ui.el
             [ Ui.background (Ui.rgb 240 220 130)
@@ -1651,8 +1699,13 @@ tileInFront cellSize2 offset letterOrWildcard =
             , Ui.contentCenterY
             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
             , Ui.Font.bold
-            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+            , Ui.move
+                { x = Coord.xRaw offset
+                , y = Coord.yRaw offset - round (fade.drift * tileFadeDrift * toFloat cellSize2)
+                , z = 0
+                }
             , Ui.Font.color (Ui.rgb 0 0 0)
+            , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))

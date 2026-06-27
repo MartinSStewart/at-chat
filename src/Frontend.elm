@@ -193,8 +193,8 @@ subscriptions model =
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
                                 , case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
-                                    Just ( _, shared, _ ) ->
-                                        if WordSpellingGame.isAnimating loaded.time shared then
+                                    Just ( _, shared, gameData ) ->
+                                        if WordSpellingGame.isAnimating loaded.time shared || WordSpellingGame.anyTileAnimating loaded.time gameData then
                                             Effect.Browser.Events.onAnimationFrame GotTime
 
                                         else
