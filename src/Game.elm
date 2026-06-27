@@ -322,6 +322,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                     WordSpellingGame.updateGame
                                         time
                                         currentUserId
+                                        setup
                                         cache
                                         wordSpellingGameMsg
                                         (case model of

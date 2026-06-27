@@ -316,52 +316,57 @@ updateAction setup action state =
                         animatedPlacement =
                             Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
                     in
-                    case isValid of
-                        FilledInByBackend IsNotValid ->
-                            -- The backend rejected the word, so the tiles don't end up on the
-                            -- board (they animate in, turn red and leave) and the turn isn't taken.
-                            { state | lastPlacement = animatedPlacement }
+                    { state
+                        | board =
+                            case isValid of
+                                FilledInByBackend IsNotValid ->
+                                    state.board
 
-                        _ ->
-                            { state
-                                | board = result.board
-                                , players =
-                                    NonemptyExtra.update
-                                        state.turnCount
-                                        (\player ->
-                                            let
-                                                remainingTray : List LetterOrWildcard
-                                                remainingTray =
-                                                    List.foldl
-                                                        removeFromTray
-                                                        (IdArray.toList player.tray)
-                                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
+                                _ ->
+                                    result.board
+                        , players =
+                            NonemptyExtra.update
+                                state.turnCount
+                                (\player ->
+                                    let
+                                        remainingTray : List LetterOrWildcard
+                                        remainingTray =
+                                            List.foldl
+                                                removeFromTray
+                                                (IdArray.toList player.tray)
+                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
 
-                                                drawn : List LetterOrWildcard
-                                                drawn =
-                                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                        Just drawCount ->
-                                                            getLetters
-                                                                drawCount
-                                                                setup
-                                                                result.board
-                                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
-                                                                    |> List.Nonempty.toList
-                                                                )
-                                                                state.turnCount
+                                        drawn : List LetterOrWildcard
+                                        drawn =
+                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                                Just drawCount ->
+                                                    getLetters
+                                                        drawCount
+                                                        setup
+                                                        result.board
+                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                            |> List.Nonempty.toList
+                                                        )
+                                                        state.turnCount
 
-                                                        Nothing ->
-                                                            []
-                                            in
-                                            { player
-                                                | tray = remainingTray ++ drawn |> IdArray.fromList
-                                                , score = player.score + result.score
-                                            }
-                                        )
-                                        state.players
-                                , turnCount = state.turnCount + 1
-                                , lastPlacement = animatedPlacement
-                            }
+                                                Nothing ->
+                                                    []
+                                    in
+                                    { player
+                                        | tray = remainingTray ++ drawn |> IdArray.fromList
+                                        , score =
+                                            case isValid of
+                                                FilledInByBackend IsNotValid ->
+                                                    player.score
+
+                                                _ ->
+                                                    player.score + result.score
+                                    }
+                                )
+                                state.players
+                        , turnCount = state.turnCount + 1
+                        , lastPlacement = animatedPlacement
+                    }
 
                 Nothing ->
                     state
@@ -708,34 +713,33 @@ updateSetup time currentUserId msg setup =
                     ( Setup { setup | error = Just error }, [] )
 
 
-updateGame : Time.Posix -> Id UserId -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
-updateGame time currentUserId shared msg model =
+updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame time currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord ->
             case checkValidPlacement currentUserId shared model of
                 Ok placement ->
+                    let
+                        remainingTray =
+                            Array.filter
+                                (\tile ->
+                                    case tile.position of
+                                        TileInTray _ ->
+                                            True
+
+                                        TileOnBoard _ ->
+                                            False
+                                )
+                                model.tiles
+                    in
                     ( { model
                         | tiles =
-                            Array.foldl
-                                (\tile ( index, tiles ) ->
-                                    ( index + 1
-                                    , Array.set
-                                        index
-                                        { tile
-                                            | position =
-                                                case tile.position of
-                                                    TileInTray _ ->
-                                                        tile.position
-
-                                                    TileOnBoard _ ->
-                                                        firstOpenTrayIndex index tiles |> TileInTray
-                                        }
-                                        tiles
+                            List.range (Array.length remainingTray) (OneOrGreater.toInt setup.traySize)
+                                |> List.foldl
+                                    (\_ tray ->
+                                        Array.push { position = TileInTray (firstOpenTrayIndex Nothing tray) } tray
                                     )
-                                )
-                                ( 0, model.tiles )
-                                model.tiles
-                                |> Tuple.second
+                                    remainingTray
                       }
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
@@ -1116,7 +1120,7 @@ dragEnd windowSize newTouches ( _, shared, gameModel ) =
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
-                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex tileIndex gameModel.tiles) })
+                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) })
                                     gameModel.tiles
                         }
             in
@@ -1146,7 +1150,7 @@ dragEnd windowSize newTouches ( _, shared, gameModel ) =
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
 the tray.
 -}
-firstOpenTrayIndex : Int -> Array Tile -> TrayIndex
+firstOpenTrayIndex : Maybe Int -> Array Tile -> TrayIndex
 firstOpenTrayIndex draggedIndex tiles =
     let
         occupied : List Int
@@ -1154,7 +1158,7 @@ firstOpenTrayIndex draggedIndex tiles =
             Array.toIndexedList tiles
                 |> List.filterMap
                     (\( index, tile ) ->
-                        if index == draggedIndex then
+                        if Just index == draggedIndex then
                             Nothing
 
                         else
