@@ -76,7 +76,10 @@ wordSpellingGameTests normalConfig =
                 , dragTile 100 admin (trayTile 1) (boardCell 8 7)
                 , dragTile 100 admin (trayTile 3) (boardCell 9 7)
                 , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
-                , dragTile 1000 user (trayTile 0) (boardCell 7 6)
+                , dragTile 3000 user (trayTile 1) (boardCell 7 6)
+                , dragTile 100 user (trayTile 5) (boardCell 7 7)
+                , dragTile 100 user (trayTile 6) (boardCell 7 8)
+                , user.click 100 (Dom.id "wordSpellingGame_submitWord")
                 ]
             )
         ]
