@@ -1234,11 +1234,18 @@ invalidHoldDuration =
     2000
 
 
-{-| How long, in milliseconds, a freshly created tile takes to fade and drift into place.
+{-| How long, in milliseconds, a freshly created tile stays hidden before it fades in.
+-}
+tileFadeDelay : Float
+tileFadeDelay =
+    1000
+
+
+{-| How long, in milliseconds, the fade-and-drift into place itself takes, once it starts.
 -}
 tileFadeDuration : Float
 tileFadeDuration =
-    1000
+    200
 
 
 {-| How far, as a fraction of a tile's size, a new tile starts above its final spot before it
@@ -1293,19 +1300,20 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    Array.Extra.any (\tile -> elapsedMs currentTime tile.createdAt < tileFadeDuration) model.tiles
+    Array.Extra.any (\tile -> elapsedMs currentTime tile.createdAt < tileFadeDelay + tileFadeDuration) model.tiles
 
 
-{-| The opacity and downward drift of a tile as it fades into place over the second after it was
-created. `opacity` runs 0 to 1; `drift` is the fraction of a tile's size the tile still sits above
-its final spot (1 just after creation, easing to 0 once settled).
+{-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
+`tileFadeDelay` after being created, then quickly fades and drifts down over `tileFadeDuration`.
+`opacity` runs 0 to 1; `drift` is the fraction of a tile's size the tile still sits above its final
+spot (1 before/at the start of the fade, easing to 0 once settled).
 -}
 tileFade : Time.Posix -> Time.Posix -> { opacity : Float, drift : Float }
 tileFade currentTime createdAt =
     let
         progress : Float
         progress =
-            clamp 0 1 (elapsedMs currentTime createdAt / tileFadeDuration)
+            clamp 0 1 ((elapsedMs currentTime createdAt - tileFadeDelay) / tileFadeDuration)
     in
     { opacity = progress, drift = 1 - easeOutCubic progress }
 
