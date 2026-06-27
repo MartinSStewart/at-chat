@@ -523,7 +523,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
 
                         Nothing ->
                             Ui.row
-                                [ Ui.spacing 8, Ui.wrap ]
+                                [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
                                 (List.map gameSelectButton allGames)
                     ]
         )
@@ -547,7 +547,7 @@ gameToString game =
             "Go"
 
         Game_WordSpellingGame ->
-            "Word Spelling Game"
+            "Word Spelling Game (WIP)"
 
 
 gameSelectButton : Game -> Element Msg
@@ -561,6 +561,11 @@ gameSelectButton game =
         , Ui.background MyUi.buttonBackground
         , Ui.border 1
         , Ui.borderColor MyUi.buttonBorder
+        , Ui.contentCenterY
+        , Ui.Font.size 20
+        , Ui.Font.center
+        , Ui.Font.bold
+        , Ui.padding 16
         ]
         (gameToString game |> Ui.text)
 
