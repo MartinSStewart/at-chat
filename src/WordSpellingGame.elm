@@ -129,7 +129,7 @@ type alias ValidatedSetup =
     , traySize : OneOrGreater
     , createdBy : Id UserId
     , seed : Int
-    , letters : SeqDict LetterOrWildcard OneOrGreater
+    , letters : NonemptyDict LetterOrWildcard OneOrGreater
     }
 
 
@@ -935,24 +935,20 @@ validateSetup createdBy time setup =
         Ok timeControls ->
             case OneOrGreater.fromInt setup.traySize of
                 Just traySize ->
-                    let
-                        letters : SeqDict LetterOrWildcard OneOrGreater
-                        letters =
-                            parseLetters setup.letters
-                    in
-                    if List.any isLetter (SeqDict.keys letters) then
-                        Ok
+                    case parseLetters setup.letters of
+                        Ok nonempty ->
                             { createdBy = createdBy
                             , timeControls = timeControls
                             , traySize = traySize
                             , seed =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
-                            , letters = letters
+                            , letters = nonempty
                             }
+                                |> Ok
 
-                    else
-                        Err "Letters: enter at least one letter (A-Z)"
+                        Err error ->
+                            Err error
 
                 Nothing ->
                     Err "Tray size must be at least 1"
@@ -2215,7 +2211,7 @@ defaultLetters =
 {-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and any
 letter (in either case) is counted; any other character is ignored.
 -}
-parseLetters : String -> SeqDict LetterOrWildcard OneOrGreater
+parseLetters : String -> Result String (NonemptyDict LetterOrWildcard OneOrGreater)
 parseLetters string =
     String.foldl
         (\char acc ->
