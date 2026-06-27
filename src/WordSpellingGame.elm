@@ -105,6 +105,7 @@ type SetupMsg
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
     | ChangedLettersInput String
+    | PressedResetLetters
     | PressedStartGame
 
 
@@ -722,6 +723,9 @@ updateSetup time currentUserId msg setup =
 
         ChangedLettersInput input ->
             ( Setup { setup | letters = input, error = Nothing }, [] )
+
+        PressedResetLetters ->
+            ( Setup { setup | letters = defaultLetters, error = Nothing }, [] )
 
         PressedStartGame ->
             case validateSetup currentUserId time setup of
@@ -2083,7 +2087,11 @@ setupView windowSize setup =
             )
         , setupSection
             "Letter distribution (spaces are wildcards)"
-            (lettersInput setup.letters)
+            (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
+                [ lettersInput setup.letters
+                , MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
+                ]
+            )
         , case setup.error of
             Just error ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text error)
@@ -2139,6 +2147,11 @@ lettersInput value =
         , Html.Attributes.style "width" "100%"
         , Html.Attributes.style "min-width" "260px"
         , Html.Attributes.style "height" "80px"
+
+        -- Wrap at any character (letter wrap) rather than only at spaces, since the distribution is
+        -- essentially one long word.
+        , Html.Attributes.style "word-break" "break-all"
+        , Html.Attributes.style "white-space" "pre-wrap"
         , Html.Attributes.style "padding" "8px"
         , Html.Attributes.style "box-sizing" "border-box"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
