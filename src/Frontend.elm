@@ -5802,7 +5802,7 @@ getWordSpellingGameModel local loggedIn model =
                                                     gameModel
 
                                                 _ ->
-                                                    WordSpellingGame.initGame setup
+                                                    WordSpellingGame.initGame model.time setup
                                             )
                                                 |> Just
 

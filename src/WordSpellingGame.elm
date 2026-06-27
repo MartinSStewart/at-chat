@@ -85,7 +85,7 @@ type alias GameData =
 
 
 type alias Tile =
-    { position : TilePosition }
+    { position : TilePosition, createdAt : Time.Posix }
 
 
 type TilePosition
@@ -135,12 +135,12 @@ initSetup =
     }
 
 
-initGame : ValidatedSetup -> GameData
-initGame setup =
+initGame : Time.Posix -> ValidatedSetup -> GameData
+initGame time setup =
     { selectedCell = Nothing
     , tiles =
         List.range 0 (OneOrGreater.toInt setup.traySize - 1)
-            |> List.map (\index -> { position = TileInTray (TrayIndex index) })
+            |> List.map (\index -> { position = TileInTray (TrayIndex index), createdAt = time })
             |> Array.fromList
     , dragging = Nothing
     }
@@ -707,7 +707,7 @@ updateSetup time currentUserId msg setup =
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
-                    ( Game (initGame validated), [ OutLocalChange (StartMatch time validated) ] )
+                    ( Game (initGame time validated), [ OutLocalChange (StartMatch time validated) ] )
 
                 Err error ->
                     ( Setup { setup | error = Just error }, [] )
@@ -737,7 +737,9 @@ updateGame time currentUserId setup shared msg model =
                             List.range (Array.length remainingTray) (OneOrGreater.toInt setup.traySize)
                                 |> List.foldl
                                     (\_ tray ->
-                                        Array.push { position = TileInTray (firstOpenTrayIndex Nothing tray) } tray
+                                        Array.push
+                                            { position = TileInTray (firstOpenTrayIndex Nothing tray), createdAt = time }
+                                            tray
                                     )
                                     remainingTray
                       }

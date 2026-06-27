@@ -330,7 +330,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                                 gameModel
 
                                             _ ->
-                                                WordSpellingGame.initGame setup
+                                                WordSpellingGame.initGame time setup
                                         )
 
                                 matchId : Id ChannelMessageId
@@ -487,7 +487,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                                 game
 
                                             _ ->
-                                                WordSpellingGame.initGame setup
+                                                WordSpellingGame.initGame currentTime setup
                                         )
                                         |> Ui.map WordSpellingGameMsg
 
