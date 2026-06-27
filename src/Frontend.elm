@@ -30,6 +30,7 @@ import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
+import Game
 import Go
 import GuildName
 import Html exposing (Html)
@@ -61,7 +62,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -86,6 +87,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import WordSpellingGame
 
 
 app :
@@ -190,6 +192,19 @@ subscriptions model =
 
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
+                                , case FrontendExtra.getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
+                                    Just data ->
+                                        if
+                                            WordSpellingGame.isAnimating loaded.time data.shared
+                                                || WordSpellingGame.anyTileAnimating loaded.time data.model
+                                        then
+                                            Effect.Browser.Events.onAnimationFrame GotTime
+
+                                        else
+                                            Subscription.none
+
+                                    Nothing ->
+                                        Subscription.none
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
@@ -440,7 +455,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
-            , currentDmGoMatch = SeqDict.empty
+            , currentDmGame = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
@@ -1172,7 +1187,7 @@ updateLoaded msg model =
                     case model.route of
                         DmRoute dmRoute ->
                             case dmRoute.tab of
-                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                                Just (DmChannelHeaderTab_Games maybeMatchId) ->
                                     FrontendExtra.updateLoggedIn
                                         (\loggedIn ->
                                             case loggedIn.textInputFocus of
@@ -1193,11 +1208,30 @@ updateLoaded msg model =
                                                                         |> Maybe.withDefault DmChannel.frontendInit
                                                             in
                                                             ( { loggedIn
-                                                                | currentDmGoMatch =
+                                                                | currentDmGame =
                                                                     SeqDict.update
                                                                         ( otherUserId, maybeMatchId )
-                                                                        (Go.pressedKey key maybeMatchId dmChannel.goMatches)
-                                                                        loggedIn.currentDmGoMatch
+                                                                        (\maybeGameModel ->
+                                                                            case
+                                                                                maybeMatchId
+                                                                                    |> Maybe.andThen (\matchId -> SeqDict.get matchId dmChannel.games)
+                                                                                    |> Maybe.andThen Game.goMatchData
+                                                                            of
+                                                                                Just ( _, shared ) ->
+                                                                                    (case maybeGameModel of
+                                                                                        Just (Game.GoModel m) ->
+                                                                                            Just m
+
+                                                                                        _ ->
+                                                                                            Nothing
+                                                                                    )
+                                                                                        |> Go.pressedKey key shared
+                                                                                        |> Maybe.map Game.GoModel
+
+                                                                                Nothing ->
+                                                                                    maybeGameModel
+                                                                        )
+                                                                        loggedIn.currentDmGame
                                                               }
                                                             , Command.none
                                                             )
@@ -1466,6 +1500,9 @@ updateLoaded msg model =
                                             Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
                                     }
 
+                                Drag_WordSpellingGameBoard ->
+                                    loggedIn
+
                                 Drag_Channel ->
                                     case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
                                         ( Just _, _ ) ->
@@ -1572,6 +1609,28 @@ updateLoaded msg model =
 
                                             else
                                                 loggedIn
+
+                                        Drag_WordSpellingGameBoard ->
+                                            let
+                                                local2 : LocalState
+                                                local2 =
+                                                    Local.model loggedIn.localState
+                                            in
+                                            case FrontendExtra.getWordSpellingGameModel local2 loggedIn model of
+                                                Just data ->
+                                                    setWordSpellingGameModel
+                                                        local2
+                                                        model
+                                                        (WordSpellingGame.dragStart
+                                                            model.windowSize
+                                                            startTouches
+                                                            data.setup
+                                                            data.model
+                                                        )
+                                                        loggedIn
+
+                                                _ ->
+                                                    loggedIn
                                     , Command.none
                                     )
                                 )
@@ -1916,7 +1975,7 @@ updateLoaded msg model =
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
 
-        GoMsg goMsg ->
+        GameMsg gameMsg ->
             case ( model.route, model.loginStatus ) of
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
                     let
@@ -1924,81 +1983,92 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
                     in
                     case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                        ( Just (DmChannelHeaderTab_Go maybeMatchId), Just otherUserId ) ->
+                        ( Just (DmChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
                             let
                                 dmChannel =
                                     SeqDict.get otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.frontendInit
 
-                                ( goModel2, cmd, outMsg ) =
-                                    Go.update
+                                newMatchId : Id Id.ChannelMessageId
+                                newMatchId =
+                                    DmChannel.latestMessageId dmChannel |> Id.increment
+
+                                ( gameModel2, outMsgs ) =
+                                    Game.update
                                         model.time
                                         local.localUser.session.userId
                                         otherUserId
-                                        goMsg
-                                        maybeMatchId
-                                        dmChannel.goMatches
-                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                        gameMsg
+                                        newMatchId
+                                        (case maybeMatchId of
+                                            Just matchId ->
+                                                case SeqDict.get matchId dmChannel.games of
+                                                    Just matchData ->
+                                                        Just ( matchId, matchData )
 
-                                maybeChange : Maybe Go.LocalChange
-                                maybeChange =
-                                    case outMsg of
-                                        Go.OutLocalChange change ->
-                                            Just change
+                                                    Nothing ->
+                                                        Nothing
 
-                                        _ ->
-                                            Nothing
+                                            Nothing ->
+                                                Nothing
+                                        )
+                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
 
-                                ( loggedIn2, cmd2 ) =
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Maybe.map (Local_Go { otherUserId = otherUserId }) maybeChange)
-                                        { loggedIn
-                                            | currentDmGoMatch =
-                                                SeqDict.update
-                                                    ( otherUserId, maybeMatchId )
-                                                    (\_ -> goModel2)
-                                                    loggedIn.currentDmGoMatch
-                                        }
-                                        (Command.map never GoMsg cmd)
-
-                                ( model2, routeCmd ) =
-                                    case outMsg of
-                                        Go.OutLocalChange localChange ->
-                                            case localChange of
-                                                Go.StartMatch _ _ ->
-                                                    FrontendExtra.routePush
-                                                        { model | loginStatus = LoggedIn loggedIn2 }
-                                                        (DmRoute
-                                                            { dmRoute
-                                                                | tab =
-                                                                    DmChannel.latestMessageId dmChannel
-                                                                        |> Id.increment
-                                                                        |> Just
-                                                                        |> DmChannelHeaderTab_Go
-                                                                        |> Just
-                                                            }
-                                                        )
+                                ( loggedIn2, localChangeCmd ) =
+                                    List.foldl
+                                        (\outMsg ( accLoggedIn, accCmd ) ->
+                                            case outMsg of
+                                                Game.OutLocalChange change ->
+                                                    FrontendExtra.handleLocalChange
+                                                        model.time
+                                                        (Just (Local_Game { otherUserId = otherUserId } change))
+                                                        accLoggedIn
+                                                        accCmd
 
                                                 _ ->
-                                                    ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                                    ( accLoggedIn, accCmd )
+                                        )
+                                        ( { loggedIn
+                                            | currentDmGame =
+                                                SeqDict.update
+                                                    ( otherUserId, maybeMatchId )
+                                                    (\_ -> gameModel2)
+                                                    loggedIn.currentDmGame
+                                          }
+                                        , Command.none
+                                        )
+                                        (Debug.log "outMsgs" outMsgs)
 
-                                        Go.OutSelectMatch newMatchId ->
-                                            FrontendExtra.routePush
-                                                { model | loginStatus = LoggedIn loggedIn2 }
-                                                (DmRoute
-                                                    { dmRoute
-                                                        | tab = Just (DmChannelHeaderTab_Go newMatchId)
-                                                    }
-                                                )
+                                ( model2, effectCmd ) =
+                                    List.foldl
+                                        (\outMsg ( accModel, cmds ) ->
+                                            case outMsg of
+                                                Game.PlaySound maybeTime sound ->
+                                                    ( accModel, Ports.playSound maybeTime sound :: cmds )
 
-                                        Go.NoOutMsg ->
-                                            ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                                                Game.CopyText text ->
+                                                    let
+                                                        ( copyModel, copyCmd ) =
+                                                            copyText text accModel
+                                                    in
+                                                    ( copyModel, copyCmd :: cmds )
 
-                                        Go.CopyText text ->
-                                            copyText text { model | loginStatus = LoggedIn loggedIn2 }
+                                                Game.OutSelectMatch newSelected ->
+                                                    let
+                                                        ( pushModel, pushCmd ) =
+                                                            FrontendExtra.routePush
+                                                                accModel
+                                                                (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
+                                                    in
+                                                    ( pushModel, pushCmd :: cmds )
+
+                                                Game.OutLocalChange _ ->
+                                                    ( accModel, cmds )
+                                        )
+                                        ( { model | loginStatus = LoggedIn loggedIn2 }, [] )
+                                        outMsgs
                             in
-                            ( model2, Command.batch [ routeCmd, cmd2 ] )
+                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
                         _ ->
                             ( model, Command.none )
@@ -2649,14 +2719,14 @@ updateLoaded msg model =
                         PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
+                MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
                             case model.route of
                                 DmRoute dmRoute ->
                                     FrontendExtra.routePush
                                         model
-                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Go (Just messageId)) })
+                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games (Just messageId)) })
 
                                 HomePageRoute ->
                                     ( model, Command.none )
@@ -4257,7 +4327,7 @@ updateLoaded msg model =
 
         PressedChannelHeaderTab tab ->
             let
-                sameTab : DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Maybe DmChannelHeaderTab
+                sameTab : ChannelHeaderTab -> Maybe ChannelHeaderTab -> Maybe ChannelHeaderTab
                 sameTab tabA tabB =
                     case tabB of
                         Just tabB2 ->
@@ -5654,71 +5724,116 @@ handleTouchEnd time model =
                         _ ->
                             loggedIn
             in
-            ( case loggedIn2.messageHover of
-                MessageMenu extraOptions ->
-                    case extraOptions.mobileMode of
-                        MessageMenuDragging dragging ->
-                            let
-                                delta : Duration
-                                delta =
-                                    Duration.from dragging.time time
+            ( finalizeWordSpellingDrag model
+                (case loggedIn2.messageHover of
+                    MessageMenu extraOptions ->
+                        case extraOptions.mobileMode of
+                            MessageMenuDragging dragging ->
+                                let
+                                    delta : Duration
+                                    delta =
+                                        Duration.from dragging.time time
 
-                                menuDelta : Quantity Float (Rate CssPixels Seconds)
-                                menuDelta =
-                                    dragging.offset
-                                        |> Quantity.minus dragging.previousOffset
-                                        |> Quantity.per delta
+                                    menuDelta : Quantity Float (Rate CssPixels Seconds)
+                                    menuDelta =
+                                        dragging.offset
+                                            |> Quantity.minus dragging.previousOffset
+                                            |> Quantity.per delta
 
-                                speedThreshold : Quantity Float (Rate CssPixels Seconds)
-                                speedThreshold =
-                                    Quantity.rate (CssPixels.cssPixels -100) Duration.second
+                                    speedThreshold : Quantity Float (Rate CssPixels Seconds)
+                                    speedThreshold =
+                                        Quantity.rate (CssPixels.cssPixels -100) Duration.second
 
-                                menuHeight : Quantity Float CssPixels
-                                menuHeight =
-                                    MessageMenu.mobileMenuMaxHeight
-                                        extraOptions
-                                        (Local.model loggedIn2.localState)
-                                        model
+                                    menuHeight : Quantity Float CssPixels
+                                    menuHeight =
+                                        MessageMenu.mobileMenuMaxHeight
+                                            extraOptions
+                                            (Local.model loggedIn2.localState)
+                                            model
 
-                                halfwayPoint : Quantity Float CssPixels
-                                halfwayPoint =
-                                    menuHeight |> Quantity.divideBy 2
-                            in
-                            if
-                                (dragging.offset |> Quantity.lessThan halfwayPoint)
-                                    || (menuDelta |> Quantity.lessThan speedThreshold)
-                            then
-                                MessageMenu.close model loggedIn2
+                                    halfwayPoint : Quantity Float CssPixels
+                                    halfwayPoint =
+                                        menuHeight |> Quantity.divideBy 2
+                                in
+                                if
+                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                        || (menuDelta |> Quantity.lessThan speedThreshold)
+                                then
+                                    MessageMenu.close model loggedIn2
 
-                            else
-                                { loggedIn2
-                                    | messageHover =
-                                        MessageMenu
-                                            { extraOptions
-                                                | mobileMode =
-                                                    MessageMenuFixed
-                                                        (Quantity.min menuHeight dragging.offset)
-                                            }
-                                }
+                                else
+                                    { loggedIn2
+                                        | messageHover =
+                                            MessageMenu
+                                                { extraOptions
+                                                    | mobileMode =
+                                                        MessageMenuFixed
+                                                            (Quantity.min menuHeight dragging.offset)
+                                                }
+                                    }
 
-                        _ ->
-                            loggedIn2
+                            _ ->
+                                loggedIn2
 
-                NoMessageHover ->
-                    loggedIn2
+                    NoMessageHover ->
+                        loggedIn2
 
-                MessageHover _ _ ->
-                    loggedIn2
+                    MessageHover _ _ ->
+                        loggedIn2
+                )
             , Process.sleep (Duration.milliseconds 30) |> Task.perform (\() -> OneFrameAfterDragEnd)
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-{-| Decide what a touch drag should manipulate based on where it started. If the
-call thumbnail is visible and the touch began on top of it, the drag moves the
-thumbnail; otherwise it falls back to dragging the channel sidebar.
--}
+setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
+setWordSpellingGameModel local model game loggedIn =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
+                    { loggedIn
+                        | currentDmGame =
+                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGameModel game) loggedIn.currentDmGame
+                    }
+
+                _ ->
+                    loggedIn
+
+        _ ->
+            loggedIn
+
+
+finalizeWordSpellingDrag : LoadedFrontend -> LoggedIn2 -> LoggedIn2
+finalizeWordSpellingDrag model loggedIn =
+    case model.drag of
+        Dragging dragging ->
+            case dragging.target of
+                Drag_WordSpellingGameBoard ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
+                        Just game ->
+                            setWordSpellingGameModel
+                                local
+                                model
+                                (WordSpellingGame.dragEnd model.windowSize dragging.touches game.shared game.model)
+                                loggedIn
+
+                        Nothing ->
+                            loggedIn
+
+                _ ->
+                    loggedIn
+
+        _ ->
+            loggedIn
+
+
 dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
 dragTarget startTouches model =
     case model.loginStatus of
@@ -5733,15 +5848,24 @@ dragTarget startTouches model =
 
                 centroid : Coord CssPixels
                 centroid =
-                    NonemptyDict.values startTouches
-                        |> List.Nonempty.map .client
-                        |> (\(Nonempty head rest) -> Point2d.centroid head rest)
-                        |> Coord.roundPoint
+                    Touch.touchCentroid startTouches
+
+                insideBoard : Bool
+                insideBoard =
+                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
+                        Just _ ->
+                            WordSpellingGame.insideBoard model.windowSize centroid
+
+                        Nothing ->
+                            False
             in
             case Call.displayMode local.localUser.session.userId model.route local.calls of
                 Call.ShowLocalVideoAndCallThumbnail _ ->
                     if Call.insideThumbnail centroid model loggedIn.voiceChat then
                         Just Drag_CallThumbnail
+
+                    else if insideBoard then
+                        Just Drag_WordSpellingGameBoard
 
                     else if isMobile then
                         Just Drag_Channel
@@ -5750,7 +5874,10 @@ dragTarget startTouches model =
                         Nothing
 
                 _ ->
-                    if isMobile then
+                    if insideBoard then
+                        Just Drag_WordSpellingGameBoard
+
+                    else if isMobile then
                         Just Drag_Channel
 
                     else
@@ -6464,35 +6591,55 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
-                                Server_Go _ _ goChange ->
-                                    case goChange of
-                                        Go.StartMatch _ _ ->
+                                Server_Game _ _ gameChange ->
+                                    case gameChange of
+                                        Game.LocalChange_Go _ goChange ->
+                                            case goChange of
+                                                Go.StartMatch _ _ ->
+                                                    ( loggedIn2, Command.none )
+
+                                                Go.Action actionWithTime ->
+                                                    ( loggedIn2
+                                                    , case actionWithTime.change of
+                                                        Go.PlaceStone _ _ ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.PassTurn ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.MarkTerritory _ _ ->
+                                                            Command.none
+
+                                                        Go.FinishedMarking ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.AcceptTerritory ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.RejectTerritory ->
+                                                            Ports.playSound Nothing "pop"
+                                                    )
+
+                                        Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 
-                                        Go.Action _ actionWithTime ->
+                                        Game.LocalChange_WordSpellingGame _ wsChange ->
                                             ( loggedIn2
-                                            , case actionWithTime.change of
-                                                Go.PlaceStone _ _ ->
-                                                    Ports.playSound "pop"
+                                            , case wsChange of
+                                                WordSpellingGame.Action actionWithTime ->
+                                                    case actionWithTime.change of
+                                                        WordSpellingGame.PlaceWord placedWord (FilledInByBackend WordSpellingGame.IsValid) ->
+                                                            -- Pop as the other player's tiles land on the board.
+                                                            Ports.playSound
+                                                                (Just (WordSpellingGame.placementLandTime actionWithTime.time placedWord))
+                                                                "pop"
 
-                                                Go.PassTurn ->
-                                                    Ports.playSound "pop"
+                                                        _ ->
+                                                            Command.none
 
-                                                Go.MarkTerritory _ _ ->
+                                                WordSpellingGame.StartMatch _ _ ->
                                                     Command.none
-
-                                                Go.FinishedMarking ->
-                                                    Ports.playSound "pop"
-
-                                                Go.AcceptTerritory ->
-                                                    Ports.playSound "pop"
-
-                                                Go.RejectTerritory ->
-                                                    Ports.playSound "pop"
                                             )
-
-                                        Go.CreatePublicLink _ _ ->
-                                            ( loggedIn2, Command.none )
 
                                 _ ->
                                     ( loggedIn2, Command.none )

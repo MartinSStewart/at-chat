@@ -64,7 +64,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetEmojiSkinTone
     | ToBackendLog_Local_AddCustomEmojisToUser
     | ToBackendLog_Local_VoiceChatChange
-    | ToBackendLog_Local_Go
+    | ToBackendLog_Local_Game
     | ToBackendLog_Local_Drawing
 
 
@@ -236,8 +236,8 @@ toBackendLogToString log =
         ToBackendLog_Local_VoiceChatChange ->
             "Local_VoiceChatChange"
 
-        ToBackendLog_Local_Go ->
-            "Local_Go"
+        ToBackendLog_Local_Game ->
+            "Local_Game"
 
         ToBackendLog_Local_Drawing ->
             "Local_Drawing"

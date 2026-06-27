@@ -1,4 +1,4 @@
-module DiscordRecordedTests exposing (discordTests)
+module E2EDiscord exposing (discordTests)
 
 import Array
 import Backend
@@ -7,12 +7,14 @@ import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Drawing
 import Duration
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Websocket as Websocket
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import IdArray
 import Iso8601
 import LinkedAndOtherDiscordUsers
 import Local
@@ -22,7 +24,6 @@ import Message
 import MessageInput
 import Pages.Guild
 import PersonName
-import RecordedTestExtra
 import Route
 import SeqDict
 import Sticker
@@ -83,7 +84,7 @@ checkDmVisibleMessageCount admin isExpected data =
                             ("Discord DM visibleMessages.count="
                                 ++ String.fromInt dmChannel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (Array.length dmChannel.messages)
+                                ++ String.fromInt (IdArray.length dmChannel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
                             )
 
@@ -125,7 +126,7 @@ checkGuildVisibleMessageCount admin isExpected data =
                             ("Discord guild channel visibleMessages.count="
                                 ++ String.fromInt channel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (Array.length channel.messages)
+                                ++ String.fromInt (IdArray.length channel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open guild channel, so they disappear from view."
                             )
 
@@ -140,19 +141,19 @@ discordTests :
     -> String
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
-    [ RecordedTestExtra.startTest
+    [ E2EHelper.startTest
         "Got rich text embed"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":173,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-04-16T01:36:56.515000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1494149566100930611","flags":0,"embeds":[{"type":"rich","title":"[compiler] Branch distribute was force-pushed to `c7b3d5e`","id":"1494149566100930612","description":"[Compare changes](https://github.com/lamdera/compiler/compare/01daaf8875d1...c7b3d5e6f412)","content_scan_version":4,"color":16525609,"author":{"url":"https://github.com/supermario","proxy_icon_url":"https://images-ext-1.discordapp.net/external/EOjvf3Ly7SSCVe7o-8EBJBz6V_MUyiX7n4TkBiIkZnI/%3Fv%3D4/https/avatars.githubusercontent.com/u/102781","name":"supermario","icon_url":"https://avatars.githubusercontent.com/u/102781?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
@@ -167,19 +168,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message with new custom emoji"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         let
                             customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmojiData
@@ -230,19 +231,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Got spoilered image"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-12T13:14:33.237000+00:00","pinned":false,"nonce":"1492875573255471104","mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2020-05-01T11:39:39.915000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1492875574455042168","flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[{"width":80,"url":"https://cdn.discordapp.com/attachments/1072828564317159465/1492875574174154943/SPOILER_1122943867721875456.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","size":492063,"proxy_url":"https://media.discordapp.net/attachments/1072828564317159465/1492875574174154943/SPOILER_1122943867721875456.png?ex=69dcec39&is=69db9ab9&hm=992b357861cbb393bf8fdfac2690f576b6283968400d3cd18dd2d9f7e117c65b&","placeholder_version":1,"placeholder":"ZCmGHQYsRFqRmof6NoZvZ/lnBEaEhnJkWA==","original_content_type":"image/png","id":"1492875574174154943","height":80,"flags":40,"filename":"SPOILER_1122943867721875456.png","content_type":"image/png","content_scan_version":4}],"guild_id":"705745250815311942"}}"""
@@ -257,19 +258,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message created by unlinked user containing only embed"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":476,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-03-31T20:15:05.862000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1488632753368072280","flags":0,"embeds":[{"url":"https://github.com/lamdera/compiler/pull/92","type":"rich","title":"[lamdera/compiler] Pull request opened: #92   Allow configuring <html lang> via html-lang file","id":"1488632753368072281","description":"Read an optional html-lang file from the project root to set the lang attribute on the generated  tag.  If the file contains e.g. \\"fr\\", the output becomes .  If absent or empty, the tag is plain  as before.  Fixes #84.","content_scan_version":4,"color":38912,"author":{"url":"https://github.com/MavenRain","proxy_icon_url":"https://images-ext-1.discordapp.net/external/z5iI09eMZ6hW8pY8xflOmWevOiHuXRD-pljR_thC38Q/%3Fv%3D4/https/avatars.githubusercontent.com/u/7246681","name":"MavenRain","icon_url":"https://avatars.githubusercontent.com/u/7246681?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
@@ -279,19 +280,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord friend label shows typing indicator"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guildIcon_showFriends")
                         , admin.checkView
@@ -310,19 +311,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord DM and guild messages survive websocket reconnect (HandleReadyDataStep2)"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ -- Open a Discord guild channel and load a message into it.
                           admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
@@ -355,13 +356,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 -- A brand new gateway connection is created after the reconnect. Complete the
                 -- handshake on it (hello -> identify) and replay the READY data, which triggers
                 -- HandleReadyDataStep2 again.
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                     )
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection websocketState ->
-                        case Array.toList websocketState.dataSent |> List.filter RecordedTestExtra.isOp2 of
+                        case Array.toList websocketState.dataSent |> List.filter E2EHelper.isOp2 of
                             [ _ ] ->
                                 [ T.websocketSendString 100 connection discordOp0Ready
                                 , T.websocketSendString 100 connection discordOp0ReadySupplemental
@@ -386,22 +387,22 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message created by linked user containing url"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                        , RecordedTestExtra.writeMessage admin 100 "https://www.youtube.com/watch?v=zAFDQH19pV4"
+                        , E2EHelper.writeMessage admin 100 "https://www.youtube.com/watch?v=zAFDQH19pV4"
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-01T10:04:25.211000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1488841459204489398","flags":0,"embeds":[],"edited_timestamp":null,"content":"https://www.youtube.com/watch?v=zAFDQH19pV4","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , T.websocketSendString 1000 connection """{"t":"MESSAGE_UPDATE","s":4,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-01T10:04:25.211000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1488841459204489398","flags":0,"embeds":[{"video":{"width":720,"url":"https://www.youtube.com/embed/zAFDQH19pV4","placeholder_version":1,"placeholder":"lDgKDIQHiJZyiniCe3ingHsKqA==","height":720,"flags":0},"url":"https://www.youtube.com/watch?v=zAFDQH19pV4","type":"video","title":"Spiral (jackLNDN Remix)","thumbnail":{"width":1280,"url":"https://i.ytimg.com/vi/zAFDQH19pV4/maxresdefault.jpg","proxy_url":"https://images-ext-1.discordapp.net/external/o1Bl70OhMLyAuYI0AvggMLdse0h4epFkr-Nd4Ru9L3I/https/i.ytimg.com/vi/zAFDQH19pV4/maxresdefault.jpg","placeholder_version":1,"placeholder":"lDgKDIQHiJZyiniCe3ingHsKqA==","height":720,"flags":0,"content_type":"image/jpeg"},"provider":{"url":"https://www.youtube.com","name":"YouTube"},"id":"1488841460739739829","description":"Provided to YouTube by Label Worx Limited\\n\\nSpiral (jackLNDN Remix) · Lena Leon · jackLNDN · jackLNDN\\n\\nSpiral (Deluxe Edition)\\n\\n℗ Big Proof Publishing, Danny Danger Publishing, Ultra Empire Music (BMI) obo itself and LRL Music, Whizz Kid II Publishing GmbH, Hooks & Crooks BMG Rights Management GmbH\\n\\nReleased on: 2023-02-10\\n\\nProducer: jackLND...","color":16711680,"author":{"url":"https://www.youtube.com/channel/UCQ8EctjrppQcwBA3lEIlk4w","name":"Lena Leon - Topic"}}],"edited_timestamp":null,"content":"https://www.youtube.com/watch?v=zAFDQH19pV4","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Title for https://www.youtube.com/watch?v=zAFDQH19pV4" ])
@@ -410,19 +411,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Edit Discord message by pressing up arrow in channel input"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
 
@@ -438,7 +439,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":55,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:05:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2020-05-01T11:39:39.915000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1500000000000000006","flags":0,"embeds":[],"edited_timestamp":null,"content":"Discord other three","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Discord admin three" ])
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Discord other three" ])
-                        , RecordedTestExtra.editMostRecentMessageViaArrowUp admin "Discord admin three" "Discord admin three edited"
+                        , E2EHelper.editMostRecentMessageViaArrowUp admin "Discord admin three" "Discord admin three edited"
 
                         -- Only the logged in user's most recent message was edited; the others are untouched.
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Discord admin three" ])
@@ -449,31 +450,31 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Link Discord account with login"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\_ -> [])
         ]
-    , RecordedTestExtra.startTest "Forwarded message"
-        RecordedTestExtra.startTime
+    , E2EHelper.startTest "Forwarded message"
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":3293,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-17T16:14:03.131000+00:00","pinned":false,"nonce":"1494732679017398272","message_snapshots":[{"message":{"type":0,"timestamp":"2026-04-17T11:22:04.856000+00:00","mentions":[],"flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"attachments":[{"width":2160,"url":"https://cdn.discordapp.com/attachments/123/321/IMG_1234.jpg?ex=123&is=321&hm=123&","size":517431,"proxy_url":"https://media.discordapp.net/attachments/123/321/1234.jpg?ex=123&is=321&hm=123&","placeholder_version":1,"placeholder":"WlkKDgSql6d2d3d4d4B4gZqYrHCJCGc=","id":"1494732685631946782","height":2461,"filename":"IMG_7203.jpg","content_type":"image/jpeg","content_scan_version":4}]}}],"message_reference":{"type":1,"message_id":"1494659209021751327","channel_id":"1472236476401057854"},"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":["476506921260810240","734405273103499264","743849378363605082","840010386958581770","776291214478802964","840041852852895765","1030137708531687514"],"premium_since":null,"pending":false,"nick":"cute technology","mute":false,"joined_at":"2018-08-07T17:00:17.616000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1494732685992530114","flags":16384,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"capysuit","public_flags":0,"primary_guild":null,"id":"339560235050205185","global_name":"gio","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7d2709668c67727f98ba40ff62611e78"},"attachments":[],"guild_id":"705745250815311942"}}"""
@@ -483,19 +484,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Message with sticker"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
@@ -535,22 +536,22 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         , T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             (Route.encode
                 (Route.DiscordGuildRoute
-                    { currentDiscordUserId = RecordedTestExtra.currentDiscordUserId
-                    , guildId = RecordedTestExtra.botTestGuild
+                    { currentDiscordUserId = E2EHelper.currentDiscordUserId
+                    , guildId = E2EHelper.botTestGuild
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
-                            RecordedTestExtra.botTestGuild_ChannelA
+                            E2EHelper.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
                             Nothing
                     }
                 )
             )
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\admin ->
-                [ admin.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
@@ -561,7 +562,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , Test.Html.Selector.exactText "Message with text and sticker!"
                         ]
                     )
-                , RecordedTestExtra.inviteUser
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ admin.click 100 (Dom.id "guild_openChannel_0")
@@ -599,14 +600,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Link Discord account with login to non-existent at-chat account"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             "Steve"
-            RecordedTestExtra.userEmail
+            E2EHelper.userEmail
             True
             discordOp0Ready
             discordOp0ReadySupplemental
@@ -622,38 +623,38 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Link Discord account already logged in"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             "/"
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\adminA ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail adminA
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
                 , adminA.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading user data" ])
                 , T.connectFrontend
                     100
-                    RecordedTestExtra.sessionId0
-                    ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec RecordedTestExtra.discordUserAuth)
-                    RecordedTestExtra.desktopWindow
+                    E2EHelper.sessionId0
+                    ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec E2EHelper.discordUserAuth)
+                    E2EHelper.desktopWindow
                     (\adminB ->
-                        [ adminB.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                        [ adminB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                         , adminA.checkView
                             200
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])
-                        , RecordedTestExtra.andThenWebsocket
+                        , E2EHelper.andThenWebsocket
                             (\connection _ ->
                                 [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
                             )
-                        , RecordedTestExtra.andThenWebsocket
+                        , E2EHelper.andThenWebsocket
                             (\connection websocketState ->
-                                case Array.toList websocketState.dataSent |> List.filter RecordedTestExtra.isOp2 of
+                                case Array.toList websocketState.dataSent |> List.filter E2EHelper.isOp2 of
                                     [ _ ] ->
                                         [ T.websocketSendString 100 connection discordOp0Ready
                                         , T.websocketSendString 100 connection discordOp0ReadySupplemental
@@ -676,14 +677,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Ping discord user"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
@@ -695,20 +696,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -736,7 +737,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 case
                                     List.filter
                                         (\request ->
-                                            case ( request.url, RecordedTestExtra.decodeCustomRequest request ) of
+                                            case ( request.url, E2EHelper.decodeCustomRequest request ) of
                                                 ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
                                                     (customRequest.url == "https://discord.com/api/v9/channels/705745250815311942/thread-members/@me")
                                                         && (customRequest.method == "PUT")
@@ -768,20 +769,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Unlinked Discord user starts stand-alone thread"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -806,7 +807,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 case
                                     List.filter
                                         (\request ->
-                                            case ( request.url, RecordedTestExtra.decodeCustomRequest request ) of
+                                            case ( request.url, E2EHelper.decodeCustomRequest request ) of
                                                 ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
                                                     (customRequest.url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
                                                         && (customRequest.method == "PUT")
@@ -842,20 +843,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord guild typing indicator"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.checkView
                             100
@@ -866,7 +867,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             connection
                             ("{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":"
-                                ++ String.fromInt (Time.posixToMillis (Duration.addTo RecordedTestExtra.startTime (Duration.seconds 3)))
+                                ++ String.fromInt (Time.posixToMillis (Duration.addTo E2EHelper.startTime (Duration.seconds 3)))
                                 ++ "}}"
                             )
                         , admin.checkView
@@ -879,20 +880,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Handle new sticker in guild message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -912,20 +913,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Handle new sticker in DM message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
-                , RecordedTestExtra.andThenWebsocket
+                , E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ T.websocketSendString
                             100
@@ -945,33 +946,33 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Two linked Discord accounts in same guild produce single message"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.linkSecondDiscordAccount
-                    RecordedTestExtra.sessionId0
+                [ E2EHelper.linkSecondDiscordAccount
+                    E2EHelper.sessionId0
                     discordOp0Ready
                     discordOp0ReadySupplemental
                 , T.checkState
                     100
                     (\data ->
-                        case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
                             Just guild ->
                                 let
                                     memberIds : List (Discord.Id Discord.UserId)
                                     memberIds =
                                         MembersAndOwner.membersAndOwner guild.membersAndOwner
                                 in
-                                if List.member RecordedTestExtra.currentDiscordUserId memberIds && List.member RecordedTestExtra.secondDiscordUserId memberIds then
+                                if List.member E2EHelper.currentDiscordUserId memberIds && List.member E2EHelper.secondDiscordUserId memberIds then
                                     Ok ()
 
                                 else
@@ -983,7 +984,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                 , T.collapsableGroup
                     "First message"
-                    [ RecordedTestExtra.writeMessage admin 100 "Hello from at-chat with two linked accounts"
+                    [ E2EHelper.writeMessage admin 100 "Hello from at-chat with two linked accounts"
                     , T.andThen
                         200
                         (\data ->
@@ -993,8 +994,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"Hello from at-chat with two linked accounts","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
                             in
                             case
-                                ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
-                                , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
+                                ( E2EHelper.websocketByDiscordToken "legit-token" data
+                                , E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data
                                 )
                             of
                                 ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
@@ -1008,11 +1009,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , T.checkState
                         200
                         (\data ->
-                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                            case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
                                 Just guild ->
-                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                    case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
-                                            case Array.length channel.messages of
+                                            case IdArray.length channel.messages of
                                                 1 ->
                                                     Ok ()
 
@@ -1043,8 +1044,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1234567890","flags":0,"embeds":[],"edited_timestamp":null,"content":"This is message 2","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
                             in
                             case
-                                ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
-                                , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
+                                ( E2EHelper.websocketByDiscordToken "legit-token" data
+                                , E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data
                                 )
                             of
                                 ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
@@ -1058,11 +1059,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , T.checkState
                         200
                         (\data ->
-                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                            case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
                                 Just guild ->
-                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                    case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
-                                            case Array.length channel.messages of
+                                            case IdArray.length channel.messages of
                                                 2 ->
                                                     Ok ()
 
@@ -1085,59 +1086,59 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "No Discord guild push notification while viewing the channel"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                        , RecordedTestExtra.enableNotifications False admin
-                        , RecordedTestExtra.checkNotification "Push notifications enabled"
+                        , E2EHelper.enableNotifications False admin
+                        , E2EHelper.checkNotification "Push notifications enabled"
 
                         -- The admin is viewing the Discord guild channel, so a message mentioning them should NOT push.
                         , discordGuildMessage connection "<@184437096813953035> while viewing"
-                        , RecordedTestExtra.checkNoNotification "@at28727 while viewing"
+                        , E2EHelper.checkNoNotification "@at28727 while viewing"
 
                         -- Navigate the admin away from the channel.
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
 
                         -- Positive control: while the admin isn't viewing the channel a mention should push.
                         , discordGuildMessage connection "<@184437096813953035> while away"
-                        , RecordedTestExtra.checkNotification "@at28727 while away"
+                        , E2EHelper.checkNotification "@at28727 while away"
                         ]
                     )
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "No Discord DM push notification while viewing the channel"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
-                        [ RecordedTestExtra.enableNotifications False admin
-                        , RecordedTestExtra.checkNotification "Push notifications enabled"
+                        [ E2EHelper.enableNotifications False admin
+                        , E2EHelper.checkNotification "Push notifications enabled"
 
                         -- Positive control: while the admin isn't viewing the DM a message should push.
                         , discordDmMessage connection "Discord DM while away"
-                        , RecordedTestExtra.checkNotification "Discord DM while away"
+                        , E2EHelper.checkNotification "Discord DM while away"
 
                         -- Open (and therefore view) the Discord DM channel.
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
@@ -1145,25 +1146,25 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                         -- The admin is viewing the DM the message arrived in, so no push notification should be sent.
                         , discordDmMessage connection "Discord DM while viewing"
-                        , RecordedTestExtra.checkNoNotification "Discord DM while viewing"
+                        , E2EHelper.checkNoNotification "Discord DM while viewing"
                         ]
                     )
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Draw on top of messages in Discord DM"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
                         , discordDmMessage connection "Draw on this Discord DM message!"
@@ -1186,12 +1187,12 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             100
                                             (Drawing.profileImageAnchorId messageId)
                                             "click"
-                                            (RecordedTestExtra.drawingAnchorClick 30 25)
+                                            (E2EHelper.drawingAnchorClick 30 25)
                                         , admin.checkView
                                             100
                                             (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                        , RecordedTestExtra.drawZigzagStroke admin
-                                        , admin.checkView 100 (RecordedTestExtra.expectPolylineCount 1)
+                                        , E2EHelper.drawZigzagStroke admin
+                                        , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                         -- The stroke is stored on the backend in the Discord DM channel
                                         , T.checkState
@@ -1224,19 +1225,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord DM channel description"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
                         , discordDmMessage connection "Hello!"
@@ -1258,19 +1259,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord DM notification shows red icon in guild column"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ -- The admin is on the friends page and isn't viewing the Discord DM, so no
                           -- notification icon is shown in the guild column yet.
@@ -1279,7 +1280,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1472236476401057854" ]
                             )
-                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM no notification icon" }
+                        , E2EHelper.tallSnapshot admin 100 { name = "Discord DM no notification icon" }
 
                         -- A Discord DM arrives while the admin isn't viewing it.
                         , discordDmMessage connection "Check out this Discord DM!"
@@ -1296,7 +1297,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                         -- The notification circle also appears on the DM in the DM channel column.
                         , friendLabelHasNotificationCircle admin "1472236476401057854" "1"
-                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord DM notification icon in guild column" }
+                        , E2EHelper.tallSnapshot admin 100 { name = "Discord DM notification icon in guild column" }
 
                         -- Opening the Discord DM marks it as read, removing the notification icon
                         -- from both the guild column and the DM channel column.
@@ -1312,19 +1313,19 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord group DM notification shows red icon in guild column"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
-        [ RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ RecordedTestExtra.andThenWebsocket
+                [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ -- A new Discord group DM (the linked account plus two other users) is created.
                           T.websocketSendString 100 connection discordGroupDmChannelCreate
@@ -1352,7 +1353,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                         -- The notification circle also appears on the group DM in the DM channel column.
                         , friendLabelHasNotificationCircle admin "1500000000000000099" "1"
-                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Discord group DM notification icon in guild column" }
+                        , E2EHelper.tallSnapshot admin 100 { name = "Discord group DM notification icon in guild column" }
 
                         -- Opening the group DM marks it as read, removing the notification icon
                         -- from both the guild column and the DM channel column.
@@ -1364,7 +1365,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             )
                         , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
                         , discordGroupDmMessage connection "Second message"
-                        , RecordedTestExtra.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
+                        , E2EHelper.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
                         , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
                         ]
@@ -1372,18 +1373,18 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , E2EHelper.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
-        RecordedTestExtra.startTime
+        E2EHelper.startTime
         normalConfig
         [ -- (1) Connecting while not viewing any Discord guild. Only the Discord users from the DM
           -- channels the linked account belongs to are loaded: kess shares a DM channel and is
           -- loaded, while AT (only a member of the Bot Test guild, with no shared DM channel) is
           -- not, and neither is TesterBot (neither a guild member nor a DM channel participant).
-          RecordedTestExtra.linkDiscordAndLogin
-            RecordedTestExtra.sessionId0
+          E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
             (PersonName.toString Backend.adminUser.name)
-            RecordedTestExtra.adminEmail
+            E2EHelper.adminEmail
             False
             discordOp0Ready
             discordOp0ReadySupplemental
@@ -1402,22 +1403,22 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
         -- loaded.
         , T.connectFrontend
             100
-            RecordedTestExtra.sessionId0
+            E2EHelper.sessionId0
             (Route.encode
                 (Route.DiscordGuildRoute
-                    { currentDiscordUserId = RecordedTestExtra.currentDiscordUserId
-                    , guildId = RecordedTestExtra.botTestGuild
+                    { currentDiscordUserId = E2EHelper.currentDiscordUserId
+                    , guildId = E2EHelper.botTestGuild
                     , channelRoute =
                         Route.DiscordChannel_ChannelRoute
-                            RecordedTestExtra.botTestGuild_ChannelA
+                            E2EHelper.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
                             Nothing
                     }
                 )
             )
-            RecordedTestExtra.desktopWindow
+            E2EHelper.desktopWindow
             (\viewer ->
-                [ viewer.portEvent 10 "load_startup_data_from_js" (RecordedTestExtra.startupDataJson RecordedTestExtra.firefoxDesktop)
+                [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                 , viewer.checkModel 200 (checkDiscordUserLoaded "Discord guild member AT" True guildOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)
@@ -1711,9 +1712,9 @@ lastDiscordDmMessage : BackendModel -> Maybe ( Id.Id Id.ChannelMessageId, Messag
 lastDiscordDmMessage backend =
     case SeqDict.get discordDmChannelId backend.discordDmChannels of
         Just channel ->
-            case Array.get (Array.length channel.messages - 1) channel.messages of
+            case IdArray.last channel.messages of
                 Just message ->
-                    Just ( Id.fromInt (Array.length channel.messages - 1), message )
+                    Just ( Id.fromInt (IdArray.length channel.messages - 1), message )
 
                 Nothing ->
                     Nothing

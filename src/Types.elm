@@ -74,9 +74,10 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
+import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -103,7 +104,7 @@ import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (DmChannelHeaderTab, Route)
+import Route exposing (ChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -192,6 +193,7 @@ type Drag
 type DragTarget
     = Drag_Channel
     | Drag_CallThumbnail
+    | Drag_WordSpellingGameBoard
 
 
 type LoginStatus
@@ -240,7 +242,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
-    , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
+    , currentDmGame : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
@@ -376,7 +378,7 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
-    , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
 
@@ -487,7 +489,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
-    | GoMsg Go.Msg
+    | GameMsg Game.Msg
     | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
@@ -542,7 +544,7 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
-    | PressedChannelHeaderTab DmChannelHeaderTab
+    | PressedChannelHeaderTab ChannelHeaderTab
     | FileDragEnter Duration
     | FileDragLeave
     | FileDropped (List File)
@@ -611,7 +613,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
-    | GetPublicGoMatchRequest (SecretId GoMatchPublicId)
+    | GetPublicGoMatchRequest (SecretId GamePublicId)
 
 
 type BackendMsg
@@ -872,7 +874,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
-    | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
+    | Server_Game (Id UserId) { otherUserId : Id UserId } Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
 
 
@@ -916,5 +918,5 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
-    | Local_Go { otherUserId : Id UserId } Go.LocalChange
+    | Local_Game { otherUserId : Id UserId } Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

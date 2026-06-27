@@ -1,11 +1,13 @@
 module FrontendExtra exposing
-    ( canDropFiles
+    ( WordSpellingGameData
+    , canDropFiles
     , changeUpdate
     , drawingRedo
     , drawingUndo
     , editMessage_gotFiles
     , externalLinkWarning
     , fileDragOverlayOpacity
+    , getWordSpellingGameModel
     , gotFiles
     , handleEscapeKey
     , handleLocalChange
@@ -50,11 +52,13 @@ import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
+import Game
 import Go
 import Html exposing (Html)
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -66,7 +70,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), Game(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -101,6 +105,7 @@ import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import WordSpellingGame
 
 
 pendingChangesText : LocalChange -> String
@@ -254,16 +259,21 @@ pendingChangesText localChange =
                 Call.Local_SetRemoteCallData _ ->
                     "Set audio/video input enabled"
 
-        Local_Go _ change ->
+        Local_Game _ change ->
             case change of
-                Go.StartMatch _ _ ->
-                    "Started Go match"
+                Game.CreatePublicLink _ _ ->
+                    "Shared match"
 
-                Go.Action _ _ ->
-                    "Made a move in Go"
+                Game.LocalChange_Go _ goChange ->
+                    case goChange of
+                        Go.StartMatch _ _ ->
+                            "Started Go match"
 
-                Go.CreatePublicLink _ _ ->
-                    "Shared Go match"
+                        Go.Action _ ->
+                            "Made a move in Go"
+
+                Game.LocalChange_WordSpellingGame _ _ ->
+                    "Word spelling game change"
 
         Local_Drawing _ _ _ ->
             "Drew on a message"
@@ -505,6 +515,9 @@ disableTextSelect isMobile model =
 
                     Drag_Channel ->
                         False
+
+                    Drag_WordSpellingGameBoard ->
+                        True
 
 
 canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
@@ -1011,7 +1024,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -1041,7 +1054,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
-                    [ Ports.playSound "pop"
+                    [ Ports.playSound Nothing "pop"
                     , Ports.setFavicon "/favicon-red.ico"
                     , case model.notificationPermission of
                         Ports.Granted ->
@@ -1069,7 +1082,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -1107,7 +1120,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
-                    [ Ports.playSound "pop"
+                    [ Ports.playSound Nothing "pop"
                     , Ports.setFavicon "/favicon-red.ico"
                     , case model.notificationPermission of
                         Ports.Granted ->
@@ -1236,18 +1249,24 @@ enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model 
     in
     updateLoggedIn
         (\loggedIn ->
-            ( case showMembers of
-                ShowMembersTab ->
-                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+            routeRequestChannelHelper
+                sameChannel
+                Nothing
+                threadRoute
+                (Local.model loggedIn.localState)
+                (case showMembers of
+                    ShowMembersTab ->
+                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                HideMembersTab ->
-                    if sameGuild || previousRoute == Nothing then
-                        startOpeningChannelSidebar loggedIn
+                    HideMembersTab ->
+                        if sameGuild || previousRoute == Nothing then
+                            startOpeningChannelSidebar loggedIn
 
-                    else
-                        loggedIn
-            , Command.batch [ viewCmd, openChannelCmds sameChannel threadRoute loggedIn model ]
-            )
+                        else
+                            loggedIn
+                )
+                model
+                |> Tuple.mapSecond (\cmd -> Command.batch [ viewCmd, cmd ])
         )
         model
 
@@ -1484,7 +1503,7 @@ routeRequest previousRoute newRoute model =
 
                 model3 : LoadedFrontend
                 model3 =
-                    if Debug.log "sameDmRoute" sameDmRoute then
+                    if sameDmRoute then
                         model2
 
                     else
@@ -1492,9 +1511,17 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    ( startOpeningChannelSidebar loggedIn
-                    , openChannelCmds sameDmRoute dmRoute.threadRoute loggedIn model3
-                    )
+                    let
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    routeRequestChannelHelper
+                        sameDmRoute
+                        (DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId)
+                        dmRoute.threadRoute
+                        local
+                        (startOpeningChannelSidebar loggedIn)
+                        model3
                 )
                 model3
 
@@ -1518,13 +1545,13 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    ( startOpeningChannelSidebar loggedIn
-                    , openChannelCmds
+                    routeRequestChannelHelper
                         sameDmRoute
+                        Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
-                        loggedIn
+                        (Local.model loggedIn.localState)
+                        (startOpeningChannelSidebar loggedIn)
                         model3
-                    )
                 )
                 model3
 
@@ -1572,17 +1599,81 @@ updateLoggedIn updateFunc model =
             ( model, Command.none )
 
 
-openChannelCmds :
+type alias WordSpellingGameData =
+    { matchId : Id ChannelMessageId, setup : WordSpellingGame.ValidatedSetup, shared : WordSpellingGame.Shared, model : WordSpellingGame.GameData }
+
+
+getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGameData
+getWordSpellingGameModel local loggedIn model =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case SeqDict.get messageId dmChannel.games of
+                                Just matchData ->
+                                    case Game.wordSpellingMatchData matchData of
+                                        Just ( setup, shared ) ->
+                                            { matchId = messageId
+                                            , setup = setup
+                                            , shared = shared
+                                            , model =
+                                                case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
+                                                    Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
+                                                        gameModel
+
+                                                    _ ->
+                                                        WordSpellingGame.initGame model.time setup |> Tuple.first
+                                            }
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                        Nothing ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+routeRequestChannelHelper :
     Bool
+    -> Maybe (Id UserId)
     -> ThreadRouteWithFriends
+    -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Command FrontendOnly ToBackend FrontendMsg
-openChannelCmds sameChannel threadRoute loggedIn model3 =
-    if sameChannel then
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedIn model3 =
+    ( case maybeOtherUserId of
+        Just otherUserId ->
+            case getWordSpellingGameModel local loggedIn model3 of
+                Just data ->
+                    { loggedIn
+                        | currentDmGame =
+                            SeqDict.insert
+                                ( otherUserId, Just data.matchId )
+                                (Game.WordSpellingGameModel (WordSpellingGame.Game data.model))
+                                loggedIn.currentDmGame
+                    }
+
+                Nothing ->
+                    loggedIn
+
+        Nothing ->
+            loggedIn
+    , if sameChannel then
         Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
-    else
+      else
         let
             scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
             scrollToBottom =
@@ -1611,6 +1702,7 @@ openChannelCmds sameChannel threadRoute loggedIn model3 =
                         Nothing ->
                             scrollToBottom
             ]
+    )
 
 
 isPressMsg : FrontendMsg -> Bool
@@ -1808,7 +1900,7 @@ isPressMsg msg =
         AiChatMsg aiChatMsg ->
             AiChat.isPressMsg aiChatMsg
 
-        GoMsg _ ->
+        GameMsg _ ->
             True
 
         UserNameEditableMsg editableMsg ->
@@ -2168,7 +2260,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (IdArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2263,7 +2355,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (IdArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2314,7 +2406,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length dmChannel.messages |> Id.fromInt)
+                                                                (IdArray.length dmChannel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -3068,8 +3160,12 @@ changeUpdate localMsg local =
                         Call.Local_SetRemoteCallData _ ->
                             local
 
-                Local_Go { otherUserId } goChange ->
-                    goChangeUpdate local.localUser.session.userId otherUserId goChange local
+                Local_Game { otherUserId } gameChange ->
+                    gameChangeUpdate
+                        local.localUser.session.userId
+                        otherUserId
+                        gameChange
+                        local
 
                 Local_Drawing guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
@@ -3125,7 +3221,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (GuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (IdArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3268,7 +3364,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (IdArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3774,7 +3870,7 @@ changeUpdate localMsg local =
                                                                 LocalState.discordTopicToDescription
                                                                     topic
                                                                     ChannelDescription.empty
-                                                            , messages = Array.empty
+                                                            , messages = IdArray.empty
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
@@ -3799,7 +3895,7 @@ changeUpdate localMsg local =
                                             maybeChannel
 
                                         Nothing ->
-                                            { messages = Array.empty
+                                            { messages = IdArray.empty
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members
@@ -4231,20 +4327,20 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Server_Go changeBy { otherUserId } goChange ->
-                    goChangeUpdate changeBy otherUserId goChange local
+                Server_Game changeBy { otherUserId } gameChange ->
+                    gameChangeUpdate changeBy otherUserId gameChange local
 
                 Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
-goChangeUpdate :
+gameChangeUpdate :
     Id UserId
     -> Id UserId
-    -> Go.LocalChange
+    -> Game.LocalChange
     -> LocalState
     -> LocalState
-goChangeUpdate changeBy otherUserId goChange local =
+gameChangeUpdate changeBy otherUserId gameChange local =
     { local
         | dmChannels =
             SeqDict.update
@@ -4255,46 +4351,79 @@ goChangeUpdate changeBy otherUserId goChange local =
                         dmChannel =
                             Maybe.withDefault DmChannel.frontendInit maybe
                     in
-                    (case goChange of
-                        Go.StartMatch createdAt setup ->
-                            let
-                                dmChannel2 : FrontendDmChannel
-                                dmChannel2 =
-                                    LocalState.createChannelMessageFrontend
-                                        (GoMatchStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing)
-                                        dmChannel
+                    (case gameChange of
+                        Game.LocalChange_Go matchId goChange ->
+                            case goChange of
+                                Go.StartMatch createdAt setup ->
+                                    let
+                                        dmChannel2 : FrontendDmChannel
+                                        dmChannel2 =
+                                            LocalState.createChannelMessageFrontend
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_Go)
+                                                dmChannel
 
-                                matchId : Id ChannelMessageId
-                                matchId =
-                                    DmChannel.latestMessageId dmChannel2
-                            in
-                            { dmChannel2
-                                | goMatches =
-                                    SeqDict.insert
-                                        matchId
-                                        (Go.initMatchData setup Array.empty Nothing)
-                                        dmChannel2.goMatches
-                            }
+                                        newMatchId : Id ChannelMessageId
+                                        newMatchId =
+                                            DmChannel.latestMessageId dmChannel2
+                                    in
+                                    { dmChannel2
+                                        | games =
+                                            SeqDict.insert
+                                                newMatchId
+                                                (Game.initMatchData (Game.GameData_Go setup Array.empty) Nothing)
+                                                dmChannel2.games
+                                    }
 
-                        Go.Action matchId actionWithTime ->
-                            { dmChannel
-                                | goMatches =
-                                    SeqDict.updateIfExists matchId (Go.addAction actionWithTime) dmChannel.goMatches
-                            }
+                                Go.Action action ->
+                                    { dmChannel
+                                        | games =
+                                            SeqDict.updateIfExists matchId (Game.addGoAction action) dmChannel.games
+                                    }
 
-                        Go.CreatePublicLink matchId data ->
+                        Game.CreatePublicLink matchId data ->
                             case data of
                                 FilledInByBackend publicId ->
                                     { dmChannel
-                                        | goMatches =
+                                        | games =
                                             SeqDict.updateIfExists
                                                 matchId
-                                                (Go.addPublicLink publicId)
-                                                dmChannel.goMatches
+                                                (Game.addPublicLink publicId)
+                                                dmChannel.games
                                     }
 
                                 EmptyPlaceholder ->
                                     dmChannel
+
+                        Game.LocalChange_WordSpellingGame matchId wsChange ->
+                            case wsChange of
+                                WordSpellingGame.StartMatch createdAt setup ->
+                                    let
+                                        dmChannel2 : FrontendDmChannel
+                                        dmChannel2 =
+                                            LocalState.createChannelMessageFrontend
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_WordSpellingGame)
+                                                dmChannel
+
+                                        newMatchId : Id ChannelMessageId
+                                        newMatchId =
+                                            DmChannel.latestMessageId dmChannel2
+                                    in
+                                    { dmChannel2
+                                        | games =
+                                            SeqDict.insert
+                                                newMatchId
+                                                (Game.initMatchData
+                                                    (Game.GameData_WordSpellingGame setup Array.empty (WordSpellingGame.initShared setup))
+                                                    Nothing
+                                                )
+                                                dmChannel2.games
+                                    }
+
+                                WordSpellingGame.Action action ->
+                                    { dmChannel
+                                        | games =
+                                            SeqDict.updateIfExists matchId (Game.addWordSpellingGameAction action) dmChannel.games
+                                    }
                     )
                         |> Just
                 )

@@ -58,8 +58,8 @@ config =
     [ ExposeAllRecordFields.rule |> defaultIgnore
     , OpaqueTypes.rule
         |> Review.Rule.ignoreErrorsForFiles
-            [ "tests/RecordedTests.elm"
-            , "src/RecordedTestExtra.elm"
+            [ "tests/E2ETests.elm"
+            , "src/E2EHelper.elm"
             , "src/DiscordRecordedTest.elm"
             ]
     , RunUnsafeAtStartup.rule

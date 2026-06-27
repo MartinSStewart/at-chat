@@ -27,7 +27,6 @@ import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
-import DmChannel
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -41,6 +40,7 @@ import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -557,21 +557,21 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
 
 deleteMessageHelper :
     Discord.Id Discord.MessageId
-    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id Discord.UserId)) }
+    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
     ->
         Maybe
             ( Id messageId
-            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id Discord.UserId)) }
+            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId)) }
             )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
         Just messageId ->
-            case DmChannel.getArray messageId channel.messages of
+            case IdArray.get messageId channel.messages of
                 Just (UserTextMessage message) ->
                     ( messageId
                     , { channel
                         | messages =
-                            DmChannel.setArray
+                            IdArray.set
                                 messageId
                                 (DeletedMessage message.createdAt)
                                 channel.messages
@@ -664,7 +664,7 @@ addDiscordChannel discordChannel =
                 Missing ->
                     ChannelName.fromStringLossy "Missing"
         , description = LocalState.discordTopicToDescription discordChannel.topic ChannelDescription.empty
-        , messages = Array.empty
+        , messages = IdArray.empty
         , status = ChannelActive
         , lastTypedAt = SeqDict.empty
         , linkedMessageIds = OneToOne.empty
@@ -683,7 +683,7 @@ messagesAndLinks :
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
-        ( Array (Message messageId (Discord.Id Discord.UserId))
+        ( IdArray messageId (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
 messagesAndLinks messages customEmojis discordStickers discordAttachments =
@@ -729,7 +729,7 @@ messagesAndLinks messages customEmojis discordStickers discordAttachments =
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
         )
         messages
-        |> Array.fromList
+        |> IdArray.fromList
     , linkedMessageIds
     )
 
@@ -2253,7 +2253,7 @@ handleChannelCreated channel model =
                                                     maybeChannel
 
                                                 Nothing ->
-                                                    { messages = Array.empty
+                                                    { messages = IdArray.empty
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , members = members
@@ -2326,7 +2326,7 @@ handleChannelCreated channel model =
                                                         LocalState.discordTopicToDescription
                                                             channel.topic
                                                             ChannelDescription.empty
-                                                    , messages = Array.empty
+                                                    , messages = IdArray.empty
                                                     , status = ChannelActive
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty

@@ -9,13 +9,11 @@ module DmChannel exposing
     , channelIdFromUserIds
     , channelIdToString
     , frontendInit
-    , getArray
     , latestMessageId
     , latestThreadMessageId
     , loadMessages
     , loadOlderMessages
     , otherUserId
-    , setArray
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -23,13 +21,12 @@ module DmChannel exposing
     , userIdsFromChannelId
     )
 
-import Array exposing (Array)
-import Array.Extra
 import Date exposing (Date)
 import Discord
 import Drawing exposing (Drawing)
-import Go
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Game exposing (BackendGameData)
+import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import IdArray exposing (IdArray)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -41,16 +38,16 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 type alias DmChannel =
-    { messages : Array (Message ChannelMessageId (Id UserId))
+    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , games : SeqDict (Id ChannelMessageId) BackendGameData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
 
 type alias DiscordDmChannel =
-    { messages : Array (Message ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
@@ -59,7 +56,7 @@ type alias DiscordDmChannel =
 
 
 type alias DiscordFrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
@@ -68,11 +65,11 @@ type alias DiscordFrontendDmChannel =
 
 
 type alias FrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId (Id UserId))
+    { messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , goMatches : SeqDict (Id ChannelMessageId) Go.MatchData
+    , games : SeqDict (Id ChannelMessageId) Game.MatchData
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
     }
 
@@ -85,21 +82,21 @@ type DmChannelId
 
 backendInit : DmChannel
 backendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , goMatches = SeqDict.empty
+    , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
 
 frontendInit : FrontendDmChannel
 frontendInit =
-    { messages = Array.empty
+    { messages = IdArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , goMatches = SeqDict.empty
+    , games = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
     }
 
@@ -107,7 +104,7 @@ frontendInit =
 toFrontend :
     Maybe ThreadRoute
     -> DmChannelId
-    -> OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    -> OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
     -> DmChannel
     -> FrontendDmChannel
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
@@ -122,36 +119,46 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    , goMatches =
+    , games =
         SeqDict.map
-            (\matchId ( setup, actions ) ->
-                Go.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
+            (\matchId gameData ->
+                Game.initMatchData gameData (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
             )
-            dmChannel.goMatches
+            dmChannel.games
     , dateDividerDrawings = dmChannel.dateDividerDrawings
     }
 
 
-latestMessageId : { a | messages : Array b } -> Id ChannelMessageId
+updateArray : Id messageId -> (a -> a) -> IdArray messageId a -> IdArray messageId a
+updateArray id updateFunc array =
+    case IdArray.get id array of
+        Just value ->
+            IdArray.set id (updateFunc value) array
+
+        Nothing ->
+            array
+
+
+latestMessageId : { a | messages : IdArray ChannelMessageId b } -> Id ChannelMessageId
 latestMessageId channel =
-    Array.length channel.messages - 1 |> Id.fromInt
+    IdArray.length channel.messages - 1 |> Id.fromInt
 
 
-latestThreadMessageId : { a | messages : Array b } -> Id ThreadMessageId
+latestThreadMessageId : { a | messages : IdArray ThreadMessageId b } -> Id ThreadMessageId
 latestThreadMessageId thread =
-    Array.length thread.messages - 1 |> Id.fromInt
+    IdArray.length thread.messages - 1 |> Id.fromInt
 
 
 toFrontendHelper :
     Bool
-    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
-    -> Array (MessageState messageId userId)
+    -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
+    -> IdArray messageId (MessageState messageId userId)
 toFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
-            setArray
+            IdArray.set
                 threadId
-                (case getArray threadId channel.messages of
+                (case IdArray.get threadId channel.messages of
                     Just message ->
                         MessageLoaded message
 
@@ -166,14 +173,14 @@ toFrontendHelper preloadMessages channel =
 
 toDiscordFrontendHelper :
     Bool
-    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
-    -> Array (MessageState messageId userId)
+    -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
+    -> IdArray messageId (MessageState messageId userId)
 toDiscordFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
-            setArray
+            IdArray.set
                 threadId
-                (case getArray threadId channel.messages of
+                (case IdArray.get threadId channel.messages of
                     Just message ->
                         MessageLoaded message
 
@@ -184,21 +191,6 @@ toDiscordFrontendHelper preloadMessages channel =
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
-
-
-getArray : Id messageId -> Array a -> Maybe a
-getArray id array =
-    Array.get (Id.toInt id) array
-
-
-setArray : Id messageId -> a -> Array a -> Array a
-setArray id message array =
-    Array.set (Id.toInt id) message array
-
-
-updateArray : Id messageId -> (a -> a) -> Array a -> Array a
-updateArray id message array =
-    Array.Extra.update (Id.toInt id) message array
 
 
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
@@ -246,8 +238,8 @@ otherUserId userId (DmChannelId userIdA userIdB) =
 loadOlderMessages :
     Id messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -255,7 +247,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
                 | messages =
                     SeqDict.foldl
                         (\messageId message messages ->
-                            setArray messageId (MessageLoaded message) messages
+                            IdArray.set messageId (MessageLoaded message) messages
                         )
                         channel.messages
                         messagesLoaded2
@@ -268,15 +260,15 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel
                 | messages =
                     SeqDict.foldl
-                        (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
+                        (\messageId message messages -> IdArray.set messageId (MessageLoaded message) messages)
                         channel.messages
                         messagesLoaded2
                 , visibleMessages = VisibleMessages.firstLoad channel

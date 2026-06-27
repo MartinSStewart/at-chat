@@ -1,4 +1,4 @@
-module NonemptyExtra exposing (appendList, minimumBy)
+module NonemptyExtra exposing (appendList, minimumBy, set, update)
 
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -17,3 +17,30 @@ minimumBy minFunc (Nonempty head tail) =
 
         Nothing ->
             head
+
+
+{-| Update value at index position. Index is modBy so that it wraps around if it's larger than the list.
+-}
+update : Int -> (a -> a) -> Nonempty a -> Nonempty a
+update int updateFunc nonempty =
+    let
+        index : Int
+        index =
+            modBy (List.Nonempty.length nonempty) int
+    in
+    List.Nonempty.indexedMap
+        (\i value ->
+            if i == index then
+                updateFunc value
+
+            else
+                value
+        )
+        nonempty
+
+
+{-| Set value at index position. Index is modBy so that it wraps around if it's larger than the list.
+-}
+set : Int -> a -> Nonempty a -> Nonempty a
+set int value nonempty =
+    update int (\_ -> value) nonempty

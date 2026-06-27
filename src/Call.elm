@@ -69,7 +69,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Route exposing (DmChannelHeaderTab(..), Route(..))
+import Route exposing (ChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -449,7 +449,7 @@ videoNodes localUser config loggedIn local =
                 MyUi.channelAndGuildColumnWidth config.windowSize + padding
 
         voiceChatY =
-            MyUi.channelHeaderHeight
+            MyUi.channelHeaderHeight + 4
 
         maxWidth : Int
         maxWidth =

@@ -4,7 +4,7 @@ import DmChannel
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (ChannelRoute(..), DmChannelHeaderTab(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -62,12 +62,12 @@ routeFuzzer =
         ]
 
 
-tabFuzzer : Fuzzer DmChannelHeaderTab
+tabFuzzer : Fuzzer ChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
         [ DmChannelHeaderTab_VoiceChat
-        , DmChannelHeaderTab_Go Nothing
-        , DmChannelHeaderTab_Go (Just (Id.fromInt 123))
+        , DmChannelHeaderTab_Games Nothing
+        , DmChannelHeaderTab_Games (Just (Id.fromInt 123))
         , DmChannelHeaderTab_Draw
         ]
 

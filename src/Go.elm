@@ -5,38 +5,39 @@ module Go exposing
     , DeadContext
     , GameModel
     , GameMsg(..)
-    , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , MatchData(..)
     , Model(..)
-    , Msg(..)
     , OutMsg(..)
     , Phase(..)
     , PublicGoMatchData
     , PublicGoMatchResponse
     , SetupModel
     , SetupMsg(..)
+    , Shared
     , SizeSelection(..)
     , Snapshot
     , SpectatorMsg(..)
     , Stone(..)
     , TimeControl
     , ValidatedSetup
-    , addAction
-    , addPublicLink
     , boardSize9
     , currentPlayersTurn
     , deadStones
     , foldActions
-    , hasPendingTurn
+    , gameView
     , initGame
-    , initMatchData
+    , initSetup
+    , isLocalUsersTurn
     , pressedKey
+    , publicGoMatchUrl
+    , setupView
     , spectatorView
-    , update
+    , updateAction
+    , updateGame
+    , updateSetup
     , updateSpectator
-    , view
+    , viewHeight
     )
 
 import Array exposing (Array)
@@ -45,20 +46,16 @@ import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
-import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
 import Env
 import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
+import Id exposing (GamePublicId, Id, UserId)
 import MyUi
-import Ports
 import Quantity
 import SecretId exposing (SecretId)
-import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import StringExtra
 import Svg exposing (Svg)
@@ -70,13 +67,12 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
-import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
-    , cache : GameState
+    , cache : Shared
     , blackPlayer : FrontendUser
     , whitePlayer : FrontendUser
     }
@@ -118,7 +114,7 @@ type alias TimeControl =
     }
 
 
-type alias GameState =
+type alias Shared =
     { board : Dict ( Int, Int ) Stone
     , lastMove : Maybe ( Int, Int )
     , blackCaptures : Int
@@ -251,8 +247,6 @@ type SizeSelection
     | CustomSize
 
 
-{-| OpaqueVariants
--}
 type Model
     = Setup SetupModel
     | Game GameModel
@@ -373,26 +367,7 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing }
 
 
-initMatchData : ValidatedSetup -> Array ActionWithTime -> Maybe (SecretId GoMatchPublicId) -> MatchData
-initMatchData setup actions publicLink =
-    { setup = setup, actions = actions, cache = foldActions setup actions, publicLink = publicLink } |> MatchData
-
-
-addAction : ActionWithTime -> MatchData -> MatchData
-addAction action (MatchData match) =
-    { match
-        | actions = Array.push action match.actions
-        , cache = updateAction match.setup action match.cache
-    }
-        |> MatchData
-
-
-addPublicLink : SecretId GoMatchPublicId -> MatchData -> MatchData
-addPublicLink publicLink (MatchData match) =
-    { match | publicLink = Just publicLink } |> MatchData
-
-
-initGameState : ValidatedSetup -> GameState
+initGameState : ValidatedSetup -> Shared
 initGameState setup =
     let
         positions : List ( Int, Int )
@@ -444,18 +419,6 @@ maxDimension =
 
 {-| OpaqueVariants
 -}
-type Msg
-    = GameMsg GameMsg
-    | SetupMsg SetupMsg
-    | SelectedMatch (Maybe (Id ChannelMessageId))
-    | PressedReset
-    | PressedShareGoMatch (Id ChannelMessageId)
-    | PressedCopyLink String
-    | NoOpMsg
-
-
-{-| Opaque
--}
 type SetupMsg
     = ChangedWidthInput String
     | ChangedHeightInput String
@@ -468,7 +431,7 @@ type SetupMsg
     | PressedStartGame
 
 
-{-| Opaque
+{-| OpaqueVariants
 -}
 type GameMsg
     = PressedCell ( Int, Int )
@@ -499,28 +462,14 @@ type alias ActionWithTime =
     { time : Time.Posix, change : Action }
 
 
-{-| OpaqueVariants
--}
-type MatchData
-    = MatchData
-        { setup : ValidatedSetup
-        , actions : Array ActionWithTime
-        , cache : GameState
-        , publicLink : Maybe (SecretId GoMatchPublicId)
-        }
-
-
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
-    | Action (Id ChannelMessageId) ActionWithTime
-    | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GoMatchPublicId))
+    | Action ActionWithTime
 
 
 type OutMsg
-    = NoOutMsg
-    | OutLocalChange LocalChange
-    | OutSelectMatch (Maybe (Id ChannelMessageId))
-    | CopyText String
+    = OutLocalChange LocalChange
+    | PlaySound String
 
 
 otherStone : Stone -> Stone
@@ -648,7 +597,7 @@ regionFlood setup board queue visited =
             regionFlood setup board newQueue newVisited
 
 
-currentSnapshot : GameState -> Snapshot
+currentSnapshot : Shared -> Snapshot
 currentSnapshot model =
     { board = model.board
     , currentPlayer = model.currentPlayer
@@ -657,7 +606,7 @@ currentSnapshot model =
     }
 
 
-actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> GameState -> Duration
+actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> Shared -> Duration
 actualTimeLeft currentTime player currentPlayer timeLeft model =
     case model.phase of
         Playing _ ->
@@ -681,7 +630,7 @@ actualTimeLeft currentTime player currentPlayer timeLeft model =
             timeLeft
 
 
-applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> GameState -> GameState
+applyIncrement : Time.Posix -> ValidatedSetup -> Stone -> Shared -> Shared
 applyIncrement currentTime setup mover model =
     case ( setup.timeControl, model.timeLeft ) of
         ( Just tc, Just { white, black } ) ->
@@ -710,7 +659,7 @@ applyIncrement currentTime setup mover model =
             { model | lastAction = Just currentTime }
 
 
-performPass : Time.Posix -> ValidatedSetup -> GameState -> GameState
+performPass : Time.Posix -> ValidatedSetup -> Shared -> Shared
 performPass currentTime setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
@@ -736,7 +685,7 @@ performPass currentTime setup model =
             model
 
 
-viewingSnapshot : GameState -> GameModel -> Snapshot
+viewingSnapshot : Shared -> GameModel -> Snapshot
 viewingSnapshot state model =
     if model.viewingMovesBack <= 0 then
         currentSnapshot state
@@ -760,7 +709,7 @@ jumpToLatest model =
     { model | viewingMovesBack = 0, lastError = Nothing }
 
 
-tryPlace : ValidatedSetup -> Int -> Int -> GameState -> Result String GameState
+tryPlace : ValidatedSetup -> Int -> Int -> Shared -> Result String Shared
 tryPlace setup x y model =
     if Dict.member ( x, y ) model.board then
         Err "There's already a stone there"
@@ -857,7 +806,7 @@ cycleOwner current =
             Nothing
 
 
-cycleTerritory : ValidatedSetup -> Int -> Int -> GameState -> GameState
+cycleTerritory : ValidatedSetup -> Int -> Int -> Shared -> Shared
 cycleTerritory setup x y model =
     if Dict.member ( x, y ) model.board then
         model
@@ -894,7 +843,7 @@ cycleTerritory setup x y model =
         { model | territoryMarks = newMarks }
 
 
-computeScore : ValidatedSetup -> GameState -> ( Float, Float )
+computeScore : ValidatedSetup -> Shared -> ( Float, Float )
 computeScore setup model =
     let
         ( blackTerritory, whiteTerritory ) =
@@ -980,7 +929,7 @@ deadStones ctx =
         ctx.board
 
 
-gameDeadContext : ValidatedSetup -> GameState -> DeadContext
+gameDeadContext : ValidatedSetup -> Shared -> DeadContext
 gameDeadContext setup model =
     { setup = setup
     , board = model.board
@@ -988,7 +937,7 @@ gameDeadContext setup model =
     }
 
 
-deadStonePositions : ValidatedSetup -> GameState -> Set ( Int, Int )
+deadStonePositions : ValidatedSetup -> Shared -> Set ( Int, Int )
 deadStonePositions setup model =
     deadStones (gameDeadContext setup model)
 
@@ -1051,137 +1000,28 @@ parseTimeControl model =
                                 Ok (Just { mainTime = Duration.minutes minutes, increment = Duration.seconds inc })
 
 
-update :
-    Time.Posix
-    -> Id UserId
-    -> Id UserId
-    -> Msg
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> Maybe Model
-    -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
-update time currentUserId otherUserId msg maybeMatchId matches model =
-    case msg of
-        PressedReset ->
-            ( model, Command.none, OutSelectMatch Nothing )
+pressedKey : String -> Shared -> Maybe Model -> Maybe Model
+pressedKey key shared model =
+    case model of
+        Just (Game model2) ->
+            case key of
+                "ArrowLeft" ->
+                    stepBack shared model2 |> Game |> Just
 
-        SelectedMatch newMatchId ->
-            ( model, Command.none, OutSelectMatch newMatchId )
-
-        GameMsg gameMsg ->
-            case maybeMatchId of
-                Just matchId ->
-                    case SeqDict.get matchId matches of
-                        Just (MatchData match) ->
-                            let
-                                ( game2, cmd, maybeChange ) =
-                                    updateGame
-                                        time
-                                        currentUserId
-                                        gameMsg
-                                        match.setup
-                                        match.cache
-                                        (case model of
-                                            Just (Game game) ->
-                                                game
-
-                                            Just (Setup _) ->
-                                                initGame
-
-                                            Nothing ->
-                                                initGame
-                                        )
-                            in
-                            ( Just game2
-                            , cmd
-                            , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
-                                |> localChangeToOut
-                            )
-
-                        Nothing ->
-                            ( model, Command.none, NoOutMsg )
-
-                Nothing ->
-                    ( model, Command.none, NoOutMsg )
-
-        SetupMsg setupMsg ->
-            case maybeMatchId of
-                Just _ ->
-                    ( model, Command.none, NoOutMsg )
-
-                Nothing ->
-                    let
-                        ( model2, cmd, maybeChange ) =
-                            updateSetup
-                                time
-                                currentUserId
-                                otherUserId
-                                setupMsg
-                                (case model of
-                                    Just (Game _) ->
-                                        initSetup
-
-                                    Just (Setup setup) ->
-                                        setup
-
-                                    Nothing ->
-                                        initSetup
-                                )
-                    in
-                    ( Just model2, cmd, localChangeToOut maybeChange )
-
-        PressedShareGoMatch matchId ->
-            ( model, Command.none, OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) )
-
-        PressedCopyLink text ->
-            ( model, Command.none, CopyText text )
-
-        NoOpMsg ->
-            ( model, Command.none, NoOutMsg )
-
-
-localChangeToOut : Maybe LocalChange -> OutMsg
-localChangeToOut maybeChange =
-    case maybeChange of
-        Just change ->
-            OutLocalChange change
-
-        Nothing ->
-            NoOutMsg
-
-
-pressedKey :
-    String
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> Maybe Model
-    -> Maybe Model
-pressedKey key maybeMatchId matches model =
-    case maybeMatchId of
-        Just matchId ->
-            case ( model, SeqDict.get matchId matches ) of
-                ( Just (Game model2), Just (MatchData match) ) ->
-                    case key of
-                        "ArrowLeft" ->
-                            stepBack match.cache model2 |> Game |> Just
-
-                        "ArrowRight" ->
-                            stepForward model2 |> Game |> Just
-
-                        _ ->
-                            Game model2 |> Just
+                "ArrowRight" ->
+                    stepForward model2 |> Game |> Just
 
                 _ ->
-                    model
+                    Game model2 |> Just
 
-        Nothing ->
+        _ ->
             model
 
 
-stepBack : GameState -> GameModel -> GameModel
-stepBack state model =
+stepBack : Shared -> GameModel -> GameModel
+stepBack shared model =
     { model
-        | viewingMovesBack = min (List.length state.history) (model.viewingMovesBack + 1)
+        | viewingMovesBack = min (List.length shared.history) (model.viewingMovesBack + 1)
         , lastError = Nothing
     }
 
@@ -1242,40 +1082,40 @@ updateSetup :
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+    -> ( Model, List OutMsg )
 updateSetup time creatorId otherPlayerId msg model =
     case msg of
         ChangedWidthInput input ->
-            ( Setup { model | widthInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | widthInput = input, error = Nothing }, [] )
 
         ChangedHeightInput input ->
-            ( Setup { model | heightInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | heightInput = input, error = Nothing }, [] )
 
         ChangedHandicapInput input ->
-            ( Setup { model | handicapInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | handicapInput = input, error = Nothing }, [] )
 
         ChangedKomiInput input ->
-            ( Setup { model | komiInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | komiInput = input, error = Nothing }, [] )
 
         ChangedMainTimeInput input ->
-            ( Setup { model | mainTimeInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | mainTimeInput = input, error = Nothing }, [] )
 
         ChangedIncrementInput input ->
-            ( Setup { model | incrementInput = input, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | incrementInput = input, error = Nothing }, [] )
 
         SelectedSize selection ->
-            ( Setup { model | sizeSelection = selection, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | sizeSelection = selection, error = Nothing }, [] )
 
         SelectedPlayingAs stone ->
-            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Command.none, Nothing )
+            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, [] )
 
         PressedStartGame ->
             case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
-                    ( Game initGame, Command.none, Just (StartMatch time setup) )
+                    ( Game initGame, [ OutLocalChange (StartMatch time setup) ] )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, Command.none, Nothing )
+                    ( Setup { model | error = Just error }, [] )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1302,12 +1142,12 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-foldActions : ValidatedSetup -> Array ActionWithTime -> GameState
+foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions setup actions =
     Array.foldl (updateAction setup) (initGameState setup) actions
 
 
-updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
+updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action model =
     let
         currentPlayer =
@@ -1377,7 +1217,7 @@ updateAction setup action model =
         model
 
 
-hasTimeToDoAction : Time.Posix -> GameState -> Bool
+hasTimeToDoAction : Time.Posix -> Shared -> Bool
 hasTimeToDoAction time model =
     case model.timeLeft of
         Just { black, white } ->
@@ -1404,108 +1244,101 @@ updateGame :
     -> Id UserId
     -> GameMsg
     -> ValidatedSetup
-    -> GameState
+    -> Shared
     -> GameModel
-    -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+    -> ( Model, List OutMsg )
 updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none, Nothing )
+                ( Game (jumpToLatest model), [] )
 
             else
                 case state.phase of
                     Playing _ ->
                         if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
-                                Ok updated ->
-                                    let
-                                        placed : Bool
-                                        placed =
-                                            updated.lastMove /= state.lastMove
-                                    in
+                                Ok _ ->
                                     ( Game model
-                                    , if placed then
-                                        Ports.playSound "pop"
-
-                                      else
-                                        Command.none
-                                    , PlaceStone x y |> Just
+                                    , [ PlaySound "pop"
+                                      , Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
+                                      ]
                                     )
 
                                 Err error ->
-                                    ( Game { model | lastError = Just error }, Command.none, Nothing )
+                                    ( Game { model | lastError = Just error }, [] )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     Marking ->
                         if isLocalUsersTurn currentUserId setup state then
-                            ( Game model, Command.none, MarkTerritory x y |> Just )
+                            ( Game model
+                            , [ Action { time = currentTime, change = MarkTerritory x y } |> OutLocalChange ]
+                            )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     Confirming ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
                     Scored _ ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
         PressedPass ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none, Nothing )
+                ( Game (jumpToLatest model), [] )
 
             else
                 case ( state.phase, hasTimeToDoAction currentTime state ) of
                     ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( Game model
-                            , Command.none
-                            , Just PassTurn
+                            , [ Action { time = currentTime, change = PassTurn } |> OutLocalChange ]
                             )
 
                         else
-                            ( Game model, Command.none, Nothing )
+                            ( Game model, [] )
 
                     _ ->
-                        ( Game model, Command.none, Nothing )
+                        ( Game model, [] )
 
         PressedDoneMarking ->
             case state.phase of
                 Marking ->
-                    ( Game model, Command.none, Just FinishedMarking )
+                    ( Game model
+                    , [ Action { time = currentTime, change = FinishedMarking } |> OutLocalChange ]
+                    )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         PressedAgree ->
             case state.phase of
                 Confirming ->
                     ( Game model
-                    , Command.none
-                    , Just AcceptTerritory
+                    , [ Action { time = currentTime, change = AcceptTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         PressedDisagree ->
             case state.phase of
                 Confirming ->
                     ( Game model
-                    , Command.none
-                    , Just RejectTerritory
+                    , [ Action { time = currentTime, change = RejectTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, Command.none, Nothing )
+                    ( Game model, [] )
 
         SpectatorMsg spectatorMsg ->
-            ( Game (updateSpectator spectatorMsg state model), Command.none, Nothing )
+            ( Game (updateSpectator spectatorMsg state model), [] )
 
 
-updateSpectator : SpectatorMsg -> GameState -> GameModel -> GameModel
+updateSpectator : SpectatorMsg -> Shared -> GameModel -> GameModel
 updateSpectator msg state model =
     case msg of
         ChangedViewingMove moveNumber ->
@@ -1545,210 +1378,7 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view :
-    Time.Posix
-    -> Coord CssPixels
-    -> Maybe MyUi.LastCopy
-    -> LocalUser
-    -> Id UserId
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> Maybe Model
-    -> Element Msg
-view currentTime windowSize lastCopied localUser otherUserId maybeMatchId matches model =
-    let
-        isMobile : Bool
-        isMobile =
-            MyUi.isMobile { windowSize = windowSize }
-    in
-    Ui.el
-        [ Ui.height (Ui.px (viewHeight windowSize))
-        , Ui.scrollable
-        , Ui.background MyUi.tabBackground
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , MyUi.noShrinking
-        ]
-        (Ui.column
-            []
-            [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
-            , Ui.el [ Ui.paddingXY 16 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
-            , case maybeMatchId of
-                Just matchId ->
-                    case SeqDict.get matchId matches of
-                        Just match ->
-                            gameView
-                                currentTime
-                                windowSize
-                                localUser
-                                match
-                                (case model of
-                                    Just (Game game) ->
-                                        game
-
-                                    Just (Setup _) ->
-                                        initGame
-
-                                    Nothing ->
-                                        initGame
-                                )
-                                |> Ui.map GameMsg
-
-                        Nothing ->
-                            Ui.text "Match not found"
-
-                Nothing ->
-                    Ui.Lazy.lazy3
-                        setupView
-                        (localUser.session.userId == otherUserId)
-                        windowSize
-                        (case model of
-                            Just (Game _) ->
-                                initSetup
-
-                            Just (Setup setup) ->
-                                setup
-
-                            Nothing ->
-                                initSetup
-                        )
-                        |> Ui.map SetupMsg
-            ]
-        )
-
-
-matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
-matchSwitcherView isMobile lastCopied maybeMatchId matches =
-    if SeqDict.isEmpty matches then
-        Ui.none
-
-    else
-        let
-            newMatchValue : String
-            newMatchValue =
-                " "
-
-            currentValue : String
-            currentValue =
-                case maybeMatchId of
-                    Just matchId ->
-                        String.fromInt (Id.toInt matchId)
-
-                    Nothing ->
-                        newMatchValue
-
-            onSelect : String -> Msg
-            onSelect text =
-                if text == newMatchValue then
-                    SelectedMatch Nothing
-
-                else
-                    case String.toInt text of
-                        Just n ->
-                            SelectedMatch (Just (Id.fromInt n))
-
-                        Nothing ->
-                            SelectedMatch Nothing
-        in
-        Ui.row
-            [ Ui.spacing 8
-            , Ui.padding
-                (if isMobile then
-                    8
-
-                 else
-                    12
-                )
-            , Ui.height Ui.fill
-            ]
-            [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
-            , Ui.html
-                (Html.select
-                    [ Html.Attributes.id "go_matchSwitcher"
-                    , Html.Attributes.value currentValue
-                    , Html.Events.onInput onSelect
-                    , Html.Attributes.style "height" "100%"
-                    , Html.Attributes.attribute "aria-label" "View match"
-                    , Html.Attributes.style "padding"
-                        (if isMobile then
-                            "4px"
-
-                         else
-                            "7px 8px"
-                        )
-                    , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
-                    , Html.Attributes.style "border-radius" "4px"
-                    , Html.Attributes.style "font-size"
-                        (if isMobile then
-                            "14px"
-
-                         else
-                            "16px"
-                        )
-                    , Html.Attributes.style "background-color" "rgb(32,40,70)"
-                    , Html.Attributes.style "color" "rgb(255,255,255)"
-                    , Html.Attributes.style "cursor" "pointer"
-                    ]
-                    (Html.option
-                        [ Html.Attributes.value newMatchValue
-                        , Html.Attributes.selected (maybeMatchId == Nothing)
-                        ]
-                        [ Html.text "Setup new match" ]
-                        :: List.map
-                            (\( matchId, _ ) ->
-                                let
-                                    value : String
-                                    value =
-                                        Id.toString matchId
-                                in
-                                Html.option
-                                    [ Html.Attributes.value value
-                                    , Html.Attributes.selected (Just matchId == maybeMatchId)
-                                    ]
-                                    [ Html.text ("Match #" ++ value) ]
-                            )
-                            (SeqDict.toList matches)
-                    )
-                )
-            , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-            , case maybeMatchId of
-                Just matchId ->
-                    Ui.row
-                        [ Ui.spacing 4, Ui.alignRight ]
-                        (case SeqDict.get matchId matches of
-                            Just (MatchData match) ->
-                                case match.publicLink of
-                                    Just publicLink ->
-                                        [ Ui.text "Share"
-                                        , MyUi.copyBox
-                                            (Dom.id "go_shareLink")
-                                            PressedCopyLink
-                                            NoOpMsg
-                                            { lastCopied = lastCopied }
-                                            (publicGoMatchUrl publicLink)
-                                        ]
-
-                                    Nothing ->
-                                        [ MyUi.simpleButton
-                                            (Dom.id "go_share")
-                                            (PressedShareGoMatch matchId)
-                                            (Ui.text "Share")
-                                        ]
-
-                            Nothing ->
-                                [ MyUi.simpleButton
-                                    (Dom.id "go_share")
-                                    (PressedShareGoMatch matchId)
-                                    (Ui.text "Share")
-                                ]
-                        )
-
-                Nothing ->
-                    Ui.none
-            ]
-
-
-publicGoMatchUrl : SecretId GoMatchPublicId -> String
+publicGoMatchUrl : SecretId GamePublicId -> String
 publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
@@ -1990,7 +1620,7 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
+clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> Shared -> ValidatedSetup -> Element msg
 clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
@@ -2042,7 +1672,7 @@ clockView currentTime blackUser whiteUser state setup =
         ]
 
 
-currentScore : ValidatedSetup -> GameState -> Stone -> Float
+currentScore : ValidatedSetup -> Shared -> Stone -> Float
 currentScore setup state stone =
     case state.phase of
         Scored s ->
@@ -2166,33 +1796,19 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
         ]
 
 
-isLocalUsersTurn : Id UserId -> ValidatedSetup -> GameState -> Bool
+isLocalUsersTurn : Id UserId -> ValidatedSetup -> Shared -> Bool
 isLocalUsersTurn currentUserId setup state =
-    case state.currentPlayer of
-        Black ->
-            setup.blackPlayer == currentUserId
+    case state.phase of
+        Scored _ ->
+            False
 
-        White ->
-            setup.whitePlayer == currentUserId
+        _ ->
+            case state.currentPlayer of
+                Black ->
+                    setup.blackPlayer == currentUserId
 
-
-hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
-hasPendingTurn userId matches =
-    SeqDict.foldl
-        (\matchId (MatchData match) set ->
-            case match.cache.phase of
-                Scored _ ->
-                    set
-
-                _ ->
-                    if isLocalUsersTurn userId match.setup match.cache then
-                        SeqSet.insert matchId set
-
-                    else
-                        set
-        )
-        SeqSet.empty
-        matches
+                White ->
+                    setup.whitePlayer == currentUserId
 
 
 spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
@@ -2202,7 +1818,7 @@ spectatorView currentTime windowSize data model =
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
 
-        state : GameState
+        state : Shared
         state =
             data.cache
     in
@@ -2245,18 +1861,15 @@ gameView :
     Time.Posix
     -> Coord CssPixels
     -> LocalUser
-    -> MatchData
+    -> ValidatedSetup
+    -> Shared
     -> GameModel
     -> Element GameMsg
-gameView currentTime windowSize localUser (MatchData data) model =
+gameView currentTime windowSize localUser setup state model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
-
-        state : GameState
-        state =
-            data.cache
     in
     Ui.column
         [ Ui.spacing
@@ -2279,7 +1892,7 @@ gameView currentTime windowSize localUser (MatchData data) model =
         [ Ui.column
             []
             [ statusView currentTime state
-            , (if isLocalUsersTurn localUser.session.userId data.setup state && hasTimeToDoAction currentTime state then
+            , (if isLocalUsersTurn localUser.session.userId setup state && hasTimeToDoAction currentTime state then
                 case state.phase of
                     Playing { previousPlayerPassed } ->
                         Ui.el
@@ -2324,11 +1937,11 @@ gameView currentTime windowSize localUser (MatchData data) model =
             ]
             [ clockView
                 currentTime
-                (User.getUser data.setup.blackPlayer localUser)
-                (User.getUser data.setup.whitePlayer localUser)
+                (User.getUser setup.blackPlayer localUser)
+                (User.getUser setup.whitePlayer localUser)
                 state
-                data.setup
-            , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map PressedCell
+                setup
+            , Ui.Lazy.lazy4 boardView windowSize setup state model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none
@@ -2344,7 +1957,7 @@ gameView currentTime windowSize localUser (MatchData data) model =
         ]
 
 
-statusView : Time.Posix -> GameState -> Element msg
+statusView : Time.Posix -> Shared -> Element msg
 statusView currentTime state =
     Ui.el
         [ Ui.Font.weight 600, Ui.paddingXY 16 0 ]
@@ -2399,7 +2012,7 @@ winnerSuffix b w =
         " (tie)"
 
 
-historyView : GameState -> GameModel -> Element SpectatorMsg
+historyView : Shared -> GameModel -> Element SpectatorMsg
 historyView state model =
     let
         total : Int
@@ -2433,7 +2046,7 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element ( Int, Int )
+boardView : Coord CssPixels -> ValidatedSetup -> Shared -> GameModel -> Element ( Int, Int )
 boardView windowSize setup state model =
     let
         isMobile : Bool
@@ -2615,7 +2228,7 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameState -> List (Svg msg)
+lastMoveMarker : Bool -> Shared -> List (Svg msg)
 lastMoveMarker viewingPast state =
     case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->

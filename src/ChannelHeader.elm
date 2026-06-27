@@ -9,18 +9,18 @@ module ChannelHeader exposing
     , thread
     )
 
-import Array exposing (Array)
 import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Go
+import Game
 import GuildIcon
 import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
 import Message exposing (MessageState(..))
@@ -28,12 +28,12 @@ import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
+import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
 import Thread
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
+import Types exposing (Drag(..), FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Anim
@@ -201,7 +201,7 @@ chattingWithYourself data local =
 {-| Toggles a mode where the user can draw freehand on top of messages.
 Only available on non-mobile since it requires a mouse.
 -}
-drawButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
+drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg
 drawButton isMobile currentTab =
     if isMobile then
         Ui.none
@@ -310,8 +310,8 @@ headerBackButton htmlId onPress =
 channelHeaderTabRow :
     Bool
     -> HtmlId
-    -> DmChannelHeaderTab
-    -> Maybe DmChannelHeaderTab
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> List (Element FrontendMsg)
     -> Element FrontendMsg
 channelHeaderTabRow isMobile htmlId tab currentTab content =
@@ -322,7 +322,7 @@ channelHeaderTabRow isMobile htmlId tab currentTab content =
         content
 
 
-channelHeaderTabAttributes : Int -> Int -> Bool -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> List (Ui.Attribute msg)
+channelHeaderTabAttributes : Int -> Int -> Bool -> ChannelHeaderTab -> Maybe ChannelHeaderTab -> List (Ui.Attribute msg)
 channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
     let
         isSelected =
@@ -355,15 +355,15 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
 channelHeaderTab :
     Bool
     -> HtmlId
-    -> DmChannelHeaderTab
-    -> Maybe DmChannelHeaderTab
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> Element FrontendMsg
     -> Element FrontendMsg
 channelHeaderTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
 
 
-privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> Element FrontendMsg
+privateChatWithYourself : Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg
 privateChatWithYourself isMobile currentTab local =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -376,12 +376,12 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
+            , Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
             ]
         ]
 
 
-privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
+privateChatWith : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
 privateChatWith isMobile currentTab otherUserId local name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -395,40 +395,37 @@ privateChatWith isMobile currentTab otherUserId local name =
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
             , SeqDict.get otherUserId local.dmChannels
-                |> Maybe.map .goMatches
+                |> Maybe.map .games
                 |> Maybe.withDefault SeqDict.empty
-                |> Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId
+                |> Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId
             ]
         ]
 
 
-goGameButton :
+gameButton :
     Bool
-    -> Maybe DmChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> Id UserId
-    -> SeqDict (Id ChannelMessageId) Go.MatchData
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> Element FrontendMsg
-goGameButton isMobile currentTab userId goMatches =
+gameButton isMobile currentTab userId goMatches =
     let
-        _ =
-            Debug.log "rerender goGameButton" ()
-
         viewingGo : Bool
         viewingGo =
             case currentTab of
-                Just (DmChannelHeaderTab_Go _) ->
+                Just (DmChannelHeaderTab_Games _) ->
                     True
 
                 _ ->
                     False
 
         hasPendingTurn =
-            Go.hasPendingTurn userId goMatches
+            Game.hasPendingTurn userId goMatches
     in
     channelHeaderTab
         isMobile
-        (Dom.id "guild_openGoMatch")
-        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Go)
+        (Dom.id "guild_openGamesTab")
+        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Games)
         currentTab
         (Ui.el
             [ Ui.width Ui.shrink
@@ -457,7 +454,7 @@ goGameButton isMobile currentTab userId goMatches =
         )
 
 
-voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
+voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
 voiceChatButton isMobile currentTab otherUserId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) OneOrGreater
@@ -520,7 +517,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         ]
 
 
-discordPrivateChatWith : Bool -> Maybe DmChannelHeaderTab -> String -> Element FrontendMsg
+discordPrivateChatWith : Bool -> Maybe ChannelHeaderTab -> String -> Element FrontendMsg
 discordPrivateChatWith isMobile currentTab name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -551,7 +548,7 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Go _ ->
+                        DmChannelHeaderTab_Games _ ->
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
@@ -576,17 +573,27 @@ tabBodyView local loggedIn model =
             case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (DmChannelHeaderTab_Go maybeMatchId) ->
-                            Go.view
+                        Just (DmChannelHeaderTab_Games maybeMatchId) ->
+                            Game.view
                                 model.time
                                 model.windowSize
+                                (case model.drag of
+                                    NoDrag ->
+                                        Nothing
+
+                                    DragStart _ dragging ->
+                                        Just dragging
+
+                                    Dragging dragging ->
+                                        Just dragging.touches
+                                )
                                 model.lastCopied
                                 local.localUser
                                 otherUserId
                                 maybeMatchId
-                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
-                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
-                                |> Ui.map GoMsg
+                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
+                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
+                                |> Ui.map GameMsg
                                 |> Just
 
                         Just DmChannelHeaderTab_VoiceChat ->
@@ -636,7 +643,7 @@ tabBodyView local loggedIn model =
                         DmChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Go _ ->
+                        DmChannelHeaderTab_Games _ ->
                             Nothing
 
                         DmChannelHeaderTab_Draw ->
@@ -730,9 +737,9 @@ tabBodyView local loggedIn model =
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
 drawingCanUndoOrRedo guildOrDmId anchor local =
     let
-        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : Array (MessageState messageId userId) } -> ( Bool, Bool )
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : IdArray messageId (MessageState messageId userId) } -> ( Bool, Bool )
         noThreadHelper userId anchor2 messageId channel2 =
-            case DmChannel.getArray messageId channel2.messages of
+            case IdArray.get messageId channel2.messages of
                 Just (MessageLoaded message) ->
                     let
                         drawing : Drawing.Drawing userId

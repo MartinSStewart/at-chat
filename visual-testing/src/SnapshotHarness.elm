@@ -5,12 +5,12 @@ port module SnapshotHarness exposing (main)
 
 import Browser exposing (Document, UrlRequest)
 import Browser.Navigation
+import E2ETests
 import Effect.Snapshot exposing (Snapshot)
 import Effect.Test as T
 import Html
 import List.Extra
 import List.Nonempty
-import RecordedTests
 import Task
 import Types exposing (FrontendMsg)
 import Url exposing (Url)
@@ -57,7 +57,7 @@ init _ _ _ =
             Debug.log "init" ()
     in
     ( { currentIndex = -1, snapshots = Nothing, gotFirstSnapshotRequest = False }
-    , RecordedTests.setup.cmds
+    , E2ETests.setup.cmds
         |> Task.mapError
             (\error ->
                 let

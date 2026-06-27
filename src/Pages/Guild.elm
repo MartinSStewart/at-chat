@@ -17,8 +17,6 @@ module Pages.Guild exposing
     , typingDebouncerDelay
     )
 
-import Array exposing (Array)
-import Array.Extra
 import Bitwise
 import Call
 import ChannelDescription
@@ -42,6 +40,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
@@ -50,7 +49,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (Message(..), MessageState(..), UserTextMessageData)
+import Message exposing (Game(..), Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
@@ -96,7 +95,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : IdArray messageId (MessageState messageId userId) }
     -> ChannelNotificationType
 channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -121,14 +120,14 @@ channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelI
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId userId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : IdArray messageId (MessageState messageId userId) } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
-            Array.length channel.messages - 1 - Id.toInt lastViewed
+            IdArray.length channel.messages - 1 - Id.toInt lastViewed
 
         Nothing ->
-            Array.length channel.messages
+            IdArray.length channel.messages
 
 
 channelNewMessageCount :
@@ -136,8 +135,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : Array (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId) }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =
@@ -1567,10 +1566,10 @@ pageMissingMobile text =
 threadPreviewText :
     SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> { b | messages : Array (MessageState ChannelMessageId userId) }
+    -> { b | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId) }
     -> String
 threadPreviewText allUsers threadMessageIndex channel =
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             LocalState.messageToString allUsers message
 
@@ -2108,7 +2107,7 @@ conversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -2170,7 +2169,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2368,18 +2367,18 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( IdArray.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
 
-maybeRepliedTo : Message messageId userId -> { a | messages : Array (MessageState messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
+maybeRepliedTo : Message messageId userId -> { a | messages : IdArray messageId (MessageState messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
 maybeRepliedTo message channel =
     case message of
         UserTextMessage data ->
             case data.repliedTo of
                 Just repliedToIndex ->
-                    case DmChannel.getArray repliedToIndex channel.messages of
+                    case IdArray.get repliedToIndex channel.messages of
                         Just (MessageLoaded message2) ->
                             Just ( repliedToIndex, message2 )
 
@@ -2398,7 +2397,7 @@ maybeRepliedTo message channel =
         CallStarted _ _ _ _ _ ->
             Nothing
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Nothing
 
 
@@ -2414,7 +2413,7 @@ discordConversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -2476,7 +2475,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2668,7 +2667,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( IdArray.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
@@ -2802,7 +2801,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -2952,7 +2951,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( IdArray.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -3020,7 +3019,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
         isSelectingAnchor =
             drawingIsSelectingAnchor loggedIn model
     in
-    Array.foldr
+    IdArray.foldr
         (\messageState ( index, maybeLastDate, list ) ->
             case messageState of
                 MessageLoaded message ->
@@ -3169,7 +3168,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( IdArray.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -3485,12 +3484,12 @@ replyToHeader :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Maybe (Id messageId)
     -> SeqDict userId { a | name : PersonName }
-    -> { b | messages : Array (MessageState messageId2 userId) }
+    -> { b | messages : IdArray messageId2 (MessageState messageId2 userId) }
     -> Element FrontendMsg
 replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
         Just messageIndex ->
-            case DmChannel.getArray messageIndex channel.messages of
+            case IdArray.get (Id.changeType messageIndex) channel.messages of
                 Just (MessageLoaded message) ->
                     case message of
                         UserTextMessage data ->
@@ -3505,7 +3504,7 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         CallStarted _ _ userId _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
-                        GoMatchStarted _ userId _ _ ->
+                        GameStarted _ userId _ _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -3607,7 +3606,7 @@ conversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -3782,7 +3781,7 @@ discordConversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -4399,7 +4398,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) }
+    -> { a | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -4431,7 +4430,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just edit ->
@@ -4513,7 +4512,7 @@ discordThreadStarterMessage :
     Bool
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
+    -> { a | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -4554,7 +4553,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case IdArray.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just edit ->
@@ -4763,6 +4762,9 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                             Ui.text "<Missing>"
                 )
                 (NonemptySet.toNonemptyList users)
+
+        nameCount =
+            List.Nonempty.length names
     in
     Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
@@ -4790,15 +4792,25 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                 CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
         , Ui.Prose.paragraph
             [ Ui.Font.size 14, Ui.width Ui.fill ]
-            (case List.Nonempty.tail names of
-                [] ->
-                    [ List.Nonempty.head names ]
+            (if nameCount > 10 then
+                let
+                    visible =
+                        List.Nonempty.take 8 names
+                            |> List.Nonempty.toList
+                            |> List.intersperse (Ui.text ", ")
+                in
+                visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
 
-                [ two ] ->
-                    [ List.Nonempty.head names, Ui.text " and ", two ]
+             else
+                case List.Nonempty.tail names of
+                    [] ->
+                        [ List.Nonempty.head names ]
 
-                rest ->
-                    List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
+                    [ two ] ->
+                        [ List.Nonempty.head names, Ui.text " and ", two ]
+
+                    rest ->
+                        List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
             )
         ]
 
@@ -4945,7 +4957,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Ui.none
 
 
@@ -5076,7 +5088,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         CallStarted _ _ _ _ _ ->
             Ui.none
 
-        GoMatchStarted _ _ _ _ ->
+        GameStarted _ _ _ _ _ ->
             Ui.none
 
 
@@ -5441,7 +5453,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5457,7 +5469,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5602,7 +5614,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5618,7 +5630,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5749,7 +5761,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5762,7 +5774,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5890,7 +5902,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     ]
                 )
 
-        GoMatchStarted time userId reactions drawings ->
+        GameStarted time userId reactions drawings game ->
             threadMessageContainer
                 highlight
                 messageId
@@ -5903,7 +5915,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -6286,7 +6298,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
         Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GoMatchStarted _ userId _ _ ) ->
+        Just ( repliedToIndex, GameStarted _ userId _ _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
@@ -6405,14 +6417,24 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-goMatchStartedCard messageId userId allUsers =
-    eventCard
-        (Dom.id ("guild_goMatchStartedCard_" ++ Id.toString messageId))
-        MessageViewMsg_PressedGoMatchStartedCard
-        (Ui.html Icons.go)
-        (User.toString userId allUsers)
-        "started a Go match"
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Game -> Element MessageViewMsg
+goMatchStartedCard messageId userId allUsers game =
+    case game of
+        Game_Go ->
+            eventCard
+                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                MessageViewMsg_PressedGameStartedCard
+                (Ui.html Icons.go)
+                (User.toString userId allUsers)
+                "started a Go match"
+
+        Game_WordSpellingGame ->
+            eventCard
+                (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
+                MessageViewMsg_PressedGameStartedCard
+                (Ui.html Icons.go)
+                (User.toString userId allUsers)
+                "started a Word Spelling game"
 
 
 eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
@@ -6763,7 +6785,7 @@ previewThreadLastMessage :
 previewThreadLastMessage timezone customEmojis allUsers messageId thread =
     let
         lastMessage =
-            Array.Extra.last thread.messages
+            IdArray.last thread.messages
     in
     Html.button
         [ Html.Attributes.style "white-space" "nowrap"
@@ -6789,7 +6811,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
             ]
             [ Icons.hashtag
-            , case Array.length thread.messages of
+            , case IdArray.length thread.messages of
                 1 ->
                     Html.text "1 message"
 
@@ -6850,7 +6872,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GoMatchStarted _ userId _ _ ->
+                            GameStarted _ userId _ _ _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -7261,7 +7283,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                                 )
                                 thread
                     in
-                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                    case ( hasNotifications, isSelected, IdArray.last thread.messages ) of
                         ( NoNotification, False, Just (MessageLoaded message) ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
                                 Just ( threadMessageIndex, hasNotifications, isSelected )
@@ -7403,7 +7425,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                                 )
                                 thread
                     in
-                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                    case ( hasNotifications, isSelected, IdArray.last thread.messages ) of
                         ( NoNotification, False, Just (MessageLoaded message) ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
                                 Just ( threadMessageIndex, hasNotifications, isSelected )
@@ -7776,7 +7798,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (\( otherUserId, dmChannel ) ->
                 case User.getUser otherUserId localUser of
                     Just otherUser ->
-                        ( case Array.Extra.last dmChannel.messages of
+                        ( case IdArray.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
                                 Message.createdAt message2
 
@@ -7810,7 +7832,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (SeqDict.toList dmChannelsIncludingCurrentUser)
             ++ List.map
                 (\( channelId, dmChannel ) ->
-                    ( case Array.Extra.last dmChannel.messages of
+                    ( case IdArray.last dmChannel.messages of
                         Just (MessageLoaded message2) ->
                             Message.createdAt message2
 
@@ -7915,7 +7937,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
 
         message : MessageState ChannelMessageId (Id UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            IdArray.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -7949,8 +7971,8 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ _ ->
-                                    LocalState.goMatchStartedText
+                                GameStarted _ _ _ _ game ->
+                                    LocalState.gameStartedText game
 
                         MessageUnloaded ->
                             ""
@@ -8039,7 +8061,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         message : MessageState ChannelMessageId (Discord.Id Discord.UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            IdArray.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -8078,8 +8100,8 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 CallStarted _ endedAt _ _ _ ->
                                     LocalState.callStartedText endedAt
 
-                                GoMatchStarted _ _ _ _ ->
-                                    LocalState.goMatchStartedText
+                                GameStarted _ _ _ _ game ->
+                                    LocalState.gameStartedText game
 
                         MessageUnloaded ->
                             ""
@@ -8221,7 +8243,7 @@ editChannelFormView isMobile2 guildId channelId channel form =
     let
         isEmpty : Bool
         isEmpty =
-            Array.isEmpty channel.messages
+            IdArray.isEmpty channel.messages
 
         channelNameString : String
         channelNameString =

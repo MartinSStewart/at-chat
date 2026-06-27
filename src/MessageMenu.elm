@@ -7,11 +7,9 @@ module MessageMenu exposing
     , view
     )
 
-import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -20,6 +18,7 @@ import FileStatus
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
@@ -426,9 +425,9 @@ menuItems :
     -> { items : List (Element FrontendMsg), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
+        helper : Id messageId -> { a | messages : IdArray messageId (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case IdArray.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
@@ -444,9 +443,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
+        discordHelper : Id messageId -> { a | messages : IdArray messageId (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         discordHelper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case IdArray.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
@@ -855,7 +854,7 @@ messageCustomEmojiIds message =
         CallStarted _ _ _ reactions _ ->
             reactionIds reactions
 
-        GoMatchStarted _ _ reactions _ ->
+        GameStarted _ _ reactions _ _ ->
             reactionIds reactions
 
 

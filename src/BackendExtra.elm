@@ -56,6 +56,7 @@ import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Extra
@@ -882,7 +883,7 @@ adminData model lastLogPageViewed =
     , dmChannels =
         SeqDict.map
             (\_ channel ->
-                { messageCount = Array.length channel.messages
+                { messageCount = IdArray.length channel.messages
                 , threadCount = SeqDict.size channel.threads
                 }
             )
@@ -891,8 +892,8 @@ adminData model lastLogPageViewed =
         SeqDict.map
             (\_ channel ->
                 { members = channel.members
-                , messageCount = Array.length channel.messages
-                , firstMessage = Array.get 0 channel.messages
+                , messageCount = IdArray.length channel.messages
+                , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
                 }
             )
             model.discordDmChannels
@@ -924,9 +925,9 @@ adminData model lastLogPageViewed =
                     SeqDict.map
                         (\_ channel ->
                             { name = channel.name
-                            , messageCount = Array.length channel.messages
+                            , messageCount = IdArray.length channel.messages
                             , threadCount = SeqDict.size channel.threads
-                            , firstMessage = Array.get 0 channel.messages
+                            , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
                             }
                         )
                         guild.channels
@@ -942,7 +943,7 @@ adminData model lastLogPageViewed =
                     SeqDict.map
                         (\_ channel ->
                             { name = channel.name
-                            , messageCount = Array.length channel.messages
+                            , messageCount = IdArray.length channel.messages
                             }
                         )
                         guild.channels
@@ -1707,8 +1708,8 @@ toBackendLog toBackend =
                 Local_VoiceChatChange _ ->
                     ToBackendLog_Local_VoiceChatChange
 
-                Local_Go _ _ ->
-                    ToBackendLog_Local_Go
+                Local_Game _ _ ->
+                    ToBackendLog_Local_Game
 
                 Local_Drawing _ _ _ ->
                     ToBackendLog_Local_Drawing
