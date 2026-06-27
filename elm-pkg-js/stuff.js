@@ -540,10 +540,16 @@ exports.init = async function init(app)
     app.ports.play_sound.subscribe((a) => {
         try {
             const source = context.createBufferSource();
-            if (sounds[a]) {
-                source.buffer = sounds[a];
+            if (sounds[a.name]) {
+                source.buffer = sounds[a.name];
                 source.connect(context.destination);
-                source.start(0);
+                if (a.time === null) {
+                    source.start(0);
+                } else {
+                    // a.time is wall-clock milliseconds; convert it into the audio context clock.
+                    const delaySeconds = (a.time - Date.now()) / 1000;
+                    source.start(delaySeconds <= 0 ? 0 : context.currentTime + delaySeconds);
+                }
             }
         }
         catch (error) {

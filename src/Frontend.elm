@@ -2035,8 +2035,8 @@ updateLoaded msg model =
                                     List.foldl
                                         (\outMsg ( accModel, cmds ) ->
                                             case outMsg of
-                                                Game.PlaySound sound ->
-                                                    ( accModel, Ports.playSound sound :: cmds )
+                                                Game.PlaySound maybeTime sound ->
+                                                    ( accModel, Ports.playSound maybeTime sound :: cmds )
 
                                                 Game.CopyText text ->
                                                     let
@@ -6637,29 +6637,44 @@ updateLoadedFromBackend msg model =
                                                     ( loggedIn2
                                                     , case actionWithTime.change of
                                                         Go.PlaceStone _ _ ->
-                                                            Ports.playSound "pop"
+                                                            Ports.playSound Nothing "pop"
 
                                                         Go.PassTurn ->
-                                                            Ports.playSound "pop"
+                                                            Ports.playSound Nothing "pop"
 
                                                         Go.MarkTerritory _ _ ->
                                                             Command.none
 
                                                         Go.FinishedMarking ->
-                                                            Ports.playSound "pop"
+                                                            Ports.playSound Nothing "pop"
 
                                                         Go.AcceptTerritory ->
-                                                            Ports.playSound "pop"
+                                                            Ports.playSound Nothing "pop"
 
                                                         Go.RejectTerritory ->
-                                                            Ports.playSound "pop"
+                                                            Ports.playSound Nothing "pop"
                                                     )
 
                                         Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 
-                                        Game.LocalChange_WordSpellingGame _ _ ->
-                                            ( loggedIn2, Command.none )
+                                        Game.LocalChange_WordSpellingGame _ wsChange ->
+                                            ( loggedIn2
+                                            , case wsChange of
+                                                WordSpellingGame.Action actionWithTime ->
+                                                    case actionWithTime.change of
+                                                        WordSpellingGame.PlaceWord placedWord (FilledInByBackend WordSpellingGame.IsValid) ->
+                                                            -- Pop as the other player's tiles land on the board.
+                                                            Ports.playSound
+                                                                (Just (WordSpellingGame.placementLandTime actionWithTime.time placedWord))
+                                                                "pop"
+
+                                                        _ ->
+                                                            Command.none
+
+                                                WordSpellingGame.StartMatch _ _ ->
+                                                    Command.none
+                                            )
 
                                 _ ->
                                     ( loggedIn2, Command.none )

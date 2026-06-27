@@ -33,6 +33,7 @@ module WordSpellingGame exposing
     , isAnimating
     , isPlayerTurn
     , placeWord
+    , placementLandTime
     , setupView
     , updateAction
     , updateGame
@@ -149,6 +150,7 @@ initGame time setup =
 
 type OutMsg
     = OutLocalChange LocalChange
+    | PlaySound (Maybe Time.Posix) String
 
 
 type LocalChange
@@ -747,6 +749,9 @@ updateGame time currentUserId setup shared msg model =
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
                             |> OutLocalChange
+
+                      -- The refilled tray tiles fade in tileFadeDelay later, so pop then.
+                      , PlaySound (Just (addMs tileFadeDelay time)) "pop"
                       ]
                     )
 
@@ -1259,6 +1264,19 @@ tileFadeDrift =
 elapsedMs : Time.Posix -> Time.Posix -> Float
 elapsedMs currentTime startTime =
     toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
+
+
+addMs : Float -> Time.Posix -> Time.Posix
+addMs ms time =
+    Time.millisToPosix (Time.posixToMillis time + round ms)
+
+
+{-| When the tiles of a placement finish sliding onto the board (as seen by a player watching it
+happen), so a sound can be scheduled to land with them.
+-}
+placementLandTime : Time.Posix -> PlacedWord -> Time.Posix
+placementLandTime placementTime placedWord =
+    addMs (slideInEnd (List.Nonempty.length placedWord.letters)) placementTime
 
 
 {-| The moment, in milliseconds since the placement started, at which the last tile has finished

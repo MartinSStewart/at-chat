@@ -559,9 +559,25 @@ loadSounds =
     Command.sendToJs "load_sounds_to_js" load_sounds_to_js Json.Encode.null
 
 
-playSound : String -> Command FrontendOnly toMsg msg
-playSound name =
-    Command.sendToJs "play_sound" play_sound (Json.Encode.string name)
+{-| Play a sound. `Nothing` plays it immediately; `Just time` schedules it to play at the given
+time.
+-}
+playSound : Maybe Time.Posix -> String -> Command FrontendOnly toMsg msg
+playSound maybeTime name =
+    Command.sendToJs "play_sound"
+        play_sound
+        (Json.Encode.object
+            [ ( "name", Json.Encode.string name )
+            , ( "time"
+              , case maybeTime of
+                    Just time ->
+                        Json.Encode.int (Time.posixToMillis time)
+
+                    Nothing ->
+                        Json.Encode.null
+              )
+            ]
+        )
 
 
 textInputSelectAll : HtmlId -> Command FrontendOnly toMsg msg
