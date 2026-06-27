@@ -1759,6 +1759,7 @@ tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
             , Ui.Font.color (Ui.rgb 0 0 0)
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
+            , tileScoreView cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
@@ -1778,9 +1779,29 @@ boardTileInFront cellSize2 offset letterOrWildcard =
             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
             , Ui.Font.color (Ui.rgb 0 0 0)
             , MyUi.noPointerEvents
+            , tileScoreView cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
+
+
+tileScoreView : Int -> LetterOrWildcard -> Ui.Attribute msg
+tileScoreView cellSize2 letterOrWildcard =
+    Ui.text
+        (case letterOrWildcard of
+            Letter letter ->
+                letterData letter |> .score |> String.fromInt
+
+            Wildcard ->
+                ""
+        )
+        |> Ui.el
+            [ toFloat cellSize2 * 0.3 |> ceiling |> Ui.Font.size
+            , Ui.alignBottom
+            , Ui.alignRight
+            , Ui.move { x = -2, y = 0, z = 0 }
+            ]
+        |> Ui.inFront
 
 
 {-| A tile drawn by the placement animation. It looks like a committed board tile, except a
@@ -1812,6 +1833,7 @@ animatedTileInFront cellSize2 offset red letterOrWildcard =
                     Ui.rgb 0 0 0
                 )
             , MyUi.noPointerEvents
+            , tileScoreView cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
