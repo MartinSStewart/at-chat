@@ -458,20 +458,24 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                     Just (MatchData match) ->
                         case match.data of
                             FrontendGameData_Go setup _ cache ->
-                                Go.gameView
-                                    currentTime
-                                    windowSize
-                                    localUser
-                                    setup
-                                    cache
-                                    (case model of
-                                        Just (GoModel (Go.Game game)) ->
-                                            game
+                                Ui.column
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.el [ Ui.padding 8 ] (goShareView lastCopied matchId match.publicLink)
+                                    , Go.gameView
+                                        currentTime
+                                        windowSize
+                                        localUser
+                                        setup
+                                        cache
+                                        (case model of
+                                            Just (GoModel (Go.Game game)) ->
+                                                game
 
-                                        _ ->
-                                            Go.initGame
-                                    )
-                                    |> Ui.map GoGameMsg
+                                            _ ->
+                                                Go.initGame
+                                        )
+                                        |> Ui.map GoGameMsg
+                                    ]
 
                             FrontendGameData_WordSpellingGame setup _ cache ->
                                 case model of
@@ -495,7 +499,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
             Nothing ->
                 Ui.column
                     []
-                    [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
+                    [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
                     , case model of
                         Just (GoModel model2) ->
                             Go.setupView
@@ -535,6 +539,33 @@ matchNotFound =
     Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
 
 
+{-| Share controls for the match currently being viewed. Shows a "Share" button that creates a
+public link, or, once the link exists, a copyable box with the link.
+-}
+goShareView : Maybe MyUi.LastCopy -> Id ChannelMessageId -> Maybe (SecretId GamePublicId) -> Element Msg
+goShareView lastCopied matchId maybePublicLink =
+    Ui.row
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        (case maybePublicLink of
+            Just publicLink ->
+                [ Ui.text "Share"
+                , MyUi.copyBox
+                    (Dom.id "go_shareLink")
+                    PressedCopyLink
+                    NoOpMsg
+                    { lastCopied = lastCopied }
+                    (Go.publicGoMatchUrl publicLink)
+                ]
+
+            Nothing ->
+                [ MyUi.simpleButton
+                    (Dom.id "go_share")
+                    (PressedShareMatch matchId)
+                    (Ui.text "Share")
+                ]
+        )
+
+
 allGames : List Game
 allGames =
     [ Game_Go
@@ -572,8 +603,8 @@ gameSelectButton game =
         (gameToString game |> Ui.text)
 
 
-matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
-matchSwitcherView isMobile lastCopied maybeMatchId matches =
+matchSwitcherView : Bool -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
+matchSwitcherView isMobile maybeMatchId matches =
     if SeqDict.isEmpty matches then
         Ui.none
 
@@ -669,40 +700,6 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                         )
                     )
                 , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-                , case maybeMatchId of
-                    Just matchId ->
-                        Ui.row
-                            [ Ui.spacing 4, Ui.alignRight ]
-                            (case SeqDict.get matchId matches of
-                                Just (MatchData match) ->
-                                    case match.publicLink of
-                                        Just publicLink ->
-                                            [ Ui.text "Share"
-                                            , MyUi.copyBox
-                                                (Dom.id "go_shareLink")
-                                                PressedCopyLink
-                                                NoOpMsg
-                                                { lastCopied = lastCopied }
-                                                (Go.publicGoMatchUrl publicLink)
-                                            ]
-
-                                        Nothing ->
-                                            [ MyUi.simpleButton
-                                                (Dom.id "go_share")
-                                                (PressedShareMatch matchId)
-                                                (Ui.text "Share")
-                                            ]
-
-                                Nothing ->
-                                    [ MyUi.simpleButton
-                                        (Dom.id "go_share")
-                                        (PressedShareMatch matchId)
-                                        (Ui.text "Share")
-                                    ]
-                            )
-
-                    Nothing ->
-                        Ui.none
                 ]
             , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
             ]

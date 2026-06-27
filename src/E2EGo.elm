@@ -77,8 +77,11 @@ goMatchTest normalConfig =
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
 
-                                -- Start a fresh match after the game has ended
-                                , admin.click 100 (Dom.id "go_reset")
+                                -- Start a fresh match after the game has ended. The match switcher
+                                -- (and its setup view) is only shown when no match is selected, so
+                                -- close the games tab and reopen it to get back to the setup view.
+                                , admin.click 100 (Dom.id "guild_openDescription")
+                                , admin.click 100 (Dom.id "guild_openGamesTab")
                                 , admin.click 100 (Dom.id "go_start")
                                 , user2.click 100 (Dom.id "guild_gameStartedCard_1")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
