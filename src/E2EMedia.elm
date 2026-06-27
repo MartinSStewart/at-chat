@@ -1,6 +1,6 @@
 module E2EMedia exposing (audioAttachmentTest, imageViewerTests, videoAttachmentTest)
 
-import E2EHelper exposing (..)
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
@@ -19,15 +19,15 @@ imageViewerTests :
 imageViewerTests imageUploadConfig =
     T.testGroup
         "Image viewer"
-        [ startTest
+        [ E2EHelper.startTest
             "Clicking an image attachment opens a zoomable image viewer overlay"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.desktopWindow
                 (\admin _ ->
-                    [ uploadImageAttachment admin
-                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    [ E2EHelper.uploadImageAttachment admin
+                    , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView
                         0
@@ -148,12 +148,12 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "On mobile the image viewer has no buttons and uses pinch/drag gestures"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                mobileWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.mobileWindow
                 (\admin _ ->
                     let
                         touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
@@ -167,7 +167,7 @@ imageViewerTests imageUploadConfig =
                                     points
                             }
                     in
-                    [ uploadImageAttachment admin
+                    [ E2EHelper.uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView
                         0
@@ -233,12 +233,12 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "Moving both fingers together pans the image while pinching"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                mobileWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.mobileWindow
                 (\admin _ ->
                     let
                         touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
@@ -252,7 +252,7 @@ imageViewerTests imageUploadConfig =
                                     points
                             }
                     in
-                    [ uploadImageAttachment admin
+                    [ E2EHelper.uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
                     , admin.click 0 (Dom.id "spoiler_1_image_1")
@@ -295,15 +295,15 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "Flinging the image in the viewer keeps it moving (inertia)"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.desktopWindow
                 (\admin _ ->
-                    [ uploadImageAttachment admin
-                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    [ E2EHelper.uploadImageAttachment admin
+                    , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
                     , admin.click 0 (Dom.id "spoiler_1_image_1")
@@ -376,15 +376,15 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "The image viewer background fades as the image is dragged off screen"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.desktopWindow
                 (\admin _ ->
-                    [ uploadImageAttachment admin
-                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    [ E2EHelper.uploadImageAttachment admin
+                    , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
                     , admin.click 0 (Dom.id "spoiler_1_image_1")
@@ -407,12 +407,12 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "Right clicking images and links adds copy options to the message menu"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.desktopWindow
                 (\admin _ ->
                     let
                         imageUrl : String
@@ -423,8 +423,8 @@ imageViewerTests imageUploadConfig =
                         linkUrl =
                             "https://example.com/some-page"
                     in
-                    [ uploadImageAttachment admin
-                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    [ E2EHelper.uploadImageAttachment admin
+                    , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                     , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                     , admin.checkView
                         0
@@ -604,12 +604,12 @@ imageViewerTests imageUploadConfig =
                     ]
                 )
             ]
-        , startTest
+        , E2EHelper.startTest
             "Long pressing images and links adds copy options to the mobile message menu"
-            startTime
+            E2EHelper.startTime
             imageUploadConfig
-            [ connectTwoUsersAndJoinNewGuild
-                mobileWindow
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.mobileWindow
                 (\admin _ ->
                     let
                         imageUrl : String
@@ -651,7 +651,7 @@ imageViewerTests imageUploadConfig =
                         touchEnd =
                             Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ]
                     in
-                    [ uploadImageAttachment admin
+                    [ E2EHelper.uploadImageAttachment admin
                     , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
                     , admin.checkView
                         0
@@ -732,14 +732,14 @@ videoAttachmentTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 videoAttachmentTest videoUploadConfig =
-    startTest
+    E2EHelper.startTest
         "Video attachments render inline and can be spoilered"
-        startTime
+        E2EHelper.startTime
         videoUploadConfig
-        [ connectTwoUsersAndJoinNewGuild
-            desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin _ ->
-                attachmentTestActions
+                E2EHelper.attachmentTestActions
                     { tagName = "video"
                     , plainSnapshot = "Video attachment"
                     , spoileredSnapshot = "Spoilered video attachment"
@@ -754,14 +754,14 @@ audioAttachmentTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 audioAttachmentTest audioUploadConfig =
-    startTest
+    E2EHelper.startTest
         "Audio attachments render inline and can be spoilered"
-        startTime
+        E2EHelper.startTime
         audioUploadConfig
-        [ connectTwoUsersAndJoinNewGuild
-            desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin _ ->
-                attachmentTestActions
+                E2EHelper.attachmentTestActions
                     { tagName = "audio"
                     , plainSnapshot = "Audio attachment"
                     , spoileredSnapshot = "Spoilered audio attachment"

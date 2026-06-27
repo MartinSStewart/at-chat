@@ -27,7 +27,6 @@ import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
-import DmChannel
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http

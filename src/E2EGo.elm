@@ -5,7 +5,7 @@ module E2EGo exposing
     , publicGoMatchViewTest
     )
 
-import E2EHelper exposing (..)
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
@@ -19,18 +19,18 @@ goMatchTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goMatchTest normalConfig =
-    startTest
+    E2EHelper.startTest
         "Two users play a Go match, one leaves and rejoins, then start a new match"
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
-            tallDesktopWindow
+            E2EHelper.tallDesktopWindow
             (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , inviteUser
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
@@ -54,11 +54,11 @@ goMatchTest normalConfig =
                         -- ... and then rejoins by clicking back into the DM and the Go tab
                         , T.connectFrontend
                             100
-                            sessionId1
+                            E2EHelper.sessionId1
                             "/"
-                            tallDesktopWindow
+                            E2EHelper.tallDesktopWindow
                             (\user2 ->
-                                [ user2.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+                                [ user2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
                                 , user2.click 100 (Dom.id "game_select_Go")
@@ -104,18 +104,18 @@ goTimeoutTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goTimeoutTest normalConfig =
-    startTest
+    E2EHelper.startTest
         "A player who runs out of time can't move, and both players see the loss-on-time result"
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
-            tallDesktopWindow
+            E2EHelper.tallDesktopWindow
             (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , inviteUser
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
@@ -173,18 +173,18 @@ goTurnNotificationDotTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goTurnNotificationDotTest normalConfig =
-    startTest
+    E2EHelper.startTest
         "Go channel header shows a red dot when it's the user's turn and they aren't viewing the match"
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
-            tallDesktopWindow
+            E2EHelper.tallDesktopWindow
             (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , inviteUser
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
@@ -254,27 +254,27 @@ publicGoMatchViewTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 publicGoMatchViewTest normalConfig =
-    startTest
+    E2EHelper.startTest
         "A player shares a Go match link so a non-logged-in spectator can view it"
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
-            tallDesktopWindow
+            E2EHelper.tallDesktopWindow
             (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , inviteUser
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
                     admin
                     (\user ->
                         [ T.connectFrontend
                             100
-                            sessionId4
+                            E2EHelper.sessionId4
                             "/go-match/does-not-exist"
-                            tallDesktopWindow
+                            E2EHelper.tallDesktopWindow
                             (\missingViewer ->
-                                [ missingViewer.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+                                [ missingViewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                                 , missingViewer.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
@@ -308,11 +308,11 @@ publicGoMatchViewTest normalConfig =
                                                 if String.startsWith Env.domain shareUrl then
                                                     [ T.connectFrontend
                                                         100
-                                                        sessionId2
+                                                        E2EHelper.sessionId2
                                                         (String.dropLeft (String.length Env.domain) shareUrl)
-                                                        tallDesktopWindow
+                                                        E2EHelper.tallDesktopWindow
                                                         (\viewer ->
-                                                            [ viewer.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+                                                            [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
@@ -322,7 +322,7 @@ publicGoMatchViewTest normalConfig =
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
-                                                            , tallSnapshot viewer 100 { name = "Spectating Go match" }
+                                                            , E2EHelper.tallSnapshot viewer 100 { name = "Spectating Go match" }
                                                             ]
                                                         )
                                                     ]

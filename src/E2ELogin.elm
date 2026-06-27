@@ -1,7 +1,7 @@
 module E2ELogin exposing (loginTests)
 
 import Backend
-import E2EHelper exposing (..)
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import EmailAddress
@@ -24,47 +24,47 @@ loginTests isMobile normalConfig =
         windowSize : { width : number, height : number }
         windowSize =
             if isMobile then
-                mobileWindow
+                E2EHelper.mobileWindow
 
             else
-                desktopWindow
+                E2EHelper.desktopWindow
 
         userAgent =
             if isMobile then
-                safariIphone
+                E2EHelper.safariIphone
 
             else
-                firefoxDesktop
+                E2EHelper.firefoxDesktop
     in
-    [ startTest
+    [ E2EHelper.startTest
         (if isMobile then
             "Test login mobile"
 
          else
             "Test login"
         )
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
             windowSize
             (\client ->
-                [ client.portEvent 10 "load_startup_data_from_js" (startupDataJson userAgent)
+                [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson userAgent)
                 , client.snapshotView 100 { name = "homepage" }
                 , client.click 100 Pages.Home.loginButtonId
                 , client.snapshotView 100 { name = "login" }
                 , client.input 100 LoginForm.emailInputId "asdf123"
                 , client.click 100 LoginForm.submitEmailButtonId
                 , client.snapshotView 100 { name = "invalid email" }
-                , client.input 100 LoginForm.emailInputId (EmailAddress.toString adminEmail)
+                , client.input 100 LoginForm.emailInputId (EmailAddress.toString E2EHelper.adminEmail)
                 , client.snapshotView 100 { name = "valid email" }
                 , client.click 100 LoginForm.submitEmailButtonId
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (isLoginEmail adminEmail) data.httpRequests of
+                        case List.filterMap (E2EHelper.isLoginEmail E2EHelper.adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ client.input 100 LoginForm.loginCodeInputId "12345678"
                                 , client.snapshotView 100 { name = "invalid code" }
@@ -77,33 +77,33 @@ loginTests isMobile normalConfig =
                     )
                 ]
             )
-        , checkNoErrorLogs
+        , E2EHelper.checkNoErrorLogs
         ]
-    , startTest
+    , E2EHelper.startTest
         (if isMobile then
             "Enable 2FA mobile"
 
          else
             "Enable 2FA"
         )
-        startTime
+        E2EHelper.startTime
         normalConfig
         [ T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
             windowSize
             (\user ->
-                [ handleLogin userAgent adminEmail user
+                [ E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
                 , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
-                , tallSnapshot user 100 { name = "2FA setup" }
+                , E2EHelper.tallSnapshot user 100 { name = "2FA setup" }
                 , user.input 100 (Dom.id "userOverview_twoFactorCodeInput") "123123"
-                , tallSnapshot user 100 { name = "2FA setup with wrong code" }
+                , E2EHelper.tallSnapshot user 100 { name = "2FA setup with wrong code" }
                 , T.andThen
                     100
                     (\data ->
-                        case SeqDict.get sessionId0 data.backend.sessions of
+                        case SeqDict.get E2EHelper.sessionId0 data.backend.sessions of
                             Just { userId } ->
                                 case SeqDict.get userId data.backend.twoFactorAuthenticationSetup of
                                     Just { secret } ->
@@ -112,7 +112,7 @@ loginTests isMobile normalConfig =
                                                 [ user.input
                                                     100
                                                     (Dom.id "userOverview_twoFactorCodeInput")
-                                                    (TwoFactorAuthentication.getCode startTime key
+                                                    (TwoFactorAuthentication.getCode E2EHelper.startTime key
                                                         |> Maybe.withDefault 0
                                                         |> String.fromInt
                                                         |> String.padLeft LoginForm.twoFactorCodeLength '0'
@@ -124,7 +124,7 @@ loginTests isMobile normalConfig =
                                                             "Two factor authentication enabled!"
                                                         ]
                                                     )
-                                                , tallSnapshot user 100 { name = "2FA setup complete" }
+                                                , E2EHelper.tallSnapshot user 100 { name = "2FA setup complete" }
                                                 ]
 
                                             Err _ ->
@@ -141,16 +141,16 @@ loginTests isMobile normalConfig =
             )
         , T.connectFrontend
             100
-            sessionId0
+            E2EHelper.sessionId0
             "/"
             windowSize
             (\user ->
-                [ handleLogin userAgent adminEmail user
-                , tallSnapshot user 100 { name = "2FA login step" }
+                [ E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
+                , E2EHelper.tallSnapshot user 100 { name = "2FA login step" }
                 , T.andThen
                     100
                     (\data ->
-                        case SeqDict.get sessionId0 data.backend.pendingLogins of
+                        case SeqDict.get E2EHelper.sessionId0 data.backend.pendingLogins of
                             Just (WaitingForTwoFactorToken { userId }) ->
                                 case SeqDict.get userId data.backend.twoFactorAuthentication of
                                     Just { secret } ->
@@ -159,7 +159,7 @@ loginTests isMobile normalConfig =
                                                 [ user.input
                                                     100
                                                     (Dom.id "loginForm_twoFactorCodeInput")
-                                                    (TwoFactorAuthentication.getCode startTime key
+                                                    (TwoFactorAuthentication.getCode E2EHelper.startTime key
                                                         |> Maybe.withDefault 0
                                                         |> String.fromInt
                                                         |> String.padLeft LoginForm.twoFactorCodeLength '0'
@@ -172,15 +172,15 @@ loginTests isMobile normalConfig =
                                                         , Test.Html.Selector.exactText "Two factor authentication was enabled "
                                                         ]
                                                     )
-                                                , tallSnapshot user 100 { name = "user overview with two factor already complete" }
+                                                , E2EHelper.tallSnapshot user 100 { name = "user overview with two factor already complete" }
                                                 , user.click 100 (Dom.id "userOverview_startDisable2Fa")
-                                                , tallSnapshot user 100 { name = "2FA disable prompt" }
+                                                , E2EHelper.tallSnapshot user 100 { name = "2FA disable prompt" }
                                                 , user.input 100 (Dom.id "userOverview_disableTwoFactorCodeInput") "123123"
-                                                , tallSnapshot user 100 { name = "2FA disable with wrong code" }
+                                                , E2EHelper.tallSnapshot user 100 { name = "2FA disable with wrong code" }
                                                 , user.input
                                                     100
                                                     (Dom.id "userOverview_disableTwoFactorCodeInput")
-                                                    (TwoFactorAuthentication.getCode startTime key
+                                                    (TwoFactorAuthentication.getCode E2EHelper.startTime key
                                                         |> Maybe.withDefault 0
                                                         |> String.fromInt
                                                         |> String.padLeft LoginForm.twoFactorCodeLength '0'
@@ -199,7 +199,7 @@ loginTests isMobile normalConfig =
                                                         else
                                                             Ok ()
                                                     )
-                                                , tallSnapshot user 100 { name = "2FA disabled" }
+                                                , E2EHelper.tallSnapshot user 100 { name = "2FA disabled" }
                                                 ]
 
                                             Err _ ->

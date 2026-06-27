@@ -52,7 +52,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
+import Id exposing (GamePublicId, Id, UserId)
 import MyUi
 import Quantity
 import SecretId exposing (SecretId)

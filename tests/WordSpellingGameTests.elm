@@ -2,7 +2,7 @@ module WordSpellingGameTests exposing (tests)
 
 import Expect
 import List.Nonempty exposing (Nonempty(..))
-import SeqDict exposing (SeqDict)
+import SeqDict
 import Set
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -81,7 +81,7 @@ tests =
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "cat" ])
+                        (Set.singleton "cat")
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Result.map (\result -> ( result.words, result.score ))
@@ -89,7 +89,7 @@ tests =
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "dog" ])
+                        (Set.singleton "dog")
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Expect.equal (Err ())

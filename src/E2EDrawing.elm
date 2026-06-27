@@ -4,11 +4,11 @@ import Coord
 import Date exposing (Date)
 import Drawing
 import Duration
-import E2EHelper exposing (..)
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import FileStatus
-import Id exposing (GuildOrDmId(..), ThreadRoute(..))
+import Id
 import List.Nonempty
 import Message
 import Pages.Guild
@@ -22,23 +22,23 @@ import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToB
 
 drawOnMessages : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 drawOnMessages imageUploadConfig =
-    startTest
+    E2EHelper.startTest
         "Draw on top of messages"
-        (Duration.addTo startTime (Duration.hours 23.96))
+        (Duration.addTo E2EHelper.startTime (Duration.hours 23.96))
         imageUploadConfig
-        [ connectTwoUsersAndJoinNewGuild
-            desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
-                [ writeMessage admin 100 "Draw on this message!"
-                , uploadImageAttachment admin
-                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                [ E2EHelper.writeMessage admin 100 "Draw on this message!"
+                , E2EHelper.uploadImageAttachment admin
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
 
                 -- A message with a hyperlink that loads an embed containing an image
-                , writeMessage admin 100 "Draw on https://elm.camp too!"
+                , E2EHelper.writeMessage admin 100 "Draw on https://elm.camp too!"
 
                 -- A day later another message is written so that a date divider shows up
-                , writeMessage admin (Duration.hours 0.05 |> Duration.inMilliseconds) "A new day means a date divider!"
+                , E2EHelper.writeMessage admin (Duration.hours 0.05 |> Duration.inMilliseconds) "A new day means a date divider!"
 
                 -- Open the drawing tab and check that the instructions show up
                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
@@ -49,7 +49,7 @@ drawOnMessages imageUploadConfig =
                 , T.andThen
                     100
                     (\data ->
-                        case ( lastGuildChannelMessage data.backend, findImageMessage data.backend, findEmbedImageMessage data.backend ) of
+                        case ( E2EHelper.lastGuildChannelMessage data.backend, E2EHelper.findImageMessage data.backend, E2EHelper.findEmbedImageMessage data.backend ) of
                             ( Just ( guildId, messageId, _ ), Just ( imageMessageId, fileId ), Just embedMessageId ) ->
                                 let
                                     dividerDate : Date
@@ -63,22 +63,22 @@ drawOnMessages imageUploadConfig =
                                     100
                                     (Drawing.profileImageAnchorId messageId)
                                     "click"
-                                    (drawingAnchorClick 30 25)
+                                    (E2EHelper.drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                , drawZigzagStroke admin
+                                , E2EHelper.drawZigzagStroke admin
 
                                 -- The stroke is visible for the user that drew it and, in
                                 -- realtime, for other users viewing the same channel
-                                , admin.checkView 100 (expectPolylineCount 1)
-                                , user.checkView 100 (expectPolylineCount 1)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                 -- The stroke is stored in the message on the backend
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case lastGuildChannelMessage data2.backend of
+                                        case E2EHelper.lastGuildChannelMessage data2.backend of
                                             Just ( _, _, message ) ->
                                                 if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
                                                     Ok ()
@@ -92,19 +92,19 @@ drawOnMessages imageUploadConfig =
 
                                 -- Undo removes the stroke for everyone, redo brings it back
                                 , admin.click 100 Drawing.undoButtonId
-                                , admin.checkView 100 (expectPolylineCount 0)
-                                , user.checkView 100 (expectPolylineCount 0)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 0)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 0)
                                 , admin.click 100 Drawing.redoButtonId
-                                , admin.checkView 100 (expectPolylineCount 1)
-                                , user.checkView 100 (expectPolylineCount 1)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                 -- The Ctrl+Z and Ctrl+Shift+Z hotkeys undo and redo the stroke too
                                 , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" })
-                                , admin.checkView 100 (expectPolylineCount 0)
-                                , user.checkView 100 (expectPolylineCount 0)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 0)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 0)
                                 , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" })
-                                , admin.checkView 100 (expectPolylineCount 1)
-                                , user.checkView 100 (expectPolylineCount 1)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
 
                                 -- Zooming in magnifies the conversation around the center of the
@@ -123,8 +123,8 @@ drawOnMessages imageUploadConfig =
                                 -- zoom keeps the center of the anchor centered in the container, which
                                 -- the test reports as 100x100 at the origin with the anchor's top left
                                 -- at (30, 25) and its half size at (20, 20).
-                                , drawZigzagStroke admin
-                                , admin.checkView 100 (expectPolylineCount 2)
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 2)
 
                                 -- TODO: Fix BrowserDomNotFound error in program-test
                                 --, T.checkState
@@ -147,7 +147,7 @@ drawOnMessages imageUploadConfig =
                                 -- Undo the zoomed stroke and zoom back out so the rest of the test
                                 -- continues with a single stroke and the conversation at 1x zoom
                                 , admin.click 100 Drawing.undoButtonId
-                                , admin.checkView 100 (expectPolylineCount 1)
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , admin.click 100 Drawing.zoomButtonId
                                 , admin.checkView
                                     100
@@ -177,19 +177,19 @@ drawOnMessages imageUploadConfig =
                                         )
                                     )
                                     "click"
-                                    (drawingAnchorClick 100 50)
+                                    (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                , drawZigzagStroke admin
-                                , admin.checkView 100 (expectPolylineCount 2)
-                                , user.checkView 100 (expectPolylineCount 2)
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 2)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 2)
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case findImageMessage data2.backend of
+                                        case E2EHelper.findImageMessage data2.backend of
                                             Just _ ->
-                                                case lastGuildChannelMessageAt imageMessageId data2.backend of
+                                                case E2EHelper.lastGuildChannelMessageAt imageMessageId data2.backend of
                                                     Just message ->
                                                         if
                                                             List.length
@@ -216,17 +216,17 @@ drawOnMessages imageUploadConfig =
                                     100
                                     (Dom.id ("guild_dateDivider_" ++ Date.toIsoString dividerDate))
                                     "click"
-                                    (drawingAnchorClick 400 300)
+                                    (E2EHelper.drawingAnchorClick 400 300)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                , drawZigzagStroke admin
-                                , admin.checkView 100 (expectPolylineCount 3)
-                                , user.checkView 100 (expectPolylineCount 3)
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 3)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 3)
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case lastGuildChannel data2.backend of
+                                        case E2EHelper.lastGuildChannel data2.backend of
                                             Just channel ->
                                                 case SeqDict.get dividerDate channel.dateDividerDrawings of
                                                     Just drawing ->
@@ -253,17 +253,17 @@ drawOnMessages imageUploadConfig =
                                     100
                                     (Dom.id ("spoiler_" ++ Id.toString embedMessageId ++ "_embedImage_0"))
                                     "click"
-                                    (drawingAnchorClick 100 100)
+                                    (E2EHelper.drawingAnchorClick 100 100)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                , drawWideZigzagStroke admin
-                                , admin.checkView 100 (expectPolylineCount 4)
-                                , user.checkView 100 (expectPolylineCount 4)
+                                , E2EHelper.drawWideZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 4)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 4)
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case lastGuildChannelMessageAt embedMessageId data2.backend of
+                                        case E2EHelper.lastGuildChannelMessageAt embedMessageId data2.backend of
                                             Just message ->
                                                 if
                                                     List.length
@@ -280,7 +280,7 @@ drawOnMessages imageUploadConfig =
                                     )
                                 , -- The whole conversation fits in the tall snapshot so the
                                   -- embed and the stroke sticking out of it are both visible
-                                  tallSnapshot admin 100 { name = "Drawing stroke anchored to an embed image extends outside the embed" }
+                                  E2EHelper.tallSnapshot admin 100 { name = "Drawing stroke anchored to an embed image extends outside the embed" }
 
                                 -- Pressing the pencil tab again closes the drawing tab
                                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
@@ -291,7 +291,7 @@ drawOnMessages imageUploadConfig =
                                 -- All four drawings are persisted so they survive loading the page again
                                 , T.connectFrontend
                                     100
-                                    sessionId0
+                                    E2EHelper.sessionId0
                                     (Route.encode
                                         (Route.GuildRoute
                                             guildId
@@ -302,15 +302,15 @@ drawOnMessages imageUploadConfig =
                                             )
                                         )
                                     )
-                                    desktopWindow
+                                    E2EHelper.desktopWindow
                                     (\admin2 ->
                                         [ admin2.portEvent
                                             10
                                             "load_startup_data_from_js"
-                                            (startupDataJson firefoxDesktop)
+                                            (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
                                         , -- Drawings are part of the channel data so they render
                                           -- as soon as the messages are shown
-                                          admin2.checkView 2000 (expectPolylineCount 4)
+                                          admin2.checkView 2000 (E2EHelper.expectPolylineCount 4)
                                         ]
                                     )
                                 ]
@@ -349,25 +349,25 @@ drawingScalesWithImages imageUploadConfig =
         mobileDisplayWidth =
             316
     in
-    startTest
+    E2EHelper.startTest
         "Drawings scale along with images"
-        startTime
+        E2EHelper.startTime
         imageUploadConfig
-        [ connectTwoUsersAndJoinNewGuild
-            desktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
             (\admin user ->
                 [ -- Upload an 800x100 image and post it
                   admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
                 , T.backendUpdate
                     100
                     (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 800 100)))
-                , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                 , T.andThen
                     100
                     (\data ->
-                        case ( findImageMessage data.backend, lastGuildChannelMessage data.backend ) of
+                        case ( E2EHelper.findImageMessage data.backend, E2EHelper.lastGuildChannelMessage data.backend ) of
                             ( Just ( imageMessageId, fileId ), Just ( guildId, _, _ ) ) ->
                                 [ admin.custom
                                     100
@@ -379,13 +379,13 @@ drawingScalesWithImages imageUploadConfig =
                                         )
                                     )
                                     "click"
-                                    (drawingAnchorClick 100 50)
+                                    (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
-                                , drawZigzagStroke admin
-                                , admin.checkView 100 (expectPolylineCount 1)
-                                , user.checkView 100 (expectPolylineCount 1)
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                 -- The stroke is stored in the image's full resolution
                                 -- coordinates: mouse positions relative to the image's top
@@ -394,11 +394,11 @@ drawingScalesWithImages imageUploadConfig =
                                 , T.checkState
                                     100
                                     (\data2 ->
-                                        case lastGuildChannelMessageAt imageMessageId data2.backend of
+                                        case E2EHelper.lastGuildChannelMessageAt imageMessageId data2.backend of
                                             Just message ->
                                                 case (Message.drawing (Drawing.ImageAttachmentAnchor fileId) message).finished of
                                                     [ stroke ] ->
-                                                        expectPointsCloseTo
+                                                        E2EHelper.expectPointsCloseTo
                                                             (List.map
                                                                 (\( x, y ) ->
                                                                     ( x * (imageWidth / desktopDisplayWidth)
@@ -418,14 +418,14 @@ drawingScalesWithImages imageUploadConfig =
 
                                 -- Both desktop clients render the stroke scaled back down to
                                 -- the size the image is displayed at
-                                , admin.checkView 100 (expectPolylineScale (desktopDisplayWidth / imageWidth))
-                                , user.checkView 100 (expectPolylineScale (desktopDisplayWidth / imageWidth))
+                                , admin.checkView 100 (E2EHelper.expectPolylineScale (desktopDisplayWidth / imageWidth))
+                                , user.checkView 100 (E2EHelper.expectPolylineScale (desktopDisplayWidth / imageWidth))
 
                                 -- On a mobile sized window the image is displayed smaller
                                 -- and the drawing scales down along with it
                                 , T.connectFrontend
                                     100
-                                    sessionId1
+                                    E2EHelper.sessionId1
                                     (Route.encode
                                         (Route.GuildRoute
                                             guildId
@@ -436,14 +436,14 @@ drawingScalesWithImages imageUploadConfig =
                                             )
                                         )
                                     )
-                                    mobileWindow
+                                    E2EHelper.mobileWindow
                                     (\userMobile ->
                                         [ userMobile.portEvent
                                             10
                                             "load_startup_data_from_js"
-                                            (startupDataJson firefoxDesktop)
-                                        , userMobile.checkView 2000 (expectPolylineCount 1)
-                                        , userMobile.checkView 100 (expectPolylineScale (mobileDisplayWidth / imageWidth))
+                                            (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                        , userMobile.checkView 2000 (E2EHelper.expectPolylineCount 1)
+                                        , userMobile.checkView 100 (E2EHelper.expectPolylineScale (mobileDisplayWidth / imageWidth))
                                         , userMobile.snapshotView 100 { name = "Drawing scaled down along with the image on a small screen" }
                                         ]
                                     )

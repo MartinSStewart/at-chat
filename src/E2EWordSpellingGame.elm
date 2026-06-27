@@ -1,6 +1,6 @@
 module E2EWordSpellingGame exposing (wordSpellingGameTests)
 
-import E2EHelper exposing (..)
+import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Json.Encode
@@ -11,12 +11,12 @@ wordSpellingGameTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 wordSpellingGameTests normalConfig =
-    startTest
+    E2EHelper.startTest
         "Word spelling game match"
-        startTime
+        E2EHelper.startTime
         normalConfig
-        [ connectTwoUsersAndJoinNewGuild
-            tallDesktopWindow
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
             (\admin user ->
                 let
                     pointerEvent : ( Float, Float ) -> Json.Encode.Value

@@ -118,7 +118,6 @@ module LocalState exposing
     )
 
 import Array exposing (Array)
-import Array.Extra
 import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)

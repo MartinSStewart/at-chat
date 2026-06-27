@@ -1,6 +1,7 @@
 module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
+    , AnimatedPlacement
     , Board
     , GameData
     , GameMsg

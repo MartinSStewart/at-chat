@@ -5853,7 +5853,7 @@ dragTarget startTouches model =
                 insideBoard : Bool
                 insideBoard =
                     case FrontendExtra.getWordSpellingGameModel local loggedIn model of
-                        Just game ->
+                        Just _ ->
                             WordSpellingGame.insideBoard model.windowSize centroid
 
                         Nothing ->

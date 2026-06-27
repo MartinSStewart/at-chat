@@ -211,7 +211,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         GoGameMsg goMsg ->
             case maybeMatch of
-                Just ( messageId, MatchData matchData ) ->
+                Just ( _, MatchData matchData ) ->
                     case matchData.data of
                         FrontendGameData_Go setup _ cache ->
                             let
@@ -529,6 +529,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
         )
 
 
+matchNotFound : Element msg
 matchNotFound =
     Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
 

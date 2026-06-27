@@ -1,5 +1,6 @@
 module FrontendExtra exposing
-    ( canDropFiles
+    ( WordSpellingGameData
+    , canDropFiles
     , changeUpdate
     , drawingRedo
     , drawingUndo
@@ -44,7 +45,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
-import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
@@ -89,7 +89,6 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
-import Set exposing (Set)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -1367,7 +1366,7 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                ChannelRoute channelId threadRoute tab ->
+                ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
                         threadRoute
                         sameGuild
@@ -1452,7 +1451,7 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute tab ->
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
                         threadRoute
                         sameGuild

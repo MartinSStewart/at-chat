@@ -142,7 +142,7 @@ import Test.Html.Selector
 import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import Url exposing (Protocol(..), Url)
