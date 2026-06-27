@@ -270,7 +270,7 @@ remainingLettersInBag setup board players =
                         )
                         startingLetters2
                 )
-                setup.letters
+                (NonemptyDict.toSeqDict setup.letters)
                 board
     in
     List.foldl
@@ -2085,7 +2085,11 @@ setupView windowSize setup =
             "Letter distribution (spaces are wildcards)"
             (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
                 [ lettersInput setup.letters
-                , MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
+                , if setup.letters == defaultLetters then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
                 ]
             )
         , case setup.error of
@@ -2209,25 +2213,40 @@ defaultLetters =
 
 
 {-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and any
-letter (in either case) is counted; any other character is ignored.
+letter (in either case) is counted; any other character is ignored. Fails if there isn't at least
+one (non-wildcard) letter, since words can't be formed out of wildcards alone.
 -}
 parseLetters : String -> Result String (NonemptyDict LetterOrWildcard OneOrGreater)
 parseLetters string =
-    String.foldl
-        (\char acc ->
-            if char == ' ' then
-                SeqDictHelper.increment Wildcard acc
+    let
+        counts : SeqDict LetterOrWildcard OneOrGreater
+        counts =
+            String.foldl
+                (\char acc ->
+                    if char == ' ' then
+                        SeqDictHelper.increment Wildcard acc
+
+                    else
+                        case charToLetter char of
+                            Just letter ->
+                                SeqDictHelper.increment (Letter letter) acc
+
+                            Nothing ->
+                                acc
+                )
+                SeqDict.empty
+                string
+    in
+    case NonemptyDict.fromSeqDict counts of
+        Just nonempty ->
+            if List.any isLetter (SeqDict.keys counts) then
+                Ok nonempty
 
             else
-                case charToLetter char of
-                    Just letter ->
-                        SeqDictHelper.increment (Letter letter) acc
+                Err "Letters: enter at least one letter (A-Z)"
 
-                    Nothing ->
-                        acc
-        )
-        SeqDict.empty
-        string
+        Nothing ->
+            Err "Letters: enter at least one letter (A-Z)"
 
 
 charToLetter : Char -> Maybe Letter
