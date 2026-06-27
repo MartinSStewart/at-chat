@@ -6,6 +6,7 @@ module FrontendExtra exposing
     , editMessage_gotFiles
     , externalLinkWarning
     , fileDragOverlayOpacity
+    , getWordSpellingGameModel
     , gotFiles
     , handleEscapeKey
     , handleLocalChange
@@ -1230,14 +1231,13 @@ enterSidebarRoute sameGuild previousRoute viewCmd model =
 
 enterChannelRoute :
     ThreadRouteWithFriends
-    -> Maybe Route.ChannelHeaderTab
     -> Bool
     -> Bool
     -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-enterChannelRoute threadRoute tab sameGuild sameChannel previousRoute viewCmd model =
+enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model =
     let
         showMembers : ShowMembersTab
         showMembers =
@@ -1250,18 +1250,24 @@ enterChannelRoute threadRoute tab sameGuild sameChannel previousRoute viewCmd mo
     in
     updateLoggedIn
         (\loggedIn ->
-            ( case showMembers of
-                ShowMembersTab ->
-                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+            routeRequestChannelHelper
+                sameChannel
+                Nothing
+                threadRoute
+                (Local.model loggedIn.localState)
+                (case showMembers of
+                    ShowMembersTab ->
+                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                HideMembersTab ->
-                    if sameGuild || previousRoute == Nothing then
-                        startOpeningChannelSidebar loggedIn
+                    HideMembersTab ->
+                        if sameGuild || previousRoute == Nothing then
+                            startOpeningChannelSidebar loggedIn
 
-                    else
-                        loggedIn
-            , Command.batch [ viewCmd, openChannelCmds sameChannel tab threadRoute loggedIn model ]
-            )
+                        else
+                            loggedIn
+                )
+                model
+                |> Tuple.mapSecond (\cmd -> Command.batch [ viewCmd, cmd ])
         )
         model
 
@@ -1364,7 +1370,6 @@ routeRequest previousRoute newRoute model =
                 ChannelRoute channelId threadRoute tab ->
                     enterChannelRoute
                         threadRoute
-                        tab
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
@@ -1450,7 +1455,6 @@ routeRequest previousRoute newRoute model =
                 DiscordChannel_ChannelRoute channelId threadRoute tab ->
                     enterChannelRoute
                         threadRoute
-                        tab
                         sameGuild
                         (if sameGuild then
                             case previousRoute of
@@ -1508,9 +1512,17 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    ( startOpeningChannelSidebar loggedIn
-                    , openChannelCmds sameDmRoute dmRoute.tab dmRoute.threadRoute loggedIn model3
-                    )
+                    let
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    routeRequestChannelHelper
+                        sameDmRoute
+                        (DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId)
+                        dmRoute.threadRoute
+                        local
+                        (startOpeningChannelSidebar loggedIn)
+                        model3
                 )
                 model3
 
@@ -1534,14 +1546,13 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    ( startOpeningChannelSidebar loggedIn
-                    , openChannelCmds
+                    routeRequestChannelHelper
                         sameDmRoute
-                        routeData.tab
+                        Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
-                        loggedIn
+                        (Local.model loggedIn.localState)
+                        (startOpeningChannelSidebar loggedIn)
                         model3
-                    )
                 )
                 model3
 
@@ -1589,18 +1600,81 @@ updateLoggedIn updateFunc model =
             ( model, Command.none )
 
 
-openChannelCmds :
+type alias WordSpellingGameData =
+    { matchId : Id ChannelMessageId, setup : WordSpellingGame.ValidatedSetup, shared : WordSpellingGame.Shared, model : WordSpellingGame.GameData }
+
+
+getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGameData
+getWordSpellingGameModel local loggedIn model =
+    case model.route of
+        DmRoute dmRoute ->
+            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case SeqDict.get messageId dmChannel.games of
+                                Just matchData ->
+                                    case Game.wordSpellingMatchData matchData of
+                                        Just ( setup, shared ) ->
+                                            { matchId = messageId
+                                            , setup = setup
+                                            , shared = shared
+                                            , model =
+                                                case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
+                                                    Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
+                                                        gameModel
+
+                                                    _ ->
+                                                        WordSpellingGame.initGame model.time setup |> Tuple.first
+                                            }
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                        Nothing ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+routeRequestChannelHelper :
     Bool
-    -> Maybe Route.ChannelHeaderTab
+    -> Maybe (Id UserId)
     -> ThreadRouteWithFriends
+    -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Command FrontendOnly ToBackend FrontendMsg
-openChannelCmds sameChannel tab threadRoute loggedIn model3 =
-    if sameChannel then
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedIn model3 =
+    ( case maybeOtherUserId of
+        Just otherUserId ->
+            case getWordSpellingGameModel local loggedIn model3 of
+                Just data ->
+                    { loggedIn
+                        | currentDmGame =
+                            SeqDict.insert
+                                ( otherUserId, Just data.matchId )
+                                (Game.WordSpellingGameModel (WordSpellingGame.Game data.model))
+                                loggedIn.currentDmGame
+                    }
+
+                Nothing ->
+                    loggedIn
+
+        Nothing ->
+            loggedIn
+    , if sameChannel then
         Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
-    else
+      else
         let
             scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
             scrollToBottom =
@@ -1629,6 +1703,7 @@ openChannelCmds sameChannel tab threadRoute loggedIn model3 =
                         Nothing ->
                             scrollToBottom
             ]
+    )
 
 
 isPressMsg : FrontendMsg -> Bool

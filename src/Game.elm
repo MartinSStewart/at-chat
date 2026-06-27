@@ -315,8 +315,8 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
         WordSpellingGameMsg wordSpellingGameMsg ->
             case maybeMatch of
                 Just ( _, MatchData matchData ) ->
-                    case matchData.data of
-                        FrontendGameData_WordSpellingGame setup _ cache ->
+                    case ( matchData.data, model ) of
+                        ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGameModel (WordSpellingGame.Game gameModel)) ) ->
                             let
                                 ( notSharedModel, outMsgs ) =
                                     WordSpellingGame.updateGame
@@ -325,13 +325,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                         setup
                                         cache
                                         wordSpellingGameMsg
-                                        (case model of
-                                            Just (WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
-                                                gameModel
-
-                                            _ ->
-                                                WordSpellingGame.initGame time setup
-                                        )
+                                        gameModel
 
                                 matchId : Id ChannelMessageId
                                 matchId =
@@ -363,7 +357,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                 outMsgs
                             )
 
-                        FrontendGameData_Go _ _ _ ->
+                        _ ->
                             ( model, [] )
 
                 _ ->
@@ -481,24 +475,23 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                         )
                                         |> Ui.map GoGameMsg
 
-                                FrontendGameData_WordSpellingGame setup _ cache ->
-                                    WordSpellingGame.gameView
-                                        currentTime
-                                        windowSize
-                                        maybeDragging
-                                        localUser.session.userId
-                                        cache
-                                        (case model of
-                                            Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
+                                FrontendGameData_WordSpellingGame _ _ cache ->
+                                    case model of
+                                        Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
+                                            WordSpellingGame.gameView
+                                                currentTime
+                                                windowSize
+                                                maybeDragging
+                                                localUser.session.userId
+                                                cache
                                                 game
+                                                |> Ui.map WordSpellingGameMsg
 
-                                            _ ->
-                                                WordSpellingGame.initGame currentTime setup
-                                        )
-                                        |> Ui.map WordSpellingGameMsg
+                                        _ ->
+                                            matchNotFound
 
                         Nothing ->
-                            Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
+                            matchNotFound
 
                 Nothing ->
                     case model of
@@ -533,6 +526,10 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                 (List.map gameSelectButton allGames)
             ]
         )
+
+
+matchNotFound =
+    Ui.el [ Ui.centerX, Ui.centerY, Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Match not found")
 
 
 allGames : List Game

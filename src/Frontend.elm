@@ -192,9 +192,12 @@ subscriptions model =
 
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
-                                , case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
-                                    Just ( _, shared, gameData ) ->
-                                        if WordSpellingGame.isAnimating loaded.time shared || WordSpellingGame.anyTileAnimating loaded.time gameData then
+                                , case FrontendExtra.getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
+                                    Just data ->
+                                        if
+                                            WordSpellingGame.isAnimating loaded.time data.shared
+                                                || WordSpellingGame.anyTileAnimating loaded.time data.model
+                                        then
                                             Effect.Browser.Events.onAnimationFrame GotTime
 
                                         else
@@ -1613,12 +1616,17 @@ updateLoaded msg model =
                                                 local2 =
                                                     Local.model loggedIn.localState
                                             in
-                                            case getWordSpellingGameModel local2 loggedIn model of
-                                                Just ( setup, _, gameData ) ->
+                                            case FrontendExtra.getWordSpellingGameModel local2 loggedIn model of
+                                                Just data ->
                                                     setWordSpellingGameModel
                                                         local2
                                                         model
-                                                        (WordSpellingGame.dragStart model.windowSize startTouches setup gameData)
+                                                        (WordSpellingGame.dragStart
+                                                            model.windowSize
+                                                            startTouches
+                                                            data.setup
+                                                            data.model
+                                                        )
                                                         loggedIn
 
                                                 _ ->
@@ -5779,49 +5787,6 @@ handleTouchEnd time model =
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-getWordSpellingGameModel :
-    LocalState
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared, WordSpellingGame.GameData )
-getWordSpellingGameModel local loggedIn model =
-    case model.route of
-        DmRoute dmRoute ->
-            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
-                    case SeqDict.get otherUserId local.dmChannels of
-                        Just dmChannel ->
-                            case SeqDict.get messageId dmChannel.games of
-                                Just matchData ->
-                                    case Game.wordSpellingMatchData matchData of
-                                        Just ( setup, shared ) ->
-                                            ( setup
-                                            , shared
-                                            , case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
-                                                Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
-                                                    gameModel
-
-                                                _ ->
-                                                    WordSpellingGame.initGame model.time setup
-                                            )
-                                                |> Just
-
-                                        Nothing ->
-                                            Nothing
-
-                                Nothing ->
-                                    Nothing
-
-                        Nothing ->
-                            Nothing
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
-
-
 setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
 setWordSpellingGameModel local model game loggedIn =
     case model.route of
@@ -5851,12 +5816,12 @@ finalizeWordSpellingDrag model loggedIn =
                         local =
                             Local.model loggedIn.localState
                     in
-                    case getWordSpellingGameModel local loggedIn model of
+                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
                         Just game ->
                             setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd model.windowSize dragging.touches game)
+                                (WordSpellingGame.dragEnd model.windowSize dragging.touches game.shared game.model)
                                 loggedIn
 
                         Nothing ->
@@ -5887,9 +5852,9 @@ dragTarget startTouches model =
 
                 insideBoard : Bool
                 insideBoard =
-                    case getWordSpellingGameModel local loggedIn model of
+                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
                         Just game ->
-                            WordSpellingGame.insideBoard model.windowSize centroid game
+                            WordSpellingGame.insideBoard model.windowSize centroid
 
                         Nothing ->
                             False

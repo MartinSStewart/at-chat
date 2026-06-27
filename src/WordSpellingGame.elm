@@ -137,15 +137,24 @@ initSetup =
     }
 
 
-initGame : Time.Posix -> ValidatedSetup -> GameData
+initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
 initGame time setup =
-    { selectedCell = Nothing
-    , tiles =
-        List.range 0 (OneOrGreater.toInt setup.traySize - 1)
-            |> List.map (\index -> { position = TileInTray (TrayIndex index), createdAt = time })
-            |> Array.fromList
-    , dragging = Nothing
-    }
+    ( { selectedCell = Nothing
+      , tiles =
+            List.range 0 (OneOrGreater.toInt setup.traySize - 1)
+                |> List.map
+                    (\index ->
+                        { position = TileInTray (TrayIndex index)
+                        , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                        }
+                    )
+                |> Array.fromList
+      , dragging = Nothing
+      }
+    , List.map
+        (\index -> PlaySound (Duration.addTo time (Duration.seconds (0.2 * toFloat index)) |> Just) "pop")
+        (List.range 0 (OneOrGreater.toInt setup.traySize - 1))
+    )
 
 
 type OutMsg
@@ -710,7 +719,11 @@ updateSetup time currentUserId msg setup =
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
-                    ( Game (initGame time validated), [ OutLocalChange (StartMatch time validated) ] )
+                    let
+                        ( model, outMsgs ) =
+                            initGame time validated
+                    in
+                    ( Game model, OutLocalChange (StartMatch time validated) :: outMsgs )
 
                 Err error ->
                     ( Setup { setup | error = Just error }, [] )
@@ -737,11 +750,13 @@ updateGame time currentUserId setup shared msg model =
                     in
                     ( { model
                         | tiles =
-                            List.range (Array.length remainingTray) (OneOrGreater.toInt setup.traySize)
+                            List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray)
                                 |> List.foldl
-                                    (\_ tray ->
+                                    (\index tray ->
                                         Array.push
-                                            { position = TileInTray (firstOpenTrayIndex Nothing tray), createdAt = time }
+                                            { position = TileInTray (firstOpenTrayIndex Nothing tray)
+                                            , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
+                                            }
                                             tray
                                     )
                                     remainingTray
@@ -975,8 +990,8 @@ boardHeight windowSize =
     boardWidth windowSize + trayHeight
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> ( ValidatedSetup, Shared, GameData ) -> Bool
-insideBoard windowSize coord _ =
+insideBoard : Coord CssPixels -> Coord CssPixels -> Bool
+insideBoard windowSize coord =
     let
         x =
             boardX windowSize
@@ -1111,8 +1126,8 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
 
-dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> ( ValidatedSetup, Shared, GameData ) -> Model
-dragEnd windowSize newTouches ( _, shared, gameModel ) =
+dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> Model
+dragEnd windowSize newTouches shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
             let

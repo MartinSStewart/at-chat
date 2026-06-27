@@ -61,7 +61,7 @@ wordSpellingGameTests normalConfig =
                 , admin.click 100 (Dom.id "wsg_start")
 
                 -- The other user opens the same match and joins it.
-                , user.click 100 (Dom.id "guild_openDm_0")
+                , user.click 2000 (Dom.id "guild_openDm_0")
                 , user.click 100 (Dom.id "guild_openGamesTab")
                 , user.custom
                     100
