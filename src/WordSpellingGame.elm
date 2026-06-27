@@ -24,6 +24,7 @@ module WordSpellingGame exposing
     , ValidatedSetup
     , animatedTilePlacement
     , anyTileAnimating
+    , boardY
     , dragEnd
     , dragStart
     , gameView
@@ -36,6 +37,7 @@ module WordSpellingGame exposing
     , placeWord
     , placementLandTime
     , setupView
+    , trayY
     , updateAction
     , updateGame
     , updateSetup

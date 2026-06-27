@@ -1,10 +1,15 @@
 module E2EWordSpellingGame exposing (wordSpellingGameTests)
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Game
 import Json.Encode
+import Message
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import WordSpellingGame
 
 
 wordSpellingGameTests :
@@ -19,6 +24,10 @@ wordSpellingGameTests normalConfig =
             E2EHelper.tallDesktopWindow
             (\admin user ->
                 let
+                    windowSize : Coord CssPixels
+                    windowSize =
+                        Coord.xy E2EHelper.tallDesktopWindow.width E2EHelper.tallDesktopWindow.height
+
                     pointerEvent : ( Float, Float ) -> Json.Encode.Value
                     pointerEvent ( x, y ) =
                         Json.Encode.object
@@ -48,16 +57,16 @@ wordSpellingGameTests normalConfig =
                     -- is directly below it.
                     trayTile : Int -> ( Float, Float )
                     trayTile index =
-                        ( toFloat (283 + index * 54), 573 )
+                        ( toFloat (283 + index * 54), WordSpellingGame.trayY windowSize |> toFloat )
 
                     boardCell : Int -> Int -> ( Float, Float )
                     boardCell cx cy =
-                        ( toFloat (273 + cx * 30), toFloat (113 + cy * 30) )
+                        ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
                 in
                 [ -- Admin creates a Word Spelling Game match in the DM with the other user.
                   admin.click 100 (Dom.id "guild_openDm_2")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
-                , admin.click 100 (Dom.id "game_select_Word Spelling Game")
+                , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
                 , admin.click 100 (Dom.id "wsg_start")
 
                 -- The other user opens the same match and joins it.

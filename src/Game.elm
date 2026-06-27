@@ -8,6 +8,7 @@ module Game exposing
     , addGoAction
     , addPublicLink
     , addWordSpellingGameAction
+    , gameToString
     , goMatchData
     , hasPendingTurn
     , initMatchData
