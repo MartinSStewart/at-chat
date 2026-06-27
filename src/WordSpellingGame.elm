@@ -46,6 +46,7 @@ module WordSpellingGame exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration
@@ -103,6 +104,7 @@ type SetupMsg
     = ChangedMainTimeInput String
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
+    | ChangedLettersInput String
     | PressedStartGame
 
 
@@ -136,7 +138,7 @@ initSetup =
     , incrementInput = "5"
     , traySize = 7
     , error = Nothing
-    , letters = Debug.todo ""
+    , letters = defaultLetters
     }
 
 
@@ -718,6 +720,9 @@ updateSetup time currentUserId msg setup =
             , []
             )
 
+        ChangedLettersInput input ->
+            ( Setup { setup | letters = input, error = Nothing }, [] )
+
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
@@ -926,15 +931,24 @@ validateSetup createdBy time setup =
         Ok timeControls ->
             case OneOrGreater.fromInt setup.traySize of
                 Just traySize ->
-                    Ok
-                        { createdBy = createdBy
-                        , timeControls = timeControls
-                        , traySize = traySize
-                        , seed =
-                            -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
-                            Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
-                        , letters = Debug.todo ""
-                        }
+                    let
+                        letters : SeqDict LetterOrWildcard OneOrGreater
+                        letters =
+                            parseLetters setup.letters
+                    in
+                    if List.any isLetter (SeqDict.keys letters) then
+                        Ok
+                            { createdBy = createdBy
+                            , timeControls = timeControls
+                            , traySize = traySize
+                            , seed =
+                                -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
+                                Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
+                            , letters = letters
+                            }
+
+                    else
+                        Err "Letters: enter at least one letter (A-Z)"
 
                 Nothing ->
                     Err "Tray size must be at least 1"
@@ -2067,6 +2081,9 @@ setupView windowSize setup =
                 , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                 ]
             )
+        , setupSection
+            "Letter distribution (spaces are wildcards)"
+            (lettersInput setup.letters)
         , case setup.error of
             Just error ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text error)
@@ -2112,6 +2129,26 @@ numberInput args =
         |> Ui.html
 
 
+lettersInput : String -> Element SetupMsg
+lettersInput value =
+    Html.textarea
+        [ Html.Attributes.id "wsg_lettersInput"
+        , Html.Attributes.value value
+        , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "font-family" "monospace"
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "min-width" "260px"
+        , Html.Attributes.style "height" "80px"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "box-sizing" "border-box"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Events.onInput ChangedLettersInput
+        ]
+        []
+        |> Ui.html
+
+
 timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
 timeInput htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
@@ -2139,9 +2176,75 @@ allLetters =
     [ A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z ]
 
 
+{-| How many wildcards (blank tiles) the standard Scrabble distribution has.
+-}
+defaultWildcardCount : Int
+defaultWildcardCount =
+    2
+
+
+{-| The standard Scrabble letter distribution, written as a single long string. Each wildcard is a
+space and each letter appears in lowercase as many times as it occurs in the bag, e.g.
+`"  aaaaaaaaabbccdddd..."` (two wildcards followed by nine a's, two b's and so on).
+-}
+defaultLetters : String
+defaultLetters =
+    String.repeat defaultWildcardCount " "
+        ++ (List.map
+                (\letter ->
+                    String.repeat (OneOrGreater.toInt (letterData letter).total) (String.toLower (letterData letter).text)
+                )
+                allLetters
+                |> String.concat
+           )
+
+
+{-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and any
+letter (in either case) is counted; any other character is ignored.
+-}
+parseLetters : String -> SeqDict LetterOrWildcard OneOrGreater
+parseLetters string =
+    String.foldl
+        (\char acc ->
+            if char == ' ' then
+                SeqDictHelper.increment Wildcard acc
+
+            else
+                case charToLetter char of
+                    Just letter ->
+                        SeqDictHelper.increment (Letter letter) acc
+
+                    Nothing ->
+                        acc
+        )
+        SeqDict.empty
+        string
+
+
+charToLetter : Char -> Maybe Letter
+charToLetter char =
+    List.Extra.find
+        (\letter -> (letterData letter).text == String.fromChar (Char.toUpper char))
+        allLetters
+
+
+isLetter : LetterOrWildcard -> Bool
+isLetter letterOrWildcard =
+    case letterOrWildcard of
+        Letter _ ->
+            True
+
+        Wildcard ->
+            False
+
+
 type alias LetterData =
     { score : Int
     , text : String
+
+    -- The number of this letter in the standard Scrabble distribution, used as the default letter
+    -- distribution in the game setup.
+    , total : OneOrGreater
     }
 
 
