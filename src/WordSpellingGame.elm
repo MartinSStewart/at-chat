@@ -244,14 +244,8 @@ initShared setup =
     }
 
 
-getLetters :
-    OneOrGreater
-    -> ValidatedSetup
-    -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
-    -> List Player
-    -> Int
-    -> List LetterOrWildcard
-getLetters count setup board players turnCount =
+remainingLettersInBag : SeqDict a { b | letter : Letter, isWildcard : Bool } -> List Player -> SeqDict LetterOrWildcard OneOrGreater
+remainingLettersInBag board players =
     let
         startingLetters : SeqDict LetterOrWildcard OneOrGreater
         startingLetters =
@@ -274,19 +268,26 @@ getLetters count setup board players turnCount =
                 )
                 startingLetters
                 board
-
-        remainingLetters3 : SeqDict LetterOrWildcard OneOrGreater
-        remainingLetters3 =
-            List.foldl
-                (\player remainingLetters2 -> IdArray.foldl SeqDictHelper.decrement remainingLetters2 player.tray)
-                remainingLetters
-                players
     in
+    List.foldl
+        (\player remainingLetters2 -> IdArray.foldl SeqDictHelper.decrement remainingLetters2 player.tray)
+        remainingLetters
+        players
+
+
+getLetters :
+    OneOrGreater
+    -> ValidatedSetup
+    -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    -> List Player
+    -> Int
+    -> List LetterOrWildcard
+getLetters count setup board players turnCount =
     Random.step
         (SeqDict.foldl
             (\letter count2 list -> List.repeat (OneOrGreater.toInt count2) letter ++ list)
             []
-            remainingLetters3
+            (remainingLettersInBag board players)
             |> shuffle
         )
         (Random.initialSeed (setup.seed + turnCount))
@@ -750,7 +751,7 @@ updateGame time currentUserId setup shared msg model =
                     in
                     ( { model
                         | tiles =
-                            List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray)
+                            List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1)
                                 |> List.foldl
                                     (\index tray ->
                                         Array.push
@@ -967,7 +968,7 @@ boardX windowSize =
 
 boardY : number
 boardY =
-    MyUi.matchSwitcherHeight + MyUi.channelHeaderHeight
+    MyUi.channelHeaderHeight
 
 
 trayX : Coord CssPixels -> Int
@@ -1445,23 +1446,26 @@ gameView :
     -> GameData
     -> Element GameMsg
 gameView currentTime windowSize maybeDragging currentUserId shared model =
-    Ui.column
-        [ Ui.spacing 16 ]
+    Ui.row
+        [ Ui.spacing 16, Ui.wrap ]
         [ boardView currentTime windowSize maybeDragging currentUserId shared model
-        , statusView currentUserId shared
-        , case isPlayerTurn currentUserId shared of
-            JoinedAndItsTheirTurn ->
-                Ui.row
-                    [ Ui.spacing 16 ]
-                    [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                    , MyUi.simpleButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTray (Ui.text "Replace tray")
-                    ]
+        , Ui.column
+            [ Ui.paddingXY 16 0 ]
+            [ statusView currentUserId shared
+            , case isPlayerTurn currentUserId shared of
+                JoinedAndItsTheirTurn ->
+                    Ui.row
+                        [ Ui.spacing 16 ]
+                        [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+                        , MyUi.simpleButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTray (Ui.text "Replace tray")
+                        ]
 
-            Joined ->
-                Ui.none
+                Joined ->
+                    Ui.none
 
-            NotJoined ->
-                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+                NotJoined ->
+                    MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+            ]
         ]
 
 
@@ -1474,11 +1478,17 @@ statusView currentUserId shared =
 
         playerCount =
             List.Nonempty.length shared.players
+
+        lettersLeft =
+            SeqDict.foldl
+                (\_ a total -> OneOrGreater.toInt a + total)
+                0
+                (remainingLettersInBag shared.board (List.Nonempty.toList shared.players))
     in
     Ui.column
-        [ Ui.spacing 4, Ui.paddingXY 16 0 ]
-        (List.Nonempty.toList shared.players
-            |> List.indexedMap
+        [ Ui.spacing 4 ]
+        (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
+            :: List.indexedMap
                 (\index player ->
                     (if player.userId == currentUserId then
                         "You"
@@ -1507,6 +1517,7 @@ statusView currentUserId shared =
                                 Ui.Font.weight 400
                             ]
                 )
+                (List.Nonempty.toList shared.players)
         )
 
 

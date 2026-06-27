@@ -451,50 +451,50 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
         ]
-        (Ui.column
-            []
-            [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
-            , case maybeMatchId of
-                Just matchId ->
-                    case SeqDict.get matchId matches of
-                        Just (MatchData match) ->
-                            case match.data of
-                                FrontendGameData_Go setup _ cache ->
-                                    Go.gameView
-                                        currentTime
-                                        windowSize
-                                        localUser
-                                        setup
-                                        cache
-                                        (case model of
-                                            Just (GoModel (Go.Game game)) ->
-                                                game
-
-                                            _ ->
-                                                Go.initGame
-                                        )
-                                        |> Ui.map GoGameMsg
-
-                                FrontendGameData_WordSpellingGame _ _ cache ->
-                                    case model of
-                                        Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
-                                            WordSpellingGame.gameView
-                                                currentTime
-                                                windowSize
-                                                maybeDragging
-                                                localUser.session.userId
-                                                cache
-                                                game
-                                                |> Ui.map WordSpellingGameMsg
+        (case maybeMatchId of
+            Just matchId ->
+                case SeqDict.get matchId matches of
+                    Just (MatchData match) ->
+                        case match.data of
+                            FrontendGameData_Go setup _ cache ->
+                                Go.gameView
+                                    currentTime
+                                    windowSize
+                                    localUser
+                                    setup
+                                    cache
+                                    (case model of
+                                        Just (GoModel (Go.Game game)) ->
+                                            game
 
                                         _ ->
-                                            matchNotFound
+                                            Go.initGame
+                                    )
+                                    |> Ui.map GoGameMsg
 
-                        Nothing ->
-                            matchNotFound
+                            FrontendGameData_WordSpellingGame _ _ cache ->
+                                case model of
+                                    Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
+                                        WordSpellingGame.gameView
+                                            currentTime
+                                            windowSize
+                                            maybeDragging
+                                            localUser.session.userId
+                                            cache
+                                            game
+                                            |> Ui.map WordSpellingGameMsg
 
-                Nothing ->
-                    case model of
+                                    _ ->
+                                        matchNotFound
+
+                    Nothing ->
+                        matchNotFound
+
+            Nothing ->
+                Ui.column
+                    []
+                    [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
+                    , case model of
                         Just (GoModel model2) ->
                             Go.setupView
                                 (localUser.session.userId == otherUserId)
@@ -524,7 +524,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                             Ui.row
                                 [ Ui.spacing 8, Ui.wrap ]
                                 (List.map gameSelectButton allGames)
-            ]
+                    ]
         )
 
 
