@@ -117,6 +117,7 @@ type alias SetupModel =
     , incrementInput : String
     , traySize : Int
     , error : Maybe String
+    , letters : String
     }
 
 
@@ -125,6 +126,7 @@ type alias ValidatedSetup =
     , traySize : OneOrGreater
     , createdBy : Id UserId
     , seed : Int
+    , letters : SeqDict LetterOrWildcard OneOrGreater
     }
 
 
@@ -134,6 +136,7 @@ initSetup =
     , incrementInput = "5"
     , traySize = 7
     , error = Nothing
+    , letters = Debug.todo ""
     }
 
 
@@ -244,15 +247,13 @@ initShared setup =
     }
 
 
-remainingLettersInBag : SeqDict a { b | letter : Letter, isWildcard : Bool } -> List Player -> SeqDict LetterOrWildcard OneOrGreater
-remainingLettersInBag board players =
+remainingLettersInBag :
+    ValidatedSetup
+    -> SeqDict a { b | letter : Letter, isWildcard : Bool }
+    -> List Player
+    -> SeqDict LetterOrWildcard OneOrGreater
+remainingLettersInBag setup board players =
     let
-        startingLetters : SeqDict LetterOrWildcard OneOrGreater
-        startingLetters =
-            ( Wildcard, OneOrGreater.two )
-                :: List.map (\letter -> ( Letter letter, (letterData letter).total )) allLetters
-                |> SeqDict.fromList
-
         remainingLetters : SeqDict LetterOrWildcard OneOrGreater
         remainingLetters =
             SeqDict.foldl
@@ -266,7 +267,7 @@ remainingLettersInBag board players =
                         )
                         startingLetters2
                 )
-                startingLetters
+                setup.letters
                 board
     in
     List.foldl
@@ -287,7 +288,7 @@ getLetters count setup board players turnCount =
         (SeqDict.foldl
             (\letter count2 list -> List.repeat (OneOrGreater.toInt count2) letter ++ list)
             []
-            (remainingLettersInBag board players)
+            (remainingLettersInBag setup board players)
             |> shuffle
         )
         (Random.initialSeed (setup.seed + turnCount))
@@ -932,6 +933,7 @@ validateSetup createdBy time setup =
                         , seed =
                             -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                             Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
+                        , letters = Debug.todo ""
                         }
 
                 Nothing ->
@@ -1442,16 +1444,17 @@ gameView :
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
     -> Id UserId
+    -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging currentUserId shared model =
+gameView currentTime windowSize maybeDragging currentUserId setup shared model =
     Ui.row
         [ Ui.spacing 16, Ui.wrap ]
         [ boardView currentTime windowSize maybeDragging currentUserId shared model
         , Ui.column
             [ Ui.paddingXY 16 0 ]
-            [ statusView currentUserId shared
+            [ statusView currentUserId setup shared
             , case isPlayerTurn currentUserId shared of
                 JoinedAndItsTheirTurn ->
                     Ui.row
@@ -1469,8 +1472,8 @@ gameView currentTime windowSize maybeDragging currentUserId shared model =
         ]
 
 
-statusView : Id UserId -> Shared -> Element GameMsg
-statusView currentUserId shared =
+statusView : Id UserId -> ValidatedSetup -> Shared -> Element GameMsg
+statusView currentUserId setup shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -1483,7 +1486,7 @@ statusView currentUserId shared =
             SeqDict.foldl
                 (\_ a total -> OneOrGreater.toInt a + total)
                 0
-                (remainingLettersInBag shared.board (List.Nonempty.toList shared.players))
+                (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -2139,7 +2142,6 @@ allLetters =
 type alias LetterData =
     { score : Int
     , text : String
-    , total : OneOrGreater
     }
 
 

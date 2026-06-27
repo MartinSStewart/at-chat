@@ -472,7 +472,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                     )
                                     |> Ui.map GoGameMsg
 
-                            FrontendGameData_WordSpellingGame _ _ cache ->
+                            FrontendGameData_WordSpellingGame setup _ cache ->
                                 case model of
                                     Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
                                         WordSpellingGame.gameView
@@ -480,6 +480,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                             windowSize
                                             maybeDragging
                                             localUser.session.userId
+                                            setup
                                             cache
                                             game
                                             |> Ui.map WordSpellingGameMsg
