@@ -97,7 +97,10 @@ type alias Tile =
 
 
 type TilePosition
-    = TileInTray TrayIndex
+    = -- The `Maybe ( Time.Posix, Int )` records, when the tile was shifted to make room for an
+      -- inserted tile, the moment the shift started and the slot it shifted from, so the view can
+      -- animate it sliding from its old slot to this one.
+      TileInTray TrayIndex (Maybe ( Time.Posix, Int ))
     | TileOnBoard ( Int, Int )
 
 
@@ -155,7 +158,7 @@ initGame time setup =
             List.range 0 (OneOrGreater.toInt setup.traySize - 1)
                 |> List.map
                     (\index ->
-                        { position = TileInTray (TrayIndex index)
+                        { position = TileInTray (TrayIndex index) Nothing
                         , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
                         }
                     )
@@ -815,7 +818,7 @@ updateGame time currentUserId setup shared msg model =
                             Array.filter
                                 (\tile ->
                                     case tile.position of
-                                        TileInTray _ ->
+                                        TileInTray _ _ ->
                                             True
 
                                         TileOnBoard _ ->
@@ -829,7 +832,7 @@ updateGame time currentUserId setup shared msg model =
                                 |> List.foldl
                                     (\index tray ->
                                         Array.push
-                                            { position = TileInTray (firstOpenTrayIndex Nothing tray)
+                                            { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
                                             , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
                                             }
                                             tray
@@ -884,7 +887,7 @@ checkValidPlacement currentUserId shared notShared =
                                     TileOnBoard cell ->
                                         Just ( cell, letter )
 
-                                    TileInTray _ ->
+                                    TileInTray _ _ ->
                                         Nothing
                             )
 
@@ -1124,6 +1127,39 @@ trayTilePos windowSize (TrayIndex index) =
         (trayY windowSize)
 
 
+{-| Where a tray tile is currently drawn. While a shift animation is in progress the tile eases
+from the slot it was shifted out of toward its current slot; otherwise it sits at its current slot.
+-}
+animatedTrayTilePos : Coord CssPixels -> Time.Posix -> TrayIndex -> Maybe ( Time.Posix, Int ) -> Coord CssPixels
+animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
+    let
+        dest : Coord CssPixels
+        dest =
+            trayTilePos windowSize trayIndex
+    in
+    case shiftAnimation of
+        Just ( startTime, fromSlot ) ->
+            let
+                eased : Float
+                eased =
+                    easeOutCubic (clamp 0 1 (elapsedMs currentTime startTime / trayShiftDuration))
+
+                from : Coord CssPixels
+                from =
+                    trayTilePos windowSize (TrayIndex fromSlot)
+
+                lerp : Int -> Int -> Int
+                lerp a b =
+                    round (toFloat a + eased * toFloat (b - a))
+            in
+            Coord.xy
+                (lerp (Coord.xRaw from) (Coord.xRaw dest))
+                (lerp (Coord.yRaw from) (Coord.yRaw dest))
+
+        Nothing ->
+            dest
+
+
 {-| Which tray slot (if any) a screen position is over.
 -}
 trayIndexAtPosition : Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
@@ -1171,7 +1207,7 @@ dragStart windowSize touches setup gameModel =
                             TileOnBoard boardPosition ->
                                 boardPosition == cell
 
-                            TileInTray _ ->
+                            TileInTray _ _ ->
                                 False
                     )
                     trayList
@@ -1192,7 +1228,7 @@ dragStart windowSize touches setup gameModel =
                                     TileOnBoard _ ->
                                         False
 
-                                    TileInTray trayIndex ->
+                                    TileInTray trayIndex _ ->
                                         trayIndex == TrayIndex index
                             )
                             trayList
@@ -1207,8 +1243,8 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
 
-dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> Model
-dragEnd windowSize newTouches shared gameModel =
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> Model
+dragEnd currentTime windowSize newTouches shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
             let
@@ -1219,7 +1255,7 @@ dragEnd windowSize newTouches shared gameModel =
                 returnToTray : Model
                 returnToTray =
                     if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
-                        insertIntoTray windowSize tileIndex position gameModel
+                        insertIntoTray currentTime windowSize tileIndex position gameModel
 
                     else
                         Game
@@ -1228,7 +1264,7 @@ dragEnd windowSize newTouches shared gameModel =
                                 , tiles =
                                     Array.Extra.update
                                         tileIndex
-                                        (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) })
+                                        (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
                                         gameModel.tiles
                             }
             in
@@ -1271,7 +1307,7 @@ firstOpenTrayIndex draggedIndex tiles =
 
                         else
                             case tile.position of
-                                TileInTray (TrayIndex trayIndex) ->
+                                TileInTray (TrayIndex trayIndex) _ ->
                                     Just trayIndex
 
                                 TileOnBoard _ ->
@@ -1339,8 +1375,8 @@ distanceToTray windowSize coord slotCount =
 {-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
 slot and the nearest empty slot over by one to make room.
 -}
-insertIntoTray : Coord CssPixels -> Int -> Coord CssPixels -> GameData -> Model
-insertIntoTray windowSize tileIndex position gameModel =
+insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> GameData -> Model
+insertIntoTray currentTime windowSize tileIndex position gameModel =
     let
         slotCount : Int
         slotCount =
@@ -1363,7 +1399,7 @@ insertIntoTray windowSize tileIndex position gameModel =
 
                         else
                             case tile.position of
-                                TileInTray (TrayIndex slot) ->
+                                TileInTray (TrayIndex slot) _ ->
                                     Just slot
 
                                 TileOnBoard _ ->
@@ -1429,12 +1465,23 @@ insertIntoTray windowSize tileIndex position gameModel =
                 Array.indexedMap
                     (\index tile ->
                         if index == tileIndex then
-                            { tile | position = TileInTray (TrayIndex target) }
+                            -- The dropped tile appears straight at its slot (it was following the
+                            -- cursor, so there's no old tray slot to slide from).
+                            { tile | position = TileInTray (TrayIndex target) Nothing }
 
                         else
                             case tile.position of
-                                TileInTray (TrayIndex slot) ->
-                                    { tile | position = TileInTray (TrayIndex (slotMapping slot)) }
+                                TileInTray (TrayIndex slot) _ ->
+                                    let
+                                        newSlot : Int
+                                        newSlot =
+                                            slotMapping slot
+                                    in
+                                    if newSlot == slot then
+                                        tile
+
+                                    else
+                                        { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
 
                                 TileOnBoard _ ->
                                     tile
@@ -1517,13 +1564,24 @@ trayShiftDuration =
     150
 
 
-{-| Whether a tile is still in its fade-in window, during which `tileInFront` drives the tile's
-position itself (for the downward drift), so the CSS slide transition must stay off to avoid
-fighting it.
+{-| Whether a tile is still within its fade-in window, so the view keeps redrawing each animation
+frame until it has settled.
 -}
 isTileFading : Time.Posix -> Time.Posix -> Bool
 isTileFading currentTime createdAt =
     elapsedMs currentTime createdAt < tileFadeDelay + tileFadeDuration
+
+
+{-| Whether a tray tile is partway through sliding from an old slot to a new one.
+-}
+isTileShifting : Time.Posix -> Tile -> Bool
+isTileShifting currentTime tile =
+    case tile.position of
+        TileInTray _ (Just ( startTime, _ )) ->
+            elapsedMs currentTime startTime < trayShiftDuration
+
+        _ ->
+            False
 
 
 elapsedMs : Time.Posix -> Time.Posix -> Float
@@ -1583,7 +1641,7 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt) model.tiles
+    Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
 
 
 {-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
@@ -2030,7 +2088,6 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                         Touch.touchCentroid dragging2
                                 in
                                 tileInFront
-                                    False
                                     currentTime
                                     tile.createdAt
                                     cellSize2
@@ -2042,18 +2099,16 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
 
                             _ ->
                                 case tile.position of
-                                    TileInTray trayIndex ->
+                                    TileInTray trayIndex shiftAnimation ->
                                         tileInFront
-                                            (not (isTileFading currentTime tile.createdAt))
                                             currentTime
                                             tile.createdAt
                                             trayTileSize
-                                            (trayTilePos windowSize trayIndex)
+                                            (animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation)
                                             letter
 
                                     TileOnBoard ( x, y ) ->
                                         tileInFront
-                                            False
                                             currentTime
                                             tile.createdAt
                                             cellSize2
@@ -2143,8 +2198,8 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         (Ui.Lazy.lazy boardViewBackground cellSize2)
 
 
-tileInFront : Bool -> Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront animateMove currentTime createdAt cellSize2 offset letterOrWildcard =
+tileInFront : Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
     let
         fade : { opacity : Float, drift : Float }
         fade =
@@ -2164,11 +2219,6 @@ tileInFront animateMove currentTime createdAt cellSize2 offset letterOrWildcard 
                 , y = Coord.yRaw offset - round (fade.drift * tileFadeDrift * toFloat cellSize2)
                 , z = 0
                 }
-            , if animateMove then
-                MyUi.htmlStyle "transition" ("translate " ++ String.fromFloat trayShiftDuration ++ "ms ease-out")
-
-              else
-                Ui.noAttr
             , Ui.Font.color (Ui.rgb 0 0 0)
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents

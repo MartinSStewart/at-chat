@@ -5821,7 +5821,7 @@ finalizeWordSpellingDrag model loggedIn =
                             setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd model.windowSize dragging.touches game.shared game.model)
+                                (WordSpellingGame.dragEnd model.time model.windowSize dragging.touches game.shared game.model)
                                 loggedIn
 
                         Nothing ->
