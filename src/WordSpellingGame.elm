@@ -1578,7 +1578,74 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
 
 leaderboardView : Shared -> LocalUser -> Element GameMsg
 leaderboardView shared localUser =
-    Debug.todo ""
+    let
+        winners : List (Id UserId)
+        winners =
+            case getWinner shared of
+                Just nonempty ->
+                    List.Nonempty.toList nonempty
+
+                Nothing ->
+                    []
+
+        isTie : Bool
+        isTie =
+            List.length winners > 1
+
+        sortedPlayers : List Player
+        sortedPlayers =
+            List.Nonempty.toList shared.players
+                |> List.sortBy (\player -> negate player.score)
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        (Ui.el
+            [ Ui.Font.weight 700 ]
+            (Ui.text
+                (if isTie then
+                    "Game over — it's a tie!"
+
+                 else
+                    "Game over"
+                )
+            )
+            :: List.map
+                (\player ->
+                    let
+                        isWinner : Bool
+                        isWinner =
+                            List.member player.userId winners
+                    in
+                    ((if player.userId == localUser.session.userId then
+                        "You"
+
+                      else
+                        "Opponent"
+                     )
+                        ++ ": "
+                        ++ String.fromInt player.score
+                        ++ (if isWinner then
+                                if isTie then
+                                    " (tied for first)"
+
+                                else
+                                    " (winner)"
+
+                            else
+                                ""
+                           )
+                    )
+                        |> Ui.text
+                        |> Ui.el
+                            [ if isWinner then
+                                Ui.Font.weight 700
+
+                              else
+                                Ui.Font.weight 400
+                            ]
+                )
+                sortedPlayers
+        )
 
 
 statusView : Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
