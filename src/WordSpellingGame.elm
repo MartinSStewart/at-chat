@@ -353,112 +353,105 @@ updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action state =
     case action.change of
         PlaceWord placedWord isValid ->
-            case getWinner state of
-                Just _ ->
-                    state
+            case ( getWinner state, getPlayer action.userId state ) of
+                ( Nothing, Just player ) ->
+                    case placeWord state.board placedWord of
+                        Just result ->
+                            let
+                                animatedPlacement : Maybe AnimatedPlacement
+                                animatedPlacement =
+                                    Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
 
-                Nothing ->
-                    case getPlayer action.userId state of
-                        Just player ->
-                            case placeWord state.board placedWord of
-                                Just result ->
-                                    let
-                                        animatedPlacement : Maybe AnimatedPlacement
-                                        animatedPlacement =
-                                            Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
+                                remainingTray : List LetterOrWildcard
+                                remainingTray =
+                                    List.foldl
+                                        removeFromTray
+                                        (IdArray.toList player.tray)
+                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
 
-                                        remainingTray : List LetterOrWildcard
-                                        remainingTray =
-                                            List.foldl
-                                                removeFromTray
-                                                (IdArray.toList player.tray)
-                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
-
-                                        drawn : List LetterOrWildcard
-                                        drawn =
-                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                Just drawCount ->
-                                                    getLetters
-                                                        drawCount
-                                                        setup
-                                                        result.board
-                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
-                                                            |> List.Nonempty.toList
-                                                        )
-                                                        state.turnCount
-
-                                                Nothing ->
-                                                    []
-
-                                        tray =
-                                            remainingTray ++ drawn |> IdArray.fromList
-                                    in
-                                    { state
-                                        | board =
-                                            case isValid of
-                                                FilledInByBackend IsNotValid ->
-                                                    state.board
-
-                                                _ ->
-                                                    result.board
-                                        , players =
-                                            NonemptyExtra.set
+                                drawn : List LetterOrWildcard
+                                drawn =
+                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                        Just drawCount ->
+                                            getLetters
+                                                drawCount
+                                                setup
+                                                result.board
+                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                    |> List.Nonempty.toList
+                                                )
                                                 state.turnCount
-                                                { player
-                                                    | tray = tray
-                                                    , score =
-                                                        case isValid of
-                                                            FilledInByBackend IsNotValid ->
-                                                                player.score
 
-                                                            _ ->
-                                                                player.score + result.score
-                                                }
-                                                state.players
-                                        , turnCount = state.turnCount + 1
-                                        , lastPlacement = animatedPlacement
-                                        , passingStartedAt =
-                                            if tray == IdArray.empty then
-                                                case state.passingStartedAt of
-                                                    Nothing ->
-                                                        Just state.turnCount
+                                        Nothing ->
+                                            []
 
-                                                    Just _ ->
-                                                        state.passingStartedAt
+                                tray =
+                                    remainingTray ++ drawn |> IdArray.fromList
+                            in
+                            { state
+                                | board =
+                                    case isValid of
+                                        FilledInByBackend IsNotValid ->
+                                            state.board
 
-                                            else
-                                                Nothing
-                                    }
+                                        _ ->
+                                            result.board
+                                , players =
+                                    NonemptyExtra.set
+                                        state.turnCount
+                                        { player
+                                            | tray = tray
+                                            , score =
+                                                case isValid of
+                                                    FilledInByBackend IsNotValid ->
+                                                        player.score
 
-                                Nothing ->
-                                    state
+                                                    _ ->
+                                                        player.score + result.score
+                                        }
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , lastPlacement = animatedPlacement
+                                , passingStartedAt =
+                                    if tray == IdArray.empty then
+                                        case state.passingStartedAt of
+                                            Nothing ->
+                                                Just state.turnCount
+
+                                            Just _ ->
+                                                state.passingStartedAt
+
+                                    else
+                                        Nothing
+                            }
+
+                        Nothing ->
+                            state
+
+                _ ->
+                    state
 
         ReplaceTrayOrPass ->
-            case getWinner state of
-                Just _ ->
-                    state
-
-                Nothing ->
+            case ( getWinner state, getPlayer action.userId state ) of
+                ( Nothing, Just player ) ->
                     case passBehavior setup state of
                         ShouldReplaceTray ->
                             { state
                                 | players =
-                                    NonemptyExtra.update
+                                    NonemptyExtra.set
                                         state.turnCount
-                                        (\player ->
-                                            { player
-                                                | tray =
-                                                    getLetters
-                                                        setup.traySize
-                                                        setup
-                                                        state.board
-                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
-                                                            |> List.Nonempty.toList
-                                                        )
-                                                        state.turnCount
-                                                        |> IdArray.fromList
-                                            }
-                                        )
+                                        { player
+                                            | tray =
+                                                getLetters
+                                                    setup.traySize
+                                                    setup
+                                                    state.board
+                                                    (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
+                                                        |> List.Nonempty.toList
+                                                    )
+                                                    state.turnCount
+                                                    |> IdArray.fromList
+                                        }
                                         state.players
                                 , turnCount = state.turnCount + 1
                                 , passingStartedAt = Nothing
@@ -478,6 +471,9 @@ updateAction setup action state =
 
                         ShouldEndGame ->
                             { state | turnCount = state.turnCount + 1 }
+
+                _ ->
+                    state
 
         JoinGame ->
             if state.turnCount > List.Nonempty.length state.players then
