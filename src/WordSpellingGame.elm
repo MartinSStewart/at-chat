@@ -2526,21 +2526,6 @@ bonusCellLabel bonus =
             "★"
 
 
-{-| Text color for a bonus cell's label, picked for contrast against its (darker) background.
--}
-bonusTextColor : BonusCells -> Ui.Color
-bonusTextColor bonus =
-    case bonus of
-        TripleWord ->
-            Ui.rgb 255 255 255
-
-        TripleLetter ->
-            Ui.rgb 255 255 255
-
-        _ ->
-            Ui.rgb 0 0 0
-
-
 bonusCells : SeqDict ( Int, Int ) BonusCells
 bonusCells =
     ( ( 7, 7 ), CenterCell )

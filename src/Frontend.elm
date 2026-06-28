@@ -1,4 +1,4 @@
-module Frontend exposing (app, app_)
+module Frontend exposing (app, app_, handleWordSpellingGameOutMsgs)
 
 import AiChat
 import Array
@@ -7140,17 +7140,22 @@ routeToInitialDataRequest route =
             InitialLoadRequested_None
 
 
+handleWordSpellingGameOutMsgs :
+    List Game.OutMsg
+    -> Route.DmRouteData
+    -> LoadedFrontend
+    -> ( LoadedFrontend, List (Command FrontendOnly ToBackend FrontendMsg) )
 handleWordSpellingGameOutMsgs outMsgs dmRoute model =
     List.foldl
-        (\outMsg ( accModel, cmds ) ->
+        (\outMsg ( model2, cmds ) ->
             case outMsg of
                 Game.PlaySound maybeTime sound ->
-                    ( accModel, Ports.playSound maybeTime sound :: cmds )
+                    ( model2, Ports.playSound maybeTime sound :: cmds )
 
                 Game.CopyText text ->
                     let
                         ( copyModel, copyCmd ) =
-                            copyText text accModel
+                            copyText text model2
                     in
                     ( copyModel, copyCmd :: cmds )
 
@@ -7158,13 +7163,13 @@ handleWordSpellingGameOutMsgs outMsgs dmRoute model =
                     let
                         ( pushModel, pushCmd ) =
                             FrontendExtra.routePush
-                                accModel
+                                model2
                                 (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
                     in
                     ( pushModel, pushCmd :: cmds )
 
                 Game.OutLocalChange _ ->
-                    ( accModel, cmds )
+                    ( model2, cmds )
         )
         ( model, [] )
         outMsgs
