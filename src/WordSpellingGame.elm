@@ -8,7 +8,7 @@ module WordSpellingGame exposing
     , IsValid(..)
     , Letter(..)
     , LetterId
-    , LetterOrWildcard
+    , LetterOrWildcard(..)
     , LocalChange(..)
     , Model(..)
     , OutMsg(..)
@@ -19,7 +19,8 @@ module WordSpellingGame exposing
     , SetupMsg
     , Shared
     , Tile
-    , TilePosition
+    , TilePosition(..)
+    , TrayIndex(..)
     , UserStatus(..)
     , ValidatedSetup
     , animatedTilePlacement
@@ -102,6 +103,8 @@ type alias Tile =
     { position : TilePosition, createdAt : Time.Posix }
 
 
+{-| OpaqueVariants
+-}
 type TilePosition
     = -- The `Maybe ( Time.Posix, Int )` records, when the tile was shifted to make room for an
       -- inserted tile, the moment the shift started and the slot it shifted from, so the view can
@@ -110,6 +113,8 @@ type TilePosition
     | TileOnBoard ( Int, Int )
 
 
+{-| Opaque
+-}
 type TrayIndex
     = TrayIndex Int
 
@@ -255,6 +260,8 @@ type LetterId
     = LetterId Never
 
 
+{-| OpaqueVariants
+-}
 type LetterOrWildcard
     = Letter Letter
     | Wildcard

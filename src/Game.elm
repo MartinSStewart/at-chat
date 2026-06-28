@@ -1,7 +1,8 @@
 module Game exposing
     ( BackendGameData(..)
+    , FrontendGameData(..)
     , LocalChange(..)
-    , MatchData
+    , MatchData(..)
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -52,6 +53,8 @@ type BackendGameData
     | GameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
 
 
+{-| OpaqueVariants
+-}
 type FrontendGameData
     = FrontendGameData_Go Go.ValidatedSetup (Array Go.ActionWithTime) Go.Shared
     | FrontendGameData_WordSpellingGame WordSpellingGame.ValidatedSetup (Array WordSpellingGame.ActionWithTime) WordSpellingGame.Shared
