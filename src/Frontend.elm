@@ -1,4 +1,4 @@
-module Frontend exposing (app, app_, handleWordSpellingGameOutMsgs)
+module Frontend exposing (app, app_)
 
 import AiChat
 import Array
