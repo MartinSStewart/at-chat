@@ -41,9 +41,6 @@ wordSpellingGameTests normalConfig =
                     pointerUpEvent =
                         Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
 
-                    -- Drag a tile from one screen position to another. Two move events are
-                    -- needed: the first transitions the drag into the Dragging state (which
-                    -- records the start position), the second sets the drop position.
                     dragTile delay tab from to =
                         T.group
                             [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
@@ -67,28 +64,63 @@ wordSpellingGameTests normalConfig =
                   admin.click 100 (Dom.id "guild_openDm_2")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
                 , admin.click 100 (Dom.id "wsg_start")
 
                 -- The other user opens the same match and joins it.
                 , user.click 2000 (Dom.id "guild_openDm_0")
                 , user.click 100 (Dom.id "guild_openGamesTab")
-                , user.custom
-                    100
-                    (Dom.id "go_matchSwitcher")
-                    "input"
-                    (Json.Encode.object [ ( "target", Json.Encode.object [ ( "value", Json.Encode.string "0" ) ] ) ])
+                , user.input 100 (Dom.id "go_matchSwitcher") "0"
                 , user.click 100 (Dom.id "wordSpellingGame_joinGame")
-
-                -- Admin drags three tiles from the tray onto a row of the board to form a
-                -- word, then submits it.
-                , dragTile 100 admin (trayTile 0) (boardCell 7 7)
-                , dragTile 100 admin (trayTile 1) (boardCell 8 7)
-                , dragTile 100 admin (trayTile 3) (boardCell 9 7)
-                , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
-                , dragTile 3000 user (trayTile 1) (boardCell 7 6)
-                , dragTile 100 user (trayTile 5) (boardCell 7 7)
-                , dragTile 100 user (trayTile 6) (boardCell 7 8)
-                , user.click 100 (Dom.id "wordSpellingGame_submitWord")
+                , T.collapsableGroup
+                    "Place invalid word"
+                    [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                    , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                    , dragTile 100 admin (trayTile 3) (boardCell 9 7)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.snapshotView 3000 { name = "Place invalid word" }
+                    , user.snapshotView 0 { name = "Place invalid word" }
+                    ]
+                , T.collapsableGroup
+                    "Place \"site\""
+                    [ dragTile 100 user (trayTile 4) (boardCell 7 6)
+                    , dragTile 100 user (trayTile 5) (boardCell 7 7)
+                    , dragTile 100 user (trayTile 6) (boardCell 7 8)
+                    , dragTile 100 user (trayTile 1) (boardCell 7 9)
+                    , user.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.snapshotView 3000 { name = "Place \"site\"" }
+                    , user.snapshotView 0 { name = "Place \"site\"" }
+                    ]
+                , T.collapsableGroup
+                    "Place \"said\""
+                    [ dragTile 100 admin (trayTile 4) (boardCell 10 10)
+                    , dragTile 100 admin (trayTile 3) (boardCell 9 10)
+                    , dragTile 100 admin (trayTile 2) (boardCell 8 10)
+                    , dragTile 100 admin (trayTile 1) (boardCell 7 10)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.snapshotView 3000 { name = "Place \"said\"" }
+                    , user.snapshotView 0 { name = "Place \"said\"" }
+                    ]
+                , T.collapsableGroup
+                    "Place \"note\""
+                    [ dragTile 100 user (trayTile 2) (boardCell 9 11)
+                    , dragTile 100 user (trayTile 3) (boardCell 12 11)
+                    , dragTile 100 user (trayTile 6) (boardCell 10 11)
+                    , dragTile 100 user (trayTile 4) (boardCell 11 11)
+                    , user.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.snapshotView 3000 { name = "Place \"note\"" }
+                    , user.snapshotView 0 { name = "Place \"note\"" }
+                    ]
+                , T.collapsableGroup
+                    "Place \"amino\""
+                    [ dragTile 100 admin (trayTile 1) (boardCell 9 8)
+                    , dragTile 100 admin (trayTile 6) (boardCell 9 9)
+                    , dragTile 100 admin (trayTile 5) (boardCell 9 12)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.snapshotView 3000 { name = "Place \"amino\"" }
+                    , user.snapshotView 0 { name = "Place \"amino\"" }
+                    ]
+                , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
                 ]
             )
         ]

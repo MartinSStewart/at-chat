@@ -5398,38 +5398,39 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
             case ( action.userId == session.userId, SeqDict.get matchId dmChannel.games ) of
                 ( True, Just (Game.GameData_WordSpellingGame setup actions shared) ) ->
                     let
+                        action2 =
+                            { action
+                                | time = time
+                                , change =
+                                    case action.change of
+                                        WordSpellingGame.PlaceWord placed _ ->
+                                            WordSpellingGame.PlaceWord
+                                                placed
+                                                (case
+                                                    WordSpellingGame.validatePlacement
+                                                        WordSpellingGameList.words
+                                                        shared.board
+                                                        placed
+                                                 of
+                                                    Ok _ ->
+                                                        FilledInByBackend WordSpellingGame.IsValid
+
+                                                    Err () ->
+                                                        FilledInByBackend WordSpellingGame.IsNotValid
+                                                )
+
+                                        WordSpellingGame.ReplaceTrayOrPass ->
+                                            action.change
+
+                                        WordSpellingGame.JoinGame ->
+                                            action.change
+                            }
+
                         localMsg2 : Game.LocalChange
                         localMsg2 =
                             Game.LocalChange_WordSpellingGame
                                 matchId
-                                (WordSpellingGame.Action
-                                    { action
-                                        | time = time
-                                        , change =
-                                            case action.change of
-                                                WordSpellingGame.PlaceWord placed _ ->
-                                                    WordSpellingGame.PlaceWord
-                                                        placed
-                                                        (case
-                                                            WordSpellingGame.validatePlacement
-                                                                WordSpellingGameList.words
-                                                                shared.board
-                                                                placed
-                                                         of
-                                                            Ok _ ->
-                                                                FilledInByBackend WordSpellingGame.IsValid
-
-                                                            Err () ->
-                                                                FilledInByBackend WordSpellingGame.IsNotValid
-                                                        )
-
-                                                WordSpellingGame.ReplaceTray ->
-                                                    action.change
-
-                                                WordSpellingGame.JoinGame ->
-                                                    action.change
-                                    }
-                                )
+                                (WordSpellingGame.Action action2)
                     in
                     ( { model
                         | dmChannels =
@@ -5439,7 +5440,11 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                                     | games =
                                         SeqDict.insert
                                             matchId
-                                            (Game.GameData_WordSpellingGame setup (Array.push action actions) shared)
+                                            (Game.GameData_WordSpellingGame
+                                                setup
+                                                (Array.push action2 actions)
+                                                (WordSpellingGame.updateAction setup action2 shared)
+                                            )
                                             dmChannel.games
                                 }
                                 model.dmChannels

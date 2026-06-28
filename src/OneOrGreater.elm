@@ -73,7 +73,7 @@ increment (OneOrGreater a) =
 
 decrement : OneOrGreater -> Maybe OneOrGreater
 decrement (OneOrGreater a) =
-    if a > 0 then
+    if a > 1 then
         OneOrGreater (a - 1) |> Just
 
     else

@@ -115,7 +115,7 @@ type SetupMsg
 type GameMsg
     = PressedSubmitWord
     | PressedJoinGame
-    | PressedReplaceTray
+    | PressedReplaceTrayOrPass
 
 
 type alias SetupModel =
@@ -178,7 +178,7 @@ type LocalChange
 
 type Action
     = PlaceWord PlacedWord (ToBeFilledInByBackend IsValid)
-    | ReplaceTray
+    | ReplaceTrayOrPass
     | JoinGame
 
 
@@ -202,6 +202,7 @@ type alias Shared =
     { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
     , players : Nonempty Player
     , turnCount : Int
+    , passingStartedAt : Maybe Int
     , lastPlacement : Maybe AnimatedPlacement
     }
 
@@ -250,6 +251,7 @@ initShared setup =
     , players = Nonempty (initPlayer setup.createdBy initialBoard setup []) []
     , turnCount = 0
     , lastPlacement = Nothing
+    , passingStartedAt = Nothing
     }
 
 
@@ -391,28 +393,46 @@ updateAction setup action state =
                 Nothing ->
                     state
 
-        ReplaceTray ->
-            { state
-                | players =
-                    NonemptyExtra.update
-                        state.turnCount
-                        (\player ->
-                            { player
-                                | tray =
-                                    getLetters
-                                        setup.traySize
-                                        setup
-                                        state.board
-                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
-                                            |> List.Nonempty.toList
-                                        )
-                                        state.turnCount
-                                        |> IdArray.fromList
-                            }
-                        )
-                        state.players
-                , turnCount = state.turnCount + 1
-            }
+        ReplaceTrayOrPass ->
+            case passBehavior setup state of
+                ShouldReplaceTray ->
+                    { state
+                        | players =
+                            NonemptyExtra.update
+                                state.turnCount
+                                (\player ->
+                                    { player
+                                        | tray =
+                                            getLetters
+                                                setup.traySize
+                                                setup
+                                                state.board
+                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
+                                                    |> List.Nonempty.toList
+                                                )
+                                                state.turnCount
+                                                |> IdArray.fromList
+                                    }
+                                )
+                                state.players
+                        , turnCount = state.turnCount + 1
+                        , passingStartedAt = Nothing
+                    }
+
+                ShouldPass ->
+                    { state
+                        | passingStartedAt =
+                            case state.passingStartedAt of
+                                Nothing ->
+                                    Just state.turnCount
+
+                                Just _ ->
+                                    state.passingStartedAt
+                        , turnCount = state.turnCount + 1
+                    }
+
+                ShouldEndGame ->
+                    
 
         JoinGame ->
             if state.turnCount > List.Nonempty.length state.players then
@@ -790,8 +810,8 @@ updateGame time currentUserId setup shared msg model =
         PressedJoinGame ->
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
-        PressedReplaceTray ->
-            ( model, [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTray, time = time }) ] )
+        PressedReplaceTrayOrPass ->
+            ( model, [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ] )
 
 
 {-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
@@ -1456,6 +1476,30 @@ animatingCells currentTime shared =
             Set.empty
 
 
+type PassBehavior
+    = ShouldReplaceTray
+    | ShouldPass
+    | ShouldEndGame
+
+
+passBehavior : ValidatedSetup -> Shared -> PassBehavior
+passBehavior setup shared =
+    if remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players) == SeqDict.empty then
+        case shared.passingStartedAt of
+            Just passingStartedAt ->
+                if List.Nonempty.length shared.players > shared.turnCount + 1 - passingStartedAt then
+                    ShouldEndGame
+
+                else
+                    ShouldPass
+
+            Nothing ->
+                ShouldPass
+
+    else
+        ShouldReplaceTray
+
+
 gameView :
     Time.Posix
     -> Coord CssPixels
@@ -1477,7 +1521,19 @@ gameView currentTime windowSize maybeDragging currentUserId setup shared model =
                     Ui.row
                         [ Ui.spacing 16 ]
                         [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                        , MyUi.simpleButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTray (Ui.text "Replace tray")
+                        , MyUi.simpleButton
+                            (Dom.id "wordSpellingGame_replaceTray")
+                            PressedReplaceTrayOrPass
+                            (case passBehavior setup shared of
+                                ShouldReplaceTray ->
+                                    Ui.text "Replace tray"
+
+                                ShouldPass ->
+                                    Ui.text "Pass turn"
+
+                                ShouldEndGame ->
+                                    Ui.text "End game"
+                            )
                         ]
 
                 Joined ->
