@@ -1218,15 +1218,19 @@ dragEnd windowSize newTouches shared gameModel =
 
                 returnToTray : Model
                 returnToTray =
-                    Game
-                        { gameModel
-                            | dragging = Nothing
-                            , tiles =
-                                Array.Extra.update
-                                    tileIndex
-                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) })
-                                    gameModel.tiles
-                        }
+                    if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
+                        insertIntoTray windowSize tileIndex position gameModel
+
+                    else
+                        Game
+                            { gameModel
+                                | dragging = Nothing
+                                , tiles =
+                                    Array.Extra.update
+                                        tileIndex
+                                        (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) })
+                                        gameModel.tiles
+                            }
             in
             case cellAtPosition windowSize position of
                 Just cell ->
@@ -1289,6 +1293,154 @@ cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
 cellOccupiedByOtherTile draggedIndex cell tiles =
     Array.toIndexedList tiles
         |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
+
+
+{-| How close (in CSS pixels) the cursor has to be to the tray for a dropped tile to snap into it
+rather than fall back to the first open slot.
+-}
+maxTraySnapDistance : number
+maxTraySnapDistance =
+    100
+
+
+{-| The distance (in CSS pixels) from a screen position to the nearest edge of the tray rectangle,
+or 0 when the position is inside it.
+-}
+distanceToTray : Coord CssPixels -> Coord CssPixels -> Int -> Float
+distanceToTray windowSize coord slotCount =
+    let
+        left : Int
+        left =
+            trayX windowSize
+
+        right : Int
+        right =
+            left + slotCount * trayTileSize + (slotCount - 1) * trayTileSpacing
+
+        top : Int
+        top =
+            trayY windowSize
+
+        bottom : Int
+        bottom =
+            top + trayHeight
+
+        dx : Int
+        dx =
+            max 0 (max (left - Coord.xRaw coord) (Coord.xRaw coord - right))
+
+        dy : Int
+        dy =
+            max 0 (max (top - Coord.yRaw coord) (Coord.yRaw coord - bottom))
+    in
+    sqrt (toFloat (dx * dx + dy * dy))
+
+
+{-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
+slot and the nearest empty slot over by one to make room.
+-}
+insertIntoTray : Coord CssPixels -> Int -> Coord CssPixels -> GameData -> Model
+insertIntoTray windowSize tileIndex position gameModel =
+    let
+        slotCount : Int
+        slotCount =
+            Array.length gameModel.tiles
+
+        target : Int
+        target =
+            toFloat (Coord.xRaw position - trayX windowSize)
+                / (trayTileSize + trayTileSpacing)
+                |> round
+                |> clamp 0 (slotCount - 1)
+
+        occupied : Set Int
+        occupied =
+            Array.toIndexedList gameModel.tiles
+                |> List.filterMap
+                    (\( index, tile ) ->
+                        if index == tileIndex then
+                            Nothing
+
+                        else
+                            case tile.position of
+                                TileInTray (TrayIndex slot) ->
+                                    Just slot
+
+                                TileOnBoard _ ->
+                                    Nothing
+                    )
+                |> Set.fromList
+
+        rightFree : Maybe Int
+        rightFree =
+            List.range (target + 1) (slotCount - 1)
+                |> List.filter (\slot -> not (Set.member slot occupied))
+                |> List.head
+
+        leftFree : Maybe Int
+        leftFree =
+            List.range 0 (target - 1)
+                |> List.filter (\slot -> not (Set.member slot occupied))
+                |> List.maximum
+
+        shiftRight : Int -> Int -> Int
+        shiftRight free slot =
+            if slot >= target && slot < free then
+                slot + 1
+
+            else
+                slot
+
+        shiftLeft : Int -> Int -> Int
+        shiftLeft free slot =
+            if slot > free && slot <= target then
+                slot - 1
+
+            else
+                slot
+
+        slotMapping : Int -> Int
+        slotMapping =
+            if not (Set.member target occupied) then
+                identity
+
+            else
+                case ( leftFree, rightFree ) of
+                    ( Just l, Just r ) ->
+                        if target - l <= r - target then
+                            shiftLeft l
+
+                        else
+                            shiftRight r
+
+                    ( Just l, Nothing ) ->
+                        shiftLeft l
+
+                    ( Nothing, Just r ) ->
+                        shiftRight r
+
+                    ( Nothing, Nothing ) ->
+                        identity
+    in
+    Game
+        { gameModel
+            | dragging = Nothing
+            , tiles =
+                Array.indexedMap
+                    (\index tile ->
+                        if index == tileIndex then
+                            { tile | position = TileInTray (TrayIndex target) }
+
+                        else
+                            case tile.position of
+                                TileInTray (TrayIndex slot) ->
+                                    { tile | position = TileInTray (TrayIndex (slotMapping slot)) }
+
+                                TileOnBoard _ ->
+                                    tile
+                    )
+                    gameModel.tiles
+        }
 
 
 type UserStatus
