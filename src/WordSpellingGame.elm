@@ -75,6 +75,7 @@ import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
+import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -327,112 +328,142 @@ shuffle list =
         Random.independentSeed
 
 
+getWinner : Shared -> Maybe (Nonempty (Id UserId))
+getWinner shared =
+    case shared.passingStartedAt of
+        Just passingStartedAt ->
+            if List.Nonempty.length shared.players < shared.turnCount - passingStartedAt then
+                let
+                    player =
+                        NonemptyExtra.maximumBy .score shared.players
+                in
+                List.Nonempty.filter (\a -> a.score == player.score) player shared.players
+                    |> List.Nonempty.map .userId
+                    |> Just
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action state =
     case action.change of
         PlaceWord placedWord isValid ->
-            case placeWord state.board placedWord of
-                Just result ->
-                    let
-                        animatedPlacement : Maybe AnimatedPlacement
-                        animatedPlacement =
-                            Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
-                    in
-                    { state
-                        | board =
-                            case isValid of
-                                FilledInByBackend IsNotValid ->
-                                    state.board
+            case getWinner state of
+                Just _ ->
+                    state
 
-                                _ ->
-                                    result.board
-                        , players =
-                            NonemptyExtra.update
-                                state.turnCount
-                                (\player ->
-                                    let
-                                        remainingTray : List LetterOrWildcard
-                                        remainingTray =
-                                            List.foldl
-                                                removeFromTray
-                                                (IdArray.toList player.tray)
-                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
+                Nothing ->
+                    case placeWord state.board placedWord of
+                        Just result ->
+                            let
+                                animatedPlacement : Maybe AnimatedPlacement
+                                animatedPlacement =
+                                    Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
+                            in
+                            { state
+                                | board =
+                                    case isValid of
+                                        FilledInByBackend IsNotValid ->
+                                            state.board
 
-                                        drawn : List LetterOrWildcard
-                                        drawn =
-                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                Just drawCount ->
+                                        _ ->
+                                            result.board
+                                , players =
+                                    NonemptyExtra.update
+                                        state.turnCount
+                                        (\player ->
+                                            let
+                                                remainingTray : List LetterOrWildcard
+                                                remainingTray =
+                                                    List.foldl
+                                                        removeFromTray
+                                                        (IdArray.toList player.tray)
+                                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
+
+                                                drawn : List LetterOrWildcard
+                                                drawn =
+                                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                                        Just drawCount ->
+                                                            getLetters
+                                                                drawCount
+                                                                setup
+                                                                result.board
+                                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                                    |> List.Nonempty.toList
+                                                                )
+                                                                state.turnCount
+
+                                                        Nothing ->
+                                                            []
+                                            in
+                                            { player
+                                                | tray = remainingTray ++ drawn |> IdArray.fromList
+                                                , score =
+                                                    case isValid of
+                                                        FilledInByBackend IsNotValid ->
+                                                            player.score
+
+                                                        _ ->
+                                                            player.score + result.score
+                                            }
+                                        )
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , lastPlacement = animatedPlacement
+                            }
+
+                        Nothing ->
+                            state
+
+        ReplaceTrayOrPass ->
+            case getWinner state of
+                Just _ ->
+                    state
+
+                Nothing ->
+                    case passBehavior setup state of
+                        ShouldReplaceTray ->
+                            { state
+                                | players =
+                                    NonemptyExtra.update
+                                        state.turnCount
+                                        (\player ->
+                                            { player
+                                                | tray =
                                                     getLetters
-                                                        drawCount
+                                                        setup.traySize
                                                         setup
-                                                        result.board
-                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                        state.board
+                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
                                                             |> List.Nonempty.toList
                                                         )
                                                         state.turnCount
+                                                        |> IdArray.fromList
+                                            }
+                                        )
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , passingStartedAt = Nothing
+                            }
 
-                                                Nothing ->
-                                                    []
-                                    in
-                                    { player
-                                        | tray = remainingTray ++ drawn |> IdArray.fromList
-                                        , score =
-                                            case isValid of
-                                                FilledInByBackend IsNotValid ->
-                                                    player.score
+                        ShouldPass ->
+                            { state
+                                | passingStartedAt =
+                                    case state.passingStartedAt of
+                                        Nothing ->
+                                            Just state.turnCount
 
-                                                _ ->
-                                                    player.score + result.score
-                                    }
-                                )
-                                state.players
-                        , turnCount = state.turnCount + 1
-                        , lastPlacement = animatedPlacement
-                    }
+                                        Just _ ->
+                                            state.passingStartedAt
+                                , turnCount = state.turnCount + 1
+                            }
 
-                Nothing ->
-                    state
-
-        ReplaceTrayOrPass ->
-            case passBehavior setup state of
-                ShouldReplaceTray ->
-                    { state
-                        | players =
-                            NonemptyExtra.update
-                                state.turnCount
-                                (\player ->
-                                    { player
-                                        | tray =
-                                            getLetters
-                                                setup.traySize
-                                                setup
-                                                state.board
-                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
-                                                    |> List.Nonempty.toList
-                                                )
-                                                state.turnCount
-                                                |> IdArray.fromList
-                                    }
-                                )
-                                state.players
-                        , turnCount = state.turnCount + 1
-                        , passingStartedAt = Nothing
-                    }
-
-                ShouldPass ->
-                    { state
-                        | passingStartedAt =
-                            case state.passingStartedAt of
-                                Nothing ->
-                                    Just state.turnCount
-
-                                Just _ ->
-                                    state.passingStartedAt
-                        , turnCount = state.turnCount + 1
-                    }
-
-                ShouldEndGame ->
-                    
+                        ShouldEndGame ->
+                            { state | turnCount = state.turnCount + 1 }
 
         JoinGame ->
             if state.turnCount > List.Nonempty.length state.players then
@@ -1488,10 +1519,10 @@ passBehavior setup shared =
         case shared.passingStartedAt of
             Just passingStartedAt ->
                 if List.Nonempty.length shared.players > shared.turnCount + 1 - passingStartedAt then
-                    ShouldEndGame
+                    ShouldPass
 
                 else
-                    ShouldPass
+                    ShouldEndGame
 
             Nothing ->
                 ShouldPass
@@ -1504,19 +1535,19 @@ gameView :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
-    -> Id UserId
+    -> LocalUser
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging currentUserId setup shared model =
+gameView currentTime windowSize maybeDragging localUser setup shared model =
     Ui.row
         [ Ui.spacing 16, Ui.wrap ]
-        [ boardView currentTime windowSize maybeDragging currentUserId shared model
+        [ boardView currentTime windowSize maybeDragging localUser.session.userId shared model
         , Ui.column
             [ Ui.paddingXY 16 0 ]
-            [ statusView currentUserId setup shared
-            , case isPlayerTurn currentUserId shared of
+            [ statusView localUser.session.userId localUser setup shared
+            , case isPlayerTurn localUser.session.userId shared of
                 JoinedAndItsTheirTurn ->
                     Ui.row
                         [ Ui.spacing 16 ]
@@ -1545,8 +1576,13 @@ gameView currentTime windowSize maybeDragging currentUserId setup shared model =
         ]
 
 
-statusView : Id UserId -> ValidatedSetup -> Shared -> Element GameMsg
-statusView currentUserId setup shared =
+leaderboardView : Shared -> LocalUser -> Element GameMsg
+leaderboardView shared localUser =
+    Debug.todo ""
+
+
+statusView : Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
+statusView currentUserId localUser setup shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -1561,40 +1597,45 @@ statusView currentUserId setup shared =
                 0
                 (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
     in
-    Ui.column
-        [ Ui.spacing 4 ]
-        (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
-            :: List.indexedMap
-                (\index player ->
-                    (if player.userId == currentUserId then
-                        "You"
+    case getWinner shared of
+        Just winners ->
+            leaderboardView shared localUser
 
-                     else
-                        "Opponent"
-                    )
-                        ++ ": "
-                        ++ String.fromInt player.score
-                        ++ (if index == modBy playerCount shared.turnCount then
-                                if player.userId == currentUserId then
-                                    " (your turn)"
+        Nothing ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
+                    :: List.indexedMap
+                        (\index player ->
+                            (if player.userId == currentUserId then
+                                "You"
 
-                                else
-                                    " (their turn)"
+                             else
+                                "Opponent"
+                            )
+                                ++ ": "
+                                ++ String.fromInt player.score
+                                ++ (if index == modBy playerCount shared.turnCount then
+                                        if player.userId == currentUserId then
+                                            " (your turn)"
 
-                            else
-                                ""
-                           )
-                        |> Ui.text
-                        |> Ui.el
-                            [ if player.userId == currentPlayer.userId then
-                                Ui.Font.weight 700
+                                        else
+                                            " (their turn)"
 
-                              else
-                                Ui.Font.weight 400
-                            ]
+                                    else
+                                        ""
+                                   )
+                                |> Ui.text
+                                |> Ui.el
+                                    [ if player.userId == currentPlayer.userId then
+                                        Ui.Font.weight 700
+
+                                      else
+                                        Ui.Font.weight 400
+                                    ]
+                        )
+                        (List.Nonempty.toList shared.players)
                 )
-                (List.Nonempty.toList shared.players)
-        )
 
 
 trayHeight : number

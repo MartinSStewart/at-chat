@@ -121,6 +121,7 @@ wordSpellingGameTests normalConfig =
                     , user.snapshotView 0 { name = "Place \"amino\"" }
                     ]
                 , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
                 ]
             )
         ]
