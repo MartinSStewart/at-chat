@@ -2037,36 +2037,13 @@ updateLoaded msg model =
                                           }
                                         , Command.none
                                         )
-                                        (Debug.log "outMsgs" outMsgs)
+                                        outMsgs
 
                                 ( model2, effectCmd ) =
-                                    List.foldl
-                                        (\outMsg ( accModel, cmds ) ->
-                                            case outMsg of
-                                                Game.PlaySound maybeTime sound ->
-                                                    ( accModel, Ports.playSound maybeTime sound :: cmds )
-
-                                                Game.CopyText text ->
-                                                    let
-                                                        ( copyModel, copyCmd ) =
-                                                            copyText text accModel
-                                                    in
-                                                    ( copyModel, copyCmd :: cmds )
-
-                                                Game.OutSelectMatch newSelected ->
-                                                    let
-                                                        ( pushModel, pushCmd ) =
-                                                            FrontendExtra.routePush
-                                                                accModel
-                                                                (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
-                                                    in
-                                                    ( pushModel, pushCmd :: cmds )
-
-                                                Game.OutLocalChange _ ->
-                                                    ( accModel, cmds )
-                                        )
-                                        ( { model | loginStatus = LoggedIn loggedIn2 }, [] )
+                                    handleWordSpellingGameOutMsgs
                                         outMsgs
+                                        dmRoute
+                                        { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
@@ -5723,67 +5700,73 @@ handleTouchEnd time model =
 
                         _ ->
                             loggedIn
-            in
-            ( finalizeWordSpellingDrag
-                time
-                model
-                (case loggedIn2.messageHover of
-                    MessageMenu extraOptions ->
-                        case extraOptions.mobileMode of
-                            MessageMenuDragging dragging ->
-                                let
-                                    delta : Duration
-                                    delta =
-                                        Duration.from dragging.time time
 
-                                    menuDelta : Quantity Float (Rate CssPixels Seconds)
-                                    menuDelta =
-                                        dragging.offset
-                                            |> Quantity.minus dragging.previousOffset
-                                            |> Quantity.per delta
+                ( loggedIn3, cmds ) =
+                    finalizeWordSpellingDrag
+                        time
+                        model
+                        (case loggedIn2.messageHover of
+                            MessageMenu extraOptions ->
+                                case extraOptions.mobileMode of
+                                    MessageMenuDragging dragging ->
+                                        let
+                                            delta : Duration
+                                            delta =
+                                                Duration.from dragging.time time
 
-                                    speedThreshold : Quantity Float (Rate CssPixels Seconds)
-                                    speedThreshold =
-                                        Quantity.rate (CssPixels.cssPixels -100) Duration.second
+                                            menuDelta : Quantity Float (Rate CssPixels Seconds)
+                                            menuDelta =
+                                                dragging.offset
+                                                    |> Quantity.minus dragging.previousOffset
+                                                    |> Quantity.per delta
 
-                                    menuHeight : Quantity Float CssPixels
-                                    menuHeight =
-                                        MessageMenu.mobileMenuMaxHeight
-                                            extraOptions
-                                            (Local.model loggedIn2.localState)
-                                            model
+                                            speedThreshold : Quantity Float (Rate CssPixels Seconds)
+                                            speedThreshold =
+                                                Quantity.rate (CssPixels.cssPixels -100) Duration.second
 
-                                    halfwayPoint : Quantity Float CssPixels
-                                    halfwayPoint =
-                                        menuHeight |> Quantity.divideBy 2
-                                in
-                                if
-                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
-                                        || (menuDelta |> Quantity.lessThan speedThreshold)
-                                then
-                                    MessageMenu.close model loggedIn2
+                                            menuHeight : Quantity Float CssPixels
+                                            menuHeight =
+                                                MessageMenu.mobileMenuMaxHeight
+                                                    extraOptions
+                                                    (Local.model loggedIn2.localState)
+                                                    model
 
-                                else
-                                    { loggedIn2
-                                        | messageHover =
-                                            MessageMenu
-                                                { extraOptions
-                                                    | mobileMode =
-                                                        MessageMenuFixed
-                                                            (Quantity.min menuHeight dragging.offset)
-                                                }
-                                    }
+                                            halfwayPoint : Quantity Float CssPixels
+                                            halfwayPoint =
+                                                menuHeight |> Quantity.divideBy 2
+                                        in
+                                        if
+                                            (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                                || (menuDelta |> Quantity.lessThan speedThreshold)
+                                        then
+                                            MessageMenu.close model loggedIn2
 
-                            _ ->
+                                        else
+                                            { loggedIn2
+                                                | messageHover =
+                                                    MessageMenu
+                                                        { extraOptions
+                                                            | mobileMode =
+                                                                MessageMenuFixed
+                                                                    (Quantity.min menuHeight dragging.offset)
+                                                        }
+                                            }
+
+                                    _ ->
+                                        loggedIn2
+
+                            NoMessageHover ->
                                 loggedIn2
 
-                    NoMessageHover ->
-                        loggedIn2
-
-                    MessageHover _ _ ->
-                        loggedIn2
-                )
-            , Process.sleep (Duration.milliseconds 30) |> Task.perform (\() -> OneFrameAfterDragEnd)
+                            MessageHover _ _ ->
+                                loggedIn2
+                        )
+            in
+            ( loggedIn3
+            , Command.batch
+                [ Process.sleep (Duration.milliseconds 30) |> Task.perform (\() -> OneFrameAfterDragEnd)
+                , cmds
+                ]
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }
@@ -5807,7 +5790,7 @@ setWordSpellingGameModel local model game loggedIn =
             loggedIn
 
 
-finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> LoggedIn2
+finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
 finalizeWordSpellingDrag time model loggedIn =
     case model.drag of
         Dragging dragging ->
@@ -5820,20 +5803,30 @@ finalizeWordSpellingDrag time model loggedIn =
                     in
                     case FrontendExtra.getWordSpellingGameModel local loggedIn model of
                         Just game ->
-                            setWordSpellingGameModel
+                            let
+                                ( game2, playSound ) =
+                                    WordSpellingGame.dragEnd time model.windowSize dragging.touches game.shared game.model
+                            in
+                            ( setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd time model.windowSize dragging.touches game.shared game.model)
+                                game2
                                 loggedIn
+                            , if playSound then
+                                Ports.playSound Nothing "pop"
+
+                              else
+                                Command.none
+                            )
 
                         Nothing ->
-                            loggedIn
+                            ( loggedIn, Command.none )
 
                 _ ->
-                    loggedIn
+                    ( loggedIn, Command.none )
 
         _ ->
-            loggedIn
+            ( loggedIn, Command.none )
 
 
 dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
@@ -7145,3 +7138,33 @@ routeToInitialDataRequest route =
 
         _ ->
             InitialLoadRequested_None
+
+
+handleWordSpellingGameOutMsgs outMsgs dmRoute model =
+    List.foldl
+        (\outMsg ( accModel, cmds ) ->
+            case outMsg of
+                Game.PlaySound maybeTime sound ->
+                    ( accModel, Ports.playSound maybeTime sound :: cmds )
+
+                Game.CopyText text ->
+                    let
+                        ( copyModel, copyCmd ) =
+                            copyText text accModel
+                    in
+                    ( copyModel, copyCmd :: cmds )
+
+                Game.OutSelectMatch newSelected ->
+                    let
+                        ( pushModel, pushCmd ) =
+                            FrontendExtra.routePush
+                                accModel
+                                (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
+                    in
+                    ( pushModel, pushCmd :: cmds )
+
+                Game.OutLocalChange _ ->
+                    ( accModel, cmds )
+        )
+        ( model, [] )
+        outMsgs

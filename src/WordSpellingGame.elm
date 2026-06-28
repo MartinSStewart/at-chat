@@ -52,7 +52,7 @@ import Array.Extra
 import Char
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Duration
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Go exposing (TimeControl)
@@ -68,6 +68,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
+import Quantity
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -153,21 +154,29 @@ initSetup =
 
 initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
 initGame time setup =
+    let
+        list =
+            List.range 0 (OneOrGreater.toInt setup.traySize - 1)
+    in
     ( { selectedCell = Nothing
       , tiles =
-            List.range 0 (OneOrGreater.toInt setup.traySize - 1)
-                |> List.map
-                    (\index ->
-                        { position = TileInTray (TrayIndex index) Nothing
-                        , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
-                        }
-                    )
+            List.map
+                (\index ->
+                    { position = TileInTray (TrayIndex index) Nothing
+                    , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                    }
+                )
+                list
                 |> Array.fromList
       , dragging = Nothing
       }
     , List.map
-        (\index -> PlaySound (Duration.addTo time (Duration.seconds (0.2 * toFloat index)) |> Just) "pop")
-        (List.range 0 (OneOrGreater.toInt setup.traySize - 1))
+        (\index ->
+            PlaySound
+                (Duration.addTo time (Duration.seconds (0.2 * toFloat index) |> Quantity.plus tileFadeDelay) |> Just)
+                "pop"
+        )
+        list
     )
 
 
@@ -844,7 +853,7 @@ updateGame time currentUserId setup shared msg model =
                             |> OutLocalChange
 
                       -- The refilled tray tiles fade in tileFadeDelay later, so pop then.
-                      , PlaySound (Just (addMs tileFadeDelay time)) "pop"
+                      , PlaySound (Just (Duration.addTo time tileFadeDelay)) "pop"
                       ]
                     )
 
@@ -1243,7 +1252,7 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> Model
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> ( Model, Bool )
 dragEnd currentTime windowSize newTouches shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
@@ -1252,12 +1261,12 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                 position =
                     Touch.touchCentroid newTouches
 
-                returnToTray : Model
+                returnToTray : ( Model, Bool )
                 returnToTray =
-                    if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
+                    ( if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
                         insertIntoTray currentTime windowSize tileIndex position gameModel
 
-                    else
+                      else
                         Game
                             { gameModel
                                 | dragging = Nothing
@@ -1267,6 +1276,8 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                                         (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
                                         gameModel.tiles
                             }
+                    , False
+                    )
             in
             case cellAtPosition windowSize position of
                 Just cell ->
@@ -1274,7 +1285,7 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                         returnToTray
 
                     else
-                        Game
+                        ( Game
                             { gameModel
                                 | dragging = Nothing
                                 , tiles =
@@ -1283,12 +1294,14 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                                         (\tile -> { tile | position = TileOnBoard cell })
                                         gameModel.tiles
                             }
+                        , True
+                        )
 
                 Nothing ->
                     returnToTray
 
         Nothing ->
-            Game gameModel
+            ( Game gameModel, False )
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -1534,18 +1547,16 @@ invalidHoldDuration =
     2000
 
 
-{-| How long, in milliseconds, a freshly created tile stays hidden before it fades in.
--}
-tileFadeDelay : Float
+tileFadeDelay : Duration
 tileFadeDelay =
-    1000
+    Duration.milliseconds 1000
 
 
 {-| How long, in milliseconds, the fade-and-drift into place itself takes, once it starts.
 -}
 tileFadeDuration : Float
 tileFadeDuration =
-    200
+    100
 
 
 {-| How far, as a fraction of a tile's size, a new tile starts above its final spot before it
@@ -1569,7 +1580,7 @@ frame until it has settled.
 -}
 isTileFading : Time.Posix -> Time.Posix -> Bool
 isTileFading currentTime createdAt =
-    elapsedMs currentTime createdAt < tileFadeDelay + tileFadeDuration
+    elapsedMs currentTime createdAt < Duration.inMilliseconds tileFadeDelay + tileFadeDuration
 
 
 {-| Whether a tray tile is partway through sliding from an old slot to a new one.
@@ -1654,7 +1665,7 @@ tileFade currentTime createdAt =
     let
         progress : Float
         progress =
-            clamp 0 1 ((elapsedMs currentTime createdAt - tileFadeDelay) / tileFadeDuration)
+            clamp 0 1 ((elapsedMs currentTime createdAt - Duration.inMilliseconds tileFadeDelay) / tileFadeDuration)
     in
     { opacity = progress, drift = 1 - easeOutCubic progress }
 
