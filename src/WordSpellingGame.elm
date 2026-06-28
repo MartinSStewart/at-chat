@@ -332,7 +332,7 @@ getWinner : Shared -> Maybe (Nonempty (Id UserId))
 getWinner shared =
     case shared.passingStartedAt of
         Just passingStartedAt ->
-            if List.Nonempty.length shared.players < shared.turnCount - passingStartedAt then
+            if List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt then
                 let
                     player =
                         NonemptyExtra.maximumBy .score shared.players
