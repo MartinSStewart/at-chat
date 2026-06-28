@@ -1142,7 +1142,7 @@ animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
             let
                 eased : Float
                 eased =
-                    easeOutCubic (clamp 0 1 (elapsedMs currentTime startTime / trayShiftDuration))
+                    clamp 0 1 (elapsedMs currentTime startTime / trayShiftDuration)
 
                 from : Coord CssPixels
                 from =
@@ -1561,7 +1561,7 @@ another tile is inserted next to it.
 -}
 trayShiftDuration : Float
 trayShiftDuration =
-    150
+    200
 
 
 {-| Whether a tile is still within its fade-in window, so the view keeps redrawing each animation
@@ -1779,7 +1779,7 @@ gameView :
     -> Element GameMsg
 gameView currentTime windowSize maybeDragging localUser setup shared model =
     Ui.row
-        [ Ui.spacing 16, Ui.wrap ]
+        [ Ui.spacing 16, Ui.wrap, MyUi.htmlStyle "user-select" "none" ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
         , Ui.column
             [ Ui.paddingXY 16 0 ]

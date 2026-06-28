@@ -5724,7 +5724,9 @@ handleTouchEnd time model =
                         _ ->
                             loggedIn
             in
-            ( finalizeWordSpellingDrag model
+            ( finalizeWordSpellingDrag
+                time
+                model
                 (case loggedIn2.messageHover of
                     MessageMenu extraOptions ->
                         case extraOptions.mobileMode of
@@ -5805,8 +5807,8 @@ setWordSpellingGameModel local model game loggedIn =
             loggedIn
 
 
-finalizeWordSpellingDrag : LoadedFrontend -> LoggedIn2 -> LoggedIn2
-finalizeWordSpellingDrag model loggedIn =
+finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> LoggedIn2
+finalizeWordSpellingDrag time model loggedIn =
     case model.drag of
         Dragging dragging ->
             case dragging.target of
@@ -5821,7 +5823,7 @@ finalizeWordSpellingDrag model loggedIn =
                             setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd model.time model.windowSize dragging.touches game.shared game.model)
+                                (WordSpellingGame.dragEnd time model.windowSize dragging.touches game.shared game.model)
                                 loggedIn
 
                         Nothing ->

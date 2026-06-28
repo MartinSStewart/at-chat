@@ -8,6 +8,8 @@ import Effect.Test as T
 import Game
 import Json.Encode
 import Message
+import Test.Html.Query
+import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import WordSpellingGame
 
@@ -52,9 +54,9 @@ wordSpellingGameTests normalConfig =
                     -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
                     -- cells (see WordSpellingGame.boardX / boardY / cellSize), and the tray
                     -- is directly below it.
-                    trayTile : Int -> ( Float, Float )
+                    trayTile : Float -> ( Float, Float )
                     trayTile index =
-                        ( toFloat (283 + index * 54), WordSpellingGame.trayY windowSize |> toFloat )
+                        ( 283 + index * 54, WordSpellingGame.trayY windowSize |> toFloat )
 
                     boardCell : Int -> Int -> ( Float, Float )
                     boardCell cx cy =
@@ -81,11 +83,20 @@ wordSpellingGameTests normalConfig =
                     , admin.snapshotView 3000 { name = "Place invalid word" }
                     , user.snapshotView 0 { name = "Place invalid word" }
                     ]
+                , T.group
+                    [ user.custom 100 (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent (trayTile 4))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 4.1))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 4.5))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 5.5))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 5.9))
+                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointerup" (pointerEvent (trayTile 5.9))
+                    , user.snapshotView 500 { name = "Shift tray" }
+                    ]
                 , T.collapsableGroup
                     "Place \"site\""
-                    [ dragTile 100 user (trayTile 4) (boardCell 7 6)
-                    , dragTile 100 user (trayTile 5) (boardCell 7 7)
-                    , dragTile 100 user (trayTile 6) (boardCell 7 8)
+                    [ dragTile 100 user (trayTile 6) (boardCell 7 6)
+                    , dragTile 100 user (trayTile 4) (boardCell 7 7)
+                    , dragTile 100 user (trayTile 5) (boardCell 7 8)
                     , dragTile 100 user (trayTile 1) (boardCell 7 9)
                     , user.click 100 (Dom.id "wordSpellingGame_submitWord")
                     , admin.snapshotView 3000 { name = "Place \"site\"" }
@@ -122,6 +133,16 @@ wordSpellingGameTests normalConfig =
                     ]
                 , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
                 , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT: 28 (winner)", Test.Html.Selector.exactText "Stevie Steve: 21" ]
+                    )
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT: 28 (winner)", Test.Html.Selector.exactText "Stevie Steve: 21" ]
+                    )
                 ]
             )
         ]
