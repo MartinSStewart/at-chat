@@ -1,4 +1,4 @@
-module NonemptyExtra exposing (appendList, minimumBy, set, update)
+module NonemptyExtra exposing (appendList, maximumBy, minimumBy, set)
 
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -12,6 +12,16 @@ appendList (Nonempty head tail) list =
 minimumBy : (a -> comparable) -> Nonempty a -> a
 minimumBy minFunc (Nonempty head tail) =
     case List.Extra.minimumBy minFunc (head :: tail) of
+        Just minimum ->
+            minimum
+
+        Nothing ->
+            head
+
+
+maximumBy : (a -> comparable) -> Nonempty a -> a
+maximumBy maxFunc (Nonempty head tail) =
+    case List.Extra.maximumBy maxFunc (head :: tail) of
         Just minimum ->
             minimum
 

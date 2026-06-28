@@ -50,9 +50,10 @@ module WordSpellingGame exposing
 import Array exposing (Array)
 import Array.Extra
 import Char
+import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Duration
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Go exposing (TimeControl)
@@ -67,6 +68,8 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
+import PersonName
+import Quantity
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -75,6 +78,7 @@ import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
+import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -87,6 +91,10 @@ type alias GameData =
     { selectedCell : Maybe ( Int, Int )
     , tiles : Array Tile
     , dragging : Maybe Int
+    , -- When the player last pressed submit while their board tiles didn't form a single connected
+      -- row or column. Drives the hint under the submit button and the shake that draws attention to
+      -- the offending tiles.
+      invalidPlacement : Maybe Time.Posix
     }
 
 
@@ -95,7 +103,10 @@ type alias Tile =
 
 
 type TilePosition
-    = TileInTray TrayIndex
+    = -- The `Maybe ( Time.Posix, Int )` records, when the tile was shifted to make room for an
+      -- inserted tile, the moment the shift started and the slot it shifted from, so the view can
+      -- animate it sliding from its old slot to this one.
+      TileInTray TrayIndex (Maybe ( Time.Posix, Int ))
     | TileOnBoard ( Int, Int )
 
 
@@ -115,7 +126,7 @@ type SetupMsg
 type GameMsg
     = PressedSubmitWord
     | PressedJoinGame
-    | PressedReplaceTray
+    | PressedReplaceTrayOrPass
 
 
 type alias SetupModel =
@@ -148,21 +159,30 @@ initSetup =
 
 initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
 initGame time setup =
+    let
+        list =
+            List.range 0 (OneOrGreater.toInt setup.traySize - 1)
+    in
     ( { selectedCell = Nothing
       , tiles =
-            List.range 0 (OneOrGreater.toInt setup.traySize - 1)
-                |> List.map
-                    (\index ->
-                        { position = TileInTray (TrayIndex index)
-                        , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
-                        }
-                    )
+            List.map
+                (\index ->
+                    { position = TileInTray (TrayIndex index) Nothing
+                    , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                    }
+                )
+                list
                 |> Array.fromList
       , dragging = Nothing
+      , invalidPlacement = Nothing
       }
     , List.map
-        (\index -> PlaySound (Duration.addTo time (Duration.seconds (0.2 * toFloat index)) |> Just) "pop")
-        (List.range 0 (OneOrGreater.toInt setup.traySize - 1))
+        (\index ->
+            PlaySound
+                (Duration.addTo time (Duration.seconds (0.2 * toFloat index) |> Quantity.plus tileFadeDelay) |> Just)
+                "pop"
+        )
+        list
     )
 
 
@@ -178,7 +198,7 @@ type LocalChange
 
 type Action
     = PlaceWord PlacedWord (ToBeFilledInByBackend IsValid)
-    | ReplaceTray
+    | ReplaceTrayOrPass
     | JoinGame
 
 
@@ -202,6 +222,7 @@ type alias Shared =
     { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
     , players : Nonempty Player
     , turnCount : Int
+    , passingStartedAt : Maybe Int
     , lastPlacement : Maybe AnimatedPlacement
     }
 
@@ -250,6 +271,7 @@ initShared setup =
     , players = Nonempty (initPlayer setup.createdBy initialBoard setup []) []
     , turnCount = 0
     , lastPlacement = Nothing
+    , passingStartedAt = Nothing
     }
 
 
@@ -325,94 +347,151 @@ shuffle list =
         Random.independentSeed
 
 
+getWinner : Shared -> Maybe (Nonempty (Id UserId))
+getWinner shared =
+    case shared.passingStartedAt of
+        Just passingStartedAt ->
+            if List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt then
+                let
+                    player =
+                        NonemptyExtra.maximumBy .score shared.players
+                in
+                List.Nonempty.filter (\a -> a.score == player.score) player shared.players
+                    |> List.Nonempty.map .userId
+                    |> Just
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action state =
     case action.change of
         PlaceWord placedWord isValid ->
-            case placeWord state.board placedWord of
-                Just result ->
-                    let
-                        animatedPlacement : Maybe AnimatedPlacement
-                        animatedPlacement =
-                            Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
-                    in
-                    { state
-                        | board =
-                            case isValid of
-                                FilledInByBackend IsNotValid ->
-                                    state.board
+            case ( getWinner state, getPlayer action.userId state ) of
+                ( Nothing, Just player ) ->
+                    case placeWord state.board placedWord of
+                        Just result ->
+                            let
+                                animatedPlacement : Maybe AnimatedPlacement
+                                animatedPlacement =
+                                    Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
 
-                                _ ->
-                                    result.board
-                        , players =
-                            NonemptyExtra.update
-                                state.turnCount
-                                (\player ->
-                                    let
-                                        remainingTray : List LetterOrWildcard
-                                        remainingTray =
-                                            List.foldl
-                                                removeFromTray
-                                                (IdArray.toList player.tray)
-                                                (List.map Letter (List.Nonempty.toList placedWord.letters))
+                                remainingTray : List LetterOrWildcard
+                                remainingTray =
+                                    List.foldl
+                                        removeFromTray
+                                        (IdArray.toList player.tray)
+                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
 
-                                        drawn : List LetterOrWildcard
-                                        drawn =
-                                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                Just drawCount ->
-                                                    getLetters
-                                                        drawCount
-                                                        setup
-                                                        result.board
-                                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
-                                                            |> List.Nonempty.toList
-                                                        )
-                                                        state.turnCount
+                                drawn : List LetterOrWildcard
+                                drawn =
+                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                        Just drawCount ->
+                                            getLetters
+                                                drawCount
+                                                setup
+                                                result.board
+                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                    |> List.Nonempty.toList
+                                                )
+                                                state.turnCount
 
-                                                Nothing ->
-                                                    []
-                                    in
-                                    { player
-                                        | tray = remainingTray ++ drawn |> IdArray.fromList
-                                        , score =
-                                            case isValid of
-                                                FilledInByBackend IsNotValid ->
-                                                    player.score
+                                        Nothing ->
+                                            []
 
-                                                _ ->
-                                                    player.score + result.score
-                                    }
-                                )
-                                state.players
-                        , turnCount = state.turnCount + 1
-                        , lastPlacement = animatedPlacement
-                    }
+                                tray =
+                                    remainingTray ++ drawn |> IdArray.fromList
+                            in
+                            { state
+                                | board =
+                                    case isValid of
+                                        FilledInByBackend IsNotValid ->
+                                            state.board
 
-                Nothing ->
+                                        _ ->
+                                            result.board
+                                , players =
+                                    NonemptyExtra.set
+                                        state.turnCount
+                                        { player
+                                            | tray = tray
+                                            , score =
+                                                case isValid of
+                                                    FilledInByBackend IsNotValid ->
+                                                        player.score
+
+                                                    _ ->
+                                                        player.score + result.score
+                                        }
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , lastPlacement = animatedPlacement
+                                , passingStartedAt =
+                                    if tray == IdArray.empty then
+                                        case state.passingStartedAt of
+                                            Nothing ->
+                                                Just state.turnCount
+
+                                            Just _ ->
+                                                state.passingStartedAt
+
+                                    else
+                                        Nothing
+                            }
+
+                        Nothing ->
+                            state
+
+                _ ->
                     state
 
-        ReplaceTray ->
-            { state
-                | players =
-                    NonemptyExtra.update
-                        state.turnCount
-                        (\player ->
-                            { player
-                                | tray =
-                                    getLetters
-                                        setup.traySize
-                                        setup
-                                        state.board
-                                        (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
-                                            |> List.Nonempty.toList
-                                        )
+        ReplaceTrayOrPass ->
+            case ( getWinner state, getPlayer action.userId state ) of
+                ( Nothing, Just player ) ->
+                    case passBehavior setup state of
+                        ShouldReplaceTray ->
+                            { state
+                                | players =
+                                    NonemptyExtra.set
                                         state.turnCount
-                                        |> IdArray.fromList
+                                        { player
+                                            | tray =
+                                                getLetters
+                                                    setup.traySize
+                                                    setup
+                                                    state.board
+                                                    (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
+                                                        |> List.Nonempty.toList
+                                                    )
+                                                    state.turnCount
+                                                    |> IdArray.fromList
+                                        }
+                                        state.players
+                                , turnCount = state.turnCount + 1
+                                , passingStartedAt = Nothing
                             }
-                        )
-                        state.players
-                , turnCount = state.turnCount + 1
-            }
+
+                        ShouldPass ->
+                            { state
+                                | passingStartedAt =
+                                    case state.passingStartedAt of
+                                        Nothing ->
+                                            Just state.turnCount
+
+                                        Just _ ->
+                                            state.passingStartedAt
+                                , turnCount = state.turnCount + 1
+                            }
+
+                        ShouldEndGame ->
+                            { state | turnCount = state.turnCount + 1 }
+
+                _ ->
+                    state
 
         JoinGame ->
             if state.turnCount > List.Nonempty.length state.players then
@@ -754,7 +833,7 @@ updateGame time currentUserId setup shared msg model =
                             Array.filter
                                 (\tile ->
                                     case tile.position of
-                                        TileInTray _ ->
+                                        TileInTray _ _ ->
                                             True
 
                                         TileOnBoard _ ->
@@ -763,12 +842,13 @@ updateGame time currentUserId setup shared msg model =
                                 model.tiles
                     in
                     ( { model
-                        | tiles =
+                        | invalidPlacement = Nothing
+                        , tiles =
                             List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1)
                                 |> List.foldl
                                     (\index tray ->
                                         Array.push
-                                            { position = TileInTray (firstOpenTrayIndex Nothing tray)
+                                            { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
                                             , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
                                             }
                                             tray
@@ -780,18 +860,26 @@ updateGame time currentUserId setup shared msg model =
                             |> OutLocalChange
 
                       -- The refilled tray tiles fade in tileFadeDelay later, so pop then.
-                      , PlaySound (Just (addMs tileFadeDelay time)) "pop"
+                      , PlaySound (Just (Duration.addTo time tileFadeDelay)) "pop"
                       ]
                     )
 
                 Err () ->
-                    ( model, [] )
+                    -- The placement is geometrically invalid. If the player has tiles on the board,
+                    -- flag it so the view shows the hint and shakes those tiles.
+                    if Array.Extra.any (\tile -> isTileOnBoard tile) model.tiles then
+                        ( { model | invalidPlacement = Just time }, [] )
+
+                    else
+                        ( model, [] )
 
         PressedJoinGame ->
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
-        PressedReplaceTray ->
-            ( model, [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTray, time = time }) ] )
+        PressedReplaceTrayOrPass ->
+            ( { model | invalidPlacement = Nothing }
+            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            )
 
 
 {-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
@@ -823,7 +911,7 @@ checkValidPlacement currentUserId shared notShared =
                                     TileOnBoard cell ->
                                         Just ( cell, letter )
 
-                                    TileInTray _ ->
+                                    TileInTray _ _ ->
                                         Nothing
                             )
 
@@ -1063,6 +1151,39 @@ trayTilePos windowSize (TrayIndex index) =
         (trayY windowSize)
 
 
+{-| Where a tray tile is currently drawn. While a shift animation is in progress the tile eases
+from the slot it was shifted out of toward its current slot; otherwise it sits at its current slot.
+-}
+animatedTrayTilePos : Coord CssPixels -> Time.Posix -> TrayIndex -> Maybe ( Time.Posix, Int ) -> Coord CssPixels
+animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
+    let
+        dest : Coord CssPixels
+        dest =
+            trayTilePos windowSize trayIndex
+    in
+    case shiftAnimation of
+        Just ( startTime, fromSlot ) ->
+            let
+                eased : Float
+                eased =
+                    clamp 0 1 (elapsedMs currentTime startTime / trayShiftDuration)
+
+                from : Coord CssPixels
+                from =
+                    trayTilePos windowSize (TrayIndex fromSlot)
+
+                lerp : Int -> Int -> Int
+                lerp a b =
+                    round (toFloat a + eased * toFloat (b - a))
+            in
+            Coord.xy
+                (lerp (Coord.xRaw from) (Coord.xRaw dest))
+                (lerp (Coord.yRaw from) (Coord.yRaw dest))
+
+        Nothing ->
+            dest
+
+
 {-| Which tray slot (if any) a screen position is over.
 -}
 trayIndexAtPosition : Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
@@ -1110,7 +1231,7 @@ dragStart windowSize touches setup gameModel =
                             TileOnBoard boardPosition ->
                                 boardPosition == cell
 
-                            TileInTray _ ->
+                            TileInTray _ _ ->
                                 False
                     )
                     trayList
@@ -1131,7 +1252,7 @@ dragStart windowSize touches setup gameModel =
                                     TileOnBoard _ ->
                                         False
 
-                                    TileInTray trayIndex ->
+                                    TileInTray trayIndex _ ->
                                         trayIndex == TrayIndex index
                             )
                             trayList
@@ -1146,8 +1267,8 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
 
-dragEnd : Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> Model
-dragEnd windowSize newTouches shared gameModel =
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> ( Model, Bool )
+dragEnd currentTime windowSize newTouches shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
             let
@@ -1155,17 +1276,24 @@ dragEnd windowSize newTouches shared gameModel =
                 position =
                     Touch.touchCentroid newTouches
 
-                returnToTray : Model
+                returnToTray : ( Model, Bool )
                 returnToTray =
-                    Game
-                        { gameModel
-                            | dragging = Nothing
-                            , tiles =
-                                Array.Extra.update
-                                    tileIndex
-                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) })
-                                    gameModel.tiles
-                        }
+                    ( if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
+                        insertIntoTray currentTime windowSize tileIndex position gameModel
+
+                      else
+                        Game
+                            { gameModel
+                                | dragging = Nothing
+                                , invalidPlacement = Nothing
+                                , tiles =
+                                    Array.Extra.update
+                                        tileIndex
+                                        (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
+                                        gameModel.tiles
+                            }
+                    , False
+                    )
             in
             case cellAtPosition windowSize position of
                 Just cell ->
@@ -1173,21 +1301,24 @@ dragEnd windowSize newTouches shared gameModel =
                         returnToTray
 
                     else
-                        Game
+                        ( Game
                             { gameModel
                                 | dragging = Nothing
+                                , invalidPlacement = Nothing
                                 , tiles =
                                     Array.Extra.update
                                         tileIndex
                                         (\tile -> { tile | position = TileOnBoard cell })
                                         gameModel.tiles
                             }
+                        , True
+                        )
 
                 Nothing ->
                     returnToTray
 
         Nothing ->
-            Game gameModel
+            ( Game gameModel, False )
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -1206,7 +1337,7 @@ firstOpenTrayIndex draggedIndex tiles =
 
                         else
                             case tile.position of
-                                TileInTray (TrayIndex trayIndex) ->
+                                TileInTray (TrayIndex trayIndex) _ ->
                                     Just trayIndex
 
                                 TileOnBoard _ ->
@@ -1228,6 +1359,176 @@ cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
 cellOccupiedByOtherTile draggedIndex cell tiles =
     Array.toIndexedList tiles
         |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
+
+
+isTileOnBoard : Tile -> Bool
+isTileOnBoard tile =
+    case tile.position of
+        TileOnBoard _ ->
+            True
+
+        TileInTray _ _ ->
+            False
+
+
+{-| How close (in CSS pixels) the cursor has to be to the tray for a dropped tile to snap into it
+rather than fall back to the first open slot.
+-}
+maxTraySnapDistance : number
+maxTraySnapDistance =
+    100
+
+
+{-| The distance (in CSS pixels) from a screen position to the nearest edge of the tray rectangle,
+or 0 when the position is inside it.
+-}
+distanceToTray : Coord CssPixels -> Coord CssPixels -> Int -> Float
+distanceToTray windowSize coord slotCount =
+    let
+        left : Int
+        left =
+            trayX windowSize
+
+        right : Int
+        right =
+            left + slotCount * trayTileSize + (slotCount - 1) * trayTileSpacing
+
+        top : Int
+        top =
+            trayY windowSize
+
+        bottom : Int
+        bottom =
+            top + trayHeight
+
+        dx : Int
+        dx =
+            max 0 (max (left - Coord.xRaw coord) (Coord.xRaw coord - right))
+
+        dy : Int
+        dy =
+            max 0 (max (top - Coord.yRaw coord) (Coord.yRaw coord - bottom))
+    in
+    sqrt (toFloat (dx * dx + dy * dy))
+
+
+{-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
+slot and the nearest empty slot over by one to make room.
+-}
+insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> GameData -> Model
+insertIntoTray currentTime windowSize tileIndex position gameModel =
+    let
+        slotCount : Int
+        slotCount =
+            Array.length gameModel.tiles
+
+        target : Int
+        target =
+            toFloat (Coord.xRaw position - trayX windowSize)
+                / (trayTileSize + trayTileSpacing)
+                |> round
+                |> clamp 0 (slotCount - 1)
+
+        occupied : Set Int
+        occupied =
+            Array.toIndexedList gameModel.tiles
+                |> List.filterMap
+                    (\( index, tile ) ->
+                        if index == tileIndex then
+                            Nothing
+
+                        else
+                            case tile.position of
+                                TileInTray (TrayIndex slot) _ ->
+                                    Just slot
+
+                                TileOnBoard _ ->
+                                    Nothing
+                    )
+                |> Set.fromList
+
+        rightFree : Maybe Int
+        rightFree =
+            List.range (target + 1) (slotCount - 1)
+                |> List.filter (\slot -> not (Set.member slot occupied))
+                |> List.head
+
+        leftFree : Maybe Int
+        leftFree =
+            List.range 0 (target - 1)
+                |> List.filter (\slot -> not (Set.member slot occupied))
+                |> List.maximum
+
+        shiftRight : Int -> Int -> Int
+        shiftRight free slot =
+            if slot >= target && slot < free then
+                slot + 1
+
+            else
+                slot
+
+        shiftLeft : Int -> Int -> Int
+        shiftLeft free slot =
+            if slot > free && slot <= target then
+                slot - 1
+
+            else
+                slot
+
+        slotMapping : Int -> Int
+        slotMapping =
+            if not (Set.member target occupied) then
+                identity
+
+            else
+                case ( leftFree, rightFree ) of
+                    ( Just l, Just r ) ->
+                        if target - l <= r - target then
+                            shiftLeft l
+
+                        else
+                            shiftRight r
+
+                    ( Just l, Nothing ) ->
+                        shiftLeft l
+
+                    ( Nothing, Just r ) ->
+                        shiftRight r
+
+                    ( Nothing, Nothing ) ->
+                        identity
+    in
+    Game
+        { gameModel
+            | dragging = Nothing
+            , invalidPlacement = Nothing
+            , tiles =
+                Array.indexedMap
+                    (\index tile ->
+                        if index == tileIndex then
+                            -- The dropped tile appears straight at its slot (it was following the
+                            -- cursor, so there's no old tray slot to slide from).
+                            { tile | position = TileInTray (TrayIndex target) Nothing }
+
+                        else
+                            case tile.position of
+                                TileInTray (TrayIndex slot) _ ->
+                                    let
+                                        newSlot : Int
+                                        newSlot =
+                                            slotMapping slot
+                                    in
+                                    if newSlot == slot then
+                                        tile
+
+                                    else
+                                        { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
+
+                                TileOnBoard _ ->
+                                    tile
+                    )
+                    gameModel.tiles
+        }
 
 
 type UserStatus
@@ -1274,18 +1575,16 @@ invalidHoldDuration =
     2000
 
 
-{-| How long, in milliseconds, a freshly created tile stays hidden before it fades in.
--}
-tileFadeDelay : Float
+tileFadeDelay : Duration
 tileFadeDelay =
-    1000
+    Duration.milliseconds 1000
 
 
 {-| How long, in milliseconds, the fade-and-drift into place itself takes, once it starts.
 -}
 tileFadeDuration : Float
 tileFadeDuration =
-    200
+    100
 
 
 {-| How far, as a fraction of a tile's size, a new tile starts above its final spot before it
@@ -1294,6 +1593,83 @@ descends into place.
 tileFadeDrift : Float
 tileFadeDrift =
     0.2
+
+
+{-| How long, in milliseconds, a tray tile takes to slide from its old slot to its new one when
+another tile is inserted next to it.
+-}
+trayShiftDuration : Float
+trayShiftDuration =
+    200
+
+
+{-| Whether a tile is still within its fade-in window, so the view keeps redrawing each animation
+frame until it has settled.
+-}
+isTileFading : Time.Posix -> Time.Posix -> Bool
+isTileFading currentTime createdAt =
+    elapsedMs currentTime createdAt < Duration.inMilliseconds tileFadeDelay + tileFadeDuration
+
+
+{-| Whether a tray tile is partway through sliding from an old slot to a new one.
+-}
+isTileShifting : Time.Posix -> Tile -> Bool
+isTileShifting currentTime tile =
+    case tile.position of
+        TileInTray _ (Just ( startTime, _ )) ->
+            elapsedMs currentTime startTime < trayShiftDuration
+
+        _ ->
+            False
+
+
+{-| How long, in milliseconds, the player's board tiles jiggle after an invalid submit.
+-}
+shakeDuration : Float
+shakeDuration =
+    450
+
+
+{-| How far, in CSS pixels, the shake displaces a tile at its strongest (it decays to zero over
+`shakeDuration`).
+-}
+shakeAmplitude : Float
+shakeAmplitude =
+    5
+
+
+{-| The horizontal shake offset for the player's board tiles after an invalid submit. It oscillates
+and decays to zero over `shakeDuration`, and is zero when no invalid submit is active.
+-}
+boardTileShakeOffset : Time.Posix -> Maybe Time.Posix -> Int
+boardTileShakeOffset currentTime invalidPlacement =
+    case invalidPlacement of
+        Just startTime ->
+            let
+                progress : Float
+                progress =
+                    elapsedMs currentTime startTime / shakeDuration
+            in
+            if progress < 1 then
+                round (sin (progress * pi * 6) * shakeAmplitude * (1 - progress))
+
+            else
+                0
+
+        Nothing ->
+            0
+
+
+{-| Whether the invalid-submit shake is still playing, so the view keeps redrawing each frame.
+-}
+isShaking : Time.Posix -> GameData -> Bool
+isShaking currentTime model =
+    case model.invalidPlacement of
+        Just startTime ->
+            elapsedMs currentTime startTime < shakeDuration
+
+        Nothing ->
+            False
 
 
 elapsedMs : Time.Posix -> Time.Posix -> Float
@@ -1353,7 +1729,8 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    Array.Extra.any (\tile -> elapsedMs currentTime tile.createdAt < tileFadeDelay + tileFadeDuration) model.tiles
+    isShaking currentTime model
+        || Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
 
 
 {-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
@@ -1366,7 +1743,7 @@ tileFade currentTime createdAt =
     let
         progress : Float
         progress =
-            clamp 0 1 ((elapsedMs currentTime createdAt - tileFadeDelay) / tileFadeDuration)
+            clamp 0 1 ((elapsedMs currentTime createdAt - Duration.inMilliseconds tileFadeDelay) / tileFadeDuration)
     in
     { opacity = progress, drift = 1 - easeOutCubic progress }
 
@@ -1456,28 +1833,75 @@ animatingCells currentTime shared =
             Set.empty
 
 
+type PassBehavior
+    = ShouldReplaceTray
+    | ShouldPass
+    | ShouldEndGame
+
+
+passBehavior : ValidatedSetup -> Shared -> PassBehavior
+passBehavior setup shared =
+    if remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players) == SeqDict.empty then
+        case shared.passingStartedAt of
+            Just passingStartedAt ->
+                if List.Nonempty.length shared.players > shared.turnCount + 1 - passingStartedAt then
+                    ShouldPass
+
+                else
+                    ShouldEndGame
+
+            Nothing ->
+                ShouldPass
+
+    else
+        ShouldReplaceTray
+
+
 gameView :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
-    -> Id UserId
+    -> LocalUser
     -> ValidatedSetup
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging currentUserId setup shared model =
+gameView currentTime windowSize maybeDragging localUser setup shared model =
     Ui.row
-        [ Ui.spacing 16, Ui.wrap ]
-        [ boardView currentTime windowSize maybeDragging currentUserId shared model
+        [ Ui.spacing 16, Ui.wrap, MyUi.htmlStyle "user-select" "none" ]
+        [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
         , Ui.column
             [ Ui.paddingXY 16 0 ]
-            [ statusView currentUserId setup shared
-            , case isPlayerTurn currentUserId shared of
+            [ statusView localUser.session.userId localUser setup shared
+            , case isPlayerTurn localUser.session.userId shared of
                 JoinedAndItsTheirTurn ->
-                    Ui.row
-                        [ Ui.spacing 16 ]
-                        [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                        , MyUi.simpleButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTray (Ui.text "Replace tray")
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.row
+                            [ Ui.spacing 16 ]
+                            [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+                            , MyUi.simpleButton
+                                (Dom.id "wordSpellingGame_replaceTray")
+                                PressedReplaceTrayOrPass
+                                (case passBehavior setup shared of
+                                    ShouldReplaceTray ->
+                                        Ui.text "Replace tray"
+
+                                    ShouldPass ->
+                                        Ui.text "Pass turn"
+
+                                    ShouldEndGame ->
+                                        Ui.text "End game"
+                                )
+                            ]
+                        , case model.invalidPlacement of
+                            Just _ ->
+                                Ui.el
+                                    [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
+                                    (Ui.text "Tiles must all be on one column or row and connected")
+
+                            Nothing ->
+                                Ui.none
                         ]
 
                 Joined ->
@@ -1489,8 +1913,103 @@ gameView currentTime windowSize maybeDragging currentUserId setup shared model =
         ]
 
 
-statusView : Id UserId -> ValidatedSetup -> Shared -> Element GameMsg
-statusView currentUserId setup shared =
+{-| A row showing a player's profile image and name, followed by `suffix` (their score and any
+status text). Bolded when `isBold` is True (the current player's turn, or a winner).
+-}
+playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
+playerRow localUser userId isBold suffix =
+    let
+        maybeUser : Maybe User.FrontendUser
+        maybeUser =
+            User.getUser userId localUser
+    in
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.shrink
+        , if isBold then
+            Ui.Font.weight 700
+
+          else
+            Ui.Font.weight 400
+        ]
+        [ User.profileImage userId (Maybe.andThen .icon maybeUser)
+        , Ui.text
+            ((case maybeUser of
+                Just user ->
+                    PersonName.toString user.name
+
+                Nothing ->
+                    "Unknown"
+             )
+                ++ suffix
+            )
+        ]
+
+
+leaderboardView : Shared -> LocalUser -> Element GameMsg
+leaderboardView shared localUser =
+    let
+        winners : List (Id UserId)
+        winners =
+            case getWinner shared of
+                Just nonempty ->
+                    List.Nonempty.toList nonempty
+
+                Nothing ->
+                    []
+
+        isTie : Bool
+        isTie =
+            List.length winners > 1
+
+        sortedPlayers : List Player
+        sortedPlayers =
+            List.Nonempty.toList shared.players
+                |> List.sortBy (\player -> negate player.score)
+    in
+    Ui.column
+        [ Ui.spacing 8 ]
+        (Ui.el
+            [ Ui.Font.weight 700 ]
+            (Ui.text
+                (if isTie then
+                    "Game over — it's a tie!"
+
+                 else
+                    "Game over"
+                )
+            )
+            :: List.map
+                (\player ->
+                    let
+                        isWinner : Bool
+                        isWinner =
+                            List.member player.userId winners
+                    in
+                    playerRow
+                        localUser
+                        player.userId
+                        isWinner
+                        (": "
+                            ++ String.fromInt player.score
+                            ++ (if isWinner then
+                                    if isTie then
+                                        " (tied for first)"
+
+                                    else
+                                        " (winner)"
+
+                                else
+                                    ""
+                               )
+                        )
+                )
+                sortedPlayers
+        )
+
+
+statusView : Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
+statusView currentUserId localUser setup shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -1505,40 +2024,41 @@ statusView currentUserId setup shared =
                 0
                 (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
     in
-    Ui.column
-        [ Ui.spacing 4 ]
-        (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
-            :: List.indexedMap
-                (\index player ->
-                    (if player.userId == currentUserId then
-                        "You"
+    case getWinner shared of
+        Just _ ->
+            leaderboardView shared localUser
 
-                     else
-                        "Opponent"
-                    )
-                        ++ ": "
-                        ++ String.fromInt player.score
-                        ++ (if index == modBy playerCount shared.turnCount then
-                                if player.userId == currentUserId then
-                                    " (your turn)"
+        Nothing ->
+            Ui.column
+                [ Ui.spacing 8 ]
+                (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
+                    :: List.indexedMap
+                        (\index player ->
+                            let
+                                isTheirTurn : Bool
+                                isTheirTurn =
+                                    index == modBy playerCount shared.turnCount
+                            in
+                            playerRow
+                                localUser
+                                player.userId
+                                (player.userId == currentPlayer.userId)
+                                (": "
+                                    ++ String.fromInt player.score
+                                    ++ (if isTheirTurn then
+                                            if player.userId == currentUserId then
+                                                " (your turn)"
 
-                                else
-                                    " (their turn)"
+                                            else
+                                                " (their turn)"
 
-                            else
-                                ""
-                           )
-                        |> Ui.text
-                        |> Ui.el
-                            [ if player.userId == currentPlayer.userId then
-                                Ui.Font.weight 700
-
-                              else
-                                Ui.Font.weight 400
-                            ]
+                                        else
+                                            ""
+                                       )
+                                )
+                        )
+                        (List.Nonempty.toList shared.players)
                 )
-                (List.Nonempty.toList shared.players)
-        )
 
 
 trayHeight : number
@@ -1546,8 +2066,16 @@ trayHeight =
     trayTileSize
 
 
-boardView : Time.Posix -> Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
-boardView currentTime windowSize maybeDragging currentUserId shared model =
+boardView :
+    Time.Posix
+    -> Coord CssPixels
+    -> Maybe (NonemptyDict Int Touch)
+    -> Id UserId
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> Element GameMsg
+boardView currentTime windowSize maybeDragging currentUserId setup shared model =
     let
         cellSize2 : Int
         cellSize2 =
@@ -1671,12 +2199,12 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
 
                             _ ->
                                 case tile.position of
-                                    TileInTray trayIndex ->
+                                    TileInTray trayIndex shiftAnimation ->
                                         tileInFront
                                             currentTime
                                             tile.createdAt
                                             trayTileSize
-                                            (trayTilePos windowSize trayIndex)
+                                            (animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation)
                                             letter
 
                                     TileOnBoard ( x, y ) ->
@@ -1684,7 +2212,10 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                                             currentTime
                                             tile.createdAt
                                             cellSize2
-                                            (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
+                                            (Coord.xy
+                                                (boardX windowSize + cellSize2 * x + boardTileShakeOffset currentTime model.invalidPlacement)
+                                                (boardY + cellSize2 * y)
+                                            )
                                             letter
                     )
 
@@ -1737,6 +2268,10 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
 
                 Nothing ->
                     Ui.noAttr
+
+        trayWidth : Int
+        trayWidth =
+            Coord.xRaw (trayTilePos windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
     in
     Ui.el
         [ Ui.width Ui.shrink
@@ -1747,7 +2282,18 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                 :: trayTiles
                 ++ boardTiles
                 ++ animatedTiles
-                ++ [ selectedHighlight, dragHighlight ]
+                ++ [ selectedHighlight
+                   , dragHighlight
+                   , Ui.inFront
+                        (Ui.el
+                            [ Ui.background (Ui.rgb 119 97 97)
+                            , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
+                            , Ui.width (Ui.px trayWidth)
+                            , Ui.height (Ui.px (trayHeight + 4))
+                            ]
+                            Ui.none
+                        )
+                   ]
             )
             Ui.none
             |> Ui.inFront
@@ -1912,16 +2458,24 @@ cellView cellSize2 position =
         , Ui.contentCenterY
         ]
         (case maybeBonus of
-            Just CenterCell ->
+            Just bonus ->
                 Ui.el
                     [ Ui.centerX
                     , Ui.centerY
-                    , Ui.Font.size 20
-                    , Ui.Font.color (Ui.rgb 0 0 0)
-                    ]
-                    (Ui.text "★")
+                    , (case bonus of
+                        CenterCell ->
+                            round (toFloat cellSize2 * 0.8)
 
-            _ ->
+                        _ ->
+                            round (toFloat cellSize2 * 0.5)
+                      )
+                        |> Ui.Font.size
+                    , Ui.Font.color (bonusCellColor bonus |> Color.Manipulate.darken 0.3)
+                    , Ui.Font.bold
+                    ]
+                    (Ui.text (bonusCellLabel bonus))
+
+            Nothing ->
                 Ui.none
         )
 
@@ -1951,6 +2505,25 @@ bonusCellColor bonus =
 
         CenterCell ->
             Ui.rgb 241 154 154
+
+
+bonusCellLabel : BonusCells -> String
+bonusCellLabel bonus =
+    case bonus of
+        DoubleWord ->
+            "DW"
+
+        TripleWord ->
+            "TW"
+
+        DoubleLetter ->
+            "DL"
+
+        TripleLetter ->
+            "TL"
+
+        CenterCell ->
+            "★"
 
 
 bonusCells : SeqDict ( Int, Int ) BonusCells
