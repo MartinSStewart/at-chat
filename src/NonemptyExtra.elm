@@ -1,4 +1,4 @@
-module NonemptyExtra exposing (appendList, maximumBy, minimumBy, set, update)
+module NonemptyExtra exposing (appendList, maximumBy, minimumBy, set)
 
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))

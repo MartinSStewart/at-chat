@@ -1925,7 +1925,7 @@ statusView currentUserId localUser setup shared =
                 (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
     in
     case getWinner shared of
-        Just winners ->
+        Just _ ->
             leaderboardView shared localUser
 
         Nothing ->
