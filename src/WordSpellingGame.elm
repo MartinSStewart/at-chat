@@ -50,6 +50,7 @@ module WordSpellingGame exposing
 import Array exposing (Array)
 import Array.Extra
 import Char
+import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
@@ -2463,13 +2464,13 @@ cellView cellSize2 position =
                     , Ui.centerY
                     , (case bonus of
                         CenterCell ->
-                            20
+                            round (toFloat cellSize2 * 0.8)
 
                         _ ->
-                            max 8 (round (toFloat cellSize2 * 0.4))
+                            round (toFloat cellSize2 * 0.5)
                       )
                         |> Ui.Font.size
-                    , Ui.Font.color (bonusTextColor bonus)
+                    , Ui.Font.color (bonusCellColor bonus |> Color.Manipulate.darken 0.3)
                     , Ui.Font.bold
                     ]
                     (Ui.text (bonusCellLabel bonus))
