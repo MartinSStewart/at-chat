@@ -1509,6 +1509,23 @@ tileFadeDrift =
     0.2
 
 
+{-| How long, in milliseconds, a tray tile takes to slide from its old slot to its new one when
+another tile is inserted next to it.
+-}
+trayShiftDuration : Float
+trayShiftDuration =
+    150
+
+
+{-| Whether a tile is still in its fade-in window, during which `tileInFront` drives the tile's
+position itself (for the downward drift), so the CSS slide transition must stay off to avoid
+fighting it.
+-}
+isTileFading : Time.Posix -> Time.Posix -> Bool
+isTileFading currentTime createdAt =
+    elapsedMs currentTime createdAt < tileFadeDelay + tileFadeDuration
+
+
 elapsedMs : Time.Posix -> Time.Posix -> Float
 elapsedMs currentTime startTime =
     toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
@@ -1566,7 +1583,7 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    Array.Extra.any (\tile -> elapsedMs currentTime tile.createdAt < tileFadeDelay + tileFadeDuration) model.tiles
+    Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt) model.tiles
 
 
 {-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
@@ -2013,6 +2030,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                         Touch.touchCentroid dragging2
                                 in
                                 tileInFront
+                                    False
                                     currentTime
                                     tile.createdAt
                                     cellSize2
@@ -2026,6 +2044,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 case tile.position of
                                     TileInTray trayIndex ->
                                         tileInFront
+                                            (not (isTileFading currentTime tile.createdAt))
                                             currentTime
                                             tile.createdAt
                                             trayTileSize
@@ -2034,6 +2053,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
 
                                     TileOnBoard ( x, y ) ->
                                         tileInFront
+                                            False
                                             currentTime
                                             tile.createdAt
                                             cellSize2
@@ -2123,8 +2143,8 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         (Ui.Lazy.lazy boardViewBackground cellSize2)
 
 
-tileInFront : Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
+tileInFront : Bool -> Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront animateMove currentTime createdAt cellSize2 offset letterOrWildcard =
     let
         fade : { opacity : Float, drift : Float }
         fade =
@@ -2144,6 +2164,11 @@ tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
                 , y = Coord.yRaw offset - round (fade.drift * tileFadeDrift * toFloat cellSize2)
                 , z = 0
                 }
+            , if animateMove then
+                MyUi.htmlStyle "transition" ("translate " ++ String.fromFloat trayShiftDuration ++ "ms ease-out")
+
+              else
+                Ui.noAttr
             , Ui.Font.color (Ui.rgb 0 0 0)
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
