@@ -516,7 +516,7 @@ initPlayer userId board setup existingPlayers =
 
 type alias PlacementResult =
     { board : SeqDict ( Int, Int ) LetterOrWildcard
-    , words : List LetterOrWildcard
+    , words : List (List LetterOrWildcard)
     , score : Int
     , placedCells : List ( ( Int, Int ), Letter )
     }
@@ -568,7 +568,7 @@ placeWord board placedWord =
                 newBoard : SeqDict ( Int, Int ) LetterOrWildcard
                 newBoard =
                     List.foldl
-                        (\( cell, letter ) acc -> SeqDict.insert cell { letter = letter, isWildcard = False } acc)
+                        (\( cell, letter ) acc -> SeqDict.insert cell (Letter letter) acc)
                         board
                         placedCells
 
@@ -658,7 +658,9 @@ lineWord board ( dirX, dirY ) cell =
     walkForward (walkBack cell) []
 
 
-{-| The lowercased text of the word formed by the given cells.
+{-| The tiles (letters and wildcards) forming the word at the given cells, in order. Wildcards are
+kept as `Wildcard` rather than resolved to a letter, since the tile on the board doesn't record
+which letter the player meant; `wordIsValid` tries every letter for them when checking the word.
 -}
 wordString : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> List LetterOrWildcard
 wordString board cells =
@@ -676,15 +678,15 @@ wordScore board placedSet cells =
             List.map
                 (\cell ->
                     case SeqDict.get cell board of
-                        Just { letter, isWildcard } ->
-                            if isWildcard then
-                                0
-
-                            else if Set.member cell placedSet then
+                        Just (Letter letter) ->
+                            if Set.member cell placedSet then
                                 (letterData letter).score * letterScoreMultiplier cell
 
                             else
                                 (letterData letter).score
+
+                        Just Wildcard ->
+                            0
 
                         Nothing ->
                             0
@@ -709,7 +711,7 @@ wordScore board placedSet cells =
 
 
 {-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
-exists in `wordList`.
+exists in `wordList` (see `wordIsValid` for how words containing wildcards are handled).
 -}
 validatePlacement : Set String -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
 validatePlacement wordList board placedWord =
@@ -718,7 +720,7 @@ validatePlacement wordList board placedWord =
             if List.isEmpty result.words then
                 Err ()
 
-            else if List.all (\word -> Set.member word wordList) result.words then
+            else if List.all (wordIsValid wordList) result.words then
                 Ok result
 
             else
@@ -726,6 +728,42 @@ validatePlacement wordList board placedWord =
 
         Nothing ->
             Err ()
+
+
+{-| Whether a formed word is in the dictionary. A wildcard tile can stand for any letter, but the
+board doesn't record which letter the player meant, so a word containing wildcards is valid if
+_some_ assignment of letters to its wildcards spells a word in `wordList`.
+
+Rather than brute-forcing all 26^(number of wildcards) strings and looking each one up, we build the
+candidate string from left to right, fixing the real letters and branching only at wildcards, and
+stop as soon as a match is found. With no wildcards this collapses to a single `Set.member` lookup;
+with `k` wildcards it does at most 26^k lookups, but the short-circuit means the common case is far
+cheaper. (`k` is bounded by how many wildcard tiles exist, which is tiny in practice.)
+
+-}
+wordIsValid : Set String -> List LetterOrWildcard -> Bool
+wordIsValid wordList word =
+    let
+        search : List LetterOrWildcard -> String -> Bool
+        search remaining prefix =
+            case remaining of
+                [] ->
+                    Set.member prefix wordList
+
+                (Letter letter) :: rest ->
+                    search rest (prefix ++ letterText letter)
+
+                Wildcard :: rest ->
+                    List.any (\letter -> search rest (prefix ++ letterText letter)) allLetters
+    in
+    search word ""
+
+
+{-| A letter's lowercase text, as it appears in the word list.
+-}
+letterText : Letter -> String
+letterText letter =
+    String.toLower (letterData letter).text
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
