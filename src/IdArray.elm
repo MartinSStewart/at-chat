@@ -1,5 +1,5 @@
 module IdArray exposing
-    ( IdArray
+    ( IdArray(..)
     , empty
     , foldl
     , foldr
@@ -23,6 +23,8 @@ import Array exposing (Array)
 import Id exposing (Id)
 
 
+{-| OpaqueVariants
+-}
 type IdArray k v
     = IdArray (Array v)
 
