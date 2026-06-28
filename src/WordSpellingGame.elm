@@ -1553,7 +1553,7 @@ gameView :
 gameView currentTime windowSize maybeDragging localUser setup shared model =
     Ui.row
         [ Ui.spacing 16, Ui.wrap ]
-        [ boardView currentTime windowSize maybeDragging localUser.session.userId shared model
+        [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
         , Ui.column
             [ Ui.paddingXY 16 0 ]
             [ statusView localUser.session.userId localUser setup shared
@@ -1739,8 +1739,16 @@ trayHeight =
     trayTileSize
 
 
-boardView : Time.Posix -> Coord CssPixels -> Maybe (NonemptyDict Int Touch) -> Id UserId -> Shared -> GameData -> Element GameMsg
-boardView currentTime windowSize maybeDragging currentUserId shared model =
+boardView :
+    Time.Posix
+    -> Coord CssPixels
+    -> Maybe (NonemptyDict Int Touch)
+    -> Id UserId
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> Element GameMsg
+boardView currentTime windowSize maybeDragging currentUserId setup shared model =
     let
         cellSize2 : Int
         cellSize2 =
@@ -1930,6 +1938,10 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
 
                 Nothing ->
                     Ui.noAttr
+
+        trayWidth : Int
+        trayWidth =
+            Coord.xRaw (trayTilePos windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
     in
     Ui.el
         [ Ui.width Ui.shrink
@@ -1940,7 +1952,18 @@ boardView currentTime windowSize maybeDragging currentUserId shared model =
                 :: trayTiles
                 ++ boardTiles
                 ++ animatedTiles
-                ++ [ selectedHighlight, dragHighlight ]
+                ++ [ selectedHighlight
+                   , dragHighlight
+                   , Ui.inFront
+                        (Ui.el
+                            [ Ui.background (Ui.rgb 119 97 97)
+                            , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
+                            , Ui.width (Ui.px trayWidth)
+                            , Ui.height (Ui.px (trayHeight + 4))
+                            ]
+                            Ui.none
+                        )
+                   ]
             )
             Ui.none
             |> Ui.inFront
