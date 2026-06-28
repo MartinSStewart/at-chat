@@ -90,6 +90,10 @@ type alias GameData =
     { selectedCell : Maybe ( Int, Int )
     , tiles : Array Tile
     , dragging : Maybe Int
+    , -- When the player last pressed submit while their board tiles didn't form a single connected
+      -- row or column. Drives the hint under the submit button and the shake that draws attention to
+      -- the offending tiles.
+      invalidPlacement : Maybe Time.Posix
     }
 
 
@@ -169,6 +173,7 @@ initGame time setup =
                 list
                 |> Array.fromList
       , dragging = Nothing
+      , invalidPlacement = Nothing
       }
     , List.map
         (\index ->
@@ -836,7 +841,8 @@ updateGame time currentUserId setup shared msg model =
                                 model.tiles
                     in
                     ( { model
-                        | tiles =
+                        | invalidPlacement = Nothing
+                        , tiles =
                             List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1)
                                 |> List.foldl
                                     (\index tray ->
@@ -858,13 +864,21 @@ updateGame time currentUserId setup shared msg model =
                     )
 
                 Err () ->
-                    ( model, [] )
+                    -- The placement is geometrically invalid. If the player has tiles on the board,
+                    -- flag it so the view shows the hint and shakes those tiles.
+                    if Array.Extra.any (\tile -> isTileOnBoard tile) model.tiles then
+                        ( { model | invalidPlacement = Just time }, [] )
+
+                    else
+                        ( model, [] )
 
         PressedJoinGame ->
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
         PressedReplaceTrayOrPass ->
-            ( model, [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ] )
+            ( { model | invalidPlacement = Nothing }
+            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            )
 
 
 {-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
@@ -1270,6 +1284,7 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                         Game
                             { gameModel
                                 | dragging = Nothing
+                                , invalidPlacement = Nothing
                                 , tiles =
                                     Array.Extra.update
                                         tileIndex
@@ -1288,6 +1303,7 @@ dragEnd currentTime windowSize newTouches shared gameModel =
                         ( Game
                             { gameModel
                                 | dragging = Nothing
+                                , invalidPlacement = Nothing
                                 , tiles =
                                     Array.Extra.update
                                         tileIndex
@@ -1342,6 +1358,16 @@ cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
 cellOccupiedByOtherTile draggedIndex cell tiles =
     Array.toIndexedList tiles
         |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
+
+
+isTileOnBoard : Tile -> Bool
+isTileOnBoard tile =
+    case tile.position of
+        TileOnBoard _ ->
+            True
+
+        TileInTray _ _ ->
+            False
 
 
 {-| How close (in CSS pixels) the cursor has to be to the tray for a dropped tile to snap into it
@@ -1474,6 +1500,7 @@ insertIntoTray currentTime windowSize tileIndex position gameModel =
     Game
         { gameModel
             | dragging = Nothing
+            , invalidPlacement = Nothing
             , tiles =
                 Array.indexedMap
                     (\index tile ->
@@ -1595,6 +1622,55 @@ isTileShifting currentTime tile =
             False
 
 
+{-| How long, in milliseconds, the player's board tiles jiggle after an invalid submit.
+-}
+shakeDuration : Float
+shakeDuration =
+    450
+
+
+{-| How far, in CSS pixels, the shake displaces a tile at its strongest (it decays to zero over
+`shakeDuration`).
+-}
+shakeAmplitude : Float
+shakeAmplitude =
+    5
+
+
+{-| The horizontal shake offset for the player's board tiles after an invalid submit. It oscillates
+and decays to zero over `shakeDuration`, and is zero when no invalid submit is active.
+-}
+boardTileShakeOffset : Time.Posix -> Maybe Time.Posix -> Int
+boardTileShakeOffset currentTime invalidPlacement =
+    case invalidPlacement of
+        Just startTime ->
+            let
+                progress : Float
+                progress =
+                    elapsedMs currentTime startTime / shakeDuration
+            in
+            if progress < 1 then
+                round (sin (progress * pi * 6) * shakeAmplitude * (1 - progress))
+
+            else
+                0
+
+        Nothing ->
+            0
+
+
+{-| Whether the invalid-submit shake is still playing, so the view keeps redrawing each frame.
+-}
+isShaking : Time.Posix -> GameData -> Bool
+isShaking currentTime model =
+    case model.invalidPlacement of
+        Just startTime ->
+            elapsedMs currentTime startTime < shakeDuration
+
+        Nothing ->
+            False
+
+
 elapsedMs : Time.Posix -> Time.Posix -> Float
 elapsedMs currentTime startTime =
     toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
@@ -1652,7 +1728,8 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
+    isShaking currentTime model
+        || Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
 
 
 {-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
@@ -1797,22 +1874,33 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
             [ statusView localUser.session.userId localUser setup shared
             , case isPlayerTurn localUser.session.userId shared of
                 JoinedAndItsTheirTurn ->
-                    Ui.row
-                        [ Ui.spacing 16 ]
-                        [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                        , MyUi.simpleButton
-                            (Dom.id "wordSpellingGame_replaceTray")
-                            PressedReplaceTrayOrPass
-                            (case passBehavior setup shared of
-                                ShouldReplaceTray ->
-                                    Ui.text "Replace tray"
+                    Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.row
+                            [ Ui.spacing 16 ]
+                            [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+                            , MyUi.simpleButton
+                                (Dom.id "wordSpellingGame_replaceTray")
+                                PressedReplaceTrayOrPass
+                                (case passBehavior setup shared of
+                                    ShouldReplaceTray ->
+                                        Ui.text "Replace tray"
 
-                                ShouldPass ->
-                                    Ui.text "Pass turn"
+                                    ShouldPass ->
+                                        Ui.text "Pass turn"
 
-                                ShouldEndGame ->
-                                    Ui.text "End game"
-                            )
+                                    ShouldEndGame ->
+                                        Ui.text "End game"
+                                )
+                            ]
+                        , case model.invalidPlacement of
+                            Just _ ->
+                                Ui.el
+                                    [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
+                                    (Ui.text "Tiles must all be on one column or row and connected")
+
+                            Nothing ->
+                                Ui.none
                         ]
 
                 Joined ->
@@ -2123,7 +2211,10 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                             currentTime
                                             tile.createdAt
                                             cellSize2
-                                            (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
+                                            (Coord.xy
+                                                (boardX windowSize + cellSize2 * x + boardTileShakeOffset currentTime model.invalidPlacement)
+                                                (boardY + cellSize2 * y)
+                                            )
                                             letter
                     )
 
@@ -2366,16 +2457,24 @@ cellView cellSize2 position =
         , Ui.contentCenterY
         ]
         (case maybeBonus of
-            Just CenterCell ->
+            Just bonus ->
                 Ui.el
                     [ Ui.centerX
                     , Ui.centerY
-                    , Ui.Font.size 20
-                    , Ui.Font.color (Ui.rgb 0 0 0)
-                    ]
-                    (Ui.text "★")
+                    , (case bonus of
+                        CenterCell ->
+                            20
 
-            _ ->
+                        _ ->
+                            max 8 (round (toFloat cellSize2 * 0.4))
+                      )
+                        |> Ui.Font.size
+                    , Ui.Font.color (bonusTextColor bonus)
+                    , Ui.Font.bold
+                    ]
+                    (Ui.text (bonusCellLabel bonus))
+
+            Nothing ->
                 Ui.none
         )
 
@@ -2405,6 +2504,40 @@ bonusCellColor bonus =
 
         CenterCell ->
             Ui.rgb 241 154 154
+
+
+bonusCellLabel : BonusCells -> String
+bonusCellLabel bonus =
+    case bonus of
+        DoubleWord ->
+            "DW"
+
+        TripleWord ->
+            "TW"
+
+        DoubleLetter ->
+            "DL"
+
+        TripleLetter ->
+            "TL"
+
+        CenterCell ->
+            "★"
+
+
+{-| Text color for a bonus cell's label, picked for contrast against its (darker) background.
+-}
+bonusTextColor : BonusCells -> Ui.Color
+bonusTextColor bonus =
+    case bonus of
+        TripleWord ->
+            Ui.rgb 255 255 255
+
+        TripleLetter ->
+            Ui.rgb 255 255 255
+
+        _ ->
+            Ui.rgb 0 0 0
 
 
 bonusCells : SeqDict ( Int, Int ) BonusCells
