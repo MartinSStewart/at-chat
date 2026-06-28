@@ -67,6 +67,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptyExtra
 import OneOrGreater exposing (OneOrGreater)
+import PersonName
 import Random
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -1576,6 +1577,39 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         ]
 
 
+{-| A row showing a player's profile image and name, followed by `suffix` (their score and any
+status text). Bolded when `isBold` is True (the current player's turn, or a winner).
+-}
+playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
+playerRow localUser userId isBold suffix =
+    let
+        maybeUser : Maybe User.FrontendUser
+        maybeUser =
+            User.getUser userId localUser
+    in
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.shrink
+        , if isBold then
+            Ui.Font.weight 700
+
+          else
+            Ui.Font.weight 400
+        ]
+        [ User.profileImage userId (Maybe.andThen .icon maybeUser)
+        , Ui.text
+            ((case maybeUser of
+                Just user ->
+                    PersonName.toString user.name
+
+                Nothing ->
+                    "Unknown"
+             )
+                ++ suffix
+            )
+        ]
+
+
 leaderboardView : Shared -> LocalUser -> Element GameMsg
 leaderboardView shared localUser =
     let
@@ -1598,7 +1632,7 @@ leaderboardView shared localUser =
                 |> List.sortBy (\player -> negate player.score)
     in
     Ui.column
-        [ Ui.spacing 4 ]
+        [ Ui.spacing 8 ]
         (Ui.el
             [ Ui.Font.weight 700 ]
             (Ui.text
@@ -1616,33 +1650,23 @@ leaderboardView shared localUser =
                         isWinner =
                             List.member player.userId winners
                     in
-                    ((if player.userId == localUser.session.userId then
-                        "You"
+                    playerRow
+                        localUser
+                        player.userId
+                        isWinner
+                        (": "
+                            ++ String.fromInt player.score
+                            ++ (if isWinner then
+                                    if isTie then
+                                        " (tied for first)"
 
-                      else
-                        "Opponent"
-                     )
-                        ++ ": "
-                        ++ String.fromInt player.score
-                        ++ (if isWinner then
-                                if isTie then
-                                    " (tied for first)"
+                                    else
+                                        " (winner)"
 
                                 else
-                                    " (winner)"
-
-                            else
-                                ""
-                           )
-                    )
-                        |> Ui.text
-                        |> Ui.el
-                            [ if isWinner then
-                                Ui.Font.weight 700
-
-                              else
-                                Ui.Font.weight 400
-                            ]
+                                    ""
+                               )
+                        )
                 )
                 sortedPlayers
         )
@@ -1670,36 +1694,32 @@ statusView currentUserId localUser setup shared =
 
         Nothing ->
             Ui.column
-                [ Ui.spacing 4 ]
+                [ Ui.spacing 8 ]
                 (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
                     :: List.indexedMap
                         (\index player ->
-                            (if player.userId == currentUserId then
-                                "You"
+                            let
+                                isTheirTurn : Bool
+                                isTheirTurn =
+                                    index == modBy playerCount shared.turnCount
+                            in
+                            playerRow
+                                localUser
+                                player.userId
+                                (player.userId == currentPlayer.userId)
+                                (": "
+                                    ++ String.fromInt player.score
+                                    ++ (if isTheirTurn then
+                                            if player.userId == currentUserId then
+                                                " (your turn)"
 
-                             else
-                                "Opponent"
-                            )
-                                ++ ": "
-                                ++ String.fromInt player.score
-                                ++ (if index == modBy playerCount shared.turnCount then
-                                        if player.userId == currentUserId then
-                                            " (your turn)"
+                                            else
+                                                " (their turn)"
 
                                         else
-                                            " (their turn)"
-
-                                    else
-                                        ""
-                                   )
-                                |> Ui.text
-                                |> Ui.el
-                                    [ if player.userId == currentPlayer.userId then
-                                        Ui.Font.weight 700
-
-                                      else
-                                        Ui.Font.weight 400
-                                    ]
+                                            ""
+                                       )
+                                )
                         )
                         (List.Nonempty.toList shared.players)
                 )
