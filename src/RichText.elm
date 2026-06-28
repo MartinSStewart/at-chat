@@ -3170,6 +3170,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 )
                                 ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, [] )
                                 (List.Nonempty.toList items)
+                                |> (\( a, b, acc ) -> ( a, b, List.reverse acc ))
                     in
                     ( ( True, spoilerIndex5 )
                     , embedIndex5

@@ -540,6 +540,26 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , E2EHelper.focusEvent admin 100 Nothing Nothing
                 , E2EHelper.tallSnapshot admin 1000 { name = "Rich text message after being sent" }
+
+                -- The bullet points should render in the same order they were written.
+                , admin.checkView
+                    100
+                    (\html ->
+                        html
+                            |> Test.Html.Query.find [ Test.Html.Selector.tag "ul" ]
+                            |> Test.Html.Query.findAll [ Test.Html.Selector.tag "li" ]
+                            |> Test.Html.Query.index 0
+                            |> Test.Html.Query.has [ Test.Html.Selector.text "First bullet point" ]
+                    )
+                , admin.checkView
+                    100
+                    (\html ->
+                        html
+                            |> Test.Html.Query.find [ Test.Html.Selector.tag "ul" ]
+                            |> Test.Html.Query.findAll [ Test.Html.Selector.tag "li" ]
+                            |> Test.Html.Query.index 2
+                            |> Test.Html.Query.has [ Test.Html.Selector.text "Third bullet with a " ]
+                    )
                 , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 100, 100 ) []
                 , admin.click 100 (Dom.id "miniView_reply")
                 , admin.input 100 (Dom.id "channel_textinput") "Reply"
