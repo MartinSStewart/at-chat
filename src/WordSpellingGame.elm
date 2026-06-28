@@ -2,7 +2,6 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
-    , Board
     , GameData
     , GameMsg
     , IsValid(..)
@@ -224,7 +223,7 @@ type alias ActionWithTime =
 
 
 type alias Shared =
-    { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    { board : SeqDict ( Int, Int ) LetterOrWildcard
     , players : Nonempty Player
     , turnCount : Int
     , passingStartedAt : Maybe Int
@@ -270,7 +269,7 @@ type LetterOrWildcard
 initShared : ValidatedSetup -> Shared
 initShared setup =
     let
-        initialBoard : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+        initialBoard : SeqDict ( Int, Int ) LetterOrWildcard
         initialBoard =
             SeqDict.empty
     in
@@ -284,7 +283,7 @@ initShared setup =
 
 remainingLettersInBag :
     ValidatedSetup
-    -> SeqDict a { b | letter : Letter, isWildcard : Bool }
+    -> SeqDict ( Int, Int ) LetterOrWildcard
     -> List Player
     -> SeqDict LetterOrWildcard OneOrGreater
 remainingLettersInBag setup board players =
@@ -292,16 +291,7 @@ remainingLettersInBag setup board players =
         remainingLetters : SeqDict LetterOrWildcard OneOrGreater
         remainingLetters =
             SeqDict.foldl
-                (\_ { letter, isWildcard } startingLetters2 ->
-                    SeqDictHelper.decrement
-                        (if isWildcard then
-                            Wildcard
-
-                         else
-                            Letter letter
-                        )
-                        startingLetters2
-                )
+                (\_ letter startingLetters2 -> SeqDictHelper.decrement letter startingLetters2)
                 (NonemptyDict.toSeqDict setup.letters)
                 board
     in
@@ -314,7 +304,7 @@ remainingLettersInBag setup board players =
 getLetters :
     OneOrGreater
     -> ValidatedSetup
-    -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    -> SeqDict ( Int, Int ) LetterOrWildcard
     -> List Player
     -> Int
     -> List LetterOrWildcard
@@ -375,12 +365,12 @@ getWinner shared =
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
-updateAction setup action state =
+updateAction setup action shared =
     case action.change of
         PlaceWord placedWord isValid ->
-            case ( getWinner state, getPlayer action.userId state ) of
+            case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case placeWord state.board placedWord of
+                    case placeWord shared.board placedWord of
                         Just result ->
                             let
                                 animatedPlacement : Maybe AnimatedPlacement
@@ -402,10 +392,10 @@ updateAction setup action state =
                                                 drawCount
                                                 setup
                                                 result.board
-                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
                                                     |> List.Nonempty.toList
                                                 )
-                                                state.turnCount
+                                                shared.turnCount
 
                                         Nothing ->
                                             []
@@ -413,17 +403,17 @@ updateAction setup action state =
                                 tray =
                                     remainingTray ++ drawn |> IdArray.fromList
                             in
-                            { state
+                            { shared
                                 | board =
                                     case isValid of
                                         FilledInByBackend IsNotValid ->
-                                            state.board
+                                            shared.board
 
                                         _ ->
                                             result.board
                                 , players =
                                     NonemptyExtra.set
-                                        state.turnCount
+                                        shared.turnCount
                                         { player
                                             | tray = tray
                                             , score =
@@ -434,89 +424,89 @@ updateAction setup action state =
                                                     _ ->
                                                         player.score + result.score
                                         }
-                                        state.players
-                                , turnCount = state.turnCount + 1
+                                        shared.players
+                                , turnCount = shared.turnCount + 1
                                 , lastPlacement = animatedPlacement
                                 , passingStartedAt =
                                     if tray == IdArray.empty then
-                                        case state.passingStartedAt of
+                                        case shared.passingStartedAt of
                                             Nothing ->
-                                                Just state.turnCount
+                                                Just shared.turnCount
 
                                             Just _ ->
-                                                state.passingStartedAt
+                                                shared.passingStartedAt
 
                                     else
                                         Nothing
                             }
 
                         Nothing ->
-                            state
+                            shared
 
                 _ ->
-                    state
+                    shared
 
         ReplaceTrayOrPass ->
-            case ( getWinner state, getPlayer action.userId state ) of
+            case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case passBehavior setup state of
+                    case passBehavior setup shared of
                         ShouldReplaceTray ->
-                            { state
+                            { shared
                                 | players =
                                     NonemptyExtra.set
-                                        state.turnCount
+                                        shared.turnCount
                                         { player
                                             | tray =
                                                 getLetters
                                                     setup.traySize
                                                     setup
-                                                    state.board
-                                                    (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
+                                                    shared.board
+                                                    (NonemptyExtra.set shared.turnCount { player | tray = IdArray.empty } shared.players
                                                         |> List.Nonempty.toList
                                                     )
-                                                    state.turnCount
+                                                    shared.turnCount
                                                     |> IdArray.fromList
                                         }
-                                        state.players
-                                , turnCount = state.turnCount + 1
+                                        shared.players
+                                , turnCount = shared.turnCount + 1
                                 , passingStartedAt = Nothing
                             }
 
                         ShouldPass ->
-                            { state
+                            { shared
                                 | passingStartedAt =
-                                    case state.passingStartedAt of
+                                    case shared.passingStartedAt of
                                         Nothing ->
-                                            Just state.turnCount
+                                            Just shared.turnCount
 
                                         Just _ ->
-                                            state.passingStartedAt
-                                , turnCount = state.turnCount + 1
+                                            shared.passingStartedAt
+                                , turnCount = shared.turnCount + 1
                             }
 
                         ShouldEndGame ->
-                            { state | turnCount = state.turnCount + 1 }
+                            { shared | turnCount = shared.turnCount + 1 }
 
                 _ ->
-                    state
+                    shared
 
         JoinGame ->
-            if state.turnCount > List.Nonempty.length state.players then
-                state
+            if shared.turnCount > List.Nonempty.length shared.players then
+                shared
 
             else
-                { state
+                { shared
                     | players =
                         List.Nonempty.append
-                            state.players
+                            shared.players
                             (Nonempty
-                                (initPlayer action.userId state.board setup (List.Nonempty.toList state.players))
+                                (initPlayer action.userId shared.board setup (List.Nonempty.toList shared.players))
                                 []
                             )
                 }
 
 
-initPlayer : Id UserId -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ValidatedSetup -> List Player -> Player
+initPlayer : Id UserId -> SeqDict ( Int, Int ) LetterOrWildcard -> ValidatedSetup -> List Player -> Player
 initPlayer userId board setup existingPlayers =
     { userId = userId
     , tray = getLetters setup.traySize setup board existingPlayers 0 |> IdArray.fromList
@@ -524,13 +514,9 @@ initPlayer userId board setup existingPlayers =
     }
 
 
-type alias Board =
-    SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
-
-
 type alias PlacementResult =
-    { board : Board
-    , words : List String
+    { board : SeqDict ( Int, Int ) LetterOrWildcard
+    , words : List LetterOrWildcard
     , score : Int
     , placedCells : List ( ( Int, Int ), Letter )
     }
@@ -547,7 +533,7 @@ The returned `words` are lowercased so they can be looked up directly in the wor
 apply to the squares the new tiles land on; wildcards score zero).
 
 -}
-placeWord : Board -> PlacedWord -> Maybe PlacementResult
+placeWord : SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
 placeWord board placedWord =
     let
         ( dx, dy ) =
@@ -579,7 +565,7 @@ placeWord board placedWord =
     case layout placedWord.start (List.Nonempty.toList placedWord.letters) [] of
         Just placedCells ->
             let
-                newBoard : Board
+                newBoard : SeqDict ( Int, Int ) LetterOrWildcard
                 newBoard =
                     List.foldl
                         (\( cell, letter ) acc -> SeqDict.insert cell { letter = letter, isWildcard = False } acc)
@@ -645,7 +631,7 @@ placeWord board placedWord =
 
 {-| The maximal contiguous run of tiles through `cell` in the direction `( dirX, dirY )`.
 -}
-lineWord : Board -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
+lineWord : SeqDict ( Int, Int ) LetterOrWildcard -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
 lineWord board ( dirX, dirY ) cell =
     let
         walkBack : ( Int, Int ) -> ( Int, Int )
@@ -674,19 +660,15 @@ lineWord board ( dirX, dirY ) cell =
 
 {-| The lowercased text of the word formed by the given cells.
 -}
-wordString : Board -> List ( Int, Int ) -> String
+wordString : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> List LetterOrWildcard
 wordString board cells =
-    List.filterMap
-        (\cell -> SeqDict.get cell board |> Maybe.map (\{ letter } -> (letterData letter).text))
-        cells
-        |> String.concat
-        |> String.toLower
+    List.filterMap (\cell -> SeqDict.get cell board) cells
 
 
 {-| The Scrabble score of a single word. Letter and word multipliers only apply to the squares
 that the newly-placed tiles (`placedSet`) land on; wildcards always score zero.
 -}
-wordScore : Board -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
+wordScore : SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
 wordScore board placedSet cells =
     let
         letterSum : Int
@@ -729,7 +711,7 @@ wordScore board placedSet cells =
 {-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
 exists in `wordList`.
 -}
-validatePlacement : Set String -> Board -> PlacedWord -> Result () PlacementResult
+validatePlacement : Set String -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
 validatePlacement wordList board placedWord =
     case placeWord board placedWord of
         Just result ->
@@ -2095,7 +2077,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         boardTiles : List (Ui.Attribute GameMsg)
         boardTiles =
             SeqDict.foldl
-                (\( x, y ) { letter, isWildcard } list ->
+                (\( x, y ) letter list ->
                     if Set.member ( x, y ) animatingCellSet then
                         -- This tile is being animated into place, so the animation layer draws it.
                         list
@@ -2104,12 +2086,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         boardTileInFront
                             cellSize2
                             (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
-                            (if isWildcard then
-                                Wildcard
-
-                             else
-                                Letter letter
-                            )
+                            letter
                             :: list
                 )
                 []
