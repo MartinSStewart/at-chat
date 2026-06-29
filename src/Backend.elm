@@ -87,6 +87,14 @@ import WordSpellingGame
 import WordSpellingGameList
 
 
+{-| The word-spelling dictionary, built once and reused for every placement check (grouping the
+~179k words by length is too expensive to redo per move).
+-}
+wordDictionary : WordSpellingGame.Dictionary
+wordDictionary =
+    WordSpellingGame.buildDictionary WordSpellingGameList.words
+
+
 app :
     { init : ( BackendModel, Cmd BackendMsg )
     , update : BackendMsg -> BackendModel -> ( BackendModel, Cmd BackendMsg )
@@ -5427,7 +5435,7 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                                                 placed
                                                 (case
                                                     WordSpellingGame.validatePlacement
-                                                        WordSpellingGameList.words
+                                                        wordDictionary
                                                         shared.board
                                                         placed
                                                  of

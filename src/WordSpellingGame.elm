@@ -2,6 +2,7 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
+    , Dictionary
     , GameData
     , GameMsg
     , IsValid(..)
@@ -25,6 +26,7 @@ module WordSpellingGame exposing
     , animatedTilePlacement
     , anyTileAnimating
     , boardY
+    , buildDictionary
     , dragEnd
     , dragStart
     , gameView
@@ -53,6 +55,7 @@ import Char
 import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
@@ -710,17 +713,43 @@ wordScore board placedSet cells =
     letterSum * wordMultiplier
 
 
-{-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
-exists in `wordList` (see `wordIsValid` for how words containing wildcards are handled).
+{-| The word list, in two forms: the flat set for direct membership lookups, and the words bucketed
+by length so that a word with many wildcards can be checked by scanning only the words it could
+possibly be (see `wordIsValid`). Build it once with `buildDictionary` and reuse it.
 -}
-validatePlacement : Set String -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacement wordList board placedWord =
+type alias Dictionary =
+    { all : Set String
+    , byLength : Dict Int (List String)
+    }
+
+
+buildDictionary : Set String -> Dictionary
+buildDictionary all =
+    { all = all
+    , byLength =
+        Set.foldl
+            (\word acc ->
+                Dict.update
+                    (String.length word)
+                    (\existing -> Just (word :: Maybe.withDefault [] existing))
+                    acc
+            )
+            Dict.empty
+            all
+    }
+
+
+{-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
+exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
+-}
+validatePlacement : Dictionary -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacement dictionary board placedWord =
     case placeWord board placedWord of
         Just result ->
             if List.isEmpty result.words then
                 Err ()
 
-            else if List.all (wordIsValid wordList) result.words then
+            else if List.all (wordIsValid dictionary) result.words then
                 Ok result
 
             else
@@ -730,19 +759,45 @@ validatePlacement wordList board placedWord =
             Err ()
 
 
+{-| The most wildcards we'll resolve by trying every letter combination. With `k` wildcards that's
+26^k dictionary lookups, so we only do it while that stays cheap (26^2 = 676); beyond it we scan
+instead, which keeps the work bounded no matter how many wildcards a word has.
+-}
+maxBruteForceWildcards : Int
+maxBruteForceWildcards =
+    2
+
+
 {-| Whether a formed word is in the dictionary. A wildcard tile can stand for any letter, but the
 board doesn't record which letter the player meant, so a word containing wildcards is valid if
-_some_ assignment of letters to its wildcards spells a word in `wordList`.
+_some_ assignment of letters to its wildcards spells a word in the dictionary.
 
-Rather than brute-forcing all 26^(number of wildcards) strings and looking each one up, we build the
-candidate string from left to right, fixing the real letters and branching only at wildcards, and
-stop as soon as a match is found. With no wildcards this collapses to a single `Set.member` lookup;
-with `k` wildcards it does at most 26^k lookups, but the short-circuit means the common case is far
-cheaper. (`k` is bounded by how many wildcard tiles exist, which is tiny in practice.)
+There are two ways to check this, and we pick whichever is bounded by the smaller amount of work:
+
+  - With few wildcards, try every letter for them (`bruteForceMatch`): at most 26^k lookups.
+  - With many wildcards, 26^k explodes (e.g. 4 wildcards is ~457k), so instead scan the dictionary
+    words of this length and keep any that agree with the fixed letters (`scanForMatch`). That's one
+    pass over a single length bucket — at most ~30k words for this dictionary — regardless of how
+    many wildcards there are. This is what stops a word like "3 letters + 4 wildcards" locking up
+    the server.
 
 -}
-wordIsValid : Set String -> List LetterOrWildcard -> Bool
-wordIsValid wordList word =
+wordIsValid : Dictionary -> List LetterOrWildcard -> Bool
+wordIsValid dictionary word =
+    if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+        bruteForceMatch dictionary.all word
+
+    else
+        scanForMatch dictionary.byLength word
+
+
+{-| Try every letter for each wildcard, building the candidate string from left to right and
+stopping as soon as one is in the word list. With no wildcards this is a single `Set.member` lookup.
+Only used when there are few wildcards (see `maxBruteForceWildcards`), so this does at most 26^k
+lookups for small `k`.
+-}
+bruteForceMatch : Set String -> List LetterOrWildcard -> Bool
+bruteForceMatch wordList word =
     let
         search : List LetterOrWildcard -> String -> Bool
         search remaining prefix =
@@ -759,11 +814,71 @@ wordIsValid wordList word =
     search word ""
 
 
+{-| Whether any dictionary word of the same length agrees with the word's fixed (non-wildcard)
+letters; the wildcards then stand for whatever letters that dictionary word has in their place. This
+costs a single pass over the words of that length, which is bounded however many wildcards there are.
+-}
+scanForMatch : Dict Int (List String) -> List LetterOrWildcard -> Bool
+scanForMatch byLength word =
+    let
+        pattern : List (Maybe Char)
+        pattern =
+            List.map
+                (\cell ->
+                    case cell of
+                        Letter letter ->
+                            Just (letterChar letter)
+
+                        Wildcard ->
+                            Nothing
+                )
+                word
+    in
+    case Dict.get (List.length word) byLength of
+        Just candidates ->
+            List.any (matchesPattern pattern) candidates
+
+        Nothing ->
+            False
+
+
+{-| Whether a dictionary word agrees with a pattern: each fixed position (`Just char`) must equal
+the word's character there, and wildcard positions (`Nothing`) match anything. The word and pattern
+are the same length, since the candidates come from the matching length bucket.
+-}
+matchesPattern : List (Maybe Char) -> String -> Bool
+matchesPattern pattern candidate =
+    List.map2
+        (\patternChar candidateChar ->
+            case patternChar of
+                Just fixed ->
+                    fixed == candidateChar
+
+                Nothing ->
+                    True
+        )
+        pattern
+        (String.toList candidate)
+        |> List.all identity
+
+
 {-| A letter's lowercase text, as it appears in the word list.
 -}
 letterText : Letter -> String
 letterText letter =
     String.toLower (letterData letter).text
+
+
+{-| A letter's lowercase character, as it appears in the word list.
+-}
+letterChar : Letter -> Char
+letterChar letter =
+    case String.uncons (letterText letter) of
+        Just ( char, _ ) ->
+            char
+
+        Nothing ->
+            ' '
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
