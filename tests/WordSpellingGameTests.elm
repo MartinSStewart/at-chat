@@ -27,7 +27,7 @@ word =
 
 placedWord : ( Int, Int ) -> Bool -> Letter -> List Letter -> PlacedWord
 placedWord start isVertical first rest =
-    { start = start, isVertical = isVertical, letters = Nonempty first rest }
+    { start = start, isVertical = isVertical, letters = Nonempty (Letter first) (List.map Letter rest) }
 
 
 tests : Test
@@ -210,6 +210,29 @@ tests =
                         existing
                         (placedWord ( 7, 4 ) False A [])
                         |> Expect.equal (Err ())
+            ]
+        , Test.describe "placementConnects keeps words from floating in empty space"
+            [ Test.test "the first word must cover the centre square" <|
+                \_ ->
+                    WordSpellingGame.placementConnects SeqDict.empty [ ( 7, 7 ), ( 8, 7 ) ]
+                        |> Expect.equal True
+            , Test.test "the first word is rejected if it misses the centre square" <|
+                \_ ->
+                    WordSpellingGame.placementConnects SeqDict.empty [ ( 0, 0 ), ( 1, 0 ) ]
+                        |> Expect.equal False
+            , Test.test "a later word must touch a tile already on the board" <|
+                \_ ->
+                    -- An existing tile at (7,7); a word placed orthogonally next to it connects.
+                    WordSpellingGame.placementConnects
+                        (board [ ( ( 7, 7 ), A ) ])
+                        [ ( 7, 8 ), ( 7, 9 ) ]
+                        |> Expect.equal True
+            , Test.test "a later word floating away from every existing tile is rejected" <|
+                \_ ->
+                    WordSpellingGame.placementConnects
+                        (board [ ( ( 7, 7 ), A ) ])
+                        [ ( 0, 0 ), ( 1, 0 ) ]
+                        |> Expect.equal False
             ]
         , Test.describe "animatedTilePlacement positions tiles from the start time"
             [ Test.test "an observer's tile starts at the top-left corner and slides to its cell" <|

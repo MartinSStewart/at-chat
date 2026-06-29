@@ -35,6 +35,7 @@ module WordSpellingGame exposing
     , isAnimating
     , isPlayerTurn
     , placeWord
+    , placementConnects
     , placementLandTime
     , setupView
     , trayY
@@ -216,7 +217,7 @@ type IsValid
 type alias PlacedWord =
     { start : ( Int, Int )
     , isVertical : Bool
-    , letters : Nonempty Letter
+    , letters : Nonempty LetterOrWildcard
     }
 
 
@@ -240,7 +241,7 @@ purely from the current time (see `animatedTilePlacement`).
 -}
 type alias AnimatedPlacement =
     { startTime : Time.Posix
-    , cells : List ( ( Int, Int ), Letter )
+    , cells : List ( ( Int, Int ), LetterOrWildcard )
     , isValid : ToBeFilledInByBackend IsValid
     }
 
@@ -384,7 +385,7 @@ updateAction setup action shared =
                                     List.foldl
                                         removeFromTray
                                         (IdArray.toList player.tray)
-                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
+                                        (List.Nonempty.toList placedWord.letters)
 
                                 drawn : List LetterOrWildcard
                                 drawn =
@@ -520,7 +521,7 @@ type alias PlacementResult =
     { board : SeqDict ( Int, Int ) LetterOrWildcard
     , words : List (List LetterOrWildcard)
     , score : Int
-    , placedCells : List ( ( Int, Int ), Letter )
+    , placedCells : List ( ( Int, Int ), LetterOrWildcard )
     }
 
 
@@ -545,14 +546,14 @@ placeWord board placedWord =
             else
                 ( 1, 0 )
 
-        -- Lay out the new letters, stepping over tiles already committed to the board.
-        layout : ( Int, Int ) -> List Letter -> List ( ( Int, Int ), Letter ) -> Maybe (List ( ( Int, Int ), Letter ))
+        -- Lay out the new tiles, stepping over tiles already committed to the board.
+        layout : ( Int, Int ) -> List LetterOrWildcard -> List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (List ( ( Int, Int ), LetterOrWildcard ))
         layout ( cx, cy ) remaining acc =
             case remaining of
                 [] ->
                     Just (List.reverse acc)
 
-                letter :: rest ->
+                letterOrWildcard :: rest ->
                     if cx < 0 || cy < 0 || cx >= gridSize || cy >= gridSize then
                         Nothing
 
@@ -562,7 +563,7 @@ placeWord board placedWord =
                                 layout ( cx + dx, cy + dy ) remaining acc
 
                             Nothing ->
-                                layout ( cx + dx, cy + dy ) rest (( ( cx, cy ), letter ) :: acc)
+                                layout ( cx + dx, cy + dy ) rest (( ( cx, cy ), letterOrWildcard ) :: acc)
     in
     case layout placedWord.start (List.Nonempty.toList placedWord.letters) [] of
         Just placedCells ->
@@ -570,7 +571,7 @@ placeWord board placedWord =
                 newBoard : SeqDict ( Int, Int ) LetterOrWildcard
                 newBoard =
                     List.foldl
-                        (\( cell, letter ) acc -> SeqDict.insert cell (Letter letter) acc)
+                        (\( cell, letterOrWildcard ) acc -> SeqDict.insert cell letterOrWildcard acc)
                         board
                         placedCells
 
@@ -1004,12 +1005,14 @@ the same order as `GameData.tiles` (see `boardView`).
 A placement is valid when:
 
   - at least one tile was placed on the board,
-  - the placed tiles all lie in a single row or column, and
+  - the placed tiles all lie in a single row or column,
   - the run from the first to the last placed tile has no gaps (any cell between them that wasn't
-    placed must already hold a committed tile).
+    placed must already hold a committed tile), and
+  - the word connects to the rest of the board: the first word of the game must cover the centre
+    square, and every later word must touch a tile already on the board.
 
-Wildcard tiles aren't supported yet (there's no way to pick which letter they represent), so a
-placement containing one is rejected.
+Wildcard tiles are allowed; the letter a wildcard stands for is decided later, when the word is
+checked against the dictionary on the backend (see `wordIsValid`).
 
 -}
 checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
@@ -1101,8 +1104,12 @@ buildPlacedWord isVertical shared placed =
                                 in
                                 List.member cell placedCells || SeqDict.member cell shared.board
                             )
+
+                connected : Bool
+                connected =
+                    placementConnects shared.board placedCells
             in
-            case ( contiguous, nonemptyLetters sorted ) of
+            case ( contiguous && connected, nonemptyLetters sorted ) of
                 ( True, Just letters ) ->
                     Ok { start = startCell, isVertical = isVertical, letters = letters }
 
@@ -1113,23 +1120,47 @@ buildPlacedWord isVertical shared placed =
             Err ()
 
 
-{-| Pull the letters out of the placed tiles in order, failing if any tile is a wildcard or if
-there are no tiles.
+{-| Whether a placement connects to the rest of the board, so words can't float in empty space.
+The very first word of the game (when the board is empty) has to cover the centre square; every word
+after that has to touch a tile already on the board, either by sitting orthogonally next to one or
+by extending through one in its own line (the latter is also adjacency, so this single check covers
+it). `placedCells` are the cells the player filled this turn, none of which are on `board` yet.
 -}
-nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty Letter)
-nonemptyLetters list =
-    List.foldr
-        (\( _, letterOrWildcard ) acc ->
-            case letterOrWildcard of
-                Letter letter ->
-                    Maybe.map ((::) letter) acc
+placementConnects : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> Bool
+placementConnects board placedCells =
+    if SeqDict.isEmpty board then
+        List.member centerCell placedCells
 
-                Wildcard ->
-                    Nothing
-        )
-        (Just [])
-        list
-        |> Maybe.andThen List.Nonempty.fromList
+    else
+        List.any
+            (\cell ->
+                List.any (\neighbor -> SeqDict.member neighbor board) (orthogonalNeighbors cell)
+            )
+            placedCells
+
+
+{-| The centre square, which the first word of the game must cover.
+-}
+centerCell : ( Int, Int )
+centerCell =
+    ( gridSize // 2, gridSize // 2 )
+
+
+{-| The four cells directly above, below, left and right of a cell.
+-}
+orthogonalNeighbors : ( Int, Int ) -> List ( Int, Int )
+orthogonalNeighbors ( x, y ) =
+    [ ( x - 1, y ), ( x + 1, y ), ( x, y - 1 ), ( x, y + 1 ) ]
+
+
+{-| Pull the tiles (letters and wildcards) out of the placed cells in order, failing only if there
+are no tiles. Wildcards are kept as `Wildcard`; the letter they stand for is worked out later when
+the word is checked against the dictionary (see `wordIsValid`).
+-}
+nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty LetterOrWildcard)
+nonemptyLetters list =
+    List.map Tuple.second list
+        |> List.Nonempty.fromList
 
 
 validateSetup : Id UserId -> Time.Posix -> SetupModel -> Result String ValidatedSetup
@@ -2237,7 +2268,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 List.length placement.cells
                         in
                         List.indexedMap
-                            (\index ( ( x, y ), letter ) ->
+                            (\index ( ( x, y ), letterOrWildcard ) ->
                                 animatedTilePlacement isPreviousPlayer elapsed placement.isValid tileCount index
                                     |> Maybe.map
                                         (\{ progress, red } ->
@@ -2264,7 +2295,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                                     (round (toFloat startY + progress * toFloat (destY - startY)))
                                                 )
                                                 red
-                                                (Letter letter)
+                                                letterOrWildcard
                                         )
                             )
                             placement.cells
