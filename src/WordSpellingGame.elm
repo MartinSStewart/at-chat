@@ -2,7 +2,6 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
-    , Dictionary
     , GameData
     , GameMsg
     , IsValid(..)
@@ -26,7 +25,6 @@ module WordSpellingGame exposing
     , animatedTilePlacement
     , anyTileAnimating
     , boardY
-    , buildDictionary
     , dragEnd
     , dragStart
     , gameView
@@ -83,6 +81,7 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
+import WordSpellingGameList exposing (Dictionary)
 
 
 type Model
@@ -713,32 +712,6 @@ wordScore board placedSet cells =
     letterSum * wordMultiplier
 
 
-{-| The word list, in two forms: the flat set for direct membership lookups, and the words bucketed
-by length so that a word with many wildcards can be checked by scanning only the words it could
-possibly be (see `wordIsValid`). Build it once with `buildDictionary` and reuse it.
--}
-type alias Dictionary =
-    { all : Set String
-    , byLength : Dict Int (List String)
-    }
-
-
-buildDictionary : Set String -> Dictionary
-buildDictionary all =
-    { all = all
-    , byLength =
-        Set.foldl
-            (\word acc ->
-                Dict.update
-                    (String.length word)
-                    (\existing -> Just (word :: Maybe.withDefault [] existing))
-                    acc
-            )
-            Dict.empty
-            all
-    }
-
-
 {-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
 exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
 -}
@@ -818,7 +791,7 @@ bruteForceMatch wordList word =
 letters; the wildcards then stand for whatever letters that dictionary word has in their place. This
 costs a single pass over the words of that length, which is bounded however many wildcards there are.
 -}
-scanForMatch : Dict Int (List String) -> List LetterOrWildcard -> Bool
+scanForMatch : Dict Int (Array String) -> List LetterOrWildcard -> Bool
 scanForMatch byLength word =
     let
         pattern : List (Maybe Char)
@@ -836,7 +809,7 @@ scanForMatch byLength word =
     in
     case Dict.get (List.length word) byLength of
         Just candidates ->
-            List.any (matchesPattern pattern) candidates
+            Array.Extra.any (matchesPattern pattern) candidates
 
         Nothing ->
             False

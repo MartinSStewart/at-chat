@@ -6857,7 +6857,7 @@ view model =
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header isMobile loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
                                         ]
                 in
                 case loaded.route of
@@ -6899,7 +6899,7 @@ view model =
 
                                 NotLoggedIn notLoggedIn ->
                                     Ui.el
-                                        [ Ui.inFront (Pages.Home.header isMobile loaded.loginStatus)
+                                        [ Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
                                         (case notLoggedIn.loginForm of
@@ -7073,7 +7073,7 @@ view model =
 errorPage : LoadedFrontend -> String -> Element FrontendMsg
 errorPage model text =
     Ui.el
-        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.loginStatus)
+        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.route model.loginStatus)
         , Ui.height Ui.fill
         ]
         (Ui.column

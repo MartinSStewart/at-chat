@@ -1,15 +1,48 @@
-module WordSpellingGameList exposing (words)
+module WordSpellingGameList exposing (Dictionary, dictionary, words, wordsByLength)
 
 {-| Raw TWL06 (Tournament Word List 2006) Scrabble dictionary, one word per line.
 Source: <https://github.com/kamilmielnik/scrabble-dictionaries/blob/master/english/twl06.txt>
 -}
 
+import Array exposing (Array)
+import Dict exposing (Dict)
 import Set exposing (Set)
 
 
 words : Set String
 words =
     Set.fromList (String.split "\n" raw)
+
+
+wordsByLength : Dict Int (Array String)
+wordsByLength =
+    Set.foldl
+        (\word acc ->
+            Dict.update
+                (String.length word)
+                (\maybe ->
+                    case maybe of
+                        Just array ->
+                            Array.push word array |> Just
+
+                        Nothing ->
+                            Array.fromList [ word ] |> Just
+                )
+                acc
+        )
+        Dict.empty
+        words
+
+
+type alias Dictionary =
+    { all : Set String
+    , byLength : Dict Int (Array String)
+    }
+
+
+dictionary : Dictionary
+dictionary =
+    { all = words, byLength = wordsByLength }
 
 
 raw : String
