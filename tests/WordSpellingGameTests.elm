@@ -7,6 +7,7 @@ import Set
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
+import WordSpellingGameList
 
 
 {-| Build a board from a list of plain (non-wildcard) tiles.
@@ -22,13 +23,6 @@ board tiles =
 word : List Letter -> List LetterOrWildcard
 word =
     List.map Letter
-
-
-{-| A dictionary built from the given words, for passing to `validatePlacement`.
--}
-dict : List String -> WordSpellingGame.Dictionary
-dict words =
-    WordSpellingGame.buildDictionary (Set.fromList words)
 
 
 placedWord : ( Int, Int ) -> Bool -> Letter -> List Letter -> PlacedWord
@@ -95,7 +89,7 @@ tests =
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (dict [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "cat" ])
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Result.map (\result -> ( result.words, result.score ))
@@ -103,7 +97,7 @@ tests =
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (dict [ "dog" ])
+                        (WordSpellingGameList.buildDictionary [ "dog" ])
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Expect.equal (Err ())
@@ -115,7 +109,7 @@ tests =
                             board [ ( ( 6, 5 ), A ), ( ( 7, 5 ), A ), ( ( 8, 5 ), A ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "cat", "ca", "aa", "ta" ])
+                        (WordSpellingGameList.buildDictionary [ "cat", "ca", "aa", "ta" ])
                         existing
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Result.map (\result -> ( result.words, result.score ))
@@ -129,7 +123,7 @@ tests =
                     in
                     WordSpellingGame.validatePlacement
                         -- "aa" is missing, so the placement is rejected.
-                        (dict [ "cat", "ca", "ta" ])
+                        (WordSpellingGameList.buildDictionary [ "cat", "ca", "ta" ])
                         existing
                         (placedWord ( 6, 4 ) False C [ A, T ])
                         |> Expect.equal (Err ())
@@ -143,7 +137,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "cat" ])
                         existing
                         (placedWord ( 6, 4 ) False C [ T ])
                         |> Result.map (\result -> result.words)
@@ -157,7 +151,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "dog" ])
+                        (WordSpellingGameList.buildDictionary [ "dog" ])
                         existing
                         (placedWord ( 6, 4 ) False C [ T ])
                         |> Expect.equal (Err ())
@@ -171,7 +165,7 @@ tests =
                             SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 8, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "cat" ])
                         existing
                         (placedWord ( 7, 4 ) False A [])
                         |> Result.map (\result -> result.words)
@@ -191,7 +185,7 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "koala" ])
+                        (WordSpellingGameList.buildDictionary [ "koala" ])
                         existing
                         (placedWord ( 7, 4 ) False A [])
                         |> Result.map (\result -> result.words)
@@ -212,7 +206,7 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (dict [ "abcde" ])
+                        (WordSpellingGameList.buildDictionary [ "abcde" ])
                         existing
                         (placedWord ( 7, 4 ) False A [])
                         |> Expect.equal (Err ())
