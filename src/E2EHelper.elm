@@ -49,6 +49,7 @@ module E2EHelper exposing
     , inviteUser
     , isLogErrorEmail
     , isLoginEmail
+    , isNotificationEmail
     , isOp2
     , joeEmail
     , lastGuildChannel
@@ -289,6 +290,31 @@ isLogErrorEmail emailAddress httpRequest =
 
                             _ ->
                                 Nothing
+
+                    Err _ ->
+                        Nothing
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+{-| Detects an email-notification message sent to the given address and returns its text body.
+-}
+isNotificationEmail : EmailAddress -> HttpRequest -> Maybe String
+isNotificationEmail emailAddress httpRequest =
+    if httpRequest.url == "https://api.postmarkapp.com/email" then
+        case httpRequest.body of
+            T.JsonBody value ->
+                case Json.Decode.decodeValue decodePostmark value of
+                    Ok ( subject, to, body ) ->
+                        if emailAddress == to && String.startsWith "New message from" subject then
+                            Just body
+
+                        else
+                            Nothing
 
                     Err _ ->
                         Nothing
@@ -2268,6 +2294,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
+                Local_SetEmailNotifications _ ->
+                    False
+
                 Local_RegisterPushSubscription _ _ ->
                     False
 
@@ -2667,6 +2696,7 @@ allAttackerLocalChanges =
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
+    , Local_SetEmailNotifications User.NotifyMeWhenMentioned
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset
     , Local_UnlinkDiscordUser discordUserId

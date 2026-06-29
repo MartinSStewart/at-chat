@@ -47,6 +47,8 @@ import Test.Html.Query
 import Test.Html.Selector
 import Time
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
+import User exposing (NotificationLevel(..))
+import UserSession exposing (SetViewing(..))
 import VisibleMessages
 
 
@@ -704,6 +706,74 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                             _ ->
                                 [ admin.checkModel 100 (\_ -> Err "Expected emoji to be assigned to text input") ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "User receives email notifications when the setting is enabled"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- The guild created in the setup helper has id 1.
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ -- Get notified about every message in the guild and stop viewing
+                  -- the channel, so that incoming messages generate notifications.
+                  user.sendToBackend
+                    100
+                    (LocalModelChangeRequest (ChangeId 100) (Local_SetGuildNotificationLevel guildId NotifyOnEveryMessage))
+                , user.sendToBackend
+                    100
+                    (LocalModelChangeRequest (ChangeId 101) (Local_CurrentlyViewing StopViewingChannel))
+
+                -- Email notifications are off by default, so this message must not send an email.
+                , admin.click 100 (Dom.id "channel_textinput")
+                , admin.input 100 (Dom.id "channel_textinput") "Before enabling email"
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , T.andThen
+                    100
+                    (\data ->
+                        case List.filterMap (E2EHelper.isNotificationEmail E2EHelper.userEmail) data.httpRequests of
+                            [] ->
+                                []
+
+                            _ :: _ ->
+                                [ T.checkState 0 (\_ -> Err "No email should be sent while email notifications are disabled") ]
+                    )
+
+                -- Enable email notifications through the user options UI.
+                , user.click 100 (Dom.id "guild_showUserOptions")
+                , user.keyUp 100 (Dom.id "userOptions_emailNotifications") "ArrowDown" []
+                , user.click 100 (Dom.id "userOptions_closeUserOptions")
+
+                -- Closing the user options returns the user to the channel, so stop viewing again.
+                , user.sendToBackend
+                    100
+                    (LocalModelChangeRequest (ChangeId 102) (Local_CurrentlyViewing StopViewingChannel))
+
+                -- Now a new message should trigger an email notification to the user.
+                , admin.click 100 (Dom.id "channel_textinput")
+                , admin.input 100 (Dom.id "channel_textinput") "You have a new message"
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , T.andThen
+                    100
+                    (\data ->
+                        case List.filterMap (E2EHelper.isNotificationEmail E2EHelper.userEmail) data.httpRequests of
+                            body :: _ ->
+                                if String.contains "You have a new message" body then
+                                    []
+
+                                else
+                                    [ T.checkState 0 (\_ -> Err "Notification email did not contain the message text") ]
+
+                            [] ->
+                                [ T.checkState 0 (\_ -> Err "Expected a notification email after enabling email notifications") ]
                     )
                 ]
             )

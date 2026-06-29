@@ -209,6 +209,9 @@ pendingChangesText localChange =
         Local_SetNotificationMode _ ->
             "Set notification mode"
 
+        Local_SetEmailNotifications _ ->
+            "Set email notifications"
+
         Local_RegisterPushSubscription _ _ ->
             "Register push subscription"
 
@@ -1954,6 +1957,9 @@ isPressMsg msg =
         SelectedNotificationMode _ ->
             True
 
+        SelectedEmailNotifications _ ->
+            True
+
         PressedGuildNotificationLevel _ _ ->
             True
 
@@ -2948,6 +2954,14 @@ changeUpdate localMsg local =
                             localUser.session
                     in
                     { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
+
+                Local_SetEmailNotifications emailNotifications ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmailNotifications emailNotifications localUser.user } }
 
                 Local_RegisterPushSubscription time pushSubscription ->
                     let

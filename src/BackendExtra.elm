@@ -1678,6 +1678,9 @@ toBackendLog toBackend =
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
 
+                Local_SetEmailNotifications _ ->
+                    ToBackendLog_Local_SetEmailNotifications
+
                 Local_RegisterPushSubscription _ _ ->
                     ToBackendLog_Local_RegisterPushSubscription
 

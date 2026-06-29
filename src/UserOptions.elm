@@ -301,6 +301,14 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     PressedCopyText
                                     ("JS Exception: " ++ jsError)
                         ]
+                    , MyUi.radioColumn
+                        (Dom.id "userOptions_emailNotifications")
+                        SelectedEmailNotifications
+                        (Just local.localUser.user.emailNotifications)
+                        "Email notifications"
+                        [ ( User.NeverNotifyMe, "No email notifications" )
+                        , ( User.NotifyMeWhenMentioned, "Email me when I'm mentioned or sent a message" )
+                        ]
 
                     --, Ui.el
                     --    [ Ui.linkNewTab

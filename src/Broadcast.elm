@@ -37,6 +37,7 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
@@ -47,6 +48,7 @@ import MembersAndOwner exposing (IsMember(..))
 import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
+import Postmark
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
@@ -54,10 +56,11 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Unsafe
 import Url
-import User exposing (BackendUser)
+import User exposing (BackendUser, EmailNotifications(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
 
@@ -424,7 +427,7 @@ messageNotification :
     -> Nonempty (RichText (Id UserId))
     -> List (Id UserId)
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 messageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         plainText : String
@@ -504,7 +507,7 @@ discordGuildMessageNotification :
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
@@ -601,9 +604,33 @@ notification :
     -> String
     -> Maybe Route
     -> SeqDict SessionId UserSession
-    -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
+    ->
+        { a
+            | serverSecret : SecretId ServerSecret
+            , privateVapidKey : PrivateVapidKey
+            , users : NonemptyDict.NonemptyDict (Id UserId) BackendUser
+            , postmarkApiKey : Postmark.ApiKey
+        }
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 notification time userToNotify senderName senderIcon text navigateTo sessions model =
+    let
+        -- Email notifications are a user setting (not a session setting like push
+        -- notifications) so we send at most one email per notification, regardless
+        -- of how many sessions the user has open.
+        emailCmds : List (Command BackendOnly toMsg BackendMsg)
+        emailCmds =
+            case NonemptyDict.get userToNotify model.users of
+                Just user ->
+                    case user.emailNotifications of
+                        NotifyMeWhenMentioned ->
+                            [ notificationEmail time user.email senderName text model.postmarkApiKey ]
+
+                        NeverNotifyMe ->
+                            []
+
+                Nothing ->
+                    []
+    in
     SeqDict.foldl
         (\sessionId session ( sessions2, cmds ) ->
             if session.userId == userToNotify then
@@ -638,8 +665,31 @@ notification time userToNotify senderName senderIcon text navigateTo sessions mo
             else
                 ( sessions2, cmds )
         )
-        ( sessions, [] )
+        ( sessions, emailCmds )
         sessions
+
+
+{-| Build a plain-text email notifying a user that they were mentioned or sent a
+message. Sent when the user has enabled email notifications in their settings.
+-}
+notificationEmail : Time.Posix -> EmailAddress -> String -> String -> Postmark.ApiKey -> Command BackendOnly toMsg BackendMsg
+notificationEmail time email senderName body postmarkApiKey =
+    Postmark.sendEmail
+        (SentNotificationEmail time email)
+        postmarkApiKey
+        { from = { name = "", email = notificationEmailFrom }
+        , to = List.Nonempty.fromElement { name = "", email = email }
+        , subject = NonemptyString 'N' ("ew message from " ++ senderName)
+        , body =
+            Postmark.BodyText
+                (senderName ++ ": " ++ body ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
+        , messageStream = "outbound"
+        }
+
+
+notificationEmailFrom : EmailAddress
+notificationEmailFrom =
+    Unsafe.emailAddress "no-reply@at-chat.app"
 
 
 isViewingDiscordDm : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
@@ -664,7 +714,7 @@ discordDmNotification :
     -> Maybe FileHash
     -> String
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordDmNotification time channelId senderId senderName senderIcon text model =
     let
         usersToNotify : SeqDict (Id UserId) (Discord.Id Discord.UserId)
