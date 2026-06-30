@@ -375,8 +375,12 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                         let
                                             userId : Discord.Id Discord.UserId
                                             userId =
-                                                NonemptyDict.remove currentUserId dmChannel.members
-                                                    |> SeqDict.keys
+                                                NonemptyDict.keys dmChannel.members
+                                                    |> List.Nonempty.toList
+                                                    |> List.filter
+                                                        (\memberId ->
+                                                            not (LinkedAndOtherDiscordUsers.isLinkedUser memberId localUser.discordUsers)
+                                                        )
                                                     |> List.head
                                                     |> Maybe.withDefault currentUserId
 

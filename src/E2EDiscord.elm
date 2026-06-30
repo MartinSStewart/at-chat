@@ -1374,6 +1374,58 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord group DM with two linked members shows a non-linked member's icon in the guild column"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ -- Link a second Discord account so the at-chat user now has two linked Discord accounts.
+                  E2EHelper.linkSecondDiscordAccount
+                    E2EHelper.sessionId0
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                , T.andThen
+                    120
+                    (\data ->
+                        case E2EHelper.websocketByDiscordToken "legit-token" data of
+                            Just ( connection, _ ) ->
+                                [ -- A new group DM is created with four members: the two linked Discord accounts
+                                  -- (the at-chat user's own accounts) plus two other (non-linked) users, Alice and Bob.
+                                  T.websocketSendString 100 connection group4DmChannelCreate
+
+                                -- Each of the four members writes a message in the group DM.
+                                , group4DmMessage connection "1500000000000000201" group4LinkedAuthorOneJson "Hello from linked account one"
+                                , group4DmMessage connection "1500000000000000202" group4LinkedAuthorTwoJson "Hello from linked account two"
+                                , group4DmMessage connection "1500000000000000203" group4UnlinkedAliceAuthorJson "Hello from Alice"
+                                , group4DmMessage connection "1500000000000000204" group4UnlinkedBobAuthorJson "Hello from Bob"
+
+                                -- A notification icon for the group DM now appears in the guild column.
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.id "guildsColumn_openDiscordDm_1500000000000000100" ]
+                                    )
+
+                                -- The icon shown is one of the non-linked members (Alice). It must never be one of the
+                                -- two linked Discord accounts, since those represent the at-chat user themselves.
+                                , guildColumnDiscordDmIconHasSrc admin
+                                    "1500000000000000100"
+                                    (Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) group4UnlinkedAliceId)
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Couldn't find the first Discord websocket connection") ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
         E2EHelper.startTime
         normalConfig
@@ -1595,6 +1647,85 @@ discordGroupDmMessage connection content =
                 connection
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000099\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[]}}")
             ]
+        )
+
+
+{-| A `CHANNEL_CREATE` gateway event for a Discord group DM (channel id
+`1500000000000000100`) with four members: the two linked Discord accounts
+(`184437096813953035` and `555555555555555555`, i.e. the at-chat user's own accounts)
+plus two non-linked users, Alice (`100000000000000000`) and Bob (`110000000000000000`).
+Alice and Bob have no avatar set, so they render with a default Discord avatar.
+-}
+group4DmChannelCreate : String
+group4DmChannelCreate =
+    "{\"t\":\"CHANNEL_CREATE\",\"s\":420,\"op\":0,\"d\":{\"type\":3,\"id\":\"1500000000000000100\",\"last_message_id\":null,\"recipients\":[{\"username\":\"at28727\",\"id\":\"184437096813953035\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},{\"username\":\"at28727b\",\"id\":\"555555555555555555\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},{\"username\":\"alice\",\"id\":\"100000000000000000\",\"discriminator\":\"0\",\"avatar\":null},{\"username\":\"bob\",\"id\":\"110000000000000000\",\"discriminator\":\"0\",\"avatar\":null}]}}"
+
+
+{-| The `author` object for the first linked Discord account (`184437096813953035`).
+-}
+group4LinkedAuthorOneJson : String
+group4LinkedAuthorOneJson =
+    "{\"username\":\"at28727\",\"public_flags\":0,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"}"
+
+
+{-| The `author` object for the second linked Discord account (`555555555555555555`).
+-}
+group4LinkedAuthorTwoJson : String
+group4LinkedAuthorTwoJson =
+    "{\"username\":\"at28727b\",\"public_flags\":0,\"id\":\"555555555555555555\",\"global_name\":\"AT2B\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"}"
+
+
+{-| The `author` object for the non-linked user Alice (`100000000000000000`).
+-}
+group4UnlinkedAliceAuthorJson : String
+group4UnlinkedAliceAuthorJson =
+    "{\"username\":\"alice\",\"public_flags\":0,\"id\":\"100000000000000000\",\"global_name\":\"Alice\",\"discriminator\":\"0\",\"avatar\":null}"
+
+
+{-| The `author` object for the non-linked user Bob (`110000000000000000`).
+-}
+group4UnlinkedBobAuthorJson : String
+group4UnlinkedBobAuthorJson =
+    "{\"username\":\"bob\",\"public_flags\":0,\"id\":\"110000000000000000\",\"global_name\":\"Bob\",\"discriminator\":\"0\",\"avatar\":null}"
+
+
+{-| Alice's Discord user id. She is the first non-linked member of the group DM created by
+`group4DmChannelCreate`, so her icon is the one shown in the guild column.
+-}
+group4UnlinkedAliceId : Discord.Id Discord.UserId
+group4UnlinkedAliceId =
+    Unsafe.uint64 "100000000000000000" |> Discord.idFromUInt64
+
+
+{-| Send a `MESSAGE_CREATE` for the group DM created by `group4DmChannelCreate`. `messageId`
+is used for both the gateway sequence number and the message id, `authorJson` is the raw
+Discord `author` object, and `content` is the message text.
+-}
+group4DmMessage : Websocket.Connection -> String -> String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+group4DmMessage connection messageId authorJson content =
+    T.websocketSendString
+        100
+        connection
+        ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ messageId ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-29T00:00:00.000000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ messageId ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":3,\"channel_id\":\"1500000000000000100\",\"author\":" ++ authorJson ++ ",\"attachments\":[]}}")
+
+
+{-| Assert that the Discord group DM notification icon in the guild column (the link button
+with id `guildsColumn_openDiscordDm_<channelId>`) shows an `img` with the given `src`.
+-}
+guildColumnDiscordDmIconHasSrc :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+guildColumnDiscordDmIconHasSrc user channelId src =
+    user.checkView
+        100
+        (\html ->
+            Test.Html.Query.find
+                [ Test.Html.Selector.id ("guildsColumn_openDiscordDm_" ++ channelId) ]
+                html
+                |> Test.Html.Query.has
+                    [ Test.Html.Selector.attribute (Html.Attributes.src src) ]
         )
 
 
