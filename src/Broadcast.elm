@@ -751,6 +751,7 @@ notificationEmailContent userToString senderName body =
                 [ Email.Html.Attributes.color "#ffffff"
                 , Email.Html.Attributes.fontSize "15px"
                 , Email.Html.Attributes.lineHeight "1.4"
+                , Email.Html.Attributes.style "white-space" "pre-wrap"
                 ]
                 (RichText.emailView userToString body)
             , Email.Html.div

@@ -955,166 +955,324 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
         |> String.concat
 
 
-{-| Best-effort rendering of rich text into email-safe html. Email clients only
-support a small subset of html/css, so we stick to inline styles and basic
-elements and degrade gracefully: user mentions, stickers, custom emojis and
-attachments become simple text placeholders (we don't have the lookup tables
-needed to render them properly here), while text styling, links, headings,
-quotes, code and bullet lists are preserved.
+{-| Render rich text into email-safe html. This is a port of `view`/`viewHelper`
+that keeps the same formatting `state` and `dropNextLineBreak` handling and reuses
+the same inline styling, but strips out everything email can't support: the
+large-content vs preview distinction, all event handling, link embeds, and
+image/video/audio rendering. Mentions are resolved with `userToString`; spoilers
+are always shown in their hidden form (email can't reveal them on click); and
+attachments, stickers and custom emojis become simple placeholders since the
+lookup tables needed to render them aren't available here.
 -}
 emailView : (userId -> String) -> Nonempty (RichText userId) -> List Email.Html.Html
 emailView userToString nonempty =
-    emailViewHelper userToString (List.Nonempty.toList nonempty)
+    emailViewHelper
+        userToString
+        False
+        { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
+        nonempty
+        |> Tuple.second
 
 
-emailViewHelper : (userId -> String) -> List (RichText userId) -> List Email.Html.Html
-emailViewHelper userToString list =
-    List.map (emailViewItem userToString) list
+emailViewHelper :
+    (userId -> String)
+    -> Bool
+    -> RichTextState
+    -> Nonempty (RichText userId)
+    -> ( Bool, List Email.Html.Html )
+emailViewHelper userToString dropNextLineBreak state nonempty =
+    List.foldl
+        (\item ( dropNextLineBreak2, currentList ) ->
+            case item of
+                UserMention userId ->
+                    ( False, currentList ++ [ emailUserLabel (userToString userId) ] )
+
+                NormalText char text ->
+                    ( False
+                    , currentList
+                        ++ emailNormalTextView
+                            (if dropNextLineBreak2 && char == '\n' then
+                                text
+
+                             else
+                                String.cons char text
+                            )
+                            state
+                    )
+
+                Italic nonempty2 ->
+                    let
+                        ( dropNextLineBreak3, list ) =
+                            emailViewHelper userToString dropNextLineBreak2 { state | italic = True } nonempty2
+                    in
+                    ( dropNextLineBreak3, currentList ++ list )
+
+                Underline nonempty2 ->
+                    let
+                        ( dropNextLineBreak3, list ) =
+                            emailViewHelper userToString dropNextLineBreak2 { state | underline = True } nonempty2
+                    in
+                    ( dropNextLineBreak3, currentList ++ list )
+
+                Bold nonempty2 ->
+                    let
+                        ( dropNextLineBreak3, list ) =
+                            emailViewHelper userToString dropNextLineBreak2 { state | bold = True } nonempty2
+                    in
+                    ( dropNextLineBreak3, currentList ++ list )
+
+                Strikethrough nonempty2 ->
+                    let
+                        ( dropNextLineBreak3, list ) =
+                            emailViewHelper userToString dropNextLineBreak2 { state | strikethrough = True } nonempty2
+                    in
+                    ( dropNextLineBreak3, currentList ++ list )
+
+                Spoiler nonempty2 ->
+                    let
+                        -- Email can't reveal spoilers on click, so always render the hidden variant.
+                        ( dropNextLineBreak3, list ) =
+                            emailViewHelper userToString dropNextLineBreak2 { state | spoiler = True } nonempty2
+                    in
+                    ( dropNextLineBreak3
+                    , currentList
+                        ++ [ Email.Html.span
+                                [ Email.Html.Attributes.borderRadius "2px"
+                                , Email.Html.Attributes.backgroundColor "rgb(0,0,0)"
+                                ]
+                                list
+                           ]
+                    )
+
+                BlockQuote _ list ->
+                    let
+                        ( _, list2 ) =
+                            case List.Nonempty.fromList list of
+                                Just nonempty2 ->
+                                    emailViewHelper userToString True state nonempty2
+
+                                Nothing ->
+                                    ( True, [ Email.Html.text " " ] )
+                    in
+                    ( True
+                    , currentList
+                        ++ [ Email.Html.div
+                                [ Email.Html.Attributes.borderLeft "4px solid rgb(80,120,200)"
+                                , Email.Html.Attributes.padding "2px 8px"
+                                ]
+                                list2
+                           ]
+                    )
+
+                Heading level _ nonempty2 ->
+                    let
+                        ( _, list2 ) =
+                            emailViewHelper userToString True state nonempty2
+
+                        headingElement : Email.Html.Html
+                        headingElement =
+                            case level of
+                                H1 ->
+                                    Email.Html.h1
+                                        [ Email.Html.Attributes.fontSize "2em"
+                                        , Email.Html.Attributes.style "font-weight" "700"
+                                        , Email.Html.Attributes.style "margin" "0"
+                                        ]
+                                        list2
+
+                                H2 ->
+                                    Email.Html.h2
+                                        [ Email.Html.Attributes.fontSize "1.5em"
+                                        , Email.Html.Attributes.style "font-weight" "700"
+                                        , Email.Html.Attributes.style "margin" "0"
+                                        ]
+                                        list2
+
+                                H3 ->
+                                    Email.Html.h3
+                                        [ Email.Html.Attributes.fontSize "1.25em"
+                                        , Email.Html.Attributes.style "font-weight" "700"
+                                        , Email.Html.Attributes.style "margin" "0"
+                                        ]
+                                        list2
+
+                                Small ->
+                                    Email.Html.div
+                                        [ Email.Html.Attributes.fontSize "0.8em"
+                                        , Email.Html.Attributes.color (MyUi.colorToStyle MyUi.font2)
+                                        ]
+                                        list2
+                    in
+                    ( True, currentList ++ [ headingElement ] )
+
+                Hyperlink data ->
+                    ( False, currentList ++ [ emailLinkView state (Url.toString data) (Url.toString data) ] )
+
+                MarkdownLink alias url ->
+                    ( False, currentList ++ [ emailLinkView state (Url.toString url) (String.Nonempty.toString alias) ] )
+
+                InlineCode char rest ->
+                    ( False
+                    , currentList
+                        ++ [ Email.Html.span
+                                (List.filterMap identity
+                                    [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+                                    , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                                    , emailAttrIf state.bold (Email.Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                                    , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+                                    ]
+                                    ++ [ Email.Html.Attributes.backgroundColor "rgb(90,100,120)"
+                                       , Email.Html.Attributes.border "rgb(55,61,73) solid 1px"
+                                       , Email.Html.Attributes.padding "0 4px 0 4px"
+                                       , Email.Html.Attributes.borderRadius "4px"
+                                       , Email.Html.Attributes.fontFamily "monospace"
+                                       ]
+                                )
+                                [ Email.Html.text (String.cons char rest) ]
+                           ]
+                    )
+
+                CodeBlock _ text ->
+                    ( True
+                    , currentList
+                        ++ [ Email.Html.div
+                                [ Email.Html.Attributes.backgroundColor
+                                    (if state.spoiler then
+                                        "rgb(0,0,0)"
+
+                                     else
+                                        "rgb(90,100,120)"
+                                    )
+                                , Email.Html.Attributes.border "rgb(55,61,73) solid 1px"
+                                , Email.Html.Attributes.padding "0 4px 0 4px"
+                                , Email.Html.Attributes.borderRadius "4px"
+                                , Email.Html.Attributes.fontFamily "monospace"
+                                ]
+                                [ if state.spoiler then
+                                    Email.Html.span [ Email.Html.Attributes.style "opacity" "0" ] [ Email.Html.text text ]
+
+                                  else
+                                    Email.Html.text text
+                                ]
+                           ]
+                    )
+
+                AttachedFile _ ->
+                    -- The attached file lookup table isn't available here, so show a placeholder.
+                    ( True, currentList ++ [ emailPlaceholder "🖼️" ] )
+
+                EscapedChar char ->
+                    ( False, currentList ++ [ Email.Html.text (escapedCharToString char) ] )
+
+                Sticker _ ->
+                    ( True, currentList ++ [ emailPlaceholder "🖼️" ] )
+
+                CustomEmoji _ ->
+                    ( False, currentList ++ [ emailPlaceholder "🙂" ] )
+
+                BulletPoint _ items ->
+                    let
+                        ( _, listItems ) =
+                            List.foldl
+                                (\bulletItem ( _, acc ) ->
+                                    case List.Nonempty.fromList bulletItem of
+                                        Just nonempty2 ->
+                                            let
+                                                ( d3, html ) =
+                                                    emailViewHelper userToString True state nonempty2
+                                            in
+                                            ( d3, html :: acc )
+
+                                        Nothing ->
+                                            ( True, acc )
+                                )
+                                ( dropNextLineBreak2, [] )
+                                (List.Nonempty.toList items)
+                                |> (\( a, acc ) -> ( a, List.reverse acc ))
+                    in
+                    ( True
+                    , currentList
+                        ++ [ Email.Html.ul
+                                [ Email.Html.Attributes.style "margin" "0"
+                                , Email.Html.Attributes.paddingLeft "24px"
+                                ]
+                                (List.map (Email.Html.li []) listItems)
+                           ]
+                    )
+        )
+        ( dropNextLineBreak, [] )
+        (List.Nonempty.toList nonempty)
 
 
-emailViewItem : (userId -> String) -> RichText userId -> Email.Html.Html
-emailViewItem userToString richText =
-    case richText of
-        NormalText char rest ->
-            emailText (String.cons char rest)
+emailAttrIf : Bool -> Email.Html.Attribute -> Maybe Email.Html.Attribute
+emailAttrIf condition attribute =
+    if condition then
+        Just attribute
 
-        UserMention userId ->
-            Email.Html.span
-                [ Email.Html.Attributes.color "#b0c1ff"
-                , Email.Html.Attributes.style "white-space" "nowrap"
-                ]
-                [ Email.Html.text ("@" ++ userToString userId) ]
-
-        Bold a ->
-            Email.Html.strong [] (emailViewHelper userToString (List.Nonempty.toList a))
-
-        Italic a ->
-            Email.Html.span
-                [ Email.Html.Attributes.fontStyle "italic" ]
-                (emailViewHelper userToString (List.Nonempty.toList a))
-
-        Underline a ->
-            Email.Html.u [] (emailViewHelper userToString (List.Nonempty.toList a))
-
-        Strikethrough a ->
-            Email.Html.span
-                [ Email.Html.Attributes.style "text-decoration" "line-through" ]
-                (emailViewHelper userToString (List.Nonempty.toList a))
-
-        Spoiler a ->
-            -- Email can't reveal spoilers on click, so redact them by matching the
-            -- text color to a dark background (still selectable to reveal).
-            Email.Html.span
-                [ Email.Html.Attributes.backgroundColor "#0e1428"
-                , Email.Html.Attributes.color "#0e1428"
-                ]
-                (emailViewHelper userToString (List.Nonempty.toList a))
-
-        BlockQuote _ a ->
-            Email.Html.div
-                [ Email.Html.Attributes.borderLeft "3px solid #61687c"
-                , Email.Html.Attributes.paddingLeft "12px"
-                , Email.Html.Attributes.color "#dcdcdc"
-                ]
-                (emailViewHelper userToString a)
-
-        Heading level _ a ->
-            let
-                children : List Email.Html.Html
-                children =
-                    emailViewHelper userToString (List.Nonempty.toList a)
-            in
-            case level of
-                H1 ->
-                    Email.Html.h1 [ Email.Html.Attributes.style "margin" "8px 0" ] children
-
-                H2 ->
-                    Email.Html.h2 [ Email.Html.Attributes.style "margin" "8px 0" ] children
-
-                H3 ->
-                    Email.Html.h3 [ Email.Html.Attributes.style "margin" "8px 0" ] children
-
-                Small ->
-                    Email.Html.div
-                        [ Email.Html.Attributes.fontSize "13px"
-                        , Email.Html.Attributes.color "#a0b4c8"
-                        ]
-                        children
-
-        Hyperlink url ->
-            emailLink (Url.toString url) (Url.toString url)
-
-        MarkdownLink alias url ->
-            emailLink (Url.toString url) (String.Nonempty.toString alias)
-
-        InlineCode char rest ->
-            Email.Html.span
-                [ Email.Html.Attributes.fontFamily "monospace"
-                , Email.Html.Attributes.backgroundColor "#0e1428"
-                , Email.Html.Attributes.padding "1px 4px"
-                , Email.Html.Attributes.borderRadius "4px"
-                ]
-                [ Email.Html.text (String.cons char rest) ]
-
-        CodeBlock _ string ->
-            Email.Html.div
-                [ Email.Html.Attributes.fontFamily "monospace"
-                , Email.Html.Attributes.backgroundColor "#0e1428"
-                , Email.Html.Attributes.padding "12px"
-                , Email.Html.Attributes.borderRadius "6px"
-                , Email.Html.Attributes.style "white-space" "pre-wrap"
-                ]
-                (textWithLineBreaks string)
-
-        AttachedFile _ ->
-            emailPlaceholder "[attachment]"
-
-        EscapedChar char ->
-            Email.Html.text (escapedCharToString char)
-
-        Sticker _ ->
-            emailPlaceholder "[sticker]"
-
-        CustomEmoji _ ->
-            emailPlaceholder "[emoji]"
-
-        BulletPoint _ items ->
-            Email.Html.ul
-                [ Email.Html.Attributes.style "margin" "4px 0"
-                , Email.Html.Attributes.paddingLeft "20px"
-                ]
-                (List.map
-                    (\item -> Email.Html.li [] (emailViewHelper userToString item))
-                    (List.Nonempty.toList items)
-                )
+    else
+        Nothing
 
 
-emailText : String -> Email.Html.Html
-emailText text =
-    Email.Html.span [] (textWithLineBreaks text)
+emailNormalTextView : String -> RichTextState -> List Email.Html.Html
+emailNormalTextView text state =
+    [ Email.Html.span
+        (List.filterMap identity
+            [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+            , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+            , emailAttrIf state.bold (Email.Html.Attributes.style "font-weight" "700")
+            , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+            , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+            ]
+        )
+        [ Email.Html.text text ]
+    ]
 
 
-{-| Render text while preserving line breaks (which html would otherwise collapse).
--}
-textWithLineBreaks : String -> List Email.Html.Html
-textWithLineBreaks text =
-    String.split "\n" text
-        |> List.map Email.Html.text
-        |> List.intersperse (Email.Html.br [] [])
-
-
-emailLink : String -> String -> Email.Html.Html
-emailLink url label =
-    Email.Html.a
-        [ Email.Html.Attributes.href url
-        , Email.Html.Attributes.color "#b0c1ff"
+emailUserLabel : String -> Email.Html.Html
+emailUserLabel name =
+    Email.Html.span
+        [ Email.Html.Attributes.backgroundColor "rgb(50,70,240)"
+        , Email.Html.Attributes.padding "1px 1px 0 1px"
+        , Email.Html.Attributes.color "rgb(215,235,255)"
+        , Email.Html.Attributes.borderRadius "2px"
+        , Email.Html.Attributes.style "white-space" "nowrap"
         ]
-        [ Email.Html.text label ]
+        [ Email.Html.text ("@" ++ name) ]
+
+
+emailLinkView : RichTextState -> String -> String -> Email.Html.Html
+emailLinkView state url label =
+    if state.spoiler then
+        Email.Html.span
+            (List.filterMap identity
+                [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+                , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                , emailAttrIf state.bold (Email.Html.Attributes.style "font-weight" "700")
+                , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                ]
+                ++ [ Email.Html.Attributes.style "opacity" "0" ]
+            )
+            [ Email.Html.text label ]
+
+    else
+        Email.Html.a
+            (List.filterMap identity
+                [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+                , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                , emailAttrIf state.bold (Email.Html.Attributes.style "font-weight" "700")
+                , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                ]
+                ++ [ Email.Html.Attributes.href url
+                   , Email.Html.Attributes.color "rgb(66,133,244)"
+                   ]
+            )
+            [ Email.Html.text label ]
 
 
 emailPlaceholder : String -> Email.Html.Html
 emailPlaceholder label =
-    Email.Html.span [ Email.Html.Attributes.color "#a0b4c8" ] [ Email.Html.text label ]
+    Email.Html.span [] [ Email.Html.text label ]
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
