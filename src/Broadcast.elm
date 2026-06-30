@@ -490,10 +490,10 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                                 userId2
                                 (PersonName.toString user2.name)
                                 user2.icon
-                                (\userId ->
-                                    case NonemptyDict.get userId model.users of
-                                        Just user ->
-                                            PersonName.toString user.name
+                                (\userId3 ->
+                                    case NonemptyDict.get userId3 model.users of
+                                        Just user3 ->
+                                            PersonName.toString user3.name
 
                                         Nothing ->
                                             "<missing>"
@@ -583,10 +583,10 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         discordUser.linkedTo
                                         (PersonName.toString user2.name)
                                         user2.icon
-                                        (\userId ->
-                                            case SeqDict.get userId model.discordUsers of
-                                                Just user ->
-                                                    DiscordUserData.username user
+                                        (\userId3 ->
+                                            case SeqDict.get userId3 model.discordUsers of
+                                                Just user3 ->
+                                                    DiscordUserData.username user3
 
                                                 Nothing ->
                                                     "<missing>"
@@ -595,16 +595,16 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             UserTextMessage message2 ->
                                                 RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
 
-                                            UserJoinedMessage posix userId seqDict drawing ->
+                                            UserJoinedMessage _ _ _ _ ->
                                                 "New user joined!"
 
-                                            DeletedMessage posix ->
+                                            DeletedMessage _ ->
                                                 ""
 
-                                            CallStarted time2 endTime userId seqDict drawing ->
+                                            CallStarted _ endTime _ _ _ ->
                                                 LocalState.callStartedText endTime
 
-                                            GameStarted posix userId seqDict drawing game ->
+                                            GameStarted _ _ _ _ game ->
                                                 LocalState.gameStartedText game
                                         )
                                         message
@@ -743,20 +743,20 @@ notificationEmail time email senderName userToString plainText message postmarkA
                     (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
                 )
 
-        UserJoinedMessage posix userId seqDict drawing ->
+        UserJoinedMessage _ _ _ _ ->
             helper
                 (NonemptyString 'N' "ew user joined")
                 (Postmark.BodyText (senderName ++ " joined!"))
 
-        DeletedMessage posix ->
+        DeletedMessage _ ->
             Command.none
 
-        CallStarted posix maybePosix userId seqDict drawing ->
+        CallStarted _ _ _ _ _ ->
             helper
                 (NonemptyString 'C' "all started")
                 (Postmark.BodyText (senderName ++ " started a call"))
 
-        GameStarted posix userId seqDict drawing game ->
+        GameStarted _ _ _ _ _ ->
             helper
                 (NonemptyString 'G' "ame started")
                 (Postmark.BodyText (senderName ++ " started a game"))

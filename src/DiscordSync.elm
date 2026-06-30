@@ -53,7 +53,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import PersonName
 import Quantity
-import RichText exposing (DiscordCustomEmojiIdAndName, RichText(..))
+import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
