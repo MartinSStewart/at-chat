@@ -1184,7 +1184,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 discordGuildId
                                                                 channelId
                                                                 threadRouteNoReply
-                                                                message2
+                                                                (Message.UserTextMessage message2)
                                                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                                 model
                                                           , channel3
@@ -1221,7 +1221,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 discordGuildId
                                                                 channelId
                                                                 threadRouteNoReply
-                                                                message
+                                                                (Message.UserTextMessage message)
                                                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                                 model
                                                           , channel3
