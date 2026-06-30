@@ -31,6 +31,7 @@ module User exposing
     , sectionToString
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
+    , setEmailNotifications
     , setEmojiCategory
     , setEmojiSkinTone
     , setGuildNotificationLevel
@@ -144,6 +145,11 @@ addRecentlyUsedEmoji emoji user =
     }
 
 
+setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }
+setEmailNotifications emailNotifications user =
+    { user | emailNotifications = emailNotifications }
+
+
 setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 setEmojiCategory category user =
     let
@@ -227,7 +233,7 @@ init createdAt name email userIsAdmin =
     , lastLogPageViewed = Id.fromInt 0
     , expandedSections = SeqSet.empty
     , createdAt = createdAt
-    , emailNotifications = CheckEvery5Minutes
+    , emailNotifications = NeverNotifyMe
     , lastEmailNotification = createdAt
     , lastViewed = SeqDict.empty
     , lastViewedThreads = SeqDict.empty
@@ -453,7 +459,8 @@ getDiscordUser userId localUser =
 
 
 type EmailNotifications
-    = CheckEvery5Minutes
+    = NeverNotifyMe
+    | NotifyMeWhenMentioned
 
 
 type AdminUiSection

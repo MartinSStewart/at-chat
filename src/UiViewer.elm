@@ -6,8 +6,10 @@ Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 
 import Array
 import BackendExtra
+import Broadcast
 import Coord
 import Discord
+import Drawing
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
@@ -25,7 +27,7 @@ import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
-import RichText exposing (Domain, Language(..), RichText(..))
+import RichText exposing (Domain, EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData, StickerUrl(..))
@@ -34,6 +36,7 @@ import Time
 import Ui
 import Ui.Font
 import Unsafe
+import Url
 
 
 main : Html ()
@@ -53,6 +56,7 @@ main =
                 [ Ui.background MyUi.background3 ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
                 , Ui.html loginEmail
+                , Ui.html notificationEmail
                 ]
             , Ui.column
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
@@ -274,6 +278,109 @@ loginEmail =
         (BackendExtra.loginEmailContent "12345678")
 
 
+notificationEmail : Html msg
+notificationEmail =
+    let
+        -- Build a NormalText node from a plain string.
+        normal str =
+            case String.uncons str of
+                Just ( char, rest ) ->
+                    NormalText char rest
+
+                Nothing ->
+                    NormalText ' ' ""
+
+        inline str =
+            Nonempty (normal str) []
+
+        heading level str =
+            Heading level NoLeadingLineBreak (inline str)
+
+        -- One of every RichText variant so the whole email rendering can be previewed.
+        content =
+            Nonempty
+                (heading H1 "Heading 1")
+                [ heading H2 "Heading 2"
+                , heading H3 "Heading 3"
+                , heading Small "Small heading"
+                , normal "Text styles: "
+                , Bold (inline "bold")
+                , normal ", "
+                , Italic (inline "italic")
+                , normal ", "
+                , Underline (inline "underline")
+                , normal ", "
+                , Strikethrough (inline "strikethrough")
+                , normal ", "
+                , Spoiler (inline "spoiler")
+                , normal ", "
+                , Bold (Nonempty (Italic (inline "nested")) [])
+                , normal ".\n"
+                , UserMention (Id.fromInt 1)
+                , normal " mentioned you. Links: "
+                , Hyperlink exampleUrl
+                , normal " and "
+                , MarkdownLink (NonemptyString 'm' "arkdown link") exampleUrl
+                , normal ". Inline "
+                , InlineCode 'c' "ode"
+                , normal " and an escaped asterisk "
+                , EscapedChar EscapedBold
+                , normal ".\n"
+                , CodeBlock NoLanguage "a code block\nwith two lines"
+                , CodeBlock (Language (NonemptyString 'e' "lm")) "add a b =\n    a + b"
+                , BlockQuote NoLeadingLineBreak [ normal "A block quote" ]
+                , BulletPoint NoLeadingLineBreak
+                    (Nonempty
+                        [ normal "First bullet point" ]
+                        [ [ normal "Second bullet point" ]
+                        , [ Bold (inline "Third"), normal " bullet point" ]
+                        ]
+                    )
+                , normal "File attachment "
+                , AttachedFile (Id.fromInt 1)
+                , normal " image attachment "
+                , AttachedFile (Id.fromInt 2)
+                , normal " sticker "
+                , Sticker (Id.fromInt 2)
+                , normal " custom emoji "
+                , CustomEmoji (Id.fromInt 3)
+                ]
+
+        message =
+            { createdAt = Time.millisToPosix 0
+            , createdBy = Id.fromInt 1
+            , content = content
+            , reactions = SeqDict.empty
+            , editedAt = Nothing
+            , repliedTo = Nothing
+            , attachedFiles = attachments
+            , embeds = Array.empty
+            , timestampDrawings = Drawing.emptyDrawing
+            , userIconDrawings = Drawing.emptyDrawing
+            , imageAttachmentDrawings = SeqDict.empty
+            , embedDrawings = SeqDict.empty
+            }
+    in
+    emailView
+        (Broadcast.notificationEmailSubject "Stevie Steve")
+        (Broadcast.notificationEmailContent
+            (\id -> "User " ++ Id.toString id)
+            "Stevie Steve"
+            message
+        )
+
+
+exampleUrl : Url.Url
+exampleUrl =
+    { protocol = Url.Https
+    , host = "at-chat.app"
+    , port_ = Nothing
+    , path = "/"
+    , query = Nothing
+    , fragment = Nothing
+    }
+
+
 exampleEmail : EmailAddress
 exampleEmail =
     Unsafe.emailAddress "user@example.com"
@@ -316,6 +423,8 @@ logExamples =
                 exampleEmail
             )
         , logEntry (Log.LoginEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })) exampleEmail)
+        , logEntry (Log.NotificationEmail (Ok ()) exampleEmail)
+        , logEntry (Log.NotificationEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })) exampleEmail)
         , logEntry (Log.LoginsRateLimited (Id.fromInt 42))
         , logEntry (Log.ChangedUsers (Id.fromInt 7))
         , logEntry (Log.SendLogErrorEmailFailed Postmark.Timeout exampleEmail)

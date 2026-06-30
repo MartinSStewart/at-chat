@@ -2814,6 +2814,17 @@ updateLoaded msg model =
                 )
                 model
 
+        SelectedEmailNotifications emailNotifications ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetEmailNotifications emailNotifications |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         ProfilePictureEditorMsg imageEditorMsg ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

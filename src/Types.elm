@@ -118,7 +118,7 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Untrusted exposing (Untrusted)
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
 
@@ -509,6 +509,7 @@ type FrontendMsg
     | ImageViewerMsg ImageViewer.Msg
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
+    | SelectedEmailNotifications EmailNotifications
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | GotStartupData Ports.StartupData
@@ -623,6 +624,7 @@ type BackendMsg
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    | SentNotificationEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
@@ -908,6 +910,7 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
+    | Local_SetEmailNotifications EmailNotifications
     | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)

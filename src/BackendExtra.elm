@@ -66,7 +66,7 @@ import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendGuild, D
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
-import Message
+import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
@@ -1060,7 +1060,16 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         )
                         text
 
-                ( channel2, embedCmds, stickers ) =
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+
+                ( ( usersMentioned, ( sessions, notificationCmds ), channel2 ), embedCmds, stickers ) =
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             let
@@ -1075,9 +1084,29 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         model.stickers
 
                                 ( messageId, channel3 ) =
-                                    LocalState.createThreadMessageBackend threadId message2 channel
+                                    LocalState.createThreadMessageBackend threadId (UserTextMessage message2) channel
+
+                                usersMentioned2 : SeqSet (Id UserId)
+                                usersMentioned2 =
+                                    LocalState.usersMentionedOrRepliedToBackend
+                                        threadRouteWithMaybeReplyTo
+                                        richText
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        channel3
+
+                                messageNotification =
+                                    Broadcast.messageNotification
+                                        usersMentioned2
+                                        time
+                                        session.userId
+                                        guildId
+                                        channelId
+                                        threadRouteNoReply
+                                        message2
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        model
                             in
-                            ( channel3
+                            ( ( usersMentioned2, messageNotification, channel3 )
                             , Command.map
                                 identity
                                 (GotGuildMessageEmbed guildId channelId (ViewThreadWithMessage threadId messageId))
@@ -1098,9 +1127,29 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         model.stickers
 
                                 ( messageId, channel3 ) =
-                                    LocalState.createChannelMessageBackend message2 channel
+                                    LocalState.createChannelMessageBackend (UserTextMessage message2) channel
+
+                                usersMentioned2 : SeqSet (Id UserId)
+                                usersMentioned2 =
+                                    LocalState.usersMentionedOrRepliedToBackend
+                                        threadRouteWithMaybeReplyTo
+                                        richText
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        channel3
+
+                                messageNotification =
+                                    Broadcast.messageNotification
+                                        usersMentioned2
+                                        time
+                                        session.userId
+                                        guildId
+                                        channelId
+                                        threadRouteNoReply
+                                        message2
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                        model
                             in
-                            ( channel3
+                            ( ( usersMentioned2, messageNotification, channel3 )
                             , Command.map
                                 identity
                                 (GotGuildMessageEmbed guildId channelId (NoThreadWithMessage messageId))
@@ -1111,23 +1160,6 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 guildOrDmId : GuildOrDmId
                 guildOrDmId =
                     GuildOrDmId_Guild guildId channelId
-
-                threadRouteNoReply : ThreadRoute
-                threadRouteNoReply =
-                    case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId _ ->
-                            ViewThread threadId
-
-                        NoThreadWithMaybeMessage _ ->
-                            NoThread
-
-                usersMentioned : SeqSet (Id UserId)
-                usersMentioned =
-                    LocalState.usersMentionedOrRepliedToBackend
-                        threadRouteWithMaybeReplyTo
-                        richText
-                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                        channel2
 
                 users2 : NonemptyDict (Id UserId) BackendUser
                 users2 =
@@ -1152,18 +1184,6 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         )
                         model.users
                         usersMentioned
-
-                ( sessions, notificationCmds ) =
-                    Broadcast.messageNotification
-                        usersMentioned
-                        time
-                        session.userId
-                        guildId
-                        channelId
-                        threadRouteNoReply
-                        richText
-                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                        model
             in
             ( { model
                 | guilds =
@@ -1265,7 +1285,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         model.stickers
 
                 ( messageId, dmChannel2 ) =
-                    LocalState.createThreadMessageBackend threadId message dmChannel
+                    LocalState.createThreadMessageBackend threadId (UserTextMessage message) dmChannel
 
                 ( sessions, notificationCmds ) =
                     Broadcast.broadcastDm
@@ -1275,7 +1295,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         session.userId
                         otherUserId
                         text
-                        richText
+                        message
                         threadRouteWithReplyTo
                         attachedFiles
                         stickers
@@ -1316,7 +1336,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         model.stickers
 
                 ( messageId, dmChannel2 ) =
-                    LocalState.createChannelMessageBackend message dmChannel
+                    LocalState.createChannelMessageBackend (Message.UserTextMessage message) dmChannel
 
                 ( sessions, notificationCmds ) =
                     Broadcast.broadcastDm
@@ -1326,7 +1346,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         session.userId
                         otherUserId
                         text
-                        richText
+                        message
                         threadRouteWithReplyTo
                         attachedFiles
                         stickers
@@ -1677,6 +1697,9 @@ toBackendLog toBackend =
 
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
+
+                Local_SetEmailNotifications _ ->
+                    ToBackendLog_Local_SetEmailNotifications
 
                 Local_RegisterPushSubscription _ _ ->
                     ToBackendLog_Local_RegisterPushSubscription

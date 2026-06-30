@@ -449,6 +449,9 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
+        SentNotificationEmail time email result ->
+            BackendExtra.addLog time (Log.NotificationEmail result email) model
+
         DiscordUserWebsocketMsg discordUserId result ->
             let
                 ( model2, cmd ) =
@@ -4689,6 +4692,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model.sessions
                               }
                             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
+                Local_SetEmailNotifications emailNotifications ->
+                    BackendExtra.asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        (User.setEmailNotifications emailNotifications user)
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
                             )
                         )
 

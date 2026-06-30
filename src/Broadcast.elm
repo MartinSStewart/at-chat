@@ -7,6 +7,8 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
+    , notificationEmailContent
+    , notificationEmailSubject
     , pushNotification
     , pushNotificationCodec
     , toAdmins
@@ -37,6 +39,9 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import Email.Html
+import Email.Html.Attributes
+import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
@@ -44,20 +49,23 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
+import Message exposing (Message(..), UserTextMessageData)
 import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
-import RichText exposing (RichText)
+import Postmark
+import RichText
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Unsafe
 import Url
-import User exposing (BackendUser)
+import User exposing (BackendUser, EmailNotifications(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
 
@@ -421,15 +429,15 @@ messageNotification :
     -> Id GuildId
     -> Id ChannelId
     -> ThreadRoute
-    -> Nonempty (RichText (Id UserId))
+    -> UserTextMessageData messageId (Id UserId)
     -> List (Id UserId)
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
-messageNotification usersMentioned time sender guildId channelId threadRoute content members model =
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+messageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
         plainText : String
         plainText =
-            RichText.toString True (NonemptyDict.toSeqDict model.users) content
+            RichText.toString True (NonemptyDict.toSeqDict model.users) message.content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -482,7 +490,16 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 userId2
                                 (PersonName.toString user2.name)
                                 user2.icon
+                                (\userId3 ->
+                                    case NonemptyDict.get userId3 model.users of
+                                        Just user3 ->
+                                            PersonName.toString user3.name
+
+                                        Nothing ->
+                                            "<missing>"
+                                )
                                 plainText
+                                (UserTextMessage message)
                                 (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
                                 sessions
                                 model
@@ -501,11 +518,11 @@ discordGuildMessageNotification :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Message messageId (Discord.Id Discord.UserId)
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
-discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
         alwaysNotify =
@@ -566,7 +583,31 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         discordUser.linkedTo
                                         (PersonName.toString user2.name)
                                         user2.icon
-                                        (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers content)
+                                        (\userId3 ->
+                                            case SeqDict.get userId3 model.discordUsers of
+                                                Just user3 ->
+                                                    DiscordUserData.username user3
+
+                                                Nothing ->
+                                                    "<missing>"
+                                        )
+                                        (case message of
+                                            UserTextMessage message2 ->
+                                                RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
+
+                                            UserJoinedMessage _ _ _ _ ->
+                                                "New user joined!"
+
+                                            DeletedMessage _ ->
+                                                ""
+
+                                            CallStarted _ endTime _ _ _ ->
+                                                LocalState.callStartedText endTime
+
+                                            GameStarted _ _ _ _ game ->
+                                                LocalState.gameStartedText game
+                                        )
+                                        message
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
                                             , guildId = guildId
@@ -598,12 +639,38 @@ notification :
     -> Id UserId
     -> String
     -> Maybe FileHash
+    -> (userId -> String)
     -> String
+    -> Message messageId userId
     -> Maybe Route
     -> SeqDict SessionId UserSession
-    -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
-notification time userToNotify senderName senderIcon text navigateTo sessions model =
+    ->
+        { a
+            | serverSecret : SecretId ServerSecret
+            , privateVapidKey : PrivateVapidKey
+            , users : NonemptyDict.NonemptyDict (Id UserId) BackendUser
+            , postmarkApiKey : Postmark.ApiKey
+        }
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+notification time userToNotify senderName senderIcon userToString plainText message navigateTo sessions model =
+    let
+        -- Email notifications are a user setting (not a session setting like push
+        -- notifications) so we send at most one email per notification, regardless
+        -- of how many sessions the user has open.
+        emailCmds : List (Command BackendOnly toMsg BackendMsg)
+        emailCmds =
+            case NonemptyDict.get userToNotify model.users of
+                Just user ->
+                    case user.emailNotifications of
+                        NotifyMeWhenMentioned ->
+                            [ notificationEmail time user.email senderName userToString plainText message model.postmarkApiKey ]
+
+                        NeverNotifyMe ->
+                            []
+
+                Nothing ->
+                    []
+    in
     SeqDict.foldl
         (\sessionId session ( sessions2, cmds ) ->
             if session.userId == userToNotify then
@@ -618,7 +685,7 @@ notification time userToNotify senderName senderIcon text navigateTo sessions mo
                             session.userId
                             time
                             senderName
-                            text
+                            plainText
                             (case senderIcon of
                                 Just icon ->
                                     FileStatus.fileUrl FileStatus.pngContent icon
@@ -638,8 +705,125 @@ notification time userToNotify senderName senderIcon text navigateTo sessions mo
             else
                 ( sessions2, cmds )
         )
-        ( sessions, [] )
+        ( sessions, emailCmds )
         sessions
+
+
+{-| Send an email notifying a user that they were mentioned or sent a message.
+Sent when the user has enabled email notifications in their settings.
+-}
+notificationEmail :
+    Time.Posix
+    -> EmailAddress
+    -> String
+    -> (userId -> String)
+    -> String
+    -> Message messageId userId
+    -> Postmark.ApiKey
+    -> Command BackendOnly toMsg BackendMsg
+notificationEmail time email senderName userToString plainText message postmarkApiKey =
+    let
+        helper subject body =
+            Postmark.sendEmail
+                (SentNotificationEmail time email)
+                postmarkApiKey
+                { from = { name = "", email = notificationEmailFrom }
+                , to = List.Nonempty.fromElement { name = "", email = email }
+                , subject = subject
+                , body = body
+                , messageStream = "outbound"
+                }
+    in
+    case message of
+        UserTextMessage data ->
+            helper
+                (notificationEmailSubject senderName)
+                (Postmark.BodyBoth
+                    (notificationEmailContent userToString senderName data)
+                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
+                )
+
+        UserJoinedMessage _ _ _ _ ->
+            helper
+                (NonemptyString 'N' "ew user joined")
+                (Postmark.BodyText (senderName ++ " joined!"))
+
+        DeletedMessage _ ->
+            Command.none
+
+        CallStarted _ _ _ _ _ ->
+            helper
+                (NonemptyString 'C' "all started")
+                (Postmark.BodyText (senderName ++ " started a call"))
+
+        GameStarted _ _ _ _ _ ->
+            helper
+                (NonemptyString 'G' "ame started")
+                (Postmark.BodyText (senderName ++ " started a game"))
+
+
+notificationEmailSubject : String -> NonemptyString
+notificationEmailSubject senderName =
+    NonemptyString 'N' ("ew message from " ++ senderName)
+
+
+{-| Render the message that triggered a notification roughly the way it looks in
+at-chat: a dark message card with the sender's name in bold above the message
+text. Email clients only support a small subset of CSS, so this sticks to inline
+styles and basic block elements.
+-}
+notificationEmailContent : (userId -> String) -> String -> UserTextMessageData messageId userId -> Email.Html.Html
+notificationEmailContent userToString senderName message =
+    Email.Html.div
+        [ Email.Html.Attributes.backgroundColor "#0e1428"
+        , Email.Html.Attributes.padding "24px"
+        , Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif"
+        ]
+        [ Email.Html.div
+            [ Email.Html.Attributes.style "max-width" "560px"
+            , Email.Html.Attributes.backgroundColor "#202846"
+            , Email.Html.Attributes.borderRadius "8px"
+            , Email.Html.Attributes.padding "16px"
+            ]
+            [ Email.Html.div
+                [ Email.Html.Attributes.color "#a0b4c8"
+                , Email.Html.Attributes.fontSize "14px"
+                , Email.Html.Attributes.paddingBottom "12px"
+                ]
+                [ Email.Html.text "You have a new message on at-chat" ]
+            , Email.Html.div
+                [ Email.Html.Attributes.color "#ffffff"
+                , Email.Html.Attributes.fontSize "16px"
+                , Email.Html.Attributes.paddingBottom "4px"
+                ]
+                [ Email.Html.strong [] [ Email.Html.text senderName ] ]
+            , Email.Html.div
+                [ Email.Html.Attributes.color "#ffffff"
+                , Email.Html.Attributes.fontSize "15px"
+                , Email.Html.Attributes.lineHeight "1.4"
+                , Email.Html.Attributes.style "white-space" "pre-wrap"
+                ]
+                (RichText.emailView { userToString = userToString, attachedFiles = message.attachedFiles } message.content)
+            , Email.Html.div
+                [ Email.Html.Attributes.paddingTop "20px" ]
+                [ Email.Html.a
+                    [ Email.Html.Attributes.href Env.domain
+                    , Email.Html.Attributes.backgroundColor "#407ab2"
+                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.padding "10px 16px"
+                    , Email.Html.Attributes.borderRadius "6px"
+                    , Email.Html.Attributes.style "text-decoration" "none"
+                    , Email.Html.Attributes.style "display" "inline-block"
+                    ]
+                    [ Email.Html.text "Open at-chat" ]
+                ]
+            ]
+        ]
+
+
+notificationEmailFrom : EmailAddress
+notificationEmailFrom =
+    Unsafe.emailAddress "no-reply@at-chat.app"
 
 
 isViewingDiscordDm : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
@@ -663,9 +847,10 @@ discordDmNotification :
     -> String
     -> Maybe FileHash
     -> String
+    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
     -> BackendModel
-    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
-discordDmNotification time channelId senderId senderName senderIcon text model =
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+discordDmNotification time channelId senderId senderName senderIcon text message model =
     let
         usersToNotify : SeqDict (Id UserId) (Discord.Id Discord.UserId)
         usersToNotify =
@@ -702,7 +887,16 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
                 userId
                 senderName
                 senderIcon
+                (\userId2 ->
+                    case SeqDict.get userId2 model.discordUsers of
+                        Just user ->
+                            DiscordUserData.username user
+
+                        Nothing ->
+                            "<missing>"
+                )
                 text
+                (UserTextMessage message)
                 (Route.DiscordDmRoute
                     { currentDiscordUserId = discordUserId
                     , channelId = channelId
@@ -899,13 +1093,13 @@ broadcastDm :
     -> Id UserId
     -> Id UserId
     -> NonemptyString
-    -> Nonempty (RichText (Id UserId))
+    -> UserTextMessageData messageId (Id UserId)
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-broadcastDm changeId time clientId userId otherUserId text richText threadRouteWithReplyTo attachedFiles stickers model =
+broadcastDm changeId time clientId userId otherUserId text message threadRouteWithReplyTo attachedFiles stickers model =
     let
         threadRouteNoReply : ThreadRoute
         threadRouteNoReply =
@@ -941,7 +1135,16 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
                             otherUserId
                             (PersonName.toString otherUser.name)
                             otherUser.icon
+                            (\userId2 ->
+                                case NonemptyDict.get userId2 model.users of
+                                    Just user ->
+                                        PersonName.toString user.name
+
+                                    Nothing ->
+                                        "<missing>"
+                            )
                             (String.Nonempty.toString text)
+                            (UserTextMessage message)
                             (DmRoute
                                 { channelId = DmChannel.channelIdFromUserIds userId otherUserId
                                 , threadRoute =
@@ -976,7 +1179,7 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
                     userId
                     time
                     (GuildOrDmId_Dm otherUserId2)
-                    richText
+                    message.content
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers

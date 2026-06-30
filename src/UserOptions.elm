@@ -225,17 +225,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view
-                    loaded.windowSize
-                    textInputFocus
-                    local.localUser.timezone
-                    time
-                    loggedIn.twoFactor
-                    |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1
                     isMobile
-                    "Miscellaneous"
+                    "Account settings"
                     [ Editable.view
                         (Dom.id "userOptions_name")
                         False
@@ -301,6 +294,14 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     PressedCopyText
                                     ("JS Exception: " ++ jsError)
                         ]
+                    , MyUi.radioColumn
+                        (Dom.id "userOptions_emailNotifications")
+                        SelectedEmailNotifications
+                        (Just local.localUser.user.emailNotifications)
+                        "Email notifications"
+                        [ ( User.NeverNotifyMe, "No email notifications" )
+                        , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
+                        ]
 
                     --, Ui.el
                     --    [ Ui.linkNewTab
@@ -335,6 +336,13 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    ]
                     --    (Ui.text "Link Slack account")
                     ]
+                , TwoFactorAuthentication.view
+                    loaded.windowSize
+                    textInputFocus
+                    local.localUser.timezone
+                    time
+                    loggedIn.twoFactor
+                    |> Ui.map TwoFactorMsg
                 , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
 
