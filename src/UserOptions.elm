@@ -225,17 +225,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view
-                    loaded.windowSize
-                    textInputFocus
-                    local.localUser.timezone
-                    time
-                    loggedIn.twoFactor
-                    |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1
                     isMobile
-                    "Miscellaneous"
+                    "Account settings"
                     [ Editable.view
                         (Dom.id "userOptions_name")
                         False
@@ -307,7 +300,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         (Just local.localUser.user.emailNotifications)
                         "Email notifications"
                         [ ( User.NeverNotifyMe, "No email notifications" )
-                        , ( User.NotifyMeWhenMentioned, "Email me when I'm mentioned or sent a message" )
+                        , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]
 
                     --, Ui.el
@@ -343,6 +336,13 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    ]
                     --    (Ui.text "Link Slack account")
                     ]
+                , TwoFactorAuthentication.view
+                    loaded.windowSize
+                    textInputFocus
+                    local.localUser.timezone
+                    time
+                    loggedIn.twoFactor
+                    |> Ui.map TwoFactorMsg
                 , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
 

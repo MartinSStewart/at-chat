@@ -736,15 +736,15 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "channel_textinput")
                 , admin.input 100 (Dom.id "channel_textinput") "Before enabling email"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , T.andThen
+                , T.checkState
                     100
                     (\data ->
                         case List.filterMap (E2EHelper.isNotificationEmail E2EHelper.userEmail) data.httpRequests of
                             [] ->
-                                []
+                                Ok ()
 
                             _ :: _ ->
-                                [ T.checkState 0 (\_ -> Err "No email should be sent while email notifications are disabled") ]
+                                Err "No email should be sent while email notifications are disabled"
                     )
 
                 -- Enable email notifications through the user options UI.
@@ -761,19 +761,22 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "channel_textinput")
                 , admin.input 100 (Dom.id "channel_textinput") "You have a new message"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , T.andThen
+                , T.checkState
                     100
                     (\data ->
                         case List.filterMap (E2EHelper.isNotificationEmail E2EHelper.userEmail) data.httpRequests of
-                            body :: _ ->
+                            [ body ] ->
                                 if String.contains "You have a new message" body then
-                                    []
+                                    Ok ()
 
                                 else
-                                    [ T.checkState 0 (\_ -> Err "Notification email did not contain the message text") ]
+                                    Err "Notification email did not contain the message text"
 
                             [] ->
-                                [ T.checkState 0 (\_ -> Err "Expected a notification email after enabling email notifications") ]
+                                Err "Expected a notification email after enabling email notifications"
+
+                            _ ->
+                                Err "Too many notification emails"
                     )
                 ]
             )
