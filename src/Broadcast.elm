@@ -49,12 +49,12 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (UserTextMessageData)
+import Message exposing (Message(..), UserTextMessageData)
 import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
 import Postmark
-import RichText exposing (RichText)
+import RichText
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -499,7 +499,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                                             "<missing>"
                                 )
                                 plainText
-                                message
+                                (UserTextMessage message)
                                 (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
                                 sessions
                                 model
@@ -518,7 +518,7 @@ discordGuildMessageNotification :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> Message messageId (Discord.Id Discord.UserId)
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
@@ -591,7 +591,22 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                                 Nothing ->
                                                     "<missing>"
                                         )
-                                        (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message.content)
+                                        (case message of
+                                            UserTextMessage message2 ->
+                                                RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
+
+                                            UserJoinedMessage posix userId seqDict drawing ->
+                                                "New user joined!"
+
+                                            DeletedMessage posix ->
+                                                ""
+
+                                            CallStarted time2 endTime userId seqDict drawing ->
+                                                LocalState.callStartedText endTime
+
+                                            GameStarted posix userId seqDict drawing game ->
+                                                LocalState.gameStartedText game
+                                        )
                                         message
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
@@ -626,7 +641,7 @@ notification :
     -> Maybe FileHash
     -> (userId -> String)
     -> String
-    -> UserTextMessageData messageId userId
+    -> Message messageId userId
     -> Maybe Route
     -> SeqDict SessionId UserSession
     ->
@@ -703,22 +718,48 @@ notificationEmail :
     -> String
     -> (userId -> String)
     -> String
-    -> UserTextMessageData messageId userId
+    -> Message messageId userId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
 notificationEmail time email senderName userToString plainText message postmarkApiKey =
-    Postmark.sendEmail
-        (SentNotificationEmail time email)
-        postmarkApiKey
-        { from = { name = "", email = notificationEmailFrom }
-        , to = List.Nonempty.fromElement { name = "", email = email }
-        , subject = notificationEmailSubject senderName
-        , body =
-            Postmark.BodyBoth
-                (notificationEmailContent userToString senderName message)
-                (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
-        , messageStream = "outbound"
-        }
+    let
+        helper subject body =
+            Postmark.sendEmail
+                (SentNotificationEmail time email)
+                postmarkApiKey
+                { from = { name = "", email = notificationEmailFrom }
+                , to = List.Nonempty.fromElement { name = "", email = email }
+                , subject = subject
+                , body = body
+                , messageStream = "outbound"
+                }
+    in
+    case message of
+        UserTextMessage data ->
+            helper
+                (notificationEmailSubject senderName)
+                (Postmark.BodyBoth
+                    (notificationEmailContent userToString senderName data)
+                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
+                )
+
+        UserJoinedMessage posix userId seqDict drawing ->
+            helper
+                (NonemptyString 'N' "ew user joined")
+                (Postmark.BodyText (senderName ++ " joined!"))
+
+        DeletedMessage posix ->
+            Command.none
+
+        CallStarted posix maybePosix userId seqDict drawing ->
+            helper
+                (NonemptyString 'C' "all started")
+                (Postmark.BodyText (senderName ++ " started a call"))
+
+        GameStarted posix userId seqDict drawing game ->
+            helper
+                (NonemptyString 'G' "ame started")
+                (Postmark.BodyText (senderName ++ " started a game"))
 
 
 notificationEmailSubject : String -> NonemptyString
@@ -855,7 +896,7 @@ discordDmNotification time channelId senderId senderName senderIcon text message
                             "<missing>"
                 )
                 text
-                message
+                (UserTextMessage message)
                 (Route.DiscordDmRoute
                     { currentDiscordUserId = discordUserId
                     , channelId = channelId
@@ -1103,7 +1144,7 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
                                         "<missing>"
                             )
                             (String.Nonempty.toString text)
-                            message
+                            (UserTextMessage message)
                             (DmRoute
                                 { channelId = DmChannel.channelIdFromUserIds userId otherUserId
                                 , threadRoute =

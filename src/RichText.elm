@@ -1,6 +1,7 @@
 module RichText exposing
     ( DiscordCustomEmojiIdAndName
     , Domain(..)
+    , EmailConfig
     , EscapedChar(..)
     , HasLeadingLineBreak(..)
     , HeadingLevel(..)

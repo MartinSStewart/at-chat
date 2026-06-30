@@ -30,7 +30,7 @@ import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
@@ -63,6 +63,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import User
+import UserSession exposing (UserSession)
 
 
 addOrRemoveDiscordReaction :
@@ -1071,16 +1072,6 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             model.discordUsers
                                                 }
 
-                                            ( joinedMessage, _, _ ) =
-                                                Message.userTextMessageBackend
-                                                    model.serverSecret
-                                                    discordMessage.timestamp
-                                                    discordMessage.author.id
-                                                    (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
-                                                    Nothing
-                                                    SeqDict.empty
-                                                    model.stickers
-
                                             ( sessions, notificationCmds ) =
                                                 Broadcast.discordGuildMessageNotification
                                                     SeqSet.empty
@@ -1089,7 +1080,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     discordGuildId
                                                     channelId
                                                     NoThread
-                                                    joinedMessage
+                                                    message
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                     model2
                                         in
@@ -1169,7 +1160,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                     guildOrDmId =
                                         DiscordGuildOrDmId_Guild discordMessage.author.id discordGuildId channelId
 
-                                    channelResult : Result DiscordMessageAlreadyExists ( DiscordBackendChannel, Command BackendOnly ToFrontend BackendMsg, SeqDict (Id StickerId) StickerData )
+                                    channelResult : Result DiscordMessageAlreadyExists ( ( ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) ), DiscordBackendChannel ), Command BackendOnly ToFrontend BackendMsg, SeqDict (Id StickerId) StickerData )
                                     channelResult =
                                         case threadRoute of
                                             ViewThreadWithMaybeMessage threadId maybeReplyTo ->
@@ -1186,7 +1177,18 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 in
                                                 case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId (Message.UserTextMessage message2) channel of
                                                     Ok ( messageId, channel3 ) ->
-                                                        ( channel3
+                                                        ( ( Broadcast.discordGuildMessageNotification
+                                                                usersMentioned
+                                                                discordMessage.timestamp
+                                                                discordMessage.author.id
+                                                                discordGuildId
+                                                                channelId
+                                                                threadRouteNoReply
+                                                                message2
+                                                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                                model
+                                                          , channel3
+                                                          )
                                                         , Command.map
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (ViewThreadWithMessage threadId messageId))
@@ -1212,7 +1214,18 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 in
                                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id (Message.UserTextMessage message) channel of
                                                     Ok ( messageId, channel3 ) ->
-                                                        ( channel3
+                                                        ( ( Broadcast.discordGuildMessageNotification
+                                                                usersMentioned
+                                                                discordMessage.timestamp
+                                                                discordMessage.author.id
+                                                                discordGuildId
+                                                                channelId
+                                                                threadRouteNoReply
+                                                                message
+                                                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                                model
+                                                          , channel3
+                                                          )
                                                         , Command.map
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (NoThreadWithMessage messageId))
@@ -1225,7 +1238,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         Err DiscordMessageAlreadyExists
                                 in
                                 case channelResult of
-                                    Ok ( channel4, embedCmds, stickers ) ->
+                                    Ok ( ( ( sessions, notificationCmds ), channel4 ), embedCmds, stickers ) ->
                                         let
                                             ( model2, logCmd ) =
                                                 if richText == RichText.emptyPlaceholder then
@@ -1236,32 +1249,6 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                                                 else
                                                     ( model, Command.none )
-
-                                            -- The created message is scoped inside the channelResult branches
-                                            -- (with differing messageId types), so rebuild an equivalent one
-                                            -- here for the notification, which only reads its content and
-                                            -- attached files.
-                                            ( notificationMessage, _, _ ) =
-                                                Message.userTextMessageBackend
-                                                    model.serverSecret
-                                                    discordMessage.timestamp
-                                                    discordMessage.author.id
-                                                    richText
-                                                    Nothing
-                                                    (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
-                                                    model.stickers
-
-                                            ( sessions, notificationCmds ) =
-                                                Broadcast.discordGuildMessageNotification
-                                                    usersMentioned
-                                                    discordMessage.timestamp
-                                                    discordMessage.author.id
-                                                    discordGuildId
-                                                    channelId
-                                                    threadRouteNoReply
-                                                    notificationMessage
-                                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                    model2
                                         in
                                         ( { model2
                                             | discordGuilds =

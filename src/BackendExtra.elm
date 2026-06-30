@@ -66,7 +66,7 @@ import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendGuild, D
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
-import Message
+import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
@@ -1084,7 +1084,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         model.stickers
 
                                 ( messageId, channel3 ) =
-                                    LocalState.createThreadMessageBackend threadId (Message.UserTextMessage message2) channel
+                                    LocalState.createThreadMessageBackend threadId (UserTextMessage message2) channel
 
                                 usersMentioned2 : SeqSet (Id UserId)
                                 usersMentioned2 =
@@ -1127,7 +1127,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         model.stickers
 
                                 ( messageId, channel3 ) =
-                                    LocalState.createChannelMessageBackend (Message.UserTextMessage message2) channel
+                                    LocalState.createChannelMessageBackend (UserTextMessage message2) channel
 
                                 usersMentioned2 : SeqSet (Id UserId)
                                 usersMentioned2 =
@@ -1285,7 +1285,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         model.stickers
 
                 ( messageId, dmChannel2 ) =
-                    LocalState.createThreadMessageBackend threadId (Message.UserTextMessage message) dmChannel
+                    LocalState.createThreadMessageBackend threadId (UserTextMessage message) dmChannel
 
                 ( sessions, notificationCmds ) =
                     Broadcast.broadcastDm
