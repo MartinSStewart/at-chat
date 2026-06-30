@@ -281,17 +281,18 @@ notificationEmail =
     emailView
         (Broadcast.notificationEmailSubject "Stevie Steve")
         (Broadcast.notificationEmailContent
+            (\id -> "User " ++ Id.toString id)
             "Stevie Steve"
             (Nonempty
                 (NormalText 'H' "ey ")
                 [ UserMention (Id.fromInt 1)
-                , NormalText ',' ", are you coming to the "
+                , NormalText ',' " are you coming to the "
                 , Bold (Nonempty (NormalText 'm' "eeting") [])
-                , NormalText '?' "? It starts in "
+                , NormalText '?' " It starts in "
                 , Italic (Nonempty (NormalText '5' " minutes") [])
-                , NormalText '.' ".\nPing me with "
+                , NormalText '.' "\nPing me with "
                 , InlineCode '/' "status"
-                , NormalText ' ' " if you're running late."
+                , NormalText ' ' "if you're running late."
                 ]
             )
         )

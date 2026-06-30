@@ -489,6 +489,14 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 userId2
                                 (PersonName.toString user2.name)
                                 user2.icon
+                                (\userId ->
+                                    case NonemptyDict.get userId model.users of
+                                        Just user ->
+                                            PersonName.toString user.name
+
+                                        Nothing ->
+                                            "<missing>"
+                                )
                                 plainText
                                 content
                                 (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
@@ -574,6 +582,14 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         discordUser.linkedTo
                                         (PersonName.toString user2.name)
                                         user2.icon
+                                        (\userId ->
+                                            case SeqDict.get userId model.discordUsers of
+                                                Just user ->
+                                                    User.discordUserDataToFrontendUser user |> .name |> PersonName.toString
+
+                                                Nothing ->
+                                                    "<missing>"
+                                        )
                                         (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers content)
                                         content
                                         (DiscordGuildRoute
@@ -607,6 +623,7 @@ notification :
     -> Id UserId
     -> String
     -> Maybe FileHash
+    -> (userId -> String)
     -> String
     -> Nonempty (RichText userId)
     -> Maybe Route
@@ -619,7 +636,7 @@ notification :
             , postmarkApiKey : Postmark.ApiKey
         }
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-notification time userToNotify senderName senderIcon plainText richText navigateTo sessions model =
+notification time userToNotify senderName senderIcon userToString plainText richText navigateTo sessions model =
     let
         -- Email notifications are a user setting (not a session setting like push
         -- notifications) so we send at most one email per notification, regardless
@@ -630,7 +647,7 @@ notification time userToNotify senderName senderIcon plainText richText navigate
                 Just user ->
                     case user.emailNotifications of
                         NotifyMeWhenMentioned ->
-                            [ notificationEmail time user.email senderName plainText richText model.postmarkApiKey ]
+                            [ notificationEmail time user.email senderName userToString plainText richText model.postmarkApiKey ]
 
                         NeverNotifyMe ->
                             []
@@ -679,8 +696,8 @@ notification time userToNotify senderName senderIcon plainText richText navigate
 {-| Send an email notifying a user that they were mentioned or sent a message.
 Sent when the user has enabled email notifications in their settings.
 -}
-notificationEmail : Time.Posix -> EmailAddress -> String -> String -> Nonempty (RichText userId) -> Postmark.ApiKey -> Command BackendOnly toMsg BackendMsg
-notificationEmail time email senderName plainText richText postmarkApiKey =
+notificationEmail : Time.Posix -> EmailAddress -> String -> (userId -> String) -> String -> Nonempty (RichText userId) -> Postmark.ApiKey -> Command BackendOnly toMsg BackendMsg
+notificationEmail time email senderName userToString plainText richText postmarkApiKey =
     Postmark.sendEmail
         (SentNotificationEmail time email)
         postmarkApiKey
@@ -689,7 +706,7 @@ notificationEmail time email senderName plainText richText postmarkApiKey =
         , subject = notificationEmailSubject senderName
         , body =
             Postmark.BodyBoth
-                (notificationEmailContent senderName richText)
+                (notificationEmailContent userToString senderName richText)
                 (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
         , messageStream = "outbound"
         }
@@ -705,8 +722,8 @@ at-chat: a dark message card with the sender's name in bold above the message
 text. Email clients only support a small subset of CSS, so this sticks to inline
 styles and basic block elements.
 -}
-notificationEmailContent : String -> Nonempty (RichText userId) -> Email.Html.Html
-notificationEmailContent senderName body =
+notificationEmailContent : (userId -> String) -> String -> Nonempty (RichText userId) -> Email.Html.Html
+notificationEmailContent userToString senderName body =
     Email.Html.div
         [ Email.Html.Attributes.backgroundColor "#0e1428"
         , Email.Html.Attributes.padding "24px"
@@ -735,7 +752,7 @@ notificationEmailContent senderName body =
                 , Email.Html.Attributes.fontSize "15px"
                 , Email.Html.Attributes.lineHeight "1.4"
                 ]
-                (RichText.emailView body)
+                (RichText.emailView userToString body)
             , Email.Html.div
                 [ Email.Html.Attributes.paddingTop "20px" ]
                 [ Email.Html.a
@@ -819,6 +836,14 @@ discordDmNotification time channelId senderId senderName senderIcon text content
                 userId
                 senderName
                 senderIcon
+                (\userId2 ->
+                    case SeqDict.get userId2 model.discordUsers of
+                        Just user ->
+                            User.discordUserDataToFrontendUser user |> .name |> PersonName.toString
+
+                        Nothing ->
+                            "<missing>"
+                )
                 text
                 content
                 (Route.DiscordDmRoute
@@ -1059,6 +1084,14 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
                             otherUserId
                             (PersonName.toString otherUser.name)
                             otherUser.icon
+                            (\userId2 ->
+                                case NonemptyDict.get userId2 model.users of
+                                    Just user ->
+                                        PersonName.toString user.name
+
+                                    Nothing ->
+                                        "<missing>"
+                            )
                             (String.Nonempty.toString text)
                             richText
                             (DmRoute

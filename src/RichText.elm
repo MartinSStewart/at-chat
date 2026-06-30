@@ -962,44 +962,44 @@ attachments become simple text placeholders (we don't have the lookup tables
 needed to render them properly here), while text styling, links, headings,
 quotes, code and bullet lists are preserved.
 -}
-emailView : Nonempty (RichText userId) -> List Email.Html.Html
-emailView nonempty =
-    emailViewHelper (List.Nonempty.toList nonempty)
+emailView : (userId -> String) -> Nonempty (RichText userId) -> List Email.Html.Html
+emailView userToString nonempty =
+    emailViewHelper userToString (List.Nonempty.toList nonempty)
 
 
-emailViewHelper : List (RichText userId) -> List Email.Html.Html
-emailViewHelper list =
-    List.map emailViewItem list
+emailViewHelper : (userId -> String) -> List (RichText userId) -> List Email.Html.Html
+emailViewHelper userToString list =
+    List.map (emailViewItem userToString) list
 
 
-emailViewItem : RichText userId -> Email.Html.Html
-emailViewItem richText =
+emailViewItem : (userId -> String) -> RichText userId -> Email.Html.Html
+emailViewItem userToString richText =
     case richText of
         NormalText char rest ->
             emailText (String.cons char rest)
 
-        UserMention _ ->
+        UserMention userId ->
             Email.Html.span
                 [ Email.Html.Attributes.color "#b0c1ff"
                 , Email.Html.Attributes.style "white-space" "nowrap"
                 ]
-                [ Email.Html.text "@mention" ]
+                [ Email.Html.text ("@" ++ userToString userId) ]
 
         Bold a ->
-            Email.Html.strong [] (emailViewHelper (List.Nonempty.toList a))
+            Email.Html.strong [] (emailViewHelper userToString (List.Nonempty.toList a))
 
         Italic a ->
             Email.Html.span
                 [ Email.Html.Attributes.fontStyle "italic" ]
-                (emailViewHelper (List.Nonempty.toList a))
+                (emailViewHelper userToString (List.Nonempty.toList a))
 
         Underline a ->
-            Email.Html.u [] (emailViewHelper (List.Nonempty.toList a))
+            Email.Html.u [] (emailViewHelper userToString (List.Nonempty.toList a))
 
         Strikethrough a ->
             Email.Html.span
                 [ Email.Html.Attributes.style "text-decoration" "line-through" ]
-                (emailViewHelper (List.Nonempty.toList a))
+                (emailViewHelper userToString (List.Nonempty.toList a))
 
         Spoiler a ->
             -- Email can't reveal spoilers on click, so redact them by matching the
@@ -1008,7 +1008,7 @@ emailViewItem richText =
                 [ Email.Html.Attributes.backgroundColor "#0e1428"
                 , Email.Html.Attributes.color "#0e1428"
                 ]
-                (emailViewHelper (List.Nonempty.toList a))
+                (emailViewHelper userToString (List.Nonempty.toList a))
 
         BlockQuote _ a ->
             Email.Html.div
@@ -1016,13 +1016,13 @@ emailViewItem richText =
                 , Email.Html.Attributes.paddingLeft "12px"
                 , Email.Html.Attributes.color "#dcdcdc"
                 ]
-                (emailViewHelper a)
+                (emailViewHelper userToString a)
 
         Heading level _ a ->
             let
                 children : List Email.Html.Html
                 children =
-                    emailViewHelper (List.Nonempty.toList a)
+                    emailViewHelper userToString (List.Nonempty.toList a)
             in
             case level of
                 H1 ->
@@ -1084,7 +1084,7 @@ emailViewItem richText =
                 , Email.Html.Attributes.paddingLeft "20px"
                 ]
                 (List.map
-                    (\item -> Email.Html.li [] (emailViewHelper item))
+                    (\item -> Email.Html.li [] (emailViewHelper userToString item))
                     (List.Nonempty.toList items)
                 )
 
