@@ -18,6 +18,7 @@ module RichText exposing
     , customEmojisFromDiscord
     , discordCharsLeft
     , domainToString
+    , emailView
     , emptyPlaceholder
     , escapedCharToString
     , fromDiscord
@@ -49,6 +50,8 @@ import Discord exposing (EmbedType(..))
 import Drawing exposing (Drawing)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
+import Email.Html
+import Email.Html.Attributes
 import Embed exposing (Embed(..), EmbedData)
 import FileName
 import FileStatus exposing (FileData, FileId)
@@ -950,6 +953,168 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
         )
         list
         |> String.concat
+
+
+{-| Best-effort rendering of rich text into email-safe html. Email clients only
+support a small subset of html/css, so we stick to inline styles and basic
+elements and degrade gracefully: user mentions, stickers, custom emojis and
+attachments become simple text placeholders (we don't have the lookup tables
+needed to render them properly here), while text styling, links, headings,
+quotes, code and bullet lists are preserved.
+-}
+emailView : Nonempty (RichText userId) -> List Email.Html.Html
+emailView nonempty =
+    emailViewHelper (List.Nonempty.toList nonempty)
+
+
+emailViewHelper : List (RichText userId) -> List Email.Html.Html
+emailViewHelper list =
+    List.map emailViewItem list
+
+
+emailViewItem : RichText userId -> Email.Html.Html
+emailViewItem richText =
+    case richText of
+        NormalText char rest ->
+            emailText (String.cons char rest)
+
+        UserMention _ ->
+            Email.Html.span
+                [ Email.Html.Attributes.color "#b0c1ff"
+                , Email.Html.Attributes.style "white-space" "nowrap"
+                ]
+                [ Email.Html.text "@mention" ]
+
+        Bold a ->
+            Email.Html.strong [] (emailViewHelper (List.Nonempty.toList a))
+
+        Italic a ->
+            Email.Html.span
+                [ Email.Html.Attributes.fontStyle "italic" ]
+                (emailViewHelper (List.Nonempty.toList a))
+
+        Underline a ->
+            Email.Html.u [] (emailViewHelper (List.Nonempty.toList a))
+
+        Strikethrough a ->
+            Email.Html.span
+                [ Email.Html.Attributes.style "text-decoration" "line-through" ]
+                (emailViewHelper (List.Nonempty.toList a))
+
+        Spoiler a ->
+            -- Email can't reveal spoilers on click, so redact them by matching the
+            -- text color to a dark background (still selectable to reveal).
+            Email.Html.span
+                [ Email.Html.Attributes.backgroundColor "#0e1428"
+                , Email.Html.Attributes.color "#0e1428"
+                ]
+                (emailViewHelper (List.Nonempty.toList a))
+
+        BlockQuote _ a ->
+            Email.Html.div
+                [ Email.Html.Attributes.borderLeft "3px solid #61687c"
+                , Email.Html.Attributes.paddingLeft "12px"
+                , Email.Html.Attributes.color "#dcdcdc"
+                ]
+                (emailViewHelper a)
+
+        Heading level _ a ->
+            let
+                children : List Email.Html.Html
+                children =
+                    emailViewHelper (List.Nonempty.toList a)
+            in
+            case level of
+                H1 ->
+                    Email.Html.h1 [ Email.Html.Attributes.style "margin" "8px 0" ] children
+
+                H2 ->
+                    Email.Html.h2 [ Email.Html.Attributes.style "margin" "8px 0" ] children
+
+                H3 ->
+                    Email.Html.h3 [ Email.Html.Attributes.style "margin" "8px 0" ] children
+
+                Small ->
+                    Email.Html.div
+                        [ Email.Html.Attributes.fontSize "13px"
+                        , Email.Html.Attributes.color "#a0b4c8"
+                        ]
+                        children
+
+        Hyperlink url ->
+            emailLink (Url.toString url) (Url.toString url)
+
+        MarkdownLink alias url ->
+            emailLink (Url.toString url) (String.Nonempty.toString alias)
+
+        InlineCode char rest ->
+            Email.Html.span
+                [ Email.Html.Attributes.fontFamily "monospace"
+                , Email.Html.Attributes.backgroundColor "#0e1428"
+                , Email.Html.Attributes.padding "1px 4px"
+                , Email.Html.Attributes.borderRadius "4px"
+                ]
+                [ Email.Html.text (String.cons char rest) ]
+
+        CodeBlock _ string ->
+            Email.Html.div
+                [ Email.Html.Attributes.fontFamily "monospace"
+                , Email.Html.Attributes.backgroundColor "#0e1428"
+                , Email.Html.Attributes.padding "12px"
+                , Email.Html.Attributes.borderRadius "6px"
+                , Email.Html.Attributes.style "white-space" "pre-wrap"
+                ]
+                (textWithLineBreaks string)
+
+        AttachedFile _ ->
+            emailPlaceholder "[attachment]"
+
+        EscapedChar char ->
+            Email.Html.text (escapedCharToString char)
+
+        Sticker _ ->
+            emailPlaceholder "[sticker]"
+
+        CustomEmoji _ ->
+            emailPlaceholder "[emoji]"
+
+        BulletPoint _ items ->
+            Email.Html.ul
+                [ Email.Html.Attributes.style "margin" "4px 0"
+                , Email.Html.Attributes.paddingLeft "20px"
+                ]
+                (List.map
+                    (\item -> Email.Html.li [] (emailViewHelper item))
+                    (List.Nonempty.toList items)
+                )
+
+
+emailText : String -> Email.Html.Html
+emailText text =
+    Email.Html.span [] (textWithLineBreaks text)
+
+
+{-| Render text while preserving line breaks (which html would otherwise collapse).
+-}
+textWithLineBreaks : String -> List Email.Html.Html
+textWithLineBreaks text =
+    String.split "\n" text
+        |> List.map Email.Html.text
+        |> List.intersperse (Email.Html.br [] [])
+
+
+emailLink : String -> String -> Email.Html.Html
+emailLink url label =
+    Email.Html.a
+        [ Email.Html.Attributes.href url
+        , Email.Html.Attributes.color "#b0c1ff"
+        ]
+        [ Email.Html.text label ]
+
+
+emailPlaceholder : String -> Email.Html.Html
+emailPlaceholder label =
+    Email.Html.span [ Email.Html.Attributes.color "#a0b4c8" ] [ Email.Html.text label ]
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)

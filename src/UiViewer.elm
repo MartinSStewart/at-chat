@@ -282,7 +282,18 @@ notificationEmail =
         (Broadcast.notificationEmailSubject "Stevie Steve")
         (Broadcast.notificationEmailContent
             "Stevie Steve"
-            "Hey, are you coming to the meeting?\nIt starts in 5 minutes."
+            (Nonempty
+                (NormalText 'H' "ey ")
+                [ UserMention (Id.fromInt 1)
+                , NormalText ',' ", are you coming to the "
+                , Bold (Nonempty (NormalText 'm' "eeting") [])
+                , NormalText '?' "? It starts in "
+                , Italic (Nonempty (NormalText '5' " minutes") [])
+                , NormalText '.' ".\nPing me with "
+                , InlineCode '/' "status"
+                , NormalText ' ' " if you're running late."
+                ]
+            )
         )
 
 

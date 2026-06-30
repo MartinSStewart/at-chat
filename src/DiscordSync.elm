@@ -878,6 +878,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     Nothing
                                             )
                                             (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers richText)
+                                            richText
                                             model
 
                                     ( model2, logCmd ) =
