@@ -760,14 +760,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Now a new message should trigger an email notification to the user.
                 , admin.click 100 (Dom.id "channel_textinput")
-                , admin.input 100 (Dom.id "channel_textinput") "You have a new message"
+                , admin.input 100 (Dom.id "channel_textinput") "You have a *new* message"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , T.checkState
                     100
                     (\data ->
                         case List.filterMap (E2EHelper.isNotificationEmail E2EHelper.userEmail) data.httpRequests of
                             [ body ] ->
-                                if String.contains "You have a new message" body then
+                                if String.contains "You have a *new* message" body then
                                     Ok ()
 
                                 else
