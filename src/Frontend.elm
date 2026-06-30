@@ -6634,11 +6634,20 @@ updateLoadedFromBackend msg model =
                                             , case wsChange of
                                                 WordSpellingGame.Action actionWithTime ->
                                                     case actionWithTime.change of
-                                                        WordSpellingGame.PlaceWord placedWord (FilledInByBackend WordSpellingGame.IsValid) ->
-                                                            -- Pop as the other player's tiles land on the board.
-                                                            Ports.playSound
-                                                                (Just (WordSpellingGame.placementLandTime actionWithTime.time placedWord))
-                                                                "pop"
+                                                        WordSpellingGame.PlaceWord placedWord _ ->
+                                                            List.map
+                                                                (\index ->
+                                                                    Ports.playSound
+                                                                        (Quantity.plus
+                                                                            WordSpellingGame.tileSlideDuration
+                                                                            (Quantity.multiplyBy (toFloat index) WordSpellingGame.tileSlideStagger)
+                                                                            |> Duration.addTo actionWithTime.time
+                                                                            |> Just
+                                                                        )
+                                                                        "pop"
+                                                                )
+                                                                (List.range 0 (List.Nonempty.length placedWord.letters - 1))
+                                                                |> Command.batch
 
                                                         _ ->
                                                             Command.none

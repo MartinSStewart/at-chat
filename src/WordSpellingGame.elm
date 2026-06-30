@@ -38,6 +38,8 @@ module WordSpellingGame exposing
     , placementConnects
     , placementLandTime
     , setupView
+    , tileSlideDuration
+    , tileSlideStagger
     , trayY
     , updateAction
     , updateGame
@@ -958,23 +960,21 @@ updateGame time currentUserId setup shared msg model =
                     ( { model
                         | invalidPlacement = Nothing
                         , tiles =
-                            List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1)
-                                |> List.foldl
-                                    (\index tray ->
-                                        Array.push
-                                            { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
-                                            , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
-                                            }
-                                            tray
-                                    )
-                                    remainingTray
+                            List.foldl
+                                (\index tray ->
+                                    Array.push
+                                        { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
+                                        , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
+                                        }
+                                        tray
+                                )
+                                remainingTray
+                                (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1))
                       }
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
                             |> OutLocalChange
-
-                      -- The refilled tray tiles fade in tileFadeDelay later, so pop then.
-                      , PlaySound (Just (Duration.addTo time tileFadeDelay)) "pop"
+                      , PlaySound Nothing "pop"
                       ]
                     )
 
@@ -1695,20 +1695,14 @@ isPlayerTurn userId shared =
             NotJoined
 
 
-{-| How long, in milliseconds, a single tile takes to slide from the board's top-left corner to
-its destination cell.
--}
-tileSlideDuration : Float
+tileSlideDuration : Duration
 tileSlideDuration =
-    250
+    Duration.milliseconds 250
 
 
-{-| How long, in milliseconds, each successive tile waits before it starts sliding in, so the
-tiles arrive one after another rather than all at once.
--}
-tileSlideStagger : Float
+tileSlideStagger : Duration
 tileSlideStagger =
-    80
+    Duration.milliseconds 80
 
 
 {-| How long, in milliseconds, rejected tiles sit on the board (turned red) before sliding back
@@ -1839,7 +1833,7 @@ sliding in.
 -}
 slideInEnd : Int -> Float
 slideInEnd tileCount =
-    toFloat (max 0 (tileCount - 1)) * tileSlideStagger + tileSlideDuration
+    toFloat (max 0 (tileCount - 1)) * Duration.inMilliseconds (Quantity.plus tileSlideStagger tileSlideDuration)
 
 
 {-| The total length of a placement's animation. A valid placement just slides in; a rejected one
@@ -1913,11 +1907,11 @@ animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
     let
         launch : Float
         launch =
-            toFloat index * tileSlideStagger
+            toFloat index * Duration.inMilliseconds tileSlideStagger
 
         slideEnd : Float
         slideEnd =
-            launch + tileSlideDuration
+            launch + Duration.inMilliseconds tileSlideDuration
 
         slideInProgress : Float
         slideInProgress =
@@ -1928,18 +1922,18 @@ animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
                 0
 
             else
-                easeOutCubic ((elapsed - launch) / tileSlideDuration)
+                easeOutCubic ((elapsed - launch) / Duration.inMilliseconds tileSlideDuration)
     in
     case isValid of
         FilledInByBackend IsNotValid ->
             let
                 leaveStart : Float
                 leaveStart =
-                    slideInEnd tileCount + invalidHoldDuration + toFloat index * tileSlideStagger
+                    slideInEnd tileCount + invalidHoldDuration + toFloat index * Duration.inMilliseconds tileSlideStagger
 
                 leaveEnd : Float
                 leaveEnd =
-                    leaveStart + tileSlideDuration
+                    leaveStart + Duration.inMilliseconds tileSlideDuration
             in
             if elapsed < slideEnd then
                 Just { progress = slideInProgress, red = False }
@@ -1951,7 +1945,10 @@ animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
                 Just { progress = 1, red = True }
 
             else if elapsed < leaveEnd then
-                Just { progress = 1 - easeOutCubic ((elapsed - leaveStart) / tileSlideDuration), red = True }
+                Just
+                    { progress = 1 - easeOutCubic ((elapsed - leaveStart) / Duration.inMilliseconds tileSlideDuration)
+                    , red = True
+                    }
 
             else
                 Nothing

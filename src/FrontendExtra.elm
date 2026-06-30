@@ -4348,12 +4348,7 @@ changeUpdate localMsg local =
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
 
 
-gameChangeUpdate :
-    Id UserId
-    -> Id UserId
-    -> Game.LocalChange
-    -> LocalState
-    -> LocalState
+gameChangeUpdate : Id UserId -> Id UserId -> Game.LocalChange -> LocalState -> LocalState
 gameChangeUpdate changeBy otherUserId gameChange local =
     { local
         | dmChannels =
