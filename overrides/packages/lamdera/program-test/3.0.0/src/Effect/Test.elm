@@ -1,6 +1,6 @@
 module Effect.Test exposing
     ( start, testGroup, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse(..), RequestedBy(..), PortToJs, FileData, FileUpload(..), MultipleFilesUpload(..), uploadBytesFile, uploadStringFile, Data, FileContents(..)
-    , FrontendActions, backendUpdate, frontendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
+    , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
     , checkState, checkBackend, toTest, toSnapshots
     , fakeNavigationKey, viewer, Msg, Model, viewerWith, ViewerWith, startViewer, addStringFile, addStringFiles, addBytesFile, addBytesFiles, addTexture, addTextureWithOptions, addTextures, addTexturesWithOptions
     , startHeadless, HeadlessMsg
@@ -6923,10 +6923,10 @@ currentStepText stepIndex currentStep testView_ =
                             "File.Select.files error"
 
                 NavigateBack _ ->
-                    "Pressed browser navigate forward button"
+                    "Pressed browser navigate back button"
 
                 NavigateForward _ ->
-                    "Pressed browser navigate backward button"
+                    "Pressed browser navigate forward button"
 
                 SetLatency _ { toBackendLatency, toFrontendLatency } ->
                     "Changed network latency toBackend:"
