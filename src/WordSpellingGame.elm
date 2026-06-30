@@ -262,8 +262,6 @@ type LetterId
     = LetterId Never
 
 
-{-| OpaqueVariants
--}
 type LetterOrWildcard
     = Letter Letter
     | Wildcard

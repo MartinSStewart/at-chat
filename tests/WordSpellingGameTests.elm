@@ -3,7 +3,6 @@ module WordSpellingGameTests exposing (tests)
 import Expect
 import List.Nonempty exposing (Nonempty(..))
 import SeqDict exposing (SeqDict)
-import Set
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
