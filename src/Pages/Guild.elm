@@ -373,20 +373,14 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                 case discordDmHasNotifications localUser channelId dmChannel of
                                     Just ( currentUserId, count ) ->
                                         let
-                                            userId : Discord.Id Discord.UserId
-                                            userId =
-                                                NonemptyDict.keys dmChannel.members
-                                                    |> List.Nonempty.toList
-                                                    |> List.filter
-                                                        (\memberId ->
-                                                            not (LinkedAndOtherDiscordUsers.isLinkedUser memberId localUser.discordUsers)
+                                            otherMembers : List ( Discord.Id Discord.UserId, Maybe FileHash )
+                                            otherMembers =
+                                                NonemptyDict.remove currentUserId dmChannel.members
+                                                    |> SeqDict.keys
+                                                    |> List.map
+                                                        (\userId ->
+                                                            ( userId, User.getDiscordUser userId localUser |> Maybe.andThen .icon )
                                                         )
-                                                    |> List.head
-                                                    |> Maybe.withDefault currentUserId
-
-                                            maybeIcon : Maybe FileHash
-                                            maybeIcon =
-                                                User.getDiscordUser userId localUser |> Maybe.andThen .icon
                                         in
                                         elLinkButton
                                             (Dom.id ("guildsColumn_openDiscordDm_" ++ Discord.idToString channelId))
@@ -399,7 +393,17 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                                 }
                                             )
                                             []
-                                            (GuildIcon.discordUserView (NewMessageForUser count) maybeIcon userId)
+                                            (case otherMembers of
+                                                [ ( userId, maybeIcon ) ] ->
+                                                    GuildIcon.discordUserView (NewMessageForUser count) maybeIcon userId
+
+                                                _ ->
+                                                    User.multipleProfileImagesCompact otherMembers
+                                                        |> Ui.el
+                                                            [ GuildIcon.notificationView 0 -3 MyUi.background1 (NewMessageForUser count)
+                                                            , Ui.centerX
+                                                            ]
+                                            )
                                             |> Just
 
                                     Nothing ->

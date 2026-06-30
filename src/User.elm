@@ -23,6 +23,7 @@ module User exposing
     , init
     , linkDiscordDataCodec
     , multipleProfileImages
+    , multipleProfileImagesCompact
     , profileImage
     , profileImageHtml
     , profileImageNoRounding
@@ -816,6 +817,64 @@ multipleProfileImages profileImages =
                         ]
                         (Ui.text ("+" ++ String.fromInt (List.length rest)))
                     )
+                ]
+                Ui.none
+
+
+{-| Like [`multipleProfileImages`](#multipleProfileImages) but laid out to fit
+inside the narrow guild column: the three-icon case is compressed together, and
+four or more icons are shown as two icons plus a `+n` counter for the rest.
+-}
+multipleProfileImagesCompact : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+multipleProfileImagesCompact profileImages =
+    case profileImages of
+        [] ->
+            Ui.none
+
+        [ ( userId, single ) ] ->
+            discordProfileImage userId single
+
+        [ one, two ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+        [ one, two, three ] ->
+            Ui.el
+                [ Ui.width (Ui.px 45)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 20, y = 0, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 15, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+        one :: two :: rest ->
+            Ui.el
+                [ Ui.width (Ui.px 45)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 20, y = 0, z = 0 }
+                        , Ui.background MyUi.background1
+                        , Ui.width (Ui.px smallProfileImageSize)
+                        , Ui.height (Ui.px smallProfileImageSize)
+                        , Ui.Font.center
+                        , Ui.Font.bold
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.Font.size 14
+                        , Ui.contentCenterY
+                        , MyUi.htmlStyle "white-space" "pre"
+                        ]
+                        (Ui.text ("+" ++ String.fromInt (List.length rest)))
+                    )
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 15, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (smallProfileImage one)
                 ]
                 Ui.none
 
