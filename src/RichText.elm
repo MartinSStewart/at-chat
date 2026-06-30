@@ -955,6 +955,12 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
         |> String.concat
 
 
+type alias EmailConfig userId =
+    { attachedFiles : SeqDict (Id FileId) FileData
+    , userToString : userId -> String
+    }
+
+
 {-| Render rich text into email-safe html. This is a port of `view`/`viewHelper`
 that keeps the same formatting `state` and `dropNextLineBreak` handling and reuses
 the same inline styling, but strips out everything email can't support: the
@@ -964,28 +970,33 @@ are always shown in their hidden form (email can't reveal them on click); and
 attachments, stickers and custom emojis become simple placeholders since the
 lookup tables needed to render them aren't available here.
 -}
-emailView : (userId -> String) -> Nonempty (RichText userId) -> List Email.Html.Html
-emailView userToString nonempty =
+emailView : EmailConfig userId -> Nonempty (RichText userId) -> List Email.Html.Html
+emailView config nonempty =
     emailViewHelper
-        userToString
+        config
         False
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         nonempty
         |> Tuple.second
 
 
+emailContainerWidth : number
+emailContainerWidth =
+    500
+
+
 emailViewHelper :
-    (userId -> String)
+    EmailConfig userId
     -> Bool
     -> RichTextState
     -> Nonempty (RichText userId)
     -> ( Bool, List Email.Html.Html )
-emailViewHelper userToString dropNextLineBreak state nonempty =
+emailViewHelper config dropNextLineBreak state nonempty =
     List.foldl
         (\item ( dropNextLineBreak2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( False, currentList ++ [ emailUserLabel (userToString userId) ] )
+                    ( False, currentList ++ [ emailUserLabel (config.userToString userId) ] )
 
                 NormalText char text ->
                     ( False
@@ -1003,28 +1014,28 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                 Italic nonempty2 ->
                     let
                         ( dropNextLineBreak3, list ) =
-                            emailViewHelper userToString dropNextLineBreak2 { state | italic = True } nonempty2
+                            emailViewHelper config dropNextLineBreak2 { state | italic = True } nonempty2
                     in
                     ( dropNextLineBreak3, currentList ++ list )
 
                 Underline nonempty2 ->
                     let
                         ( dropNextLineBreak3, list ) =
-                            emailViewHelper userToString dropNextLineBreak2 { state | underline = True } nonempty2
+                            emailViewHelper config dropNextLineBreak2 { state | underline = True } nonempty2
                     in
                     ( dropNextLineBreak3, currentList ++ list )
 
                 Bold nonempty2 ->
                     let
                         ( dropNextLineBreak3, list ) =
-                            emailViewHelper userToString dropNextLineBreak2 { state | bold = True } nonempty2
+                            emailViewHelper config dropNextLineBreak2 { state | bold = True } nonempty2
                     in
                     ( dropNextLineBreak3, currentList ++ list )
 
                 Strikethrough nonempty2 ->
                     let
                         ( dropNextLineBreak3, list ) =
-                            emailViewHelper userToString dropNextLineBreak2 { state | strikethrough = True } nonempty2
+                            emailViewHelper config dropNextLineBreak2 { state | strikethrough = True } nonempty2
                     in
                     ( dropNextLineBreak3, currentList ++ list )
 
@@ -1032,7 +1043,7 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                     let
                         -- Email can't reveal spoilers on click, so always render the hidden variant.
                         ( dropNextLineBreak3, list ) =
-                            emailViewHelper userToString dropNextLineBreak2 { state | spoiler = True } nonempty2
+                            emailViewHelper config dropNextLineBreak2 { state | spoiler = True } nonempty2
                     in
                     ( dropNextLineBreak3
                     , currentList
@@ -1049,7 +1060,7 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                         ( _, list2 ) =
                             case List.Nonempty.fromList list of
                                 Just nonempty2 ->
-                                    emailViewHelper userToString True state nonempty2
+                                    emailViewHelper config True state nonempty2
 
                                 Nothing ->
                                     ( True, [ Email.Html.text " " ] )
@@ -1067,7 +1078,7 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                 Heading level _ nonempty2 ->
                     let
                         ( _, list2 ) =
-                            emailViewHelper userToString True state nonempty2
+                            emailViewHelper config True state nonempty2
 
                         headingElement : Email.Html.Html
                         headingElement =
@@ -1158,9 +1169,48 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                            ]
                     )
 
-                AttachedFile _ ->
-                    -- The attached file lookup table isn't available here, so show a placeholder.
-                    ( True, currentList ++ [ emailPlaceholder "🖼️" ] )
+                AttachedFile fileId ->
+                    case SeqDict.get fileId config.attachedFiles of
+                        Just fileData ->
+                            ( True
+                            , currentList
+                                ++ [ case fileData.imageMetadata of
+                                        Just { imageSize } ->
+                                            let
+                                                ( width, height ) =
+                                                    actualImageSize FileStatus.imageMaxHeight emailContainerWidth imageSize
+                                            in
+                                            if state.spoiler then
+                                                Email.Html.div
+                                                    [ Email.Html.Attributes.width (String.fromInt (round width) ++ "px")
+                                                    , Email.Html.Attributes.height (String.fromInt (round height) ++ "px")
+                                                    , Email.Html.Attributes.backgroundColor "rgb(0,0,0)"
+                                                    ]
+                                                    []
+
+                                            else
+                                                let
+                                                    thumbnailUrl =
+                                                        FileStatus.thumbnailUrl
+                                                            imageSize
+                                                            fileData.contentType
+                                                            fileData.fileHash
+                                                in
+                                                Email.Html.img
+                                                    [ Email.Html.Attributes.src thumbnailUrl
+                                                    , Email.Html.Attributes.style "display" "block"
+                                                    , Email.Html.Attributes.width (String.fromInt (round width) ++ "px")
+                                                    , Email.Html.Attributes.height (String.fromInt (round height) ++ "px")
+                                                    ]
+                                                    []
+
+                                        _ ->
+                                            emailFileDownloadView state.spoiler fileData
+                                   ]
+                            )
+
+                        Nothing ->
+                            ( False, currentList )
 
                 EscapedChar char ->
                     ( False, currentList ++ [ Email.Html.text (escapedCharToString char) ] )
@@ -1180,7 +1230,7 @@ emailViewHelper userToString dropNextLineBreak state nonempty =
                                         Just nonempty2 ->
                                             let
                                                 ( d3, html ) =
-                                                    emailViewHelper userToString True state nonempty2
+                                                    emailViewHelper config True state nonempty2
                                             in
                                             ( d3, html :: acc )
 

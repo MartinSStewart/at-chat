@@ -91,7 +91,11 @@ userTextMessageBackend :
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
-    -> ( Message messageId userId, Command BackendOnly toMsg ( Url, Result Http.Error EmbedData ), SeqDict (Id StickerId) StickerData )
+    ->
+        ( UserTextMessageData messageId userId
+        , Command BackendOnly toMsg ( Url, Result Http.Error EmbedData )
+        , SeqDict (Id StickerId) StickerData
+        )
 userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attachedFiles allStickers =
     let
         hyperlinks : List Url
@@ -111,7 +115,6 @@ userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attached
       , imageAttachmentDrawings = SeqDict.empty
       , embedDrawings = SeqDict.empty
       }
-        |> UserTextMessage
     , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
     , List.foldl
         (\stickerId dict ->
