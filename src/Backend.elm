@@ -449,9 +449,8 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        SentNotificationEmail _ _ _ ->
-            -- Email notifications are best-effort; nothing to do once the request completes.
-            ( model, Command.none )
+        SentNotificationEmail time email result ->
+            BackendExtra.addLog time (Log.NotificationEmail result email) model
 
         DiscordUserWebsocketMsg discordUserId result ->
             let
