@@ -9,6 +9,7 @@ import BackendExtra
 import Broadcast
 import Coord
 import Discord
+import Drawing
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
@@ -294,14 +295,10 @@ notificationEmail =
 
         heading level str =
             Heading level NoLeadingLineBreak (inline str)
-    in
-    emailView
-        (Broadcast.notificationEmailSubject "Stevie Steve")
-        (Broadcast.notificationEmailContent
-            (\id -> "User " ++ Id.toString id)
-            "Stevie Steve"
-            -- One of every RichText variant so the whole email rendering can be previewed.
-            (Nonempty
+
+        -- One of every RichText variant so the whole email rendering can be previewed.
+        content =
+            Nonempty
                 (heading H1 "Heading 1")
                 [ heading H2 "Heading 2"
                 , heading H3 "Heading 3"
@@ -339,14 +336,37 @@ notificationEmail =
                         , [ Bold (inline "Third"), normal " bullet point" ]
                         ]
                     )
-                , normal "Attachment "
+                , normal "File attachment "
                 , AttachedFile (Id.fromInt 1)
+                , normal " image attachment "
+                , AttachedFile (Id.fromInt 2)
                 , normal " sticker "
                 , Sticker (Id.fromInt 2)
                 , normal " custom emoji "
                 , CustomEmoji (Id.fromInt 3)
                 ]
-            )
+
+        message =
+            { createdAt = Time.millisToPosix 0
+            , createdBy = Id.fromInt 1
+            , content = content
+            , reactions = SeqDict.empty
+            , editedAt = Nothing
+            , repliedTo = Nothing
+            , attachedFiles = attachments
+            , embeds = Array.empty
+            , timestampDrawings = Drawing.emptyDrawing
+            , userIconDrawings = Drawing.emptyDrawing
+            , imageAttachmentDrawings = SeqDict.empty
+            , embedDrawings = SeqDict.empty
+            }
+    in
+    emailView
+        (Broadcast.notificationEmailSubject "Stevie Steve")
+        (Broadcast.notificationEmailContent
+            (\id -> "User " ++ Id.toString id)
+            "Stevie Steve"
+            message
         )
 
 

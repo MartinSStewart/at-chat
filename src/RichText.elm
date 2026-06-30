@@ -1325,6 +1325,39 @@ emailPlaceholder label =
     Email.Html.span [] [ Email.Html.text label ]
 
 
+{-| Email port of `fileDownloadView`: a labelled link to download a non-image
+attachment. Drops the element id and download icon (which don't translate to
+email) but keeps the same styling.
+-}
+emailFileDownloadView : Bool -> FileData -> Email.Html.Html
+emailFileDownloadView isSpoilered fileData =
+    Email.Html.a
+        ([ Email.Html.Attributes.style "max-width" "284px"
+         , Email.Html.Attributes.backgroundColor
+            (if isSpoilered then
+                "rgb(0,0,0)"
+
+             else
+                MyUi.colorToStyle MyUi.background1
+            )
+         , Email.Html.Attributes.borderRadius "4px"
+         , Email.Html.Attributes.border ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+         , Email.Html.Attributes.style "display" "block"
+         , Email.Html.Attributes.fontSize "14px"
+         , Email.Html.Attributes.padding "4px 8px 4px 8px"
+         ]
+            ++ (if isSpoilered then
+                    [ Email.Html.Attributes.color "transparent" ]
+
+                else
+                    [ Email.Html.Attributes.href (FileStatus.fileUrl fileData.contentType fileData.fileHash) ]
+               )
+        )
+        [ Email.Html.text (FileName.toString fileData.fileName)
+        , Email.Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize)
+        ]
+
+
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
 fromNonemptyString users string =
     let

@@ -861,7 +861,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                             guildOrDmId =
                                 DiscordGuildOrDmId_Dm { currentUserId = discordMessage.author.id, channelId = dmChannelId }
                         in
-                        case LocalState.createDiscordDmChannelMessageBackend discordMessage.id message channel of
+                        case LocalState.createDiscordDmChannelMessageBackend discordMessage.id (Message.UserTextMessage message) channel of
                             Ok ( messageId, channel2 ) ->
                                 let
                                     ( sessions, notification ) =
@@ -878,7 +878,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     Nothing
                                             )
                                             (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers richText)
-                                            richText
+                                            message
                                             model
 
                                     ( model2, logCmd ) =
@@ -1071,6 +1071,16 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             model.discordUsers
                                                 }
 
+                                            ( joinedMessage, _, _ ) =
+                                                Message.userTextMessageBackend
+                                                    model.serverSecret
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
+                                                    (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
+                                                    Nothing
+                                                    SeqDict.empty
+                                                    model.stickers
+
                                             ( sessions, notificationCmds ) =
                                                 Broadcast.discordGuildMessageNotification
                                                     SeqSet.empty
@@ -1079,7 +1089,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     discordGuildId
                                                     channelId
                                                     NoThread
-                                                    (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
+                                                    joinedMessage
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                     model2
                                         in
@@ -1174,7 +1184,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
-                                                case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId message2 channel of
+                                                case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId (Message.UserTextMessage message2) channel of
                                                     Ok ( messageId, channel3 ) ->
                                                         ( channel3
                                                         , Command.map
@@ -1200,7 +1210,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
-                                                case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
+                                                case LocalState.createDiscordChannelMessageBackend discordMessage.id (Message.UserTextMessage message) channel of
                                                     Ok ( messageId, channel3 ) ->
                                                         ( channel3
                                                         , Command.map
@@ -1227,6 +1237,20 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 else
                                                     ( model, Command.none )
 
+                                            -- The created message is scoped inside the channelResult branches
+                                            -- (with differing messageId types), so rebuild an equivalent one
+                                            -- here for the notification, which only reads its content and
+                                            -- attached files.
+                                            ( notificationMessage, _, _ ) =
+                                                Message.userTextMessageBackend
+                                                    model.serverSecret
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
+                                                    richText
+                                                    Nothing
+                                                    (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                    model.stickers
+
                                             ( sessions, notificationCmds ) =
                                                 Broadcast.discordGuildMessageNotification
                                                     usersMentioned
@@ -1235,7 +1259,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     discordGuildId
                                                     channelId
                                                     threadRouteNoReply
-                                                    richText
+                                                    notificationMessage
                                                     (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                     model2
                                         in
