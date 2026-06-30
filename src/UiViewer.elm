@@ -6,6 +6,7 @@ Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 
 import Array
 import BackendExtra
+import Broadcast
 import Coord
 import Discord
 import Effect.Browser.Dom as Dom
@@ -53,6 +54,7 @@ main =
                 [ Ui.background MyUi.background3 ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
                 , Ui.html loginEmail
+                , Ui.html notificationEmail
                 ]
             , Ui.column
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
@@ -274,6 +276,16 @@ loginEmail =
         (BackendExtra.loginEmailContent "12345678")
 
 
+notificationEmail : Html msg
+notificationEmail =
+    emailView
+        (Broadcast.notificationEmailSubject "Stevie Steve")
+        (Broadcast.notificationEmailContent
+            "Stevie Steve"
+            "Hey, are you coming to the meeting?\nIt starts in 5 minutes."
+        )
+
+
 exampleEmail : EmailAddress
 exampleEmail =
     Unsafe.emailAddress "user@example.com"
@@ -316,6 +328,8 @@ logExamples =
                 exampleEmail
             )
         , logEntry (Log.LoginEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })) exampleEmail)
+        , logEntry (Log.NotificationEmail (Ok ()) exampleEmail)
+        , logEntry (Log.NotificationEmail (Err (Postmark.UnknownError { statusCode = 500, body = "Internal Server Error" })) exampleEmail)
         , logEntry (Log.LoginsRateLimited (Id.fromInt 42))
         , logEntry (Log.ChangedUsers (Id.fromInt 7))
         , logEntry (Log.SendLogErrorEmailFailed Postmark.Timeout exampleEmail)

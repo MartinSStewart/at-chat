@@ -7,6 +7,8 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
+    , notificationEmailContent
+    , notificationEmailSubject
     , pushNotification
     , pushNotificationCodec
     , toAdmins
@@ -37,6 +39,8 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import Email.Html
+import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -669,8 +673,8 @@ notification time userToNotify senderName senderIcon text navigateTo sessions mo
         sessions
 
 
-{-| Build a plain-text email notifying a user that they were mentioned or sent a
-message. Sent when the user has enabled email notifications in their settings.
+{-| Send an email notifying a user that they were mentioned or sent a message.
+Sent when the user has enabled email notifications in their settings.
 -}
 notificationEmail : Time.Posix -> EmailAddress -> String -> String -> Postmark.ApiKey -> Command BackendOnly toMsg BackendMsg
 notificationEmail time email senderName body postmarkApiKey =
@@ -679,12 +683,80 @@ notificationEmail time email senderName body postmarkApiKey =
         postmarkApiKey
         { from = { name = "", email = notificationEmailFrom }
         , to = List.Nonempty.fromElement { name = "", email = email }
-        , subject = NonemptyString 'N' ("ew message from " ++ senderName)
+        , subject = notificationEmailSubject senderName
         , body =
-            Postmark.BodyText
+            Postmark.BodyBoth
+                (notificationEmailContent senderName body)
                 (senderName ++ ": " ++ body ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
         , messageStream = "outbound"
         }
+
+
+notificationEmailSubject : String -> NonemptyString
+notificationEmailSubject senderName =
+    NonemptyString 'N' ("ew message from " ++ senderName)
+
+
+{-| Render the message that triggered a notification roughly the way it looks in
+at-chat: a dark message card with the sender's name in bold above the message
+text. Email clients only support a small subset of CSS, so this sticks to inline
+styles and basic block elements.
+-}
+notificationEmailContent : String -> String -> Email.Html.Html
+notificationEmailContent senderName body =
+    Email.Html.div
+        [ Email.Html.Attributes.backgroundColor "#0e1428"
+        , Email.Html.Attributes.padding "24px"
+        , Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif"
+        ]
+        [ Email.Html.div
+            [ Email.Html.Attributes.style "max-width" "560px"
+            , Email.Html.Attributes.backgroundColor "#202846"
+            , Email.Html.Attributes.borderRadius "8px"
+            , Email.Html.Attributes.padding "16px"
+            ]
+            [ Email.Html.div
+                [ Email.Html.Attributes.color "#a0b4c8"
+                , Email.Html.Attributes.fontSize "14px"
+                , Email.Html.Attributes.paddingBottom "12px"
+                ]
+                [ Email.Html.text "You have a new message on at-chat" ]
+            , Email.Html.div
+                [ Email.Html.Attributes.color "#ffffff"
+                , Email.Html.Attributes.fontSize "16px"
+                , Email.Html.Attributes.paddingBottom "4px"
+                ]
+                [ Email.Html.strong [] [ Email.Html.text senderName ] ]
+            , Email.Html.div
+                [ Email.Html.Attributes.color "#ffffff"
+                , Email.Html.Attributes.fontSize "15px"
+                , Email.Html.Attributes.lineHeight "1.4"
+                ]
+                (messageBodyHtml body)
+            , Email.Html.div
+                [ Email.Html.Attributes.paddingTop "20px" ]
+                [ Email.Html.a
+                    [ Email.Html.Attributes.href Env.domain
+                    , Email.Html.Attributes.backgroundColor "#407ab2"
+                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.padding "10px 16px"
+                    , Email.Html.Attributes.borderRadius "6px"
+                    , Email.Html.Attributes.style "text-decoration" "none"
+                    , Email.Html.Attributes.style "display" "inline-block"
+                    ]
+                    [ Email.Html.text "Open at-chat" ]
+                ]
+            ]
+        ]
+
+
+{-| Convert the plain-text message body into email html, keeping line breaks.
+-}
+messageBodyHtml : String -> List Email.Html.Html
+messageBodyHtml body =
+    String.split "\n" body
+        |> List.map Email.Html.text
+        |> List.intersperse (Email.Html.br [] [])
 
 
 notificationEmailFrom : EmailAddress
