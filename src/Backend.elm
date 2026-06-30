@@ -5427,7 +5427,7 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                                                 placed
                                                 (case
                                                     WordSpellingGame.validatePlacement
-                                                        WordSpellingGameList.words
+                                                        WordSpellingGameList.dictionary
                                                         shared.board
                                                         placed
                                                  of

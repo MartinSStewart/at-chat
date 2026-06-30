@@ -6,15 +6,17 @@ module Pages.Home exposing
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import MyUi
+import Route exposing (Route(..))
 import Types exposing (FrontendMsg(..), LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
+import Ui.Input
 import Ui.Shadow
 
 
-header : Bool -> LoginStatus -> Element FrontendMsg
-header isMobile loginStatus =
+header : Bool -> Route -> LoginStatus -> Element FrontendMsg
+header isMobile route loginStatus =
     Ui.el
         [ Ui.background MyUi.background1
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
@@ -27,7 +29,10 @@ header isMobile loginStatus =
             , Ui.centerX
             ]
             [ Ui.image
-                [ Ui.width (Ui.px 64), Ui.paddingWith { top = 4, left = 8, right = 8, bottom = 8 } ]
+                [ Ui.width (Ui.px 64)
+                , Ui.paddingWith { top = 4, left = 8, right = 8, bottom = 8 }
+                , Ui.Input.button (PressedLink HomePageRoute)
+                ]
                 { source = "/at-logo-no-background.png"
                 , description = "Logo"
                 , onLoad = Nothing
@@ -40,7 +45,7 @@ header isMobile loginStatus =
                     MyUi.elButton
                         loginButtonId
                         PressedShowLogin
-                        (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing))
+                        (buttonAttributes isMobile (notLoggedIn.loginForm /= Nothing || Route.requiresLogin route))
                         (Ui.text "Login/Signup")
             ]
         )

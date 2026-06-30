@@ -2,7 +2,6 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
-    , Board
     , GameData
     , GameMsg
     , IsValid(..)
@@ -36,6 +35,7 @@ module WordSpellingGame exposing
     , isAnimating
     , isPlayerTurn
     , placeWord
+    , placementConnects
     , placementLandTime
     , setupView
     , trayY
@@ -54,6 +54,7 @@ import Char
 import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Time as Time
@@ -81,6 +82,7 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
+import WordSpellingGameList exposing (Dictionary)
 
 
 type Model
@@ -215,7 +217,7 @@ type IsValid
 type alias PlacedWord =
     { start : ( Int, Int )
     , isVertical : Bool
-    , letters : Nonempty Letter
+    , letters : Nonempty LetterOrWildcard
     }
 
 
@@ -224,7 +226,7 @@ type alias ActionWithTime =
 
 
 type alias Shared =
-    { board : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    { board : SeqDict ( Int, Int ) LetterOrWildcard
     , players : Nonempty Player
     , turnCount : Int
     , passingStartedAt : Maybe Int
@@ -239,7 +241,7 @@ purely from the current time (see `animatedTilePlacement`).
 -}
 type alias AnimatedPlacement =
     { startTime : Time.Posix
-    , cells : List ( ( Int, Int ), Letter )
+    , cells : List ( ( Int, Int ), LetterOrWildcard )
     , isValid : ToBeFilledInByBackend IsValid
     }
 
@@ -260,8 +262,6 @@ type LetterId
     = LetterId Never
 
 
-{-| OpaqueVariants
--}
 type LetterOrWildcard
     = Letter Letter
     | Wildcard
@@ -270,7 +270,7 @@ type LetterOrWildcard
 initShared : ValidatedSetup -> Shared
 initShared setup =
     let
-        initialBoard : SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+        initialBoard : SeqDict ( Int, Int ) LetterOrWildcard
         initialBoard =
             SeqDict.empty
     in
@@ -284,7 +284,7 @@ initShared setup =
 
 remainingLettersInBag :
     ValidatedSetup
-    -> SeqDict a { b | letter : Letter, isWildcard : Bool }
+    -> SeqDict ( Int, Int ) LetterOrWildcard
     -> List Player
     -> SeqDict LetterOrWildcard OneOrGreater
 remainingLettersInBag setup board players =
@@ -292,16 +292,7 @@ remainingLettersInBag setup board players =
         remainingLetters : SeqDict LetterOrWildcard OneOrGreater
         remainingLetters =
             SeqDict.foldl
-                (\_ { letter, isWildcard } startingLetters2 ->
-                    SeqDictHelper.decrement
-                        (if isWildcard then
-                            Wildcard
-
-                         else
-                            Letter letter
-                        )
-                        startingLetters2
-                )
+                (\_ letter startingLetters2 -> SeqDictHelper.decrement letter startingLetters2)
                 (NonemptyDict.toSeqDict setup.letters)
                 board
     in
@@ -314,7 +305,7 @@ remainingLettersInBag setup board players =
 getLetters :
     OneOrGreater
     -> ValidatedSetup
-    -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
+    -> SeqDict ( Int, Int ) LetterOrWildcard
     -> List Player
     -> Int
     -> List LetterOrWildcard
@@ -375,12 +366,12 @@ getWinner shared =
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
-updateAction setup action state =
+updateAction setup action shared =
     case action.change of
         PlaceWord placedWord isValid ->
-            case ( getWinner state, getPlayer action.userId state ) of
+            case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case placeWord state.board placedWord of
+                    case placeWord shared.board placedWord of
                         Just result ->
                             let
                                 animatedPlacement : Maybe AnimatedPlacement
@@ -392,7 +383,7 @@ updateAction setup action state =
                                     List.foldl
                                         removeFromTray
                                         (IdArray.toList player.tray)
-                                        (List.map Letter (List.Nonempty.toList placedWord.letters))
+                                        (List.Nonempty.toList placedWord.letters)
 
                                 drawn : List LetterOrWildcard
                                 drawn =
@@ -402,10 +393,10 @@ updateAction setup action state =
                                                 drawCount
                                                 setup
                                                 result.board
-                                                (NonemptyExtra.set state.turnCount { player | tray = IdArray.fromList remainingTray } state.players
+                                                (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
                                                     |> List.Nonempty.toList
                                                 )
-                                                state.turnCount
+                                                shared.turnCount
 
                                         Nothing ->
                                             []
@@ -413,17 +404,17 @@ updateAction setup action state =
                                 tray =
                                     remainingTray ++ drawn |> IdArray.fromList
                             in
-                            { state
+                            { shared
                                 | board =
                                     case isValid of
                                         FilledInByBackend IsNotValid ->
-                                            state.board
+                                            shared.board
 
                                         _ ->
                                             result.board
                                 , players =
                                     NonemptyExtra.set
-                                        state.turnCount
+                                        shared.turnCount
                                         { player
                                             | tray = tray
                                             , score =
@@ -434,89 +425,89 @@ updateAction setup action state =
                                                     _ ->
                                                         player.score + result.score
                                         }
-                                        state.players
-                                , turnCount = state.turnCount + 1
+                                        shared.players
+                                , turnCount = shared.turnCount + 1
                                 , lastPlacement = animatedPlacement
                                 , passingStartedAt =
                                     if tray == IdArray.empty then
-                                        case state.passingStartedAt of
+                                        case shared.passingStartedAt of
                                             Nothing ->
-                                                Just state.turnCount
+                                                Just shared.turnCount
 
                                             Just _ ->
-                                                state.passingStartedAt
+                                                shared.passingStartedAt
 
                                     else
                                         Nothing
                             }
 
                         Nothing ->
-                            state
+                            shared
 
                 _ ->
-                    state
+                    shared
 
         ReplaceTrayOrPass ->
-            case ( getWinner state, getPlayer action.userId state ) of
+            case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case passBehavior setup state of
+                    case passBehavior setup shared of
                         ShouldReplaceTray ->
-                            { state
+                            { shared
                                 | players =
                                     NonemptyExtra.set
-                                        state.turnCount
+                                        shared.turnCount
                                         { player
                                             | tray =
                                                 getLetters
                                                     setup.traySize
                                                     setup
-                                                    state.board
-                                                    (NonemptyExtra.set state.turnCount { player | tray = IdArray.empty } state.players
+                                                    shared.board
+                                                    (NonemptyExtra.set shared.turnCount { player | tray = IdArray.empty } shared.players
                                                         |> List.Nonempty.toList
                                                     )
-                                                    state.turnCount
+                                                    shared.turnCount
                                                     |> IdArray.fromList
                                         }
-                                        state.players
-                                , turnCount = state.turnCount + 1
+                                        shared.players
+                                , turnCount = shared.turnCount + 1
                                 , passingStartedAt = Nothing
                             }
 
                         ShouldPass ->
-                            { state
+                            { shared
                                 | passingStartedAt =
-                                    case state.passingStartedAt of
+                                    case shared.passingStartedAt of
                                         Nothing ->
-                                            Just state.turnCount
+                                            Just shared.turnCount
 
                                         Just _ ->
-                                            state.passingStartedAt
-                                , turnCount = state.turnCount + 1
+                                            shared.passingStartedAt
+                                , turnCount = shared.turnCount + 1
                             }
 
                         ShouldEndGame ->
-                            { state | turnCount = state.turnCount + 1 }
+                            { shared | turnCount = shared.turnCount + 1 }
 
                 _ ->
-                    state
+                    shared
 
         JoinGame ->
-            if state.turnCount > List.Nonempty.length state.players then
-                state
+            if shared.turnCount > List.Nonempty.length shared.players then
+                shared
 
             else
-                { state
+                { shared
                     | players =
                         List.Nonempty.append
-                            state.players
+                            shared.players
                             (Nonempty
-                                (initPlayer action.userId state.board setup (List.Nonempty.toList state.players))
+                                (initPlayer action.userId shared.board setup (List.Nonempty.toList shared.players))
                                 []
                             )
                 }
 
 
-initPlayer : Id UserId -> SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool } -> ValidatedSetup -> List Player -> Player
+initPlayer : Id UserId -> SeqDict ( Int, Int ) LetterOrWildcard -> ValidatedSetup -> List Player -> Player
 initPlayer userId board setup existingPlayers =
     { userId = userId
     , tray = getLetters setup.traySize setup board existingPlayers 0 |> IdArray.fromList
@@ -524,15 +515,11 @@ initPlayer userId board setup existingPlayers =
     }
 
 
-type alias Board =
-    SeqDict ( Int, Int ) { letter : Letter, isWildcard : Bool }
-
-
 type alias PlacementResult =
-    { board : Board
-    , words : List String
+    { board : SeqDict ( Int, Int ) LetterOrWildcard
+    , words : List (List LetterOrWildcard)
     , score : Int
-    , placedCells : List ( ( Int, Int ), Letter )
+    , placedCells : List ( ( Int, Int ), LetterOrWildcard )
     }
 
 
@@ -547,7 +534,7 @@ The returned `words` are lowercased so they can be looked up directly in the wor
 apply to the squares the new tiles land on; wildcards score zero).
 
 -}
-placeWord : Board -> PlacedWord -> Maybe PlacementResult
+placeWord : SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
 placeWord board placedWord =
     let
         ( dx, dy ) =
@@ -557,14 +544,14 @@ placeWord board placedWord =
             else
                 ( 1, 0 )
 
-        -- Lay out the new letters, stepping over tiles already committed to the board.
-        layout : ( Int, Int ) -> List Letter -> List ( ( Int, Int ), Letter ) -> Maybe (List ( ( Int, Int ), Letter ))
+        -- Lay out the new tiles, stepping over tiles already committed to the board.
+        layout : ( Int, Int ) -> List LetterOrWildcard -> List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (List ( ( Int, Int ), LetterOrWildcard ))
         layout ( cx, cy ) remaining acc =
             case remaining of
                 [] ->
                     Just (List.reverse acc)
 
-                letter :: rest ->
+                letterOrWildcard :: rest ->
                     if cx < 0 || cy < 0 || cx >= gridSize || cy >= gridSize then
                         Nothing
 
@@ -574,15 +561,15 @@ placeWord board placedWord =
                                 layout ( cx + dx, cy + dy ) remaining acc
 
                             Nothing ->
-                                layout ( cx + dx, cy + dy ) rest (( ( cx, cy ), letter ) :: acc)
+                                layout ( cx + dx, cy + dy ) rest (( ( cx, cy ), letterOrWildcard ) :: acc)
     in
     case layout placedWord.start (List.Nonempty.toList placedWord.letters) [] of
         Just placedCells ->
             let
-                newBoard : Board
+                newBoard : SeqDict ( Int, Int ) LetterOrWildcard
                 newBoard =
                     List.foldl
-                        (\( cell, letter ) acc -> SeqDict.insert cell { letter = letter, isWildcard = False } acc)
+                        (\( cell, letterOrWildcard ) acc -> SeqDict.insert cell letterOrWildcard acc)
                         board
                         placedCells
 
@@ -645,7 +632,7 @@ placeWord board placedWord =
 
 {-| The maximal contiguous run of tiles through `cell` in the direction `( dirX, dirY )`.
 -}
-lineWord : Board -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
+lineWord : SeqDict ( Int, Int ) LetterOrWildcard -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
 lineWord board ( dirX, dirY ) cell =
     let
         walkBack : ( Int, Int ) -> ( Int, Int )
@@ -672,21 +659,19 @@ lineWord board ( dirX, dirY ) cell =
     walkForward (walkBack cell) []
 
 
-{-| The lowercased text of the word formed by the given cells.
+{-| The tiles (letters and wildcards) forming the word at the given cells, in order. Wildcards are
+kept as `Wildcard` rather than resolved to a letter, since the tile on the board doesn't record
+which letter the player meant; `wordIsValid` tries every letter for them when checking the word.
 -}
-wordString : Board -> List ( Int, Int ) -> String
+wordString : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> List LetterOrWildcard
 wordString board cells =
-    List.filterMap
-        (\cell -> SeqDict.get cell board |> Maybe.map (\{ letter } -> (letterData letter).text))
-        cells
-        |> String.concat
-        |> String.toLower
+    List.filterMap (\cell -> SeqDict.get cell board) cells
 
 
 {-| The Scrabble score of a single word. Letter and word multipliers only apply to the squares
 that the newly-placed tiles (`placedSet`) land on; wildcards always score zero.
 -}
-wordScore : Board -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
+wordScore : SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
 wordScore board placedSet cells =
     let
         letterSum : Int
@@ -694,15 +679,15 @@ wordScore board placedSet cells =
             List.map
                 (\cell ->
                     case SeqDict.get cell board of
-                        Just { letter, isWildcard } ->
-                            if isWildcard then
-                                0
-
-                            else if Set.member cell placedSet then
+                        Just (Letter letter) ->
+                            if Set.member cell placedSet then
                                 (letterData letter).score * letterScoreMultiplier cell
 
                             else
                                 (letterData letter).score
+
+                        Just Wildcard ->
+                            0
 
                         Nothing ->
                             0
@@ -727,16 +712,16 @@ wordScore board placedSet cells =
 
 
 {-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
-exists in `wordList`.
+exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
 -}
-validatePlacement : Set String -> Board -> PlacedWord -> Result () PlacementResult
-validatePlacement wordList board placedWord =
+validatePlacement : Dictionary -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacement dictionary board placedWord =
     case placeWord board placedWord of
         Just result ->
             if List.isEmpty result.words then
                 Err ()
 
-            else if List.all (\word -> Set.member word wordList) result.words then
+            else if List.all (wordIsValid dictionary) result.words then
                 Ok result
 
             else
@@ -744,6 +729,128 @@ validatePlacement wordList board placedWord =
 
         Nothing ->
             Err ()
+
+
+{-| The most wildcards we'll resolve by trying every letter combination. With `k` wildcards that's
+26^k dictionary lookups, so we only do it while that stays cheap (26^2 = 676); beyond it we scan
+instead, which keeps the work bounded no matter how many wildcards a word has.
+-}
+maxBruteForceWildcards : Int
+maxBruteForceWildcards =
+    2
+
+
+{-| Whether a formed word is in the dictionary. A wildcard tile can stand for any letter, but the
+board doesn't record which letter the player meant, so a word containing wildcards is valid if
+_some_ assignment of letters to its wildcards spells a word in the dictionary.
+
+There are two ways to check this, and we pick whichever is bounded by the smaller amount of work:
+
+  - With few wildcards, try every letter for them (`bruteForceMatch`): at most 26^k lookups.
+  - With many wildcards, 26^k explodes (e.g. 4 wildcards is ~457k), so instead scan the dictionary
+    words of this length and keep any that agree with the fixed letters (`scanForMatch`). That's one
+    pass over a single length bucket — at most ~30k words for this dictionary — regardless of how
+    many wildcards there are. This is what stops a word like "3 letters + 4 wildcards" locking up
+    the server.
+
+-}
+wordIsValid : Dictionary -> List LetterOrWildcard -> Bool
+wordIsValid dictionary word =
+    if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+        bruteForceMatch dictionary.all word
+
+    else
+        scanForMatch dictionary.byLength word
+
+
+{-| Try every letter for each wildcard, building the candidate string from left to right and
+stopping as soon as one is in the word list. With no wildcards this is a single `Set.member` lookup.
+Only used when there are few wildcards (see `maxBruteForceWildcards`), so this does at most 26^k
+lookups for small `k`.
+-}
+bruteForceMatch : Set String -> List LetterOrWildcard -> Bool
+bruteForceMatch wordList word =
+    let
+        search : List LetterOrWildcard -> String -> Bool
+        search remaining prefix =
+            case remaining of
+                [] ->
+                    Set.member prefix wordList
+
+                (Letter letter) :: rest ->
+                    search rest (prefix ++ letterText letter)
+
+                Wildcard :: rest ->
+                    List.any (\letter -> search rest (prefix ++ letterText letter)) allLetters
+    in
+    search word ""
+
+
+{-| Whether any dictionary word of the same length agrees with the word's fixed (non-wildcard)
+letters; the wildcards then stand for whatever letters that dictionary word has in their place. This
+costs a single pass over the words of that length, which is bounded however many wildcards there are.
+-}
+scanForMatch : Dict Int (Array String) -> List LetterOrWildcard -> Bool
+scanForMatch byLength word =
+    let
+        pattern : List (Maybe Char)
+        pattern =
+            List.map
+                (\cell ->
+                    case cell of
+                        Letter letter ->
+                            Just (letterChar letter)
+
+                        Wildcard ->
+                            Nothing
+                )
+                word
+    in
+    case Dict.get (List.length word) byLength of
+        Just candidates ->
+            Array.Extra.any (matchesPattern pattern) candidates
+
+        Nothing ->
+            False
+
+
+{-| Whether a dictionary word agrees with a pattern: each fixed position (`Just char`) must equal
+the word's character there, and wildcard positions (`Nothing`) match anything. The word and pattern
+are the same length, since the candidates come from the matching length bucket.
+-}
+matchesPattern : List (Maybe Char) -> String -> Bool
+matchesPattern pattern candidate =
+    List.map2
+        (\patternChar candidateChar ->
+            case patternChar of
+                Just fixed ->
+                    fixed == candidateChar
+
+                Nothing ->
+                    True
+        )
+        pattern
+        (String.toList candidate)
+        |> List.all identity
+
+
+{-| A letter's lowercase text, as it appears in the word list.
+-}
+letterText : Letter -> String
+letterText letter =
+    String.toLower (letterData letter).text
+
+
+{-| A letter's lowercase character, as it appears in the word list.
+-}
+letterChar : Letter -> Char
+letterChar letter =
+    case String.uncons (letterText letter) of
+        Just ( char, _ ) ->
+            char
+
+        Nothing ->
+            ' '
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -896,12 +1003,14 @@ the same order as `GameData.tiles` (see `boardView`).
 A placement is valid when:
 
   - at least one tile was placed on the board,
-  - the placed tiles all lie in a single row or column, and
+  - the placed tiles all lie in a single row or column,
   - the run from the first to the last placed tile has no gaps (any cell between them that wasn't
-    placed must already hold a committed tile).
+    placed must already hold a committed tile), and
+  - the word connects to the rest of the board: the first word of the game must cover the centre
+    square, and every later word must touch a tile already on the board.
 
-Wildcard tiles aren't supported yet (there's no way to pick which letter they represent), so a
-placement containing one is rejected.
+Wildcard tiles are allowed; the letter a wildcard stands for is decided later, when the word is
+checked against the dictionary on the backend (see `wordIsValid`).
 
 -}
 checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
@@ -993,8 +1102,12 @@ buildPlacedWord isVertical shared placed =
                                 in
                                 List.member cell placedCells || SeqDict.member cell shared.board
                             )
+
+                connected : Bool
+                connected =
+                    placementConnects shared.board placedCells
             in
-            case ( contiguous, nonemptyLetters sorted ) of
+            case ( contiguous && connected, nonemptyLetters sorted ) of
                 ( True, Just letters ) ->
                     Ok { start = startCell, isVertical = isVertical, letters = letters }
 
@@ -1005,23 +1118,47 @@ buildPlacedWord isVertical shared placed =
             Err ()
 
 
-{-| Pull the letters out of the placed tiles in order, failing if any tile is a wildcard or if
-there are no tiles.
+{-| Whether a placement connects to the rest of the board, so words can't float in empty space.
+The very first word of the game (when the board is empty) has to cover the centre square; every word
+after that has to touch a tile already on the board, either by sitting orthogonally next to one or
+by extending through one in its own line (the latter is also adjacency, so this single check covers
+it). `placedCells` are the cells the player filled this turn, none of which are on `board` yet.
 -}
-nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty Letter)
-nonemptyLetters list =
-    List.foldr
-        (\( _, letterOrWildcard ) acc ->
-            case letterOrWildcard of
-                Letter letter ->
-                    Maybe.map ((::) letter) acc
+placementConnects : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> Bool
+placementConnects board placedCells =
+    if SeqDict.isEmpty board then
+        List.member centerCell placedCells
 
-                Wildcard ->
-                    Nothing
-        )
-        (Just [])
-        list
-        |> Maybe.andThen List.Nonempty.fromList
+    else
+        List.any
+            (\cell ->
+                List.any (\neighbor -> SeqDict.member neighbor board) (orthogonalNeighbors cell)
+            )
+            placedCells
+
+
+{-| The centre square, which the first word of the game must cover.
+-}
+centerCell : ( Int, Int )
+centerCell =
+    ( gridSize // 2, gridSize // 2 )
+
+
+{-| The four cells directly above, below, left and right of a cell.
+-}
+orthogonalNeighbors : ( Int, Int ) -> List ( Int, Int )
+orthogonalNeighbors ( x, y ) =
+    [ ( x - 1, y ), ( x + 1, y ), ( x, y - 1 ), ( x, y + 1 ) ]
+
+
+{-| Pull the tiles (letters and wildcards) out of the placed cells in order, failing only if there
+are no tiles. Wildcards are kept as `Wildcard`; the letter they stand for is worked out later when
+the word is checked against the dictionary (see `wordIsValid`).
+-}
+nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty LetterOrWildcard)
+nonemptyLetters list =
+    List.map Tuple.second list
+        |> List.Nonempty.fromList
 
 
 validateSetup : Id UserId -> Time.Posix -> SetupModel -> Result String ValidatedSetup
@@ -2095,7 +2232,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         boardTiles : List (Ui.Attribute GameMsg)
         boardTiles =
             SeqDict.foldl
-                (\( x, y ) { letter, isWildcard } list ->
+                (\( x, y ) letter list ->
                     if Set.member ( x, y ) animatingCellSet then
                         -- This tile is being animated into place, so the animation layer draws it.
                         list
@@ -2104,12 +2241,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         boardTileInFront
                             cellSize2
                             (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
-                            (if isWildcard then
-                                Wildcard
-
-                             else
-                                Letter letter
-                            )
+                            letter
                             :: list
                 )
                 []
@@ -2134,7 +2266,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 List.length placement.cells
                         in
                         List.indexedMap
-                            (\index ( ( x, y ), letter ) ->
+                            (\index ( ( x, y ), letterOrWildcard ) ->
                                 animatedTilePlacement isPreviousPlayer elapsed placement.isValid tileCount index
                                     |> Maybe.map
                                         (\{ progress, red } ->
@@ -2161,7 +2293,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                                     (round (toFloat startY + progress * toFloat (destY - startY)))
                                                 )
                                                 red
-                                                (Letter letter)
+                                                letterOrWildcard
                                         )
                             )
                             placement.cells
