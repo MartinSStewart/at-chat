@@ -26,7 +26,7 @@ import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
-import RichText exposing (Domain, Language(..), RichText(..))
+import RichText exposing (Domain, EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData, StickerUrl(..))
@@ -35,6 +35,7 @@ import Time
 import Ui
 import Ui.Font
 import Unsafe
+import Url
 
 
 main : Html ()
@@ -278,24 +279,86 @@ loginEmail =
 
 notificationEmail : Html msg
 notificationEmail =
+    let
+        -- Build a NormalText node from a plain string.
+        normal str =
+            case String.uncons str of
+                Just ( char, rest ) ->
+                    NormalText char rest
+
+                Nothing ->
+                    NormalText ' ' ""
+
+        inline str =
+            Nonempty (normal str) []
+
+        heading level str =
+            Heading level NoLeadingLineBreak (inline str)
+    in
     emailView
         (Broadcast.notificationEmailSubject "Stevie Steve")
         (Broadcast.notificationEmailContent
             (\id -> "User " ++ Id.toString id)
             "Stevie Steve"
+            -- One of every RichText variant so the whole email rendering can be previewed.
             (Nonempty
-                (NormalText 'H' "ey ")
-                [ UserMention (Id.fromInt 1)
-                , NormalText ',' " are you coming to the "
-                , Bold (Nonempty (NormalText 'm' "eeting") [])
-                , NormalText '?' " It starts in "
-                , Italic (Nonempty (NormalText '5' " minutes") [])
-                , NormalText '.' "\nPing me with "
-                , InlineCode '/' "status"
-                , NormalText ' ' "if you're running late."
+                (heading H1 "Heading 1")
+                [ heading H2 "Heading 2"
+                , heading H3 "Heading 3"
+                , heading Small "Small heading"
+                , normal "Text styles: "
+                , Bold (inline "bold")
+                , normal ", "
+                , Italic (inline "italic")
+                , normal ", "
+                , Underline (inline "underline")
+                , normal ", "
+                , Strikethrough (inline "strikethrough")
+                , normal ", "
+                , Spoiler (inline "spoiler")
+                , normal ", "
+                , Bold (Nonempty (Italic (inline "nested")) [])
+                , normal ".\n"
+                , UserMention (Id.fromInt 1)
+                , normal " mentioned you. Links: "
+                , Hyperlink exampleUrl
+                , normal " and "
+                , MarkdownLink (NonemptyString 'm' "arkdown link") exampleUrl
+                , normal ". Inline "
+                , InlineCode 'c' "ode"
+                , normal " and an escaped asterisk "
+                , EscapedChar EscapedBold
+                , normal ".\n"
+                , CodeBlock NoLanguage "a code block\nwith two lines"
+                , CodeBlock (Language (NonemptyString 'e' "lm")) "add a b =\n    a + b"
+                , BlockQuote NoLeadingLineBreak [ normal "A block quote" ]
+                , BulletPoint NoLeadingLineBreak
+                    (Nonempty
+                        [ normal "First bullet point" ]
+                        [ [ normal "Second bullet point" ]
+                        , [ Bold (inline "Third"), normal " bullet point" ]
+                        ]
+                    )
+                , normal "Attachment "
+                , AttachedFile (Id.fromInt 1)
+                , normal " sticker "
+                , Sticker (Id.fromInt 2)
+                , normal " custom emoji "
+                , CustomEmoji (Id.fromInt 3)
                 ]
             )
         )
+
+
+exampleUrl : Url.Url
+exampleUrl =
+    { protocol = Url.Https
+    , host = "at-chat.app"
+    , port_ = Nothing
+    , path = "/"
+    , query = Nothing
+    , fragment = Nothing
+    }
 
 
 exampleEmail : EmailAddress
