@@ -3,7 +3,7 @@ module WordSpellingGame exposing
     , ActionWithTime
     , AnimatedPlacement
     , GameData
-    , GameMsg
+    , GameMsg(..)
     , IsValid(..)
     , Letter(..)
     , LetterId
@@ -15,7 +15,7 @@ module WordSpellingGame exposing
     , PlacementResult
     , Player
     , SetupModel
-    , SetupMsg
+    , SetupMsg(..)
     , Shared
     , Tile
     , TilePosition(..)
@@ -122,6 +122,8 @@ type TrayIndex
     = TrayIndex Int
 
 
+{-| OpaqueVariants
+-}
 type SetupMsg
     = ChangedMainTimeInput String
     | ChangedIncrementInput String
@@ -131,6 +133,8 @@ type SetupMsg
     | PressedStartGame
 
 
+{-| OpaqueVariants
+-}
 type GameMsg
     = PressedSubmitWord
     | PressedJoinGame
