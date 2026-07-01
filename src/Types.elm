@@ -48,7 +48,7 @@ module Types exposing
 
 import AiChat
 import Array exposing (Array)
-import Audio
+import Audio exposing (Audio)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import Call exposing (CallId, ChannelSidebarMode, FromJs)
@@ -145,6 +145,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
+    , popSound : Result Audio.LoadError Audio.Source
     }
 
 
@@ -181,6 +182,7 @@ type alias LoadedFrontend =
     , imageViewer : Maybe ImageViewer.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
+    , popSound : Result Audio.LoadError Audio.Source
     }
 
 
@@ -564,6 +566,7 @@ type FrontendMsg_
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
+    | LoadedPopSound (Result Audio.LoadError Audio.Source)
 
 
 type ScrollPosition

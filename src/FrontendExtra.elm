@@ -2126,6 +2126,9 @@ isPressMsg msg =
                 _ ->
                     False
 
+        LoadedPopSound result ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =

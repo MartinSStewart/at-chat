@@ -298,6 +298,7 @@ init url key =
 
                 _ ->
                     PublicGoMatch_NotLoaded
+        , popSound = Err Audio.UnknownError
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -315,7 +316,7 @@ init url key =
         , Task.perform GotTimezone Time.here
         , Ports.loadStartupData
         ]
-    , Audio.cmdNone
+    , Audio.loadAudio LoadedPopSound "/pop.mp3"
     )
 
 
@@ -371,6 +372,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , publicGoMatch = loading.publicGoMatch
             , imageViewer = Nothing
             , toFrontendLogs = Nothing
+            , popSound = loading.popSound
             }
 
         ( model2, cmdA ) =
@@ -572,6 +574,9 @@ update _ msg model =
 
                 GotStartupData startupData ->
                     tryInitLoadedFrontend { loading | startupData = Just startupData }
+
+                LoadedPopSound result ->
+                    ( Loading { loading | popSound = result }, Command.none, Audio.cmdNone )
 
                 _ ->
                     ( model, Command.none, Audio.cmdNone )
@@ -4448,6 +4453,9 @@ updateLoaded msg model =
 
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
+
+        LoadedPopSound result ->
+            ( { model | popSound = result }, Command.none )
 
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
