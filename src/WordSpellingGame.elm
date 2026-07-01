@@ -2377,6 +2377,9 @@ boardView :
     -> Element GameMsg
 boardView currentTime windowSize maybeDragging currentUserId setup shared model =
     let
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+
         cellSize2 : Int
         cellSize2 =
             cellSize windowSize
@@ -2642,7 +2645,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
 
         trayWidth : Int
         trayWidth =
-            Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
+            Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayTileSpacing - trayX windowSize
 
         boardPx : Int
         boardPx =
@@ -2709,8 +2712,8 @@ tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
             [ Ui.background (Ui.rgb 240 220 130)
-            , Ui.width (Ui.px cellSize2)
-            , Ui.height (Ui.px cellSize2)
+            , Ui.width (Ui.px (cellSize2 - 1))
+            , Ui.height (Ui.px (cellSize2 - 1))
             , Ui.contentCenterX
             , Ui.contentCenterY
             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
@@ -2734,8 +2737,8 @@ boardTileInFront cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
             [ Ui.background (Ui.rgb 186 171 103)
-            , Ui.width (Ui.px cellSize2)
-            , Ui.height (Ui.px cellSize2)
+            , Ui.width (Ui.px (cellSize2 - 1))
+            , Ui.height (Ui.px (cellSize2 - 1))
             , Ui.contentCenterX
             , Ui.contentCenterY
             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
@@ -2782,8 +2785,8 @@ animatedTileInFront cellSize2 offset red letterOrWildcard =
                  else
                     Ui.rgb 186 171 103
                 )
-            , Ui.width (Ui.px cellSize2)
-            , Ui.height (Ui.px cellSize2)
+            , Ui.width (Ui.px (cellSize2 - 1))
+            , Ui.height (Ui.px (cellSize2 - 1))
             , Ui.contentCenterX
             , Ui.contentCenterY
             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
@@ -2850,7 +2853,7 @@ cellView cellSize2 position =
                 Ui.background (Ui.rgb 250 250 250)
         , Ui.width (Ui.px cellSize2)
         , Ui.height (Ui.px cellSize2)
-        , Ui.border 1
+        , Ui.borderWith { left = 0, right = 1, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.inputBorder
         , Ui.contentCenterX
         , Ui.contentCenterY
