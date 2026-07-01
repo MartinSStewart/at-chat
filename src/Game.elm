@@ -193,7 +193,6 @@ type LocalChange
 type OutMsg
     = OutLocalChange LocalChange
     | CopyText String
-    | PlaySound (Maybe Time.Posix) String
     | OutSelectMatch (Maybe (Id ChannelMessageId))
 
 
@@ -258,9 +257,6 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
                                                 _ ->
                                                     [ OutLocalChange (LocalChange_Go matchId localChange) ]
-
-                                        Go.PlaySound sound ->
-                                            [ PlaySound Nothing sound ]
                                 )
                                 outMsgs
                             )
@@ -310,9 +306,6 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
                                 _ ->
                                     [ OutLocalChange (LocalChange_Go matchId localChange) ]
-
-                        Go.PlaySound sound ->
-                            [ PlaySound Nothing sound ]
                 )
                 outMsgs
             )
@@ -355,9 +348,6 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
                                                 WordSpellingGame.Action _ ->
                                                     [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
-
-                                        WordSpellingGame.PlaySound maybeTime name ->
-                                            [ PlaySound maybeTime name ]
                                 )
                                 outMsgs
                             )
@@ -411,9 +401,6 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
                                 WordSpellingGame.Action _ ->
                                     [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
-
-                        WordSpellingGame.PlaySound maybeTime name ->
-                            [ PlaySound maybeTime name ]
                 )
                 outMsgs
             )

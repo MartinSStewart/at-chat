@@ -530,32 +530,6 @@ exports.init = async function init(app)
             });
     });
 
-    let context = null;
-    let sounds = {};
-    app.ports.load_sounds_to_js.subscribe((a) => {
-        context = new AudioContext();
-        loadAudio("pop", context, sounds);
-        //app.ports.load_sounds_from_js.send(null);
-    });
-    app.ports.play_sound.subscribe((a) => {
-        try {
-            const source = context.createBufferSource();
-            if (sounds[a.name]) {
-                source.buffer = sounds[a.name];
-                source.connect(context.destination);
-                if (a.time === null) {
-                    source.start(0);
-                } else {
-                    // a.time is wall-clock milliseconds; convert it into the audio context clock.
-                    const delaySeconds = (a.time - Date.now()) / 1000;
-                    source.start(delaySeconds <= 0 ? 0 : context.currentTime + delaySeconds);
-                }
-            }
-        }
-        catch (error) {
-        }
-    });
-
     app.ports.haptic_feedback.subscribe((a) => {
         try {
             const label = document.createElement("label");

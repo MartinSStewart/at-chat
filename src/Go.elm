@@ -469,7 +469,6 @@ type LocalChange
 
 type OutMsg
     = OutLocalChange LocalChange
-    | PlaySound String
 
 
 otherStone : Stone -> Stone
@@ -1260,8 +1259,7 @@ updateGame currentTime currentUserId msg setup state model =
                             case tryPlace setup x y state of
                                 Ok _ ->
                                     ( Game model
-                                    , [ PlaySound "pop"
-                                      , Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
+                                    , [ Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
                                       ]
                                     )
 

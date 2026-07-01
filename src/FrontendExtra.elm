@@ -1,5 +1,6 @@
 module FrontendExtra exposing
     ( WordSpellingGameData
+    , audio
     , canDropFiles
     , changeUpdate
     , drawingRedo
@@ -31,6 +32,7 @@ module FrontendExtra exposing
 
 import AiChat
 import Array exposing (Array)
+import Audio exposing (Audio, AudioData)
 import Call exposing (CallId(..), ChannelSidebarMode(..))
 import ChannelDescription
 import ChannelHeader
@@ -94,7 +96,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel_(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1057,8 +1059,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
-                    [ Ports.playSound Nothing "pop"
-                    , Ports.setFavicon "/favicon-red.ico"
+                    [ Ports.setFavicon "/favicon-red.ico"
                     , case model.notificationPermission of
                         Ports.Granted ->
                             let
@@ -1123,8 +1124,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
-                    [ Ports.playSound Nothing "pop"
-                    , Ports.setFavicon "/favicon-red.ico"
+                    [ Ports.setFavicon "/favicon-red.ico"
                     , case model.notificationPermission of
                         Ports.Granted ->
                             Ports.showNotification
@@ -5452,3 +5452,28 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                             ( loggedIn, Command.none )
         )
         model
+
+
+audio : AudioData -> FrontendModel_ -> Audio
+audio _ model =
+    case model of
+        Loading _ ->
+            Audio.silence
+
+        Loaded loaded ->
+            case loaded.loginStatus of
+                LoggedIn loggedIn ->
+                    case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
+                        Just game ->
+                            case loaded.popSound of
+                                Ok popSound ->
+                                    WordSpellingGame.audio popSound game.model
+
+                                Err _ ->
+                                    Audio.silence
+
+                        Nothing ->
+                            Audio.silence
+
+                NotLoggedIn record ->
+                    Audio.silence
