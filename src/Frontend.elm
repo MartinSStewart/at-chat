@@ -5816,7 +5816,7 @@ finalizeWordSpellingDrag time model loggedIn =
                         Just game ->
                             let
                                 ( game2, playSound ) =
-                                    WordSpellingGame.dragEnd time model.windowSize dragging.touches game.shared game.model
+                                    WordSpellingGame.dragEnd time model.windowSize dragging.touches game.setup game.shared game.model
                             in
                             ( setWordSpellingGameModel
                                 local
@@ -5859,8 +5859,8 @@ dragTarget startTouches model =
                 insideBoard : Bool
                 insideBoard =
                     case FrontendExtra.getWordSpellingGameModel local loggedIn model of
-                        Just _ ->
-                            WordSpellingGame.insideBoard model.windowSize centroid
+                        Just data ->
+                            WordSpellingGame.insideBoard data.setup model.windowSize centroid
 
                         Nothing ->
                             False
