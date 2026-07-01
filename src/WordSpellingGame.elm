@@ -1770,10 +1770,12 @@ boardCellAtPosition time windowSize setup model coord =
 trayTileSize : ValidatedSetup -> Coord CssPixels -> Float
 trayTileSize setup windowSize =
     let
-        traySize =
-            toFloat (OneOrGreater.toInt setup.traySize)
+        -- One slot per tray tile plus one more for the replace-tray button drawn next to the tray.
+        slots : Float
+        slots =
+            toFloat (OneOrGreater.toInt setup.traySize + 1)
     in
-    min 50 ((toFloat (Coord.xRaw windowSize) - (trayTileSpacing * (traySize - 1))) / traySize)
+    min 50 ((toFloat (Coord.xRaw windowSize) - (trayTileSpacing * (slots - 1))) / slots)
 
 
 trayTileSpacing : number
@@ -2664,19 +2666,18 @@ statusView windowSize currentUserId localUser setup shared model =
                         (List.Nonempty.toList shared.players)
                     ++ [ case isPlayerTurn localUser.session.userId shared of
                             JoinedAndItsTheirTurn ->
-                                MyUi.simpleButton
-                                    (Dom.id "wordSpellingGame_replaceTray")
-                                    PressedReplaceTrayOrPass
-                                    (case passBehavior setup shared of
-                                        ShouldReplaceTray ->
-                                            Ui.text "Replace tray"
+                                -- The player replaces their tray with the delete button next to the
+                                -- tray (see `boardView`). When no letters are left to draw, replacing
+                                -- isn't possible, so instead offer to pass the turn or end the game.
+                                case passBehavior setup shared of
+                                    ShouldReplaceTray ->
+                                        Ui.none
 
-                                        ShouldPass ->
-                                            Ui.text "Pass turn"
+                                    ShouldPass ->
+                                        MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "Pass turn")
 
-                                        ShouldEndGame ->
-                                            Ui.text "End game"
-                                    )
+                                    ShouldEndGame ->
+                                        MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "End game")
 
                             Joined ->
                                 Ui.none
@@ -3024,6 +3025,54 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         trayWidth =
             Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayTileSpacing - trayX windowSize
 
+        -- A tray-tile sized button next to the tray that replaces the player's tray with fresh
+        -- letters. It's greyed out and does nothing once the letter bag is empty (there's nothing
+        -- to draw); the pass/end button in `statusView` takes over then.
+        replaceTrayButton : Ui.Attribute GameMsg
+        replaceTrayButton =
+            if getWinner shared == Nothing && isPlayerTurn currentUserId shared == JoinedAndItsTheirTurn then
+                let
+                    pos : Coord CssPixels
+                    pos =
+                        trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))
+
+                    buttonSize : Int
+                    buttonSize =
+                        round (trayTileSize setup windowSize)
+
+                    canReplace : Bool
+                    canReplace =
+                        passBehavior setup shared == ShouldReplaceTray
+
+                    attributes : List (Ui.Attribute GameMsg)
+                    attributes =
+                        [ Ui.move { x = Coord.xRaw pos, y = Coord.yRaw pos, z = 0 }
+                        , Ui.width (Ui.px buttonSize)
+                        , Ui.height (Ui.px buttonSize)
+                        , Ui.rounded (buttonSize // 6)
+                        , Ui.contentCenterX
+                        , Ui.contentCenterY
+                        , Ui.Font.color (Ui.rgb 255 255 255)
+                        , Ui.background
+                            (if canReplace then
+                                MyUi.buttonBackground
+
+                             else
+                                MyUi.disabledButtonBackground
+                            )
+                        ]
+                in
+                Ui.inFront
+                    (if canReplace then
+                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.delete)
+
+                     else
+                        Ui.el attributes (Ui.html Icons.delete)
+                    )
+
+            else
+                Ui.noAttr
+
         boardPx : Int
         boardPx =
             gridSize * cellSize2
@@ -3056,6 +3105,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
             Ui.inFront
                 (Ui.el
                     (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
+                        :: replaceTrayButton
                         :: trayHeldTiles
                         ++ [ Ui.inFront
                                 (Ui.el

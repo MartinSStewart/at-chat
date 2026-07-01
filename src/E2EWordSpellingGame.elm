@@ -125,8 +125,8 @@ wordSpellingGameTests normalConfig =
                     , admin.snapshotView 3000 { name = "Place \"amino\"" }
                     , user.snapshotView 0 { name = "Place \"amino\"" }
                     ]
-                , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
-                , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                , user.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , admin.checkView
                     100
                     (Test.Html.Query.has
