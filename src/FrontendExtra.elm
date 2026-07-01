@@ -5463,16 +5463,35 @@ audio _ model =
         Loaded loaded ->
             case loaded.loginStatus of
                 LoggedIn loggedIn ->
-                    case getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
-                        Just game ->
-                            case loaded.popSound of
-                                Ok popSound ->
-                                    WordSpellingGame.audio popSound game.model
+                    case loaded.route of
+                        DmRoute dmRoute ->
+                            let
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                                ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel ->
+                                            case
+                                                ( SeqDict.get messageId dmChannel.games
+                                                , loaded.popSound
+                                                , SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame
+                                                )
+                                            of
+                                                ( Just matchData, Ok popSound, Just gameModel ) ->
+                                                    Game.audio popSound matchData gameModel
 
-                                Err _ ->
+                                                _ ->
+                                                    Audio.silence
+
+                                        Nothing ->
+                                            Audio.silence
+
+                                _ ->
                                     Audio.silence
 
-                        Nothing ->
+                        _ ->
                             Audio.silence
 
                 NotLoggedIn record ->
