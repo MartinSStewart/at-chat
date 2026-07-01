@@ -5783,7 +5783,7 @@ handleTouchEnd time model =
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.Model -> LoggedIn2 -> LoggedIn2
+setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.GameData -> LoggedIn2 -> LoggedIn2
 setWordSpellingGameModel local model game loggedIn =
     case model.route of
         DmRoute dmRoute ->
@@ -5791,7 +5791,7 @@ setWordSpellingGameModel local model game loggedIn =
                 ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
                     { loggedIn
                         | currentDmGame =
-                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGameModel game) loggedIn.currentDmGame
+                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGame_Game game) loggedIn.currentDmGame
                     }
 
                 _ ->

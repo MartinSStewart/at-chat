@@ -1623,7 +1623,7 @@ getWordSpellingGameModel local loggedIn model =
                                             , shared = shared
                                             , model =
                                                 case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
-                                                    Just (Game.WordSpellingGameModel (WordSpellingGame.Game gameModel)) ->
+                                                    Just (Game.WordSpellingGame_Game gameModel) ->
                                                         gameModel
 
                                                     _ ->
@@ -1664,7 +1664,7 @@ routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedI
                         | currentDmGame =
                             SeqDict.insert
                                 ( otherUserId, Just data.matchId )
-                                (Game.WordSpellingGameModel (WordSpellingGame.Game data.model))
+                                (Game.WordSpellingGame_Game data.model)
                                 loggedIn.currentDmGame
                     }
 

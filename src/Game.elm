@@ -45,7 +45,8 @@ import WordSpellingGame
 
 type Model
     = GoModel Go.Model
-    | WordSpellingGameModel WordSpellingGame.Model
+    | WordSpellingGame_Setup WordSpellingGame.SetupModel
+    | WordSpellingGame_Game WordSpellingGame.GameData
 
 
 type BackendGameData
@@ -320,7 +321,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
             case maybeMatch of
                 Just ( _, MatchData matchData ) ->
                     case ( matchData.data, model ) of
-                        ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGameModel (WordSpellingGame.Game gameModel)) ) ->
+                        ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game gameModel) ) ->
                             let
                                 ( notSharedModel, outMsgs ) =
                                     WordSpellingGame.updateGame
@@ -340,7 +341,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                         Nothing ->
                                             newMatchId
                             in
-                            ( WordSpellingGameModel (WordSpellingGame.Game notSharedModel) |> Just
+                            ( WordSpellingGame_Game notSharedModel |> Just
                             , List.concatMap
                                 (\outMsg ->
                                     case outMsg of
@@ -369,14 +370,14 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         WordSpellingSetupMsg wordSpellingGameMsg ->
             let
-                ( notSharedModel, outMsgs ) =
+                ( model2, outMsgs ) =
                     WordSpellingGame.updateSetup
                         time
                         currentUserId
                         wordSpellingGameMsg
                         (case model of
-                            Just (WordSpellingGameModel (WordSpellingGame.Setup gameModel)) ->
-                                gameModel
+                            Just (WordSpellingGame_Setup setup) ->
+                                setup
 
                             _ ->
                                 WordSpellingGame.initSetup
@@ -391,7 +392,12 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         Nothing ->
                             newMatchId
             in
-            ( WordSpellingGameModel notSharedModel |> Just
+            ( case model2 of
+                WordSpellingGame.Setup setup ->
+                    WordSpellingGame_Setup setup |> Just
+
+                WordSpellingGame.Game game ->
+                    WordSpellingGame_Game game |> Just
             , List.concatMap
                 (\outMsg ->
                     case outMsg of
@@ -418,7 +424,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                     ( Just (GoModel (Go.Setup Go.initSetup)), [] )
 
                 Game_WordSpellingGame ->
-                    ( Just (WordSpellingGameModel (WordSpellingGame.Setup WordSpellingGame.initSetup)), [] )
+                    ( Just (WordSpellingGame_Setup WordSpellingGame.initSetup), [] )
 
         PressedReset ->
             ( Nothing, [ OutSelectMatch Nothing ] )
@@ -447,94 +453,92 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
     in
-    Ui.el
-        [ Ui.height (Ui.px (Go.viewHeight windowSize))
-        , Ui.scrollable
-        , Ui.background MyUi.tabBackground
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , MyUi.noShrinking
-        ]
-        (case maybeMatchId of
-            Just matchId ->
-                case SeqDict.get matchId matches of
-                    Just (MatchData match) ->
-                        case match.data of
-                            FrontendGameData_Go setup _ cache ->
-                                Ui.column
-                                    [ Ui.spacing 8 ]
-                                    [ Ui.el [ Ui.padding 8 ] (goShareView lastCopied matchId match.publicLink)
-                                    , Go.gameView
+    case maybeMatchId of
+        Just matchId ->
+            case SeqDict.get matchId matches of
+                Just (MatchData match) ->
+                    case match.data of
+                        FrontendGameData_Go setup _ cache ->
+                            Ui.column
+                                [ Ui.height (Ui.px (Go.viewHeight windowSize))
+                                , Ui.scrollable
+                                , Ui.background MyUi.tabBackground
+                                , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                                , Ui.borderColor MyUi.border2
+                                , MyUi.noShrinking
+                                , Ui.spacing 8
+                                ]
+                                [ Ui.el [ Ui.padding 8 ] (goShareView lastCopied matchId match.publicLink)
+                                , Go.gameView
+                                    currentTime
+                                    windowSize
+                                    localUser
+                                    setup
+                                    cache
+                                    (case model of
+                                        Just (GoModel (Go.Game game)) ->
+                                            game
+
+                                        _ ->
+                                            Go.initGame
+                                    )
+                                    |> Ui.map GoGameMsg
+                                ]
+
+                        FrontendGameData_WordSpellingGame setup _ cache ->
+                            case model of
+                                Just (WordSpellingGame_Game game) ->
+                                    WordSpellingGame.gameView
                                         currentTime
                                         windowSize
+                                        maybeDragging
                                         localUser
                                         setup
                                         cache
-                                        (case model of
-                                            Just (GoModel (Go.Game game)) ->
-                                                game
+                                        game
+                                        |> Ui.map WordSpellingGameMsg
 
-                                            _ ->
-                                                Go.initGame
-                                        )
-                                        |> Ui.map GoGameMsg
-                                    ]
+                                _ ->
+                                    matchNotFound
 
-                            FrontendGameData_WordSpellingGame setup _ cache ->
-                                case model of
-                                    Just (WordSpellingGameModel (WordSpellingGame.Game game)) ->
-                                        WordSpellingGame.gameView
-                                            currentTime
-                                            windowSize
-                                            maybeDragging
-                                            localUser
-                                            setup
-                                            cache
-                                            game
-                                            |> Ui.map WordSpellingGameMsg
+                Nothing ->
+                    matchNotFound
 
-                                    _ ->
-                                        matchNotFound
+        Nothing ->
+            Ui.column
+                [ Ui.height (Ui.px (Go.viewHeight windowSize))
+                , Ui.scrollable
+                , Ui.background MyUi.tabBackground
+                , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                , Ui.borderColor MyUi.border2
+                , MyUi.noShrinking
+                ]
+                [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
+                , case model of
+                    Just (GoModel model2) ->
+                        Go.setupView
+                            (localUser.session.userId == otherUserId)
+                            windowSize
+                            (case model2 of
+                                Go.Setup setup ->
+                                    setup
+
+                                _ ->
+                                    Go.initSetup
+                            )
+                            |> Ui.map GoSetupMsg
+
+                    Just (WordSpellingGame_Game _) ->
+                        WordSpellingGame.setupView windowSize WordSpellingGame.initSetup |> Ui.map WordSpellingSetupMsg
+
+                    Just (WordSpellingGame_Setup setup) ->
+                        WordSpellingGame.setupView windowSize setup |> Ui.map WordSpellingSetupMsg
 
                     Nothing ->
-                        matchNotFound
-
-            Nothing ->
-                Ui.column
-                    []
-                    [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
-                    , case model of
-                        Just (GoModel model2) ->
-                            Go.setupView
-                                (localUser.session.userId == otherUserId)
-                                windowSize
-                                (case model2 of
-                                    Go.Setup setup ->
-                                        setup
-
-                                    _ ->
-                                        Go.initSetup
-                                )
-                                |> Ui.map GoSetupMsg
-
-                        Just (WordSpellingGameModel model2) ->
-                            WordSpellingGame.setupView
-                                windowSize
-                                (case model2 of
-                                    WordSpellingGame.Setup setup ->
-                                        setup
-
-                                    _ ->
-                                        WordSpellingGame.initSetup
-                                )
-                                |> Ui.map WordSpellingSetupMsg
-
-                        Nothing ->
-                            Ui.row
-                                [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
-                                (List.map gameSelectButton allGames)
-                    ]
-        )
+                        Ui.row
+                            [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
+                            (List.map gameSelectButton allGames)
+                ]
 
 
 matchNotFound : Element msg
