@@ -1,7 +1,5 @@
 module E2EWordSpellingGame exposing (wordSpellingGameTests)
 
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -26,10 +24,6 @@ wordSpellingGameTests normalConfig =
             E2EHelper.tallDesktopWindow
             (\admin user ->
                 let
-                    windowSize : Coord CssPixels
-                    windowSize =
-                        Coord.xy E2EHelper.tallDesktopWindow.width E2EHelper.tallDesktopWindow.height
-
                     pointerEvent : ( Float, Float ) -> Json.Encode.Value
                     pointerEvent ( x, y ) =
                         Json.Encode.object
@@ -56,7 +50,7 @@ wordSpellingGameTests normalConfig =
                     -- is directly below it.
                     trayTile : Float -> ( Float, Float )
                     trayTile index =
-                        ( 283 + index * 54, WordSpellingGame.trayY windowSize |> toFloat )
+                        ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
 
                     boardCell : Int -> Int -> ( Float, Float )
                     boardCell cx cy =
@@ -79,7 +73,7 @@ wordSpellingGameTests normalConfig =
                     [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
                     , dragTile 100 admin (trayTile 1) (boardCell 8 7)
                     , dragTile 100 admin (trayTile 3) (boardCell 9 7)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
                     , admin.snapshotView 3000 { name = "Place invalid word" }
                     , user.snapshotView 0 { name = "Place invalid word" }
                     ]
@@ -98,7 +92,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 user (trayTile 4) (boardCell 7 7)
                     , dragTile 100 user (trayTile 5) (boardCell 7 8)
                     , dragTile 100 user (trayTile 1) (boardCell 7 9)
-                    , user.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
                     , admin.snapshotView 3000 { name = "Place \"site\"" }
                     , user.snapshotView 0 { name = "Place \"site\"" }
                     ]
@@ -108,7 +102,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 admin (trayTile 3) (boardCell 9 10)
                     , dragTile 100 admin (trayTile 2) (boardCell 8 10)
                     , dragTile 100 admin (trayTile 1) (boardCell 7 10)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_10")
                     , admin.snapshotView 3000 { name = "Place \"said\"" }
                     , user.snapshotView 0 { name = "Place \"said\"" }
                     ]
@@ -118,7 +112,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 user (trayTile 3) (boardCell 12 11)
                     , dragTile 100 user (trayTile 6) (boardCell 10 11)
                     , dragTile 100 user (trayTile 4) (boardCell 11 11)
-                    , user.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , user.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_11")
                     , admin.snapshotView 3000 { name = "Place \"note\"" }
                     , user.snapshotView 0 { name = "Place \"note\"" }
                     ]
@@ -127,7 +121,7 @@ wordSpellingGameTests normalConfig =
                     [ dragTile 100 admin (trayTile 1) (boardCell 9 8)
                     , dragTile 100 admin (trayTile 6) (boardCell 9 9)
                     , dragTile 100 admin (trayTile 5) (boardCell 9 12)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitWord")
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_v_9_8")
                     , admin.snapshotView 3000 { name = "Place \"amino\"" }
                     , user.snapshotView 0 { name = "Place \"amino\"" }
                     ]
