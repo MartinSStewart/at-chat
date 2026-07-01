@@ -40,6 +40,7 @@ module WordSpellingGame exposing
     , setupView
     , tileSlideDuration
     , tileSlideStagger
+    , trayDropSlot
     , trayY
     , updateAction
     , updateGame
@@ -2053,6 +2054,23 @@ distanceToTray setup windowSize coord slotCount =
     sqrt (toFloat (dx * dx + dy * dy))
 
 
+{-| The tray slot a dropped tile lands in, given the tray tile size, the tray's left edge, the
+dropped tile's centre x (the tile is drawn centred on the cursor while dragging) and the number of
+slots.
+
+We snap to the slot whose centre is nearest the cursor. Subtracting half a tile is what lines the
+cursor up with slot _centres_ rather than slot _left edges_: without it a tile dropped anywhere right
+of a slot's centre snaps a whole slot too far to the right.
+
+-}
+trayDropSlot : Float -> Int -> Int -> Int -> Int
+trayDropSlot tileSize trayLeft centerX slotCount =
+    (toFloat (centerX - trayLeft) - tileSize / 2)
+        / (tileSize + trayTileSpacing)
+        |> round
+        |> clamp 0 (slotCount - 1)
+
+
 {-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
 slot and the nearest empty slot over by one to make room.
 -}
@@ -2065,10 +2083,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
 
         target : Int
         target =
-            toFloat (Coord.xRaw position - trayX windowSize)
-                / (trayTileSize setup windowSize + trayTileSpacing)
-                |> round
-                |> clamp 0 (slotCount - 1)
+            trayDropSlot (trayTileSize setup windowSize) (trayX windowSize) (Coord.xRaw position) slotCount
 
         occupied : Set Int
         occupied =
