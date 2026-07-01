@@ -12,13 +12,13 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, LoginTokenData(..), ToBackend, ToFrontend)
 
 
 loginTests :
     Bool
-    -> T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 loginTests isMobile normalConfig =
     let
         windowSize : { width : number, height : number }

@@ -4,6 +4,7 @@ module Audio exposing
     , Audio, audio, group, silence, length, audioWithConfig, audioDefaultConfig, PlayAudioConfig, LoopConfig
     , scaleVolume, scaleVolumeAt, offsetBy
     , lamderaFrontendWithAudio, migrateModel, migrateMsg
+    , userModel, userMsg
     )
 
 {-|
@@ -80,6 +81,16 @@ type alias Model_ userMsg userModel =
     , samplesPerSecond : Maybe Int
     , sourceData : Dict Int SourceData
     }
+
+
+userModel : Model userMsg userModel -> userModel
+userModel (Model model) =
+    model.userModel
+
+
+userMsg : userMsg -> Msg userMsg
+userMsg =
+    UserMsg
 
 
 type alias SourceData =
@@ -359,8 +370,8 @@ migrateMsg msgMigrate msg =
         FromJSMsg fromJSMsg ->
             ( FromJSMsg fromJSMsg, Command.none )
 
-        UserMsg userMsg ->
-            msgMigrate userMsg |> Tuple.mapFirst UserMsg
+        UserMsg userMsg2 ->
+            msgMigrate userMsg2 |> Tuple.mapFirst UserMsg
 
 
 updateHelper :
@@ -499,8 +510,8 @@ update :
     -> ( Model userMsg userModel, Command FrontendOnly toMsg (Msg userMsg) )
 update app msg (Model model) =
     case msg of
-        UserMsg userMsg ->
-            updateHelper app.audioPort.toJS app.audio (flip app.update userMsg) (Model model)
+        UserMsg userMsg2 ->
+            updateHelper app.audioPort.toJS app.audio (flip app.update userMsg2) (Model model)
 
         FromJSMsg response ->
             case response of
@@ -518,7 +529,7 @@ update app msg (Model model) =
                                     Dict.insert (rawBufferId bufferId) { duration = duration } model.sourceData
                             in
                             case maybeUserMsg of
-                                Just ( _, userMsg ) ->
+                                Just ( _, userMsg2 ) ->
                                     { model
                                         | pendingRequests = Dict.remove requestId model.pendingRequests
                                         , sourceData = sourceData
@@ -527,7 +538,7 @@ update app msg (Model model) =
                                         |> updateHelper
                                             app.audioPort.toJS
                                             app.audio
-                                            (flip app.update userMsg)
+                                            (flip app.update userMsg2)
 
                                 Nothing ->
                                     { model
@@ -557,13 +568,13 @@ update app msg (Model model) =
                                     Nonempty.toList pendingRequest.userMsg |> find (Tuple.first >> (==) a)
                             in
                             case b of
-                                Just ( _, userMsg ) ->
+                                Just ( _, userMsg2 ) ->
                                     { model | pendingRequests = Dict.remove requestId model.pendingRequests }
                                         |> Model
                                         |> updateHelper
                                             app.audioPort.toJS
                                             app.audio
-                                            (flip app.update userMsg)
+                                            (flip app.update userMsg2)
 
                                 Nothing ->
                                     { model | pendingRequests = Dict.remove requestId model.pendingRequests }
@@ -1157,8 +1168,8 @@ enumeratedResults =
 {-| Load audio from a url.
 -}
 loadAudio : (Result LoadError Source -> msg) -> String -> AudioCmd msg
-loadAudio userMsg url =
+loadAudio userMsg2 url =
     AudioLoadRequest
-        { userMsg = Nonempty.map (\results -> ( results, userMsg results )) enumeratedResults
+        { userMsg = Nonempty.map (\results -> ( results, userMsg2 results )) enumeratedResults
         , audioUrl = url
         }
