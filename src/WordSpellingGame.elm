@@ -1294,16 +1294,19 @@ boardZoomScale =
 
 
 {-| On mobile, once the player has placed one or more tiles on the board this turn, the board is
-zoomed in on the centroid of those tiles so the surrounding cells are larger and easier to tap. The
-board's on-screen rectangle stays the same size, so the zoomed-in board is clipped to it.
+zoomed in and centred on the centroid of those tiles so the surrounding cells are larger and easier
+to tap. The board's on-screen square stays the same size, so the zoomed-in board is clipped to it.
+The centre is clamped so the visible window never runs off the edge of the board (no blank space
+shows beyond the board), which means the centroid sits dead centre only when it's far enough from
+every edge.
 
-Returns the scale factor and the screen-space focal point (the centroid of the placed tiles'
-centres), or `Nothing` when there's no zoom (not on mobile, or no tiles placed yet). The transform
-keeps the focal point fixed on screen and scales everything else around it (see `project` in
-`boardView` and `unprojectTouch`).
+Returns the drawn (zoomed) cell size and the board-local translation that positions the zoomed grid,
+or `Nothing` when there's no zoom (not on mobile, or no tiles placed yet). Both `project` in
+`boardView` and `unprojectTouch` are defined in terms of these two values, so the drawn board and the
+touch hit-testing always agree.
 
 -}
-boardZoom : Coord CssPixels -> GameData -> Maybe { scale : Float, focus : Coord CssPixels }
+boardZoom : Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
 boardZoom windowSize model =
     if MyUi.isMobile { windowSize = windowSize } then
         let
@@ -1336,13 +1339,47 @@ boardZoom windowSize model =
                     count : Int
                     count =
                         List.length centers
+
+                    zc : Int
+                    zc =
+                        round (boardZoomScale * toFloat size)
+
+                    -- The effective scale is derived from the rounded cell size so that the drawn
+                    -- grid, the tiles and the touch hit-testing all line up exactly.
+                    effScale : Float
+                    effScale =
+                        toFloat zc / toFloat size
+
+                    boardPx : Int
+                    boardPx =
+                        gridSize * size
+
+                    -- The width/height, in unzoomed board pixels, of the region that stays visible.
+                    window : Float
+                    window =
+                        toFloat boardPx / effScale
+
+                    -- The board-local translation for one axis: centre the visible window on the
+                    -- centroid, but clamp it so the window can't run past either edge of the board.
+                    axisTranslate : Int -> Int -> Int
+                    axisTranslate focus boardOrigin =
+                        let
+                            focusLocal : Float
+                            focusLocal =
+                                toFloat (focus - boardOrigin)
+
+                            left : Float
+                            left =
+                                clamp 0 (toFloat boardPx - window) (focusLocal - window / 2)
+                        in
+                        round (-effScale * left)
                 in
                 Just
-                    { scale = boardZoomScale
-                    , focus =
+                    { zoomedCellSize = zc
+                    , translate =
                         Coord.xy
-                            (List.sum (List.map Tuple.first centers) // count)
-                            (List.sum (List.map Tuple.second centers) // count)
+                            (axisTranslate (List.sum (List.map Tuple.first centers) // count) (boardX windowSize))
+                            (axisTranslate (List.sum (List.map Tuple.second centers) // count) boardY)
                     }
 
     else
@@ -1350,16 +1387,25 @@ boardZoom windowSize model =
 
 
 {-| Map a screen touch position back into the board's unzoomed coordinate space, so the existing
-cell math (`cellAtPosition`) resolves it to the right cell even while the board is zoomed in. Without
-zoom this is the identity.
+cell math (`cellAtPosition`) resolves it to the right cell even while the board is zoomed in. This is
+the exact inverse of the `project` transform in `boardView`. Without zoom it's the identity.
 -}
 unprojectTouch : Coord CssPixels -> GameData -> Coord CssPixels -> Coord CssPixels
 unprojectTouch windowSize model coord =
     case boardZoom windowSize model of
-        Just { scale, focus } ->
+        Just { zoomedCellSize, translate } ->
+            let
+                effScale : Float
+                effScale =
+                    toFloat zoomedCellSize / toFloat (cellSize windowSize)
+
+                unproject : Int -> Int -> Int -> Int
+                unproject axis boardOrigin axisTranslate =
+                    boardOrigin + round ((toFloat (axis - boardOrigin) - toFloat axisTranslate) / effScale)
+            in
             Coord.xy
-                (Coord.xRaw focus + round (toFloat (Coord.xRaw coord - Coord.xRaw focus) / scale))
-                (Coord.yRaw focus + round (toFloat (Coord.yRaw coord - Coord.yRaw focus) / scale))
+                (unproject (Coord.xRaw coord) (boardX windowSize) (Coord.xRaw translate))
+                (unproject (Coord.yRaw coord) boardY (Coord.yRaw translate))
 
         Nothing ->
             coord
@@ -2335,7 +2381,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         cellSize2 =
             cellSize windowSize
 
-        zoom : Maybe { scale : Float, focus : Coord CssPixels }
+        zoom : Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
         zoom =
             boardZoom windowSize model
 
@@ -2344,21 +2390,19 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         zoomedCellSize : Int
         zoomedCellSize =
             case zoom of
-                Just { scale } ->
-                    round (scale * toFloat cellSize2)
+                Just z ->
+                    z.zoomedCellSize
 
                 Nothing ->
                     cellSize2
 
-        -- How far the zoomed board content is shifted (in board-local coordinates) so that the
-        -- focal point stays put while everything scales around it.
+        -- How far the zoomed board content is shifted (in board-local coordinates) so the visible
+        -- window is centred on the centroid of the placed tiles (clamped to the board edges).
         boardTranslate : Coord CssPixels
         boardTranslate =
             case zoom of
-                Just { scale, focus } ->
-                    Coord.xy
-                        (round ((1 - scale) * toFloat (Coord.xRaw focus - boardX windowSize)))
-                        (round ((1 - scale) * toFloat (Coord.yRaw focus - boardY)))
+                Just z ->
+                    z.translate
 
                 Nothing ->
                     Coord.origin
