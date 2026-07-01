@@ -256,7 +256,9 @@ exports.init = async function init(app)
       }
     }
 
-    customElements.define('lottie-player', LottiePlayer);
+    if (!customElements.get('lottie-player')) {
+        customElements.define('lottie-player', LottiePlayer);
+    }
 
     class AnimatedImagePlayer extends HTMLElement {
       static get observedAttributes() { return ['src', 'start-playing']; }
@@ -333,7 +335,9 @@ exports.init = async function init(app)
       }
     }
 
-    customElements.define('animated-image-player', AnimatedImagePlayer);
+    if (!customElements.get('animated-image-player')) {
+        customElements.define('animated-image-player', AnimatedImagePlayer);
+    }
 
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
