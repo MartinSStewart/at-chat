@@ -197,6 +197,7 @@ subscriptions model =
                                         if
                                             WordSpellingGame.isAnimating loaded.time data.shared
                                                 || WordSpellingGame.anyTileAnimating loaded.time data.model
+                                                || WordSpellingGame.isZoomAnimating loaded.time loaded.windowSize data.model
                                         then
                                             Effect.Browser.Events.onAnimationFrame GotTime
 
@@ -1622,6 +1623,7 @@ updateLoaded msg model =
                                                         local2
                                                         model
                                                         (WordSpellingGame.dragStart
+                                                            time
                                                             model.windowSize
                                                             startTouches
                                                             data.setup
