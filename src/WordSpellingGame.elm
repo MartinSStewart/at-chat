@@ -63,6 +63,7 @@ import Go exposing (TimeControl)
 import Html
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (Id, UserId)
 import IdArray exposing (IdArray)
 import List.Extra
@@ -131,7 +132,7 @@ type SetupMsg
 {-| OpaqueVariants
 -}
 type GameMsg
-    = PressedSubmitWord
+    = PressedSubmitWord PlacedWord
     | PressedJoinGame
     | PressedReplaceTrayOrPass
 
@@ -944,24 +945,41 @@ updateSetup time currentUserId msg setup =
 updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
 updateGame time currentUserId setup shared msg model =
     case msg of
-        PressedSubmitWord ->
-            case checkValidPlacement currentUserId shared model of
-                Ok placement ->
+        PressedSubmitWord placement ->
+            case placeWord shared.board placement of
+                Just result ->
                     let
-                        remainingTray =
-                            Array.filter
-                                (\tile ->
+                        -- The board cells this line actually consumes (its newly placed tiles).
+                        lineCells : Set ( Int, Int )
+                        lineCells =
+                            List.map Tuple.first result.placedCells |> Set.fromList
+
+                        -- Keep the tiles still in the tray as-is, and send any tiles the player left
+                        -- on the board that aren't part of this line (stray letters) back to the
+                        -- tray. The line's own tiles are consumed and replaced by freshly drawn ones.
+                        kept : Array Tile
+                        kept =
+                            Array.foldl
+                                (\tile acc ->
                                     case tile.position of
                                         TileInTray _ _ ->
-                                            True
+                                            Array.push tile acc
 
-                                        TileOnBoard _ ->
-                                            False
+                                        TileOnBoard cell ->
+                                            if Set.member cell lineCells then
+                                                acc
+
+                                            else
+                                                Array.push
+                                                    { tile | position = TileInTray (firstOpenTrayIndex Nothing acc) Nothing }
+                                                    acc
                                 )
+                                Array.empty
                                 model.tiles
                     in
                     ( { model
                         | invalidPlacement = Nothing
+                        , dragging = Nothing
                         , tiles =
                             List.foldl
                                 (\index tray ->
@@ -971,8 +989,8 @@ updateGame time currentUserId setup shared msg model =
                                         }
                                         tray
                                 )
-                                remainingTray
-                                (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length remainingTray - 1))
+                                kept
+                                (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length kept - 1))
                       }
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
@@ -981,14 +999,8 @@ updateGame time currentUserId setup shared msg model =
                       ]
                     )
 
-                Err () ->
-                    -- The placement is geometrically invalid. If the player has tiles on the board,
-                    -- flag it so the view shows the hint and shakes those tiles.
-                    if Array.Extra.any (\tile -> isTileOnBoard tile) model.tiles then
-                        ( { model | invalidPlacement = Just time }, [] )
-
-                    else
-                        ( model, [] )
+                Nothing ->
+                    ( model, [] )
 
         PressedJoinGame ->
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
@@ -999,70 +1011,234 @@ updateGame time currentUserId setup shared msg model =
             )
 
 
-{-| Turn the tiles the local player has dragged onto the board into a `PlacedWord`, or `Err` if
-the placement isn't a valid word. The tiles the player holds are the current player's tray, in
-the same order as `GameData.tiles` (see `boardView`).
+{-| The tiles the local player has dragged onto the board this turn, paired with the letter each
+holds (their tray is index-aligned with `GameData.tiles`; see `boardView`).
+-}
+placedTiles : Id UserId -> Shared -> GameData -> List ( ( Int, Int ), LetterOrWildcard )
+placedTiles currentUserId shared model =
+    case getPlayer currentUserId shared of
+        Just player ->
+            List.map2 Tuple.pair (Array.toList model.tiles) (IdArray.toList player.tray)
+                |> List.filterMap
+                    (\( tile, letter ) ->
+                        case tile.position of
+                            TileOnBoard cell ->
+                                Just ( cell, letter )
 
-A placement is valid when:
+                            TileInTray _ _ ->
+                                Nothing
+                    )
 
-  - at least one tile was placed on the board,
-  - the placed tiles all lie in a single row or column,
-  - the run from the first to the last placed tile has no gaps (any cell between them that wasn't
-    placed must already hold a committed tile), and
-  - the word connects to the rest of the board: the first word of the game must cover the centre
-    square, and every later word must touch a tile already on the board.
+        Nothing ->
+            []
 
-Wildcard tiles are allowed; the letter a wildcard stands for is decided later, when the word is
-checked against the dictionary on the backend (see `wordIsValid`).
+
+{-| Every word the player could submit from the tiles they've placed on the board this turn. Each
+straight run of the player's placed tiles (two or more collinear tiles, bridged by any committed
+tiles between them, or a lone tile that extends an existing word) that forms a valid placement
+becomes one entry, along with the board cell next to which its submit button is drawn.
+
+A player can end up with several placed runs at once (e.g. tiles that cross, or a stray tile left
+elsewhere); each valid run gets its own button, and submitting one returns the other placed tiles to
+the tray (see `updateGame`). Whether the formed words are real dictionary words is still decided on
+the backend (see `wordIsValid`).
 
 -}
-checkValidPlacement : Id UserId -> Shared -> GameData -> Result () PlacedWord
-checkValidPlacement currentUserId shared notShared =
+submittableLines : Id UserId -> Shared -> GameData -> List { placedWord : PlacedWord, buttonCell : ( Int, Int ) }
+submittableLines currentUserId shared model =
     let
         placed : List ( ( Int, Int ), LetterOrWildcard )
         placed =
-            case getPlayer currentUserId shared of
-                Just player ->
-                    List.map2 Tuple.pair (Array.toList notShared.tiles) (IdArray.toList player.tray)
-                        |> List.filterMap
-                            (\( tile, letter ) ->
-                                case tile.position of
-                                    TileOnBoard cell ->
-                                        Just ( cell, letter )
+            placedTiles currentUserId shared model
 
-                                    TileInTray _ _ ->
-                                        Nothing
-                            )
+        placedCells : Set ( Int, Int )
+        placedCells =
+            List.map Tuple.first placed |> Set.fromList
 
-                Nothing ->
-                    []
+        runsFor : Bool -> List ( Bool, List ( ( Int, Int ), LetterOrWildcard ) )
+        runsFor isVertical =
+            lineRuns isVertical shared.board placed
+                |> List.filter (\run -> List.length run >= 2)
+                |> List.map (\run -> ( isVertical, run ))
+
+        bigRuns : List ( Bool, List ( ( Int, Int ), LetterOrWildcard ) )
+        bigRuns =
+            runsFor False ++ runsFor True
+
+        inBigRun : Set ( Int, Int )
+        inBigRun =
+            List.concatMap (\( _, run ) -> List.map Tuple.first run) bigRuns |> Set.fromList
+
+        -- A placed tile that isn't part of any two-tile run is on its own; it can still be a valid
+        -- play if it extends a committed word.
+        loneRuns : List ( Bool, List ( ( Int, Int ), LetterOrWildcard ) )
+        loneRuns =
+            placed
+                |> List.filter (\( cell, _ ) -> not (Set.member cell inBigRun))
+                |> List.map (\tile -> ( False, [ tile ] ))
     in
-    case placed of
-        ( firstCell, _ ) :: _ ->
-            let
-                cells : List ( Int, Int )
-                cells =
-                    List.map Tuple.first placed
+    (bigRuns ++ loneRuns)
+        |> List.filterMap
+            (\( isVertical, run ) ->
+                case buildPlacedWord isVertical shared run of
+                    Ok placedWord ->
+                        Just
+                            { placedWord = placedWord
+                            , buttonCell = submitButtonCell isVertical (List.map Tuple.first run) placedCells shared.board
+                            }
 
-                sameRow : Bool
-                sameRow =
-                    List.all (\( _, y ) -> y == Tuple.second firstCell) cells
+                    Err () ->
+                        Nothing
+            )
 
-                sameColumn : Bool
-                sameColumn =
-                    List.all (\( x, _ ) -> x == Tuple.first firstCell) cells
-            in
-            if sameRow then
-                buildPlacedWord False shared placed
 
-            else if sameColumn then
-                buildPlacedWord True shared placed
+{-| Split the placed tiles into maximal straight runs along one axis. Two placed tiles are in the
+same run when they share the line (same row for horizontal, same column for vertical) and every cell
+between them is filled, either by another placed tile or a committed one.
+-}
+lineRuns : Bool -> SeqDict ( Int, Int ) LetterOrWildcard -> List ( ( Int, Int ), LetterOrWildcard ) -> List (List ( ( Int, Int ), LetterOrWildcard ))
+lineRuns isVertical board placed =
+    let
+        lineKey : ( Int, Int ) -> Int
+        lineKey ( x, y ) =
+            if isVertical then
+                x
 
             else
-                Err ()
+                y
 
-        [] ->
-            Err ()
+        linePos : ( Int, Int ) -> Int
+        linePos ( x, y ) =
+            if isVertical then
+                y
+
+            else
+                x
+
+        cellAt : Int -> Int -> ( Int, Int )
+        cellAt key pos =
+            if isVertical then
+                ( key, pos )
+
+            else
+                ( pos, key )
+
+        bridged : Int -> Int -> Int -> Bool
+        bridged key from to =
+            List.range (from + 1) (to - 1)
+                |> List.all (\pos -> SeqDict.member (cellAt key pos) board)
+
+        groups : List (List ( ( Int, Int ), LetterOrWildcard ))
+        groups =
+            List.foldr
+                (\item dict -> Dict.update (lineKey (Tuple.first item)) (\m -> Just (item :: Maybe.withDefault [] m)) dict)
+                Dict.empty
+                placed
+                |> Dict.values
+    in
+    List.concatMap
+        (\group ->
+            let
+                key : Int
+                key =
+                    case group of
+                        ( cell, _ ) :: _ ->
+                            lineKey cell
+
+                        [] ->
+                            0
+
+                sorted : List ( ( Int, Int ), LetterOrWildcard )
+                sorted =
+                    List.sortBy (\( cell, _ ) -> linePos cell) group
+            in
+            List.foldl
+                (\item runs ->
+                    case runs of
+                        currentRun :: doneRuns ->
+                            case currentRun of
+                                ( lastCell, _ ) :: _ ->
+                                    if bridged key (linePos lastCell) (linePos (Tuple.first item)) then
+                                        (item :: currentRun) :: doneRuns
+
+                                    else
+                                        [ item ] :: currentRun :: doneRuns
+
+                                [] ->
+                                    [ item ] :: doneRuns
+
+                        [] ->
+                            [ [ item ] ]
+                )
+                []
+                sorted
+                |> List.map List.reverse
+        )
+        groups
+
+
+{-| The board cell next to which a line's submit button is drawn: the cell just past the end of the
+line, or just before its start, preferring whichever is on the board and unoccupied.
+-}
+submitButtonCell : Bool -> List ( Int, Int ) -> Set ( Int, Int ) -> SeqDict ( Int, Int ) LetterOrWildcard -> ( Int, Int )
+submitButtonCell isVertical runCells placedCells board =
+    let
+        linePos : ( Int, Int ) -> Int
+        linePos ( x, y ) =
+            if isVertical then
+                y
+
+            else
+                x
+
+        sorted : List ( Int, Int )
+        sorted =
+            List.sortBy linePos runCells
+
+        ( dx, dy ) =
+            if isVertical then
+                ( 0, 1 )
+
+            else
+                ( 1, 0 )
+
+        onBoard : ( Int, Int ) -> Bool
+        onBoard ( x, y ) =
+            x >= 0 && y >= 0 && x < gridSize && y < gridSize
+
+        vacant : ( Int, Int ) -> Bool
+        vacant cell =
+            not (SeqDict.member cell board) && not (Set.member cell placedCells)
+
+        afterEnd : ( Int, Int )
+        afterEnd =
+            case List.Extra.last sorted of
+                Just ( x, y ) ->
+                    ( x + dx, y + dy )
+
+                Nothing ->
+                    ( 0, 0 )
+
+        beforeStart : ( Int, Int )
+        beforeStart =
+            case List.head sorted of
+                Just ( x, y ) ->
+                    ( x - dx, y - dy )
+
+                Nothing ->
+                    ( 0, 0 )
+    in
+    if onBoard afterEnd && vacant afterEnd then
+        afterEnd
+
+    else if onBoard beforeStart && vacant beforeStart then
+        beforeStart
+
+    else if onBoard afterEnd then
+        afterEnd
+
+    else
+        beforeStart
 
 
 buildPlacedWord : Bool -> Shared -> List ( ( Int, Int ), LetterOrWildcard ) -> Result () PlacedWord
@@ -2336,31 +2512,30 @@ statusView windowSize currentUserId localUser setup shared model =
                             JoinedAndItsTheirTurn ->
                                 Ui.column
                                     [ Ui.spacing 8 ]
-                                    [ Ui.row
-                                        [ Ui.spacing 16 ]
-                                        [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                                        , MyUi.simpleButton
-                                            (Dom.id "wordSpellingGame_replaceTray")
-                                            PressedReplaceTrayOrPass
-                                            (case passBehavior setup shared of
-                                                ShouldReplaceTray ->
-                                                    Ui.text "Replace tray"
+                                    [ MyUi.simpleButton
+                                        (Dom.id "wordSpellingGame_replaceTray")
+                                        PressedReplaceTrayOrPass
+                                        (case passBehavior setup shared of
+                                            ShouldReplaceTray ->
+                                                Ui.text "Replace tray"
 
-                                                ShouldPass ->
-                                                    Ui.text "Pass turn"
+                                            ShouldPass ->
+                                                Ui.text "Pass turn"
 
-                                                ShouldEndGame ->
-                                                    Ui.text "End game"
-                                            )
-                                        ]
-                                    , case model.invalidPlacement of
-                                        Just _ ->
-                                            Ui.el
-                                                [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
-                                                (Ui.text "Tiles must all be on one column or row and connected")
+                                            ShouldEndGame ->
+                                                Ui.text "End game"
+                                        )
 
-                                        Nothing ->
-                                            Ui.none
+                                    -- When the player has tiles on the board but none of them form
+                                    -- a submittable word, there's no send button to press, so nudge
+                                    -- them towards a valid placement.
+                                    , if Array.Extra.any isTileOnBoard model.tiles && List.isEmpty (submittableLines currentUserId shared model) then
+                                        Ui.el
+                                            [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
+                                            (Ui.text "Tiles must form a connected row or column")
+
+                                      else
+                                        Ui.none
                                     ]
 
                             Joined ->
@@ -2647,6 +2822,63 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 Nothing ->
                     Ui.noAttr
 
+        -- A small send-icon button next to every valid word the player has placed. Hidden while a
+        -- tile is being dragged, when it isn't the player's turn, or once the game is over.
+        lineButtons : List (Ui.Attribute GameMsg)
+        lineButtons =
+            if
+                (model.dragging == Nothing)
+                    && (getWinner shared == Nothing)
+                    && (isPlayerTurn currentUserId shared == JoinedAndItsTheirTurn)
+            then
+                submittableLines currentUserId shared model
+                    |> List.map
+                        (\line ->
+                            let
+                                ( bx, by ) =
+                                    line.buttonCell
+
+                                p : { pos : Coord CssPixels, size : Int }
+                                p =
+                                    project bx by
+
+                                idString : String
+                                idString =
+                                    "wordSpellingGame_submitLine_"
+                                        ++ (if line.placedWord.isVertical then
+                                                "v"
+
+                                            else
+                                                "h"
+                                           )
+                                        ++ "_"
+                                        ++ String.fromInt (Tuple.first line.placedWord.start)
+                                        ++ "_"
+                                        ++ String.fromInt (Tuple.second line.placedWord.start)
+                            in
+                            MyUi.elButton (Dom.id idString)
+                                (PressedSubmitWord line.placedWord)
+                                [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
+                                , Ui.width (Ui.px p.size)
+                                , Ui.height (Ui.px p.size)
+                                , Ui.background (Ui.rgb 46 160 87)
+                                , Ui.rounded (p.size // 4)
+                                , Ui.borderColor (Ui.rgb 255 255 255)
+                                , Ui.border 2
+                                , Ui.contentCenterX
+                                , Ui.contentCenterY
+                                , Ui.Font.color (Ui.rgb 255 255 255)
+                                ]
+                                (Ui.el
+                                    [ Ui.width (Ui.px 24), Ui.height (Ui.px 24), Ui.centerX, Ui.centerY ]
+                                    (Ui.html Icons.sendMessage)
+                                )
+                                |> Ui.inFront
+                        )
+
+            else
+                []
+
         trayHeight2 : Int
         trayHeight2 =
             trayHeight setup windowSize
@@ -2668,7 +2900,8 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 (Ui.width (Ui.px boardPx)
                     :: Ui.height (Ui.px boardPx)
                     :: Ui.clip
-                    :: boardTiles
+                    :: lineButtons
+                    ++ boardTiles
                     ++ animatedTiles
                     ++ boardHeldTiles
                     ++ [ selectedHighlight, dragHighlight ]
