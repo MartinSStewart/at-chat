@@ -1,5 +1,6 @@
 module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages)
 
+import Audio
 import Coord
 import Date exposing (Date)
 import Drawing
@@ -17,10 +18,10 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, ToBackend, ToFrontend)
 
 
-drawOnMessages : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+drawOnMessages : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 drawOnMessages imageUploadConfig =
     E2EHelper.startTest
         "Draw on top of messages"
@@ -99,10 +100,10 @@ drawOnMessages imageUploadConfig =
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                 -- The Ctrl+Z and Ctrl+Shift+Z hotkeys undo and redo the stroke too
-                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" })
+                                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" }))
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 0)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 0)
-                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" })
+                                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" }))
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }
@@ -328,7 +329,7 @@ displayed scaled down to fit a smaller screen. Stroke points are stored in the
 image's full resolution coordinates and scaled back to css pixels when the
 image is rendered.
 -}
-drawingScalesWithImages : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+drawingScalesWithImages : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 drawingScalesWithImages imageUploadConfig =
     let
         -- The image attachment is 800 pixels wide while the conversation area

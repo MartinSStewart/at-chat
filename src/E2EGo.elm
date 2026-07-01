@@ -12,12 +12,12 @@ import Env
 import Json.Decode
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, ToBackend, ToFrontend)
 
 
 goMatchTest :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goMatchTest normalConfig =
     E2EHelper.startTest
         "Two users play a Go match, one leaves and rejoins, then start a new match"
@@ -104,8 +104,8 @@ goMatchTest normalConfig =
 
 
 goTimeoutTest :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goTimeoutTest normalConfig =
     E2EHelper.startTest
         "A player who runs out of time can't move, and both players see the loss-on-time result"
@@ -173,8 +173,8 @@ goTimeoutTest normalConfig =
 
 
 goTurnNotificationDotTest :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 goTurnNotificationDotTest normalConfig =
     E2EHelper.startTest
         "Go channel header shows a red dot when it's the user's turn and they aren't viewing the match"
@@ -254,8 +254,8 @@ goTurnNotificationDotTest normalConfig =
 
 
 publicGoMatchViewTest :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 publicGoMatchViewTest normalConfig =
     E2EHelper.startTest
         "A player shares a Go match link so a non-logged-in spectator can view it"

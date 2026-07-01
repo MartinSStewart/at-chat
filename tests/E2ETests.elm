@@ -1,6 +1,7 @@
 module E2ETests exposing (main, setup)
 
 import Array exposing (Array)
+import Audio
 import Backend
 import Bytes exposing (Bytes)
 import Codec
@@ -47,13 +48,13 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, LocalChange(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserSession exposing (SetViewing(..))
 import VisibleMessages
 
 
-setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel))
+setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
@@ -63,7 +64,7 @@ setup =
         |> T.addStringFile "/public/compact-emoji.json"
 
 
-main : Program () (T.Model ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
+main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 main =
     T.startViewer setup
 
@@ -74,10 +75,10 @@ tests :
     -> String
     -> Bytes
     -> String
-    -> List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
-        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel_ BackendModel } -> HttpResponse
+        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests =
             handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 128 128))
 
@@ -221,7 +222,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         handleMultiFileUpload _ =
             UnhandledMultiFileUpload
 
-        normalConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+        normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         normalConfig =
             T.Config
                 Frontend.app_
@@ -232,7 +233,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleMultiFileUpload
                 E2EHelper.domain
 
-        imageUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         imageUploadConfig =
             T.Config
                 Frontend.app_
@@ -249,7 +250,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
-        wideImageUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+        wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         wideImageUploadConfig =
             T.Config
                 Frontend.app_
@@ -266,7 +267,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads a video file. The upload response reports no image size, just
         -- like the Rust server does for files it can't decode as an image.
-        videoUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+        videoUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         videoUploadConfig =
             T.Config
                 Frontend.app_
@@ -283,7 +284,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads an audio file. Like videoUploadConfig, the upload response
         -- reports no image size.
-        audioUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         audioUploadConfig =
             T.Config
                 Frontend.app_
@@ -459,7 +460,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 let
-                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     checkCards elmCampCardCount meetdownCardCount =
                         [ admin.checkView
                             100
@@ -632,12 +633,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 let
                     checkHover :
                         (Maybe Emoji.EmojiOrSticker -> Result String ())
-                        -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     checkHover predicate =
                         admin.checkModel
                             100
                             (\model ->
-                                case model of
+                                case Audio.userModel model of
                                     Types.Loaded loaded ->
                                         case loaded.loginStatus of
                                             Types.LoggedIn loggedIn ->
@@ -1428,7 +1429,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , E2EHelper.writeMessage user 100 "Here's a reply!"
                 , E2EHelper.writeMessage user 100 "And another reply"
-                , user.update 100 (Types.VisibilityChanged Hidden)
+                , user.update 100 (Audio.userMsg (Types.VisibilityChanged Hidden))
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -2009,7 +2010,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
-                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
                 , admin.click 100 (Dom.id "guild_deleteChannel")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
@@ -2169,7 +2170,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "newChannelName") "with-message"
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , E2EHelper.writeMessage admin 100 "I have content"
-                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
 
                 -- First click reveals the confirmation input but does not delete
@@ -2347,7 +2348,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     ]
 
 
-backupRequests : T.Data FrontendModel_ BackendModel -> List HttpRequest
+backupRequests : T.Data FrontendModel BackendModel -> List HttpRequest
 backupRequests data =
     List.filter
         (\request ->
@@ -2359,8 +2360,8 @@ backupRequests data =
 
 
 sendMessageRateLimitTest :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 sendMessageRateLimitTest config =
     E2EHelper.startTest
         "SendMessage rate limiting"
@@ -2379,10 +2380,10 @@ sendMessageRateLimitTest config =
                         Id.fromInt 0
 
                     sendMessage :
-                        T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                         -> Float
                         -> Int
-                        -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     sendMessage client delayInMs changeIndex =
                         client.sendToBackend
                             delayInMs
@@ -2410,7 +2411,7 @@ sendMessageRateLimitTest config =
                             Nothing ->
                                 -1
 
-                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     checkMessageCount label expected =
                         T.checkBackend
                             100
@@ -2475,10 +2476,10 @@ sendMessageRateLimitTest config =
 
 
 attackerTriesToLeakSensitiveData :
-    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
     T.start
         "Attacker tries to leak/modify sensitive data"
@@ -2507,7 +2508,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                             E2EHelper.desktopWindow
                             (\attacker ->
                                 [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.attackerEmail attacker
-                                , attacker.update 0 Types.EnableToFrontendLogging
+                                , attacker.update 0 (Audio.userMsg Types.EnableToFrontendLogging)
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
                                 , T.andThen
@@ -2631,7 +2632,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                         , attacker.checkModel
                                             100
                                             (\model ->
-                                                case model of
+                                                case Audio.userModel model of
                                                     Types.Loaded loaded ->
                                                         case loaded.toFrontendLogs of
                                                             Just toFrontendLogs ->

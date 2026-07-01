@@ -86,6 +86,7 @@ module E2EHelper exposing
 
 import AiChat exposing (AiModelName(..))
 import Array
+import Audio
 import Backend
 import Broadcast
 import Call
@@ -143,7 +144,7 @@ import Test.Html.Selector
 import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import Url exposing (Protocol(..), Url)
@@ -171,7 +172,7 @@ startupDataJson userAgent =
 
 
 handlePortToJs :
-    { currentRequest : T.PortToJs, data : T.Data FrontendModel_ BackendModel }
+    { currentRequest : T.PortToJs, data : T.Data FrontendModel BackendModel }
     -> Maybe ( String, Json.Decode.Value )
 handlePortToJs requestAndData =
     case requestAndData.currentRequest.portName of
@@ -439,7 +440,7 @@ regeneratedServerSecretValue =
     "regenerated-server-secret-from-rust-server"
 
 
-enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 enableNotifications isMobile user =
     [ user.click 100 (Dom.id "guild_showUserOptions")
     , user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
@@ -453,7 +454,7 @@ enableNotifications isMobile user =
         |> T.group
 
 
-checkNotification : String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+checkNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 checkNotification body =
     T.checkState
         100
@@ -525,7 +526,7 @@ handler.
 -}
 mockCloudflareSfu :
     List String
-    -> { currentRequest : HttpRequest, data : T.Data FrontendModel_ BackendModel }
+    -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel }
     -> HttpResponse
 mockCloudflareSfu path { currentRequest, data } =
     let
@@ -595,7 +596,7 @@ mockCloudflareSfu path { currentRequest, data } =
 
 
 mockVoiceChatPorts :
-    { data : T.Data FrontendModel_ BackendModel, currentRequest : T.PortToJs }
+    { data : T.Data FrontendModel BackendModel, currentRequest : T.PortToJs }
     -> Maybe ( String, Json.Decode.Value )
 mockVoiceChatPorts request =
     case Codec.decodeValue Call.voiceChatToJsCodec request.currentRequest.value of
@@ -812,7 +813,7 @@ fromJsAfterPullsComplete =
 been produced so far equals `expected`. Placed at each handshake checkpoint so
 the prefix is pinned down step by step.
 -}
-checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel_ BackendModel -> Result String ()
+checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel BackendModel -> Result String ()
 checkVoiceChatFromJsEvents expected data =
     let
         actual : List String
@@ -831,7 +832,7 @@ checkVoiceChatFromJsEvents expected data =
             )
 
 
-voiceChatFromJsPayloads : T.Data FrontendModel_ BackendModel -> List String
+voiceChatFromJsPayloads : T.Data FrontendModel BackendModel -> List String
 voiceChatFromJsPayloads data =
     data.portRequests
         |> List.reverse
@@ -851,8 +852,8 @@ voiceChatFromJsPayloads data =
 
 
 addCloudflareRealtimeApiKeys :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 addCloudflareRealtimeApiKeys admin =
     T.collapsableGroup
         "Add Cloudflare Realtime API keys"
@@ -880,8 +881,8 @@ addCloudflareRealtimeApiKeys admin =
 through the admin page.
 -}
 addCloudflareAnalyticsApiKeys :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 addCloudflareAnalyticsApiKeys admin =
     T.collapsableGroup
         "Add Cloudflare analytics API keys"
@@ -907,8 +908,8 @@ addCloudflareAnalyticsApiKeys admin =
 
 dmCallTest :
     Bool
-    -> T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 dmCallTest isMobile normalConfig =
     let
         -- A narrow window renders the mobile layout (touch events), a wide one
@@ -1150,7 +1151,7 @@ dmCallTest isMobile normalConfig =
                     , T.checkState
                         100
                         (\data ->
-                            case SeqDict.get user.clientId data.frontends of
+                            case SeqDict.get user.clientId data.frontends |> Maybe.map Audio.userModel of
                                 Just (Types.Loaded loaded) ->
                                     case loaded.loginStatus of
                                         Types.LoggedIn loggedIn ->
@@ -1196,7 +1197,7 @@ dmCallTest isMobile normalConfig =
         ]
 
 
-checkNoNotification : String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+checkNoNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 checkNoNotification body =
     T.checkState
         100
@@ -1239,11 +1240,11 @@ dropPrefix prefix text =
 connectTwoUsersAndJoinNewGuild :
     { width : Int, height : Int }
     ->
-        (T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-         -> T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-         -> List (T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
+        (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
         )
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 connectTwoUsersAndJoinNewGuild windowSize continueFunc =
     T.connectFrontend
         100
@@ -1300,11 +1301,11 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
 
 
 focusEvent :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> DelayInMs
     -> Maybe HtmlId
     -> Maybe Range
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 focusEvent user delayInMs maybeHtmlId maybeSelection =
     user.portEvent
         delayInMs
@@ -1328,7 +1329,7 @@ focusEvent user delayInMs maybeHtmlId maybeSelection =
         )
 
 
-writeMessage : T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> DelayInMs -> String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> DelayInMs -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user delayInMs text =
     T.group
         [ focusEvent user delayInMs (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
@@ -1339,7 +1340,7 @@ writeMessage user delayInMs text =
         ]
 
 
-writeMessageMobile : T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+writeMessageMobile : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessageMobile user text =
     T.group
         [ user.input 100 (Dom.id "channel_textinput") text
@@ -1356,10 +1357,10 @@ all share the `channel_textinput` and `editMessageTextInput` ids.
 
 -}
 editMostRecentMessageViaArrowUp :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 editMostRecentMessageViaArrowUp user originalText editedText =
     T.collapsableGroup
         "Edit most recent message by pressing up arrow"
@@ -1387,7 +1388,7 @@ editMostRecentMessageViaArrowUp user originalText editedText =
         ]
 
 
-createThread : T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> Id ChannelMessageId -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+createThread : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> Id ChannelMessageId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 createThread user messageId =
     T.group
         [ user.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
@@ -1405,9 +1406,9 @@ createThread user messageId =
 
 
 clickSpoiler :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> HtmlId
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 clickSpoiler user htmlId =
     T.group
         [ user.click 100 htmlId
@@ -1418,8 +1419,8 @@ clickSpoiler user htmlId =
 
 
 scrollToTop :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 scrollToTop user =
     user.custom
         100
@@ -1438,8 +1439,8 @@ scrollToTop user =
 
 
 scrollToMiddle :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 scrollToMiddle user =
     user.custom
         100
@@ -1458,38 +1459,38 @@ scrollToMiddle user =
 
 
 hasExactText :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> List String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 hasExactText user texts =
     user.checkView 100 (Test.Html.Query.has (List.map Test.Html.Selector.exactText texts))
 
 
 hasText :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> List String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 hasText user texts =
     user.checkView 100 (Test.Html.Query.has (List.map Test.Html.Selector.text texts))
 
 
 hasNotExactText :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> List String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 hasNotExactText user texts =
     user.checkView 100 (Test.Html.Query.hasNot (List.map Test.Html.Selector.exactText texts))
 
 
 hasNotText :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> List String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 hasNotText user texts =
     user.checkView 100 (Test.Html.Query.hasNot (List.map Test.Html.Selector.text texts))
 
 
-noMissingMessages : DelayInMs -> T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+noMissingMessages : DelayInMs -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 noMissingMessages delayInMs user =
     user.checkView
         delayInMs
@@ -1635,8 +1636,8 @@ discordUserAuth =
 
 
 uploadImageAttachment :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 uploadImageAttachment user =
     T.group
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
@@ -1650,8 +1651,8 @@ uploadImageAttachment user =
 server only extracts image dimensions for files it can decode as an image.
 -}
 uploadNonImageAttachment :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 uploadNonImageAttachment user =
     T.group
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
@@ -1672,8 +1673,8 @@ attachmentTestActions :
     , spoileredSnapshot : String
     , revealedSnapshot : String
     }
-    -> T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> List (T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 attachmentTestActions options admin =
     [ -- The attachment renders inline in a media element instead of an "open in
       -- new tab" link, so it can be played without leaving the page.
@@ -1711,15 +1712,15 @@ attachmentTestActions options admin =
 
 
 tallSnapshot :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> DelayInMs
     -> { name : String }
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 tallSnapshot user delayInMs name =
     T.andThen
         0
         (\data ->
-            case SeqDict.get user.clientId data.frontends of
+            case SeqDict.get user.clientId data.frontends |> Maybe.map Audio.userModel of
                 Just frontend ->
                     let
                         windowSize : Coord CssPixels
@@ -1811,7 +1812,7 @@ linkSecondDiscordAccount :
     SessionId
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
     let
         secondAuth : Discord.UserAuth
@@ -2115,9 +2116,9 @@ handleInternalRequests discordStickerPacks currentRequest rest =
 startTest :
     String
     -> Time.Posix
-    -> T.Config toBackend FrontendMsg_ FrontendModel_ toFrontend backendMsg backendModel
-    -> List (T.Action toBackend FrontendMsg_ FrontendModel_ toFrontend backendMsg backendModel)
-    -> T.EndToEndTest toBackend FrontendMsg_ FrontendModel_ toFrontend backendMsg backendModel
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 startTest name startTime2 config actions =
     T.start
         name
@@ -2134,13 +2135,13 @@ startTest name startTime2 config actions =
                     [ handleLogin firefoxDesktop attackerEmail attacker
                     , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                     , attacker.click 100 (Dom.id "loginForm_submit")
-                    , attacker.update 100 Types.EnableToFrontendLogging
+                    , attacker.update 100 (Audio.userMsg Types.EnableToFrontendLogging)
                     ]
                 , T.group actions
                 , attacker.checkModel
                     100
                     (\model ->
-                        case model of
+                        case Audio.userModel model of
                             Types.Loaded loaded ->
                                 case loaded.toFrontendLogs of
                                     Just toFrontendLogs ->
@@ -2789,9 +2790,9 @@ checkNoErrorLogs =
 
 
 inviteUser :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> (T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> List (T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel))
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 inviteUser admin continueWith =
     [ admin.click 100 (Dom.id "guild_openGuild_0")
     , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
@@ -3000,8 +3001,8 @@ drawingAnchorClick x y =
 
 
 drawZigzagStroke :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 drawZigzagStroke client =
     T.group
         [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
@@ -3020,8 +3021,8 @@ x axis relative to the embed image, which goes well past both edges of the
 432px wide embed container.
 -}
 drawWideZigzagStroke :
-    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 drawWideZigzagStroke client =
     T.group
         [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 40 130)
