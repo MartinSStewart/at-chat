@@ -2156,14 +2156,22 @@ gameView :
     -> GameData
     -> Element GameMsg
 gameView currentTime windowSize maybeDragging localUser setup shared model =
-    Ui.row
+    let
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
+    (if isMobile then
+        Ui.column
+
+     else
+        Ui.row
+    )
         [ Ui.height (Ui.px (tabBodyHeight windowSize setup))
         , Ui.background MyUi.tabBackground
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
         , Ui.spacing 16
-        , Ui.wrap
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
@@ -2852,7 +2860,7 @@ cellSize setup windowSize =
         availableSize : Int
         availableSize =
             min
-                (round (toFloat (Coord.yRaw windowSize) * 0.8)
+                (round (toFloat (Coord.yRaw windowSize) * 0.7)
                     - trayHeight setup windowSize
                     - (if MyUi.isMobile { windowSize = windowSize } then
                         statusHeight
