@@ -125,6 +125,15 @@ wordSpellingGameTests normalConfig =
                     , admin.snapshotView 3000 { name = "Place \"amino\"" }
                     , user.snapshotView 0 { name = "Place \"amino\"" }
                     ]
+                , T.collapsableGroup
+                    "Drop a tray tile one slot to the right"
+                    -- Regression test for a tray-drop off-by-one: the dragged tile is drawn centred
+                    -- on the cursor, so dropping the first tile centred just right of the next slot
+                    -- must land it in that next slot, not skip a whole slot past it. (This happens on
+                    -- the user's turn once every word is placed, so it doesn't affect the scores.)
+                    [ dragTile 100 user (trayTile 0) (trayTile 1.1)
+                    , user.snapshotView 500 { name = "Drop tray tile one slot to the right" }
+                    ]
                 , user.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , admin.checkView
