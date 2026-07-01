@@ -2521,7 +2521,6 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
-        , Ui.spacing 16
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
@@ -2532,8 +2531,8 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
 {-| A row showing a player's profile image and name, followed by `suffix` (their score and any
 status text). Bolded when `isBold` is True (the current player's turn, or a winner).
 -}
-playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
-playerRow localUser userId isBold suffix =
+playerRow : LocalUser -> Id UserId -> String -> Element GameMsg
+playerRow localUser userId suffix =
     let
         maybeUser : Maybe User.FrontendUser
         maybeUser =
@@ -2542,41 +2541,32 @@ playerRow localUser userId isBold suffix =
     Ui.row
         [ Ui.spacing 8
         , Ui.width Ui.shrink
-        , if isBold then
-            Ui.Font.weight 700
-
-          else
-            Ui.Font.weight 400
         ]
         [ User.profileImage userId (Maybe.andThen .icon maybeUser)
-        , Ui.text
-            ((case maybeUser of
-                Just user ->
-                    PersonName.toString user.name
+        , Ui.row
+            [ MyUi.prewrap ]
+            [ Ui.el
+                [ Ui.Font.bold ]
+                (Ui.text
+                    (case maybeUser of
+                        Just user ->
+                            PersonName.toString user.name
 
-                Nothing ->
-                    "Unknown"
-             )
-                ++ suffix
-            )
+                        Nothing ->
+                            "Unknown"
+                    )
+                )
+            , Ui.text suffix
+            ]
         ]
 
 
-leaderboardView : Shared -> LocalUser -> Element GameMsg
-leaderboardView shared localUser =
+leaderboardView : Bool -> Nonempty (Id UserId) -> Shared -> LocalUser -> Element GameMsg
+leaderboardView isMobile winners shared localUser =
     let
-        winners : List (Id UserId)
-        winners =
-            case getWinner shared of
-                Just nonempty ->
-                    List.Nonempty.toList nonempty
-
-                Nothing ->
-                    []
-
         isTie : Bool
         isTie =
-            List.length winners > 1
+            List.Nonempty.length winners > 1
 
         sortedPlayers : List Player
         sortedPlayers =
@@ -2595,30 +2585,34 @@ leaderboardView shared localUser =
                     "Game over"
                 )
             )
-            :: List.map
+            :: List.filterMap
                 (\player ->
                     let
                         isWinner : Bool
                         isWinner =
-                            List.member player.userId winners
+                            List.Nonempty.member player.userId winners
                     in
-                    playerRow
-                        localUser
-                        player.userId
-                        isWinner
-                        (": "
-                            ++ String.fromInt player.score
-                            ++ (if isWinner then
-                                    if isTie then
-                                        " (tied for first)"
+                    if isMobile && not isWinner then
+                        Nothing
+
+                    else
+                        playerRow
+                            localUser
+                            player.userId
+                            (": "
+                                ++ String.fromInt player.score
+                                ++ (if isWinner then
+                                        if isTie then
+                                            " (tied for first)"
+
+                                        else
+                                            " (winner)"
 
                                     else
-                                        " (winner)"
-
-                                else
-                                    ""
-                               )
-                        )
+                                        ""
+                                   )
+                            )
+                            |> Just
                 )
                 sortedPlayers
         )
@@ -2631,6 +2625,10 @@ statusView windowSize currentUserId localUser setup shared model =
         currentPlayer =
             List.Nonempty.get shared.turnCount shared.players
 
+        nextPlayer : Player
+        nextPlayer =
+            List.Nonempty.get (shared.turnCount + 1) shared.players
+
         playerCount =
             List.Nonempty.length shared.players
 
@@ -2638,69 +2636,88 @@ statusView windowSize currentUserId localUser setup shared model =
             MyUi.isMobile { windowSize = windowSize }
     in
     case getWinner shared of
-        Just _ ->
-            leaderboardView shared localUser
+        Just winners ->
+            leaderboardView isMobile winners shared localUser
 
         Nothing ->
-            Ui.column
-                [ Ui.spacing 8, Ui.height (Ui.px statusHeight) ]
-                ((if isMobile then
-                    []
+            let
+                contextButton : Element GameMsg
+                contextButton =
+                    case isPlayerTurn localUser.session.userId shared of
+                        JoinedAndItsTheirTurn ->
+                            -- The player replaces their tray with the delete button next to the
+                            -- tray (see `boardView`). When no letters are left to draw, replacing
+                            -- isn't possible, so instead offer to pass the turn or end the game.
+                            case passBehavior setup shared of
+                                ShouldReplaceTray ->
+                                    Ui.none
 
-                  else
-                    [ "Letters remaining: "
+                                ShouldPass ->
+                                    MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "Pass turn")
+
+                                ShouldEndGame ->
+                                    MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "End game")
+
+                        Joined ->
+                            Ui.none
+
+                        NotJoined ->
+                            MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+            in
+            if isMobile then
+                Ui.row
+                    [ Ui.paddingXY 8 0, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
+                    [ Ui.column
+                        [ Ui.centerY, Ui.spacing 4 ]
+                        [ case User.getUser currentPlayer.userId localUser of
+                            Just user ->
+                                Ui.row
+                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
+                                    , Ui.text ("'s turn (" ++ String.fromInt currentPlayer.score ++ ")")
+                                    ]
+
+                            Nothing ->
+                                Ui.none
+                        , case User.getUser nextPlayer.userId localUser of
+                            Just user ->
+                                Ui.row
+                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
+                                    , Ui.text (" is next (" ++ String.fromInt currentPlayer.score ++ ")")
+                                    ]
+
+                            Nothing ->
+                                Ui.none
+                        ]
+                    , contextButton
+                    ]
+
+            else
+                Ui.column
+                    [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                    (("Letters remaining: "
                         ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
                         |> Ui.text
-                    ]
-                 )
-                    ++ List.indexedMap
-                        (\index player ->
-                            let
-                                isTheirTurn : Bool
-                                isTheirTurn =
-                                    index == modBy playerCount shared.turnCount
-                            in
-                            playerRow
-                                localUser
-                                player.userId
-                                (player.userId == currentPlayer.userId)
-                                (": "
-                                    ++ String.fromInt player.score
-                                    ++ (if isTheirTurn then
-                                            if player.userId == currentUserId then
-                                                " (your turn)"
+                     )
+                        :: List.indexedMap
+                            (\index player ->
+                                playerRow
+                                    localUser
+                                    player.userId
+                                    (if index == modBy playerCount shared.turnCount then
+                                        "'s turn (" ++ String.fromInt currentPlayer.score ++ ")"
 
-                                            else
-                                                " (their turn)"
+                                     else if index == modBy playerCount (shared.turnCount + 1) then
+                                        " is next (" ++ String.fromInt currentPlayer.score ++ ")"
 
-                                        else
-                                            ""
-                                       )
-                                )
-                        )
-                        (List.Nonempty.toList shared.players)
-                    ++ [ case isPlayerTurn localUser.session.userId shared of
-                            JoinedAndItsTheirTurn ->
-                                -- The player replaces their tray with the delete button next to the
-                                -- tray (see `boardView`). When no letters are left to draw, replacing
-                                -- isn't possible, so instead offer to pass the turn or end the game.
-                                case passBehavior setup shared of
-                                    ShouldReplaceTray ->
-                                        Ui.none
-
-                                    ShouldPass ->
-                                        MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "Pass turn")
-
-                                    ShouldEndGame ->
-                                        MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "End game")
-
-                            Joined ->
-                                Ui.none
-
-                            NotJoined ->
-                                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
-                       ]
-                )
+                                     else
+                                        " (" ++ String.fromInt currentPlayer.score ++ ")"
+                                    )
+                            )
+                            (List.Nonempty.toList shared.players)
+                        ++ [ contextButton ]
+                    )
 
 
 trayHeight : ValidatedSetup -> Coord CssPixels -> Int
@@ -3273,7 +3290,7 @@ boardViewBackground cellSize2 =
 
 statusHeight : number
 statusHeight =
-    100
+    70
 
 
 tabBodyHeight : Coord CssPixels -> ValidatedSetup -> Int
@@ -3287,6 +3304,7 @@ tabBodyHeight windowSize setup =
            else
             0
           )
+        + 10
 
 
 cellSize : ValidatedSetup -> Coord CssPixels -> Int
