@@ -8,13 +8,13 @@ import Json.Encode
 import Message
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, ToBackend, ToFrontend)
 import WordSpellingGame
 
 
 wordSpellingGameTests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 wordSpellingGameTests normalConfig =
     E2EHelper.startTest
         "Word spelling game match"

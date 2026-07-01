@@ -33,7 +33,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
 import Thread
-import Types exposing (Drag(..), FrontendMsg(..), LoadedFrontend, LoggedIn2)
+import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Anim
@@ -42,7 +42,7 @@ import Ui.Lazy
 import User exposing (LocalUser)
 
 
-channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 channel isMobile name guildOrDmIdNoThread local loggedIn model =
     let
         currentChannelHeaderTab =
@@ -84,7 +84,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView local loggedIn model)
 
 
-thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 thread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
@@ -116,7 +116,7 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView local loggedIn model)
 
 
-discordChannel : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+discordChannel : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
     let
         currentChannelHeaderTab =
@@ -158,7 +158,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView local loggedIn model)
 
 
-discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
@@ -201,7 +201,7 @@ chattingWithYourself data local =
 {-| Toggles a mode where the user can draw freehand on top of messages.
 Only available on non-mobile since it requires a mouse.
 -}
-drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg
+drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
 drawButton isMobile currentTab =
     if isMobile then
         Ui.none
@@ -218,7 +218,7 @@ drawButton isMobile currentTab =
             )
 
 
-showFilesButton : Element FrontendMsg
+showFilesButton : Element FrontendMsg_
 showFilesButton =
     MyUi.elButton
         (Dom.id "guild_showFiles")
@@ -233,7 +233,7 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
-channelHeader : Bool -> Bool -> Element FrontendMsg -> Maybe (Element FrontendMsg) -> Element FrontendMsg
+channelHeader : Bool -> Bool -> Element FrontendMsg_ -> Maybe (Element FrontendMsg_) -> Element FrontendMsg_
 channelHeader isMobile2 includeShowMembers content tabContent =
     Ui.column
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -312,8 +312,8 @@ channelHeaderTabRow :
     -> HtmlId
     -> ChannelHeaderTab
     -> Maybe ChannelHeaderTab
-    -> List (Element FrontendMsg)
-    -> Element FrontendMsg
+    -> List (Element FrontendMsg_)
+    -> Element FrontendMsg_
 channelHeaderTabRow isMobile htmlId tab currentTab content =
     MyUi.rowButton
         htmlId
@@ -357,13 +357,13 @@ channelHeaderTab :
     -> HtmlId
     -> ChannelHeaderTab
     -> Maybe ChannelHeaderTab
-    -> Element FrontendMsg
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
+    -> Element FrontendMsg_
 channelHeaderTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
 
 
-privateChatWithYourself : Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg
+privateChatWithYourself : Bool -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
 privateChatWithYourself isMobile currentTab local =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -381,7 +381,7 @@ privateChatWithYourself isMobile currentTab local =
         ]
 
 
-privateChatWith : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
+privateChatWith : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg_
 privateChatWith isMobile currentTab otherUserId local name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -407,7 +407,7 @@ gameButton :
     -> Maybe ChannelHeaderTab
     -> Id UserId
     -> SeqDict (Id ChannelMessageId) Game.MatchData
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 gameButton isMobile currentTab userId goMatches =
     let
         viewingGo : Bool
@@ -454,7 +454,7 @@ gameButton isMobile currentTab userId goMatches =
         )
 
 
-voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
+voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg_
 voiceChatButton isMobile currentTab otherUserId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) OneOrGreater
@@ -517,7 +517,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         ]
 
 
-discordPrivateChatWith : Bool -> Maybe ChannelHeaderTab -> String -> Element FrontendMsg
+discordPrivateChatWith : Bool -> Maybe ChannelHeaderTab -> String -> Element FrontendMsg_
 discordPrivateChatWith isMobile currentTab name =
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -530,7 +530,7 @@ discordPrivateChatWith isMobile currentTab name =
         ]
 
 
-tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
+tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg_)
 tabBodyView local loggedIn model =
     case model.route of
         GuildRoute guildId channelRoute ->
@@ -835,7 +835,7 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
 
 {-| Shown in the channel header below the tab buttons while the drawing tab is selected.
 -}
-drawingTabView : Model -> LocalState -> Element FrontendMsg
+drawingTabView : Model -> LocalState -> Element FrontendMsg_
 drawingTabView model local =
     Ui.row
         [ Ui.paddingXY 16 12
@@ -873,7 +873,7 @@ drawingTabView model local =
         |> Ui.map DrawingMsg
 
 
-channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg
+channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg_
 channelDescriptionView channelName description =
     Ui.column
         [ Ui.paddingXY 16 12

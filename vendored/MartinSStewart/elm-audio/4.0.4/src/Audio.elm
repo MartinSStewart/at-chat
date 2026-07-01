@@ -45,10 +45,12 @@ WIP support for Lamdera. Ignore this for now.
 
 -}
 
-import Browser
-import Browser.Navigation exposing (Key)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
+import Effect.Browser as Browser
+import Effect.Browser.Navigation exposing (Key)
+import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Subscription as Subscription exposing (Subscription)
 import Html exposing (Html)
 import Json.Decode as JD
 import Json.Encode as JE
@@ -136,21 +138,21 @@ type AudioCmd userMsg
     | AudioCmdGroup (List (AudioCmd userMsg))
 
 
-{-| Combine multiple commands into a single command. Conceptually the same as Cmd.batch.
+{-| Combine multiple commands into a single command. Conceptually the same as Command.batch.
 -}
 cmdBatch : List (AudioCmd userMsg) -> AudioCmd userMsg
 cmdBatch audioCmds =
     AudioCmdGroup audioCmds
 
 
-{-| A command that does nothing. Conceptually the same as Cmd.none.
+{-| A command that does nothing. Conceptually the same as Command.none.
 -}
 cmdNone : AudioCmd msg
 cmdNone =
     AudioCmdGroup []
 
 
-{-| Map a command from one type to another. Conceptually the same as Cmd.map.
+{-| Map a command from one type to another. Conceptually the same as Command.map.
 -}
 cmdMap : (a -> b) -> AudioCmd a -> AudioCmd b
 cmdMap map cmd =
@@ -184,136 +186,140 @@ getUserModel (Model model) =
 {-| Browser.element but with the ability to play sounds.
 -}
 elementWithAudio :
-    { init : flags -> ( model, Cmd msg, AudioCmd msg )
+    { init : flags -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
     , view : AudioData -> model -> Html msg
-    , update : AudioData -> msg -> model -> ( model, Cmd msg, AudioCmd msg )
-    , subscriptions : AudioData -> model -> Sub msg
+    , update : AudioData -> msg -> model -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
+    , subscriptions : AudioData -> model -> Subscription FrontendOnly msg
     , audio : AudioData -> model -> Audio
     , audioPort : Ports msg
     }
     -> Platform.Program flags (Model msg model) (Msg msg)
-elementWithAudio =
-    withAudioOffset
-        >> (\app ->
-                { init = app.init >> initHelper app.audioPort.toJS app.audio
-                , view = \model -> getUserModel model |> app.view (audioData model) |> Html.map UserMsg
-                , update = update app
-                , subscriptions = subscriptions app
-                }
-                    |> Browser.element
-           )
+elementWithAudio app =
+    let
+        app2 =
+            withAudioOffset app
+    in
+    Browser.element
+        { init = app2.init >> initHelper app2.audioPort.toJS app2.audio
+        , view = \model -> getUserModel model |> app2.view (audioData model) |> Html.map UserMsg
+        , update = update app2
+        , subscriptions = subscriptions app2
+        }
 
 
 {-| Browser.document but with the ability to play sounds.
 -}
 documentWithAudio :
-    { init : flags -> ( model, Cmd msg, AudioCmd msg )
+    { init : flags -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
     , view : AudioData -> model -> Browser.Document msg
-    , update : AudioData -> msg -> model -> ( model, Cmd msg, AudioCmd msg )
-    , subscriptions : AudioData -> model -> Sub msg
+    , update : AudioData -> msg -> model -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
+    , subscriptions : AudioData -> model -> Subscription FrontendOnly msg
     , audio : AudioData -> model -> Audio
     , audioPort : Ports msg
     }
     -> Platform.Program flags (Model msg model) (Msg msg)
-documentWithAudio =
-    withAudioOffset
-        >> (\app ->
-                { init = app.init >> initHelper app.audioPort.toJS app.audio
-                , view =
-                    \model ->
-                        let
-                            { title, body } =
-                                app.view (audioData model) (getUserModel model)
-                        in
-                        { title = title
-                        , body = body |> List.map (Html.map UserMsg)
-                        }
-                , update = update app
-                , subscriptions = subscriptions app
+documentWithAudio app =
+    let
+        app2 =
+            withAudioOffset app
+    in
+    Browser.document
+        { init = app2.init >> initHelper app2.audioPort.toJS app2.audio
+        , view =
+            \model ->
+                let
+                    { title, body } =
+                        app2.view (audioData model) (getUserModel model)
+                in
+                { title = title
+                , body = body |> List.map (Html.map UserMsg)
                 }
-                    |> Browser.document
-           )
+        , update = update app2
+        , subscriptions = subscriptions app2
+        }
 
 
 {-| Browser.application but with the ability to play sounds.
 -}
 applicationWithAudio :
-    { init : flags -> Url -> Key -> ( model, Cmd msg, AudioCmd msg )
+    { init : flags -> Url -> Key -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
     , view : AudioData -> model -> Browser.Document msg
-    , update : AudioData -> msg -> model -> ( model, Cmd msg, AudioCmd msg )
-    , subscriptions : AudioData -> model -> Sub msg
+    , update : AudioData -> msg -> model -> ( model, Command FrontendOnly Never msg, AudioCmd msg )
+    , subscriptions : AudioData -> model -> Subscription FrontendOnly msg
     , onUrlRequest : Browser.UrlRequest -> msg
     , onUrlChange : Url -> msg
     , audio : AudioData -> model -> Audio
     , audioPort : Ports msg
     }
     -> Platform.Program flags (Model msg model) (Msg msg)
-applicationWithAudio =
-    withAudioOffset
-        >> (\app ->
-                { init = \flags url key -> app.init flags url key |> initHelper app.audioPort.toJS app.audio
-                , view =
-                    \model ->
-                        let
-                            { title, body } =
-                                app.view (audioData model) (getUserModel model)
-                        in
-                        { title = title
-                        , body = body |> List.map (Html.map UserMsg)
-                        }
-                , update = update app
-                , subscriptions = subscriptions app
-                , onUrlRequest = app.onUrlRequest >> UserMsg
-                , onUrlChange = app.onUrlChange >> UserMsg
+applicationWithAudio app =
+    let
+        app2 =
+            withAudioOffset app
+    in
+    Browser.application
+        { init = \flags url key -> app2.init flags url key |> initHelper app2.audioPort.toJS app2.audio
+        , view =
+            \model ->
+                let
+                    { title, body } =
+                        app2.view (audioData model) (getUserModel model)
+                in
+                { title = title
+                , body = body |> List.map (Html.map UserMsg)
                 }
-                    |> Browser.application
-           )
+        , update = update app2
+        , subscriptions = subscriptions app2
+        , onUrlRequest = app2.onUrlRequest >> UserMsg
+        , onUrlChange = app2.onUrlChange >> UserMsg
+        }
 
 
 {-| Lamdera.frontend but with the ability to play sounds (highly experimental, just ignore this for now).
 -}
 lamderaFrontendWithAudio :
-    { init : Url.Url -> Browser.Navigation.Key -> ( model, Cmd frontendMsg, AudioCmd frontendMsg )
+    { init : Url.Url -> Key -> ( model, Command FrontendOnly toMsg frontendMsg, AudioCmd frontendMsg )
     , view : AudioData -> model -> Browser.Document frontendMsg
-    , update : AudioData -> frontendMsg -> model -> ( model, Cmd frontendMsg, AudioCmd frontendMsg )
-    , updateFromBackend : AudioData -> toFrontend -> model -> ( model, Cmd frontendMsg, AudioCmd frontendMsg )
-    , subscriptions : AudioData -> model -> Sub frontendMsg
+    , update : AudioData -> frontendMsg -> model -> ( model, Command FrontendOnly toMsg frontendMsg, AudioCmd frontendMsg )
+    , updateFromBackend : AudioData -> toFrontend -> model -> ( model, Command FrontendOnly toMsg frontendMsg, AudioCmd frontendMsg )
+    , subscriptions : AudioData -> model -> Subscription FrontendOnly frontendMsg
     , onUrlRequest : Browser.UrlRequest -> frontendMsg
     , onUrlChange : Url -> frontendMsg
     , audio : AudioData -> model -> Audio
     , audioPort : Ports frontendMsg
     }
     ->
-        { init : Url.Url -> Browser.Navigation.Key -> ( Model frontendMsg model, Cmd (Msg frontendMsg) )
+        { init : Url.Url -> Key -> ( Model frontendMsg model, Command FrontendOnly toMsg (Msg frontendMsg) )
         , view : Model frontendMsg model -> Browser.Document (Msg frontendMsg)
-        , update : Msg frontendMsg -> Model frontendMsg model -> ( Model frontendMsg model, Cmd (Msg frontendMsg) )
-        , updateFromBackend : toFrontend -> Model frontendMsg model -> ( Model frontendMsg model, Cmd (Msg frontendMsg) )
-        , subscriptions : Model frontendMsg model -> Sub (Msg frontendMsg)
+        , update : Msg frontendMsg -> Model frontendMsg model -> ( Model frontendMsg model, Command FrontendOnly toMsg (Msg frontendMsg) )
+        , updateFromBackend : toFrontend -> Model frontendMsg model -> ( Model frontendMsg model, Command FrontendOnly toMsg (Msg frontendMsg) )
+        , subscriptions : Model frontendMsg model -> Subscription FrontendOnly (Msg frontendMsg)
         , onUrlRequest : Browser.UrlRequest -> Msg frontendMsg
         , onUrlChange : Url -> Msg frontendMsg
         }
-lamderaFrontendWithAudio =
-    withAudioOffset
-        >> (\app ->
-                { init = \url key -> initHelper app.audioPort.toJS app.audio (app.init url key)
-                , view =
-                    \model ->
-                        let
-                            { title, body } =
-                                app.view (audioData model) (getUserModel model)
-                        in
-                        { title = title
-                        , body = body |> List.map (Html.map UserMsg)
-                        }
-                , update = update app
-                , updateFromBackend =
-                    \toFrontend model ->
-                        updateHelper app.audioPort.toJS app.audio (flip app.updateFromBackend toFrontend) model
-                , subscriptions = subscriptions app
-                , onUrlRequest = app.onUrlRequest >> UserMsg
-                , onUrlChange = app.onUrlChange >> UserMsg
-                }
-           )
+lamderaFrontendWithAudio app =
+    let
+        app2 =
+            withAudioOffset app
+    in
+    { init = \url key -> initHelper app2.audioPort.toJS app2.audio (app2.init url key)
+    , view =
+        \model ->
+            let
+                { title, body } =
+                    app2.view (audioData model) (getUserModel model)
+            in
+            { title = title
+            , body = body |> List.map (Html.map UserMsg)
+            }
+    , update = update app2
+    , updateFromBackend =
+        \toFrontend model ->
+            updateHelper app2.audioPort.toJS app2.audio (flip app2.updateFromBackend toFrontend) model
+    , subscriptions = subscriptions app2
+    , onUrlRequest = app2.onUrlRequest >> UserMsg
+    , onUrlChange = app2.onUrlChange >> UserMsg
+    }
 
 
 withAudioOffset app =
@@ -324,9 +330,9 @@ withAudioOffset app =
 -}
 migrateModel :
     (msgOld -> msgNew)
-    -> (modelOld -> ( modelNew, Cmd msgNew ))
+    -> (modelOld -> ( modelNew, Command FrontendOnly toMsg msgNew ))
     -> Model msgOld modelOld
-    -> ( Model msgNew modelNew, Cmd msgNew )
+    -> ( Model msgNew modelNew, Command FrontendOnly toMsg msgNew )
 migrateModel msgMigrate modelMigrate (Model model) =
     let
         ( newModel, cmd ) =
@@ -347,11 +353,11 @@ migrateModel msgMigrate modelMigrate (Model model) =
 
 {-| Use this function when migrating messages in Lamdera.
 -}
-migrateMsg : (msgOld -> ( msgNew, Cmd msgNew )) -> Msg msgOld -> ( Msg msgNew, Cmd msgNew )
+migrateMsg : (msgOld -> ( msgNew, Command FrontendOnly toMsg msgNew )) -> Msg msgOld -> ( Msg msgNew, Command FrontendOnly toMsg msgNew )
 migrateMsg msgMigrate msg =
     case msg of
         FromJSMsg fromJSMsg ->
-            ( FromJSMsg fromJSMsg, Cmd.none )
+            ( FromJSMsg fromJSMsg, Command.none )
 
         UserMsg userMsg ->
             msgMigrate userMsg |> Tuple.mapFirst UserMsg
@@ -360,9 +366,9 @@ migrateMsg msgMigrate msg =
 updateHelper :
     (JD.Value -> Cmd (Msg userMsg))
     -> (AudioData -> userModel -> Audio)
-    -> (AudioData -> userModel -> ( userModel, Cmd userMsg, AudioCmd userMsg ))
+    -> (AudioData -> userModel -> ( userModel, Command FrontendOnly toMsg userMsg, AudioCmd userMsg ))
     -> Model userMsg userModel
-    -> ( Model userMsg userModel, Cmd (Msg userMsg) )
+    -> ( Model userMsg userModel, Command FrontendOnly toMsg (Msg userMsg) )
 updateHelper audioPort audioFunc userUpdate (Model model) =
     let
         audioData_ =
@@ -393,15 +399,20 @@ updateHelper audioPort audioFunc userUpdate (Model model) =
                 ]
     in
     ( newModel2
-    , Cmd.batch [ Cmd.map UserMsg userCmd, audioPort portMessage ]
+    , Command.batch [ Command.map identity UserMsg userCmd, audioPortToJs audioPort portMessage ]
     )
+
+
+audioPortToJs : (JD.Value -> Cmd (Msg userMsg)) -> JE.Value -> Command FrontendOnly toMsg (Msg userMsg)
+audioPortToJs port_ data =
+    Command.sendToJs "audioPortFromJs" port_ data
 
 
 initHelper :
     (JD.Value -> Cmd (Msg userMsg))
     -> (AudioData -> model -> Audio)
-    -> ( model, Cmd userMsg, AudioCmd userMsg )
-    -> ( Model userMsg model, Cmd (Msg userMsg) )
+    -> ( model, Command FrontendOnly toMsg userMsg, AudioCmd userMsg )
+    -> ( Model userMsg model, Command FrontendOnly toMsg (Msg userMsg) )
 initHelper audioPort audioFunc ( model, cmds, audioCmds ) =
     let
         ( audioState, newNodeGroupIdCounter, json ) =
@@ -429,7 +440,7 @@ initHelper audioPort audioFunc ( model, cmds, audioCmds ) =
                 ]
     in
     ( initialModel2
-    , Cmd.batch [ Cmd.map UserMsg cmds, audioPort portMessage ]
+    , Command.batch [ Command.map identity UserMsg cmds, audioPortToJs audioPort portMessage ]
     )
 
 
@@ -481,11 +492,11 @@ update :
     { a
         | audioPort : Ports userMsg
         , audio : AudioData -> userModel -> Audio
-        , update : AudioData -> userMsg -> userModel -> ( userModel, Cmd userMsg, AudioCmd userMsg )
+        , update : AudioData -> userMsg -> userModel -> ( userModel, Command FrontendOnly toMsg userMsg, AudioCmd userMsg )
     }
     -> Msg userMsg
     -> Model userMsg userModel
-    -> ( Model userMsg userModel, Cmd (Msg userMsg) )
+    -> ( Model userMsg userModel, Command FrontendOnly toMsg (Msg userMsg) )
 update app msg (Model model) =
     case msg of
         UserMsg userMsg ->
@@ -533,7 +544,7 @@ update app msg (Model model) =
                                             )
 
                         Nothing ->
-                            ( Model model, Cmd.none )
+                            ( Model model, Command.none )
 
                 AudioLoadFailed { requestId, error } ->
                     case Dict.get requestId model.pendingRequests of
@@ -563,21 +574,24 @@ update app msg (Model model) =
                                             (Nonempty.head pendingRequest.userMsg |> Tuple.second |> flip app.update)
 
                         Nothing ->
-                            ( Model model, Cmd.none )
+                            ( Model model, Command.none )
 
                 InitAudioContext { samplesPerSecond } ->
-                    ( Model { model | samplesPerSecond = Just samplesPerSecond }, Cmd.none )
+                    ( Model { model | samplesPerSecond = Just samplesPerSecond }, Command.none )
 
                 JsonParseError { error } ->
-                    ( Model model, Cmd.none )
+                    ( Model model, Command.none )
 
 
 subscriptions :
-    { a | subscriptions : AudioData -> userModel -> Sub userMsg, audioPort : Ports userMsg }
+    { a | subscriptions : AudioData -> userModel -> Subscription FrontendOnly userMsg, audioPort : Ports userMsg }
     -> Model userMsg userModel
-    -> Sub (Msg userMsg)
+    -> Subscription FrontendOnly (Msg userMsg)
 subscriptions app (Model model) =
-    Sub.batch [ app.subscriptions (audioData (Model model)) model.userModel |> Sub.map UserMsg, app.audioPort.fromJS fromJSPortSub ]
+    Subscription.batch
+        [ app.subscriptions (audioData (Model model)) model.userModel |> Subscription.map UserMsg
+        , Subscription.fromJs "audioPortFromJs" app.audioPort.fromJS fromJSPortSub
+        ]
 
 
 decodeLoadError : JD.Decoder LoadError

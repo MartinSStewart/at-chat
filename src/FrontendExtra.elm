@@ -94,7 +94,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
+import Types exposing (Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendMsg_(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -282,7 +282,7 @@ pendingChangesText localChange =
             "Drew on a message"
 
 
-layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
+layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
     let
         isMobile =
@@ -523,7 +523,7 @@ disableTextSelect isMobile model =
                         True
 
 
-canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
+canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ ))
 canDropFiles currentUserId route =
     case route of
         HomePageRoute ->
@@ -637,7 +637,7 @@ canDropFileHelper :
     -> ThreadRoute
     -> Nonempty File
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 canDropFileHelper guildOrDmId threadRoute2 files model =
     case model.loginStatus of
         LoggedIn loggedIn ->
@@ -651,7 +651,7 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
             ( model, Command.none )
 
 
-fileDragOverlay : LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+fileDragOverlay : LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
 fileDragOverlay loggedIn model =
     let
         opacity =
@@ -719,7 +719,7 @@ gotFiles :
     -> ThreadRoute
     -> Nonempty File
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 gotFiles guildOrDmId threadRoute files model =
     updateLoggedIn
         (\loggedIn ->
@@ -830,7 +830,7 @@ editMessage_gotFiles :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Nonempty File
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 editMessage_gotFiles guildOrDmId files model =
     updateLoggedIn
         (\loggedIn ->
@@ -890,7 +890,7 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
+externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg_
 externalLinkWarning domainWhitelist isMobile url =
     let
         urlText =
@@ -987,7 +987,7 @@ externalLinkWarning domainWhitelist isMobile url =
         )
 
 
-logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 logout model =
     case model.loginStatus of
         LoggedIn _ ->
@@ -1142,7 +1142,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             Command.none
 
 
-routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routePush model route =
     if MyUi.isMobile model then
         routeRequest (Just model.route) route model
@@ -1151,7 +1151,7 @@ routePush model route =
         ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
 
 
-routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg
+routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg_
 routeReplace model route =
     BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
 
@@ -1214,9 +1214,9 @@ clearRevealedSpoilers model =
 enterSidebarRoute :
     Bool
     -> Maybe Route
-    -> Command FrontendOnly ToBackend FrontendMsg
+    -> Command FrontendOnly ToBackend FrontendMsg_
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 enterSidebarRoute sameGuild previousRoute viewCmd model =
     updateLoggedIn
         (\loggedIn ->
@@ -1236,9 +1236,9 @@ enterChannelRoute :
     -> Bool
     -> Bool
     -> Maybe Route
-    -> Command FrontendOnly ToBackend FrontendMsg
+    -> Command FrontendOnly ToBackend FrontendMsg_
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model =
     let
         showMembers : ShowMembersTab
@@ -1287,7 +1287,7 @@ sameThread threadRoute previousThreadRoute =
             False
 
 
-routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequest previousRoute newRoute model =
     let
         ( model2, viewCmd ) =
@@ -1590,9 +1590,9 @@ routeRequest previousRoute newRoute model =
 
 
 updateLoggedIn :
-    (LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg ))
+    (LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ ))
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 updateLoggedIn updateFunc model =
     case model.loginStatus of
         LoggedIn loggedIn ->
@@ -1654,7 +1654,7 @@ routeRequestChannelHelper :
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedIn model3 =
     ( case maybeOtherUserId of
         Just otherUserId ->
@@ -1678,7 +1678,7 @@ routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedI
 
       else
         let
-            scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+            scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
             scrollToBottom =
                 Process.sleep Duration.millisecond
                     |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
@@ -1708,7 +1708,7 @@ routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedI
     )
 
 
-isPressMsg : FrontendMsg -> Bool
+isPressMsg : FrontendMsg_ -> Bool
 isPressMsg msg =
     case msg of
         UrlClicked _ ->
@@ -2127,7 +2127,7 @@ isPressMsg msg =
                     False
 
 
-setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
+setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
     if MyUi.isMobile model then
         Command.none
@@ -5066,7 +5066,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         Nothing
 
 
-handleUndo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleUndo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleUndo model =
     updateLoggedIn
         (\loggedIn ->
@@ -5100,7 +5100,7 @@ drawingUndo selected loggedIn model =
         ( loggedIn, Command.none )
 
 
-handlePressedTextInput : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handlePressedTextInput : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handlePressedTextInput model =
     updateLoggedIn
         (\loggedIn -> ( { loggedIn | drawingMode = Drawing.NoSelectedAnchor }, Command.none ))
@@ -5127,7 +5127,7 @@ drawingRedo selected loggedIn model =
         ( loggedIn, Command.none )
 
 
-handleRedo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleRedo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleRedo model =
     updateLoggedIn
         (\loggedIn ->
@@ -5141,7 +5141,7 @@ handleRedo model =
         model
 
 
-handleEscapeKey : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleEscapeKey : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleEscapeKey model =
     case model.imageViewer of
         Just _ ->
@@ -5156,13 +5156,13 @@ handleEscapeKey model =
                 updateLoggedIn (handleEscapeKeyHelper model) model
 
 
-handleEscapeKeyHelper : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+handleEscapeKeyHelper : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 handleEscapeKeyHelper model loggedIn =
     let
         loggedIn2 =
             MessageMenu.close model loggedIn
 
-        isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
+        isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg_ )
         isPingUserDropdownOpen =
             case loggedIn2.textInputFocus of
                 Just textInputFocus ->
@@ -5268,7 +5268,7 @@ handlePressedArrowUpInEmptyInput :
     LoadedFrontend
     -> AnyGuildOrDmId
     -> ThreadRoute
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
     updateLoggedIn
         (\loggedIn ->

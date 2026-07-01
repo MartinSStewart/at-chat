@@ -9,6 +9,8 @@ port module Ports exposing
     , StartupData
     , SubscribeData
     , SubscribeKeys
+    , audioPortFromJS
+    , audioPortToJS
     , checkNotificationPermissionResponse
     , closeNotifications
     , copyImageToClipboard
@@ -56,6 +58,12 @@ import Range exposing (Range, SelectionDirection(..))
 import Time
 import Url exposing (Url)
 import UserAgent exposing (UserAgent)
+
+
+port audioPortToJS : Json.Encode.Value -> Cmd msg
+
+
+port audioPortFromJS : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port exec_command_to_js : Json.Encode.Value -> Cmd msg

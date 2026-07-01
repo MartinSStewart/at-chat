@@ -2,6 +2,7 @@ module Frontend exposing (app, app_)
 
 import AiChat
 import Array
+import Audio exposing (AudioCmd, AudioData)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
@@ -75,7 +76,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -113,18 +114,25 @@ app_ :
     , view : FrontendModel -> Browser.Document FrontendMsg
     }
 app_ =
-    { init = init
-    , onUrlRequest = onUrlRequest
-    , onUrlChange = onUrlChange
-    , update = update
-    , updateFromBackend = updateFromBackend
-    , subscriptions = subscriptions
-    , view = view
-    }
+    Audio.lamderaFrontendWithAudio
+        { init = init
+        , onUrlRequest = onUrlRequest
+        , onUrlChange = onUrlChange
+        , update = update
+        , updateFromBackend = updateFromBackend
+        , subscriptions = subscriptions
+        , view = view
+        , audio = audio
+        , audioPort = { toJS = Ports.audioPortToJS, fromJS = Ports.audioPortFromJS }
+        }
 
 
-subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
-subscriptions model =
+audio _ model =
+    Audio.silence
+
+
+subscriptions : AudioData -> FrontendModel_ -> Subscription FrontendOnly FrontendMsg_
+subscriptions _ model =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
         , Time.every Duration.second GotTime
@@ -257,17 +265,17 @@ subscriptions model =
         ]
 
 
-onUrlRequest : UrlRequest -> FrontendMsg
+onUrlRequest : UrlRequest -> FrontendMsg_
 onUrlRequest =
     UrlClicked
 
 
-onUrlChange : Url -> FrontendMsg
+onUrlChange : Url -> FrontendMsg_
 onUrlChange =
     UrlChanged
 
 
-init : Url -> Key -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+init : Url -> Key -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
 init url key =
     let
         route : Route
@@ -307,6 +315,7 @@ init url key =
         , Task.perform GotTimezone Time.here
         , Ports.loadStartupData
         ]
+    , Audio.cmdNone
     )
 
 
@@ -316,7 +325,7 @@ initLoadedFrontend :
     -> Time.Posix
     -> Ports.StartupData
     -> Result () LoginData
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
 initLoadedFrontend loading clientId time startupData loginResult =
     let
         ( loginStatus, cmdB ) =
@@ -381,6 +390,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                 Command.none
         , Emoji.requestEmojiData GotEmojiData
         ]
+    , Audio.cmdNone
     )
 
 
@@ -389,7 +399,7 @@ loadedInitHelper :
     -> UserAgent
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 loadedInitHelper timezone userAgent loginData loading =
     let
         local : LocalState
@@ -520,7 +530,7 @@ loginDataToLocalState userAgent timezone loginData =
     }
 
 
-tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
 tryInitLoadedFrontend loading =
     let
         maybeLoginStatus =
@@ -536,14 +546,18 @@ tryInitLoadedFrontend loading =
     in
     case T4 loading.clientId loading.time maybeLoginStatus loading.startupData of
         T4 (Just clientId) (Just time) (Just loginStatus) (Just startupData) ->
-            initLoadedFrontend loading clientId time startupData loginStatus |> Tuple.mapFirst Loaded
+            let
+                ( loaded, audioCmd, cmd ) =
+                    initLoadedFrontend loading clientId time startupData loginStatus
+            in
+            ( Loaded loaded, audioCmd, cmd )
 
         _ ->
-            ( Loading loading, Command.none )
+            ( Loading loading, Command.none, Audio.cmdNone )
 
 
-update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
-update msg model =
+update : AudioData -> FrontendMsg_ -> FrontendModel_ -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
+update _ msg model =
     case model of
         Loading loading ->
             case msg of
@@ -551,21 +565,21 @@ update msg model =
                     tryInitLoadedFrontend { loading | time = Just time }
 
                 GotWindowSize width height ->
-                    ( Loading { loading | windowSize = Coord.xy width height }, Command.none )
+                    ( Loading { loading | windowSize = Coord.xy width height }, Command.none, Audio.cmdNone )
 
                 GotTimezone timezone ->
-                    ( Loading { loading | timezone = timezone }, Command.none )
+                    ( Loading { loading | timezone = timezone }, Command.none, Audio.cmdNone )
 
                 GotStartupData startupData ->
                     tryInitLoadedFrontend { loading | startupData = Just startupData }
 
                 _ ->
-                    ( model, Command.none )
+                    ( model, Command.none, Audio.cmdNone )
 
         Loaded loaded ->
             case ( FrontendExtra.isPressMsg msg, loaded.dragPrevious ) of
                 ( True, Dragging _ ) ->
-                    ( model, Command.none )
+                    ( model, Command.none, Audio.cmdNone )
 
                 ( True, _ ) ->
                     let
@@ -582,6 +596,7 @@ update msg model =
                         NotLoggedIn _ ->
                             Loaded loadedNew
                     , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    , Audio.cmdNone
                     )
 
                 _ ->
@@ -589,7 +604,7 @@ update msg model =
                         ( loadedNew, cmd ) =
                             updateLoaded msg loaded
                     in
-                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ] )
+                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ], Audio.cmdNone )
 
 
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
@@ -607,7 +622,7 @@ parseDomainWhitelistInput text =
         |> SeqSet.fromList
 
 
-updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+updateLoaded : FrontendMsg_ -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 updateLoaded msg model =
     case msg of
         UrlClicked urlRequest ->
@@ -4445,7 +4460,7 @@ selectDrawingAnchor :
     -> ( Float, Float )
     -> Float
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 selectDrawingAnchor guildOrDmId anchorType elementPosition anchorHalfSize pointScale model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -4480,7 +4495,7 @@ anchorRelativePoint selected x y =
     )
 
 
-updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 updateDrawing drawingMsg model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -4831,7 +4846,7 @@ loadOlderMessages guildOrDmId threadRoute local =
                     Nothing
 
 
-pageUpOrDownScroll : Bool -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg FrontendMsg )
+pageUpOrDownScroll : Bool -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg FrontendMsg_ )
 pageUpOrDownScroll isUp model =
     ( model
     , Command.batch
@@ -4899,7 +4914,7 @@ messageHasReaction emoji guildOrDmId threadRoute local =
                     False
 
 
-scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg
+scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_
 scrollEmojiIntoView index =
     Task.map3
         (\button container viewport -> ( button, container, viewport ))
@@ -4935,7 +4950,7 @@ toggleReactionEmoji :
     -> ThreadRouteWithMessage
     -> LoadedFrontend
     -> LoggedIn2
-    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
     let
         local : LocalState
@@ -4967,7 +4982,7 @@ toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
         )
 
 
-pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 pressedOpenEmojiSelector textInputId emojiSelector model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5047,7 +5062,7 @@ selectionChanged :
     Maybe HtmlId
     -> Maybe ( Range, SelectionDirection )
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 selectionChanged maybeHtmlId maybeRange model =
     case ( maybeHtmlId, maybeRange ) of
         ( Just htmlId, Just ( range, direction ) ) ->
@@ -5263,7 +5278,7 @@ adjustSelection selectionOld selection text =
         (RichText.stringToStickersAndCustomEmojis text)
 
 
-textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 textInputFocusChanged maybeHtmlId maybeSelection model =
     case model.loginStatus of
         LoggedIn loggedIn ->
@@ -5332,7 +5347,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             )
 
 
-setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 setShowMembers showMembers model =
     case model.route of
         GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
@@ -5368,7 +5383,7 @@ viewImageInfo :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 viewImageInfo guildOrDmId fileId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5403,7 +5418,7 @@ viewImageInfo guildOrDmId fileId model =
         model
 
 
-setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 setLastViewedToLatestMessage model loggedIn =
     let
         local =
@@ -5439,9 +5454,9 @@ setLastViewedToLatestMessage model loggedIn =
 handleEditable :
     Editable.Msg value
     -> (UserOptionsModel -> Editable.Model -> UserOptionsModel)
-    -> (value -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg ))
+    -> (value -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ ))
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleEditable editableMsg setter acceptEdit model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5462,7 +5477,7 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
-pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 pressedReply guildOrDmId threadRoute loggedIn model =
     ( MessageMenu.close
         model
@@ -5480,7 +5495,7 @@ pressedReply guildOrDmId threadRoute loggedIn model =
     )
 
 
-pressedEditMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 pressedEditMessage guildOrDmId threadRoute model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5567,7 +5582,7 @@ pressedEditMessage guildOrDmId threadRoute model =
         model
 
 
-showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5605,7 +5620,7 @@ touchStart :
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touches model =
     case model.drag of
         NoDrag ->
@@ -5675,7 +5690,7 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl ma
     }
 
 
-handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 handleTouchEnd time model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5803,7 +5818,7 @@ setWordSpellingGameModel local model game loggedIn =
             loggedIn
 
 
-finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 finalizeWordSpellingDrag time model loggedIn =
     case model.drag of
         Dragging dragging ->
@@ -5955,8 +5970,12 @@ sidebarSpeed =
     Quantity.float 7 |> Quantity.per Duration.second
 
 
-updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
-updateFromBackend msg model =
+updateFromBackend :
+    AudioData
+    -> ToFrontend
+    -> FrontendModel_
+    -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
+updateFromBackend _ msg model =
     case model of
         Loading loading ->
             case msg of
@@ -5991,22 +6010,25 @@ updateFromBackend msg model =
                         }
 
                 _ ->
-                    ( model, Command.none )
+                    ( model, Command.none, Audio.cmdNone )
 
         Loaded loaded ->
-            updateLoadedFromBackend
-                msg
-                (case loaded.toFrontendLogs of
-                    Just logs ->
-                        { loaded | toFrontendLogs = Array.push msg logs |> Just }
+            let
+                ( loaded2, cmds ) =
+                    updateLoadedFromBackend
+                        msg
+                        (case loaded.toFrontendLogs of
+                            Just logs ->
+                                { loaded | toFrontendLogs = Array.push msg logs |> Just }
 
-                    Nothing ->
-                        loaded
-                )
-                |> Tuple.mapFirst Loaded
+                            Nothing ->
+                                loaded
+                        )
+            in
+            ( Loaded loaded2, cmds, Audio.cmdNone )
 
 
-updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 updateLoadedFromBackend msg model =
     case msg of
         CheckLoginResponse _ ->
@@ -6761,8 +6783,8 @@ updateLoadedFromBackend msg model =
             )
 
 
-view : FrontendModel -> Browser.Document FrontendMsg
-view model =
+view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_
+view _ model =
     { title = "AtChat"
     , body =
         [ case model of
@@ -6799,7 +6821,7 @@ view model =
                     isMobile =
                         MyUi.isMobile loaded
 
-                    requiresLogin : (LoggedIn2 -> LocalState -> Element FrontendMsg) -> Html FrontendMsg
+                    requiresLogin : (LoggedIn2 -> LocalState -> Element FrontendMsg_) -> Html FrontendMsg_
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
@@ -7081,7 +7103,7 @@ view model =
     }
 
 
-errorPage : LoadedFrontend -> String -> Element FrontendMsg
+errorPage : LoadedFrontend -> String -> Element FrontendMsg_
 errorPage model text =
     Ui.el
         [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.route model.loginStatus)
@@ -7166,7 +7188,7 @@ handleWordSpellingGameOutMsgs :
     List Game.OutMsg
     -> Route.DmRouteData
     -> LoadedFrontend
-    -> ( LoadedFrontend, List (Command FrontendOnly ToBackend FrontendMsg) )
+    -> ( LoadedFrontend, List (Command FrontendOnly ToBackend FrontendMsg_) )
 handleWordSpellingGameOutMsgs outMsgs dmRoute model =
     List.foldl
         (\outMsg ( model2, cmds ) ->

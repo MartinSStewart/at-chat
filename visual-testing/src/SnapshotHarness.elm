@@ -12,7 +12,7 @@ import Html
 import List.Extra
 import List.Nonempty
 import Task
-import Types exposing (FrontendMsg)
+import Types exposing (FrontendMsg_)
 import Url exposing (Url)
 
 
@@ -38,7 +38,7 @@ type alias Model frontendMsg =
     { currentIndex : Int, snapshots : Maybe (List (Snapshot frontendMsg)), gotFirstSnapshotRequest : Bool }
 
 
-main : Program () (Model FrontendMsg) (Msg FrontendMsg)
+main : Program () (Model FrontendMsg_) (Msg FrontendMsg_)
 main =
     Browser.application
         { init = init
@@ -50,7 +50,7 @@ main =
         }
 
 
-init : () -> Url -> Browser.Navigation.Key -> ( Model FrontendMsg, Cmd (Msg FrontendMsg) )
+init : () -> Url -> Browser.Navigation.Key -> ( Model FrontendMsg_, Cmd (Msg FrontendMsg_) )
 init _ _ _ =
     let
         _ =
@@ -71,7 +71,7 @@ init _ _ _ =
     )
 
 
-update : Msg FrontendMsg -> Model FrontendMsg -> ( Model FrontendMsg, Cmd (Msg FrontendMsg) )
+update : Msg FrontendMsg_ -> Model FrontendMsg_ -> ( Model FrontendMsg_, Cmd (Msg FrontendMsg_) )
 update msg model =
     let
         _ =

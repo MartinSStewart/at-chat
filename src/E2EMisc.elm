@@ -8,10 +8,10 @@ import Expect
 import Id
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, ToBackend, ToFrontend)
 
 
-inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inviteUserAndDmChat : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 inviteUserAndDmChat config =
     E2EHelper.startTest
         "Invite user and then have DM chat"
@@ -56,7 +56,7 @@ inviteUserAndDmChat config =
         ]
 
 
-inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 inactiveThreadsAreHiddenTest config =
     T.start
         "Inactive threads are hidden"
