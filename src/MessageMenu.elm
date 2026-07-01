@@ -34,7 +34,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
-import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
+import Types exposing (EditMessage, FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -208,7 +208,7 @@ showEditViewed extraOptions loggedIn =
             showEdit extraOptions loggedIn
 
 
-viewMobile : Float -> MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+viewMobile : Float -> MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 viewMobile offset extraOptions loggedIn local model =
     let
         height : Int
@@ -345,7 +345,7 @@ viewMobile offset extraOptions loggedIn local model =
         )
 
 
-view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
+view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg_
 view model extraOptions local loggedIn =
     if MyUi.isMobile model then
         let
@@ -422,7 +422,7 @@ menuItems :
     -> Coord CssPixels
     -> LocalState
     -> LoadedFrontend
-    -> { items : List (Element FrontendMsg), height : Int }
+    -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
         helper : Id messageId -> { a | messages : IdArray messageId (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
@@ -560,7 +560,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     )
                 , if isMobile then
                     let
-                        commonEmojis : List (Element FrontendMsg)
+                        commonEmojis : List (Element FrontendMsg_)
                         commonEmojis =
                             User.commonlyUsedEmojis local.localUser.user
                                 |> List.take 3
@@ -693,7 +693,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
             { items = [], height = 0 }
 
 
-menuItemsHelper : Bool -> List ContextMenuItem -> { items : List (Element FrontendMsg), height : Int }
+menuItemsHelper : Bool -> List ContextMenuItem -> { items : List (Element FrontendMsg_), height : Int }
 menuItemsHelper isMobile a =
     List.foldl
         (\item { items, height } ->
@@ -725,7 +725,7 @@ menuItemsHelper isMobile a =
 
 type ContextMenuItem
     = NoItem
-    | ButtonItem (Element FrontendMsg)
+    | ButtonItem (Element FrontendMsg_)
     | HorizontalLineItem
     | GroupItem (List ContextMenuItem)
 
@@ -755,7 +755,7 @@ copyImageButton isMobile imageUrl lastCopied =
         NoItem
 
 
-copyImageLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyImageLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg_
 copyImageLinkButton isMobile imageUrl lastCopied =
     button
         isMobile
@@ -775,7 +775,7 @@ copyImageLinkButton isMobile imageUrl lastCopied =
         (PressedCopyText imageUrl)
 
 
-copyLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg_
 copyLinkButton isMobile linkUrl lastCopied =
     button
         isMobile

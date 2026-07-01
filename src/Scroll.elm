@@ -13,7 +13,7 @@ import Effect.Task as Task exposing (Task)
 import MyUi
 import Pages.Guild
 import Ports
-import Types exposing (FrontendMsg(..), ScrollPosition(..))
+import Types exposing (FrontendMsg_(..), ScrollPosition(..))
 
 
 smoothScroll : HtmlId -> Task FrontendOnly Dom.Error ()
@@ -67,12 +67,12 @@ smoothScrollY stepCount x startY endY =
             |> Task.andThen (\() -> smoothScrollY (stepCount + 1) x startY endY)
 
 
-toBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
+toBottomOfChannel : Command FrontendOnly toMsg FrontendMsg_
 toBottomOfChannel =
     Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
 
 
-toBottomOfChannelIfAtBottom : ScrollPosition -> Command FrontendOnly toMsg FrontendMsg
+toBottomOfChannelIfAtBottom : ScrollPosition -> Command FrontendOnly toMsg FrontendMsg_
 toBottomOfChannelIfAtBottom position =
     case position of
         ScrolledToBottom ->
@@ -85,7 +85,7 @@ toBottomOfChannelIfAtBottom position =
             Command.none
 
 
-toBottomOfChannelSmooth : Command FrontendOnly toMsg FrontendMsg
+toBottomOfChannelSmooth : Command FrontendOnly toMsg FrontendMsg_
 toBottomOfChannelSmooth =
     Dom.getViewportOf Pages.Guild.conversationContainerId
         |> Task.andThen

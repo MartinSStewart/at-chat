@@ -47,13 +47,13 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserSession exposing (SetViewing(..))
 import VisibleMessages
 
 
-setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
@@ -63,7 +63,7 @@ setup =
         |> T.addStringFile "/public/compact-emoji.json"
 
 
-main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+main : Program () (T.Model ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
 main =
     T.startViewer setup
 
@@ -74,10 +74,10 @@ tests :
     -> String
     -> Bytes
     -> String
-    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
 tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
-        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
+        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel_ BackendModel } -> HttpResponse
         handleNormalHttpRequests =
             handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 128 128))
 
@@ -221,7 +221,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         handleMultiFileUpload _ =
             UnhandledMultiFileUpload
 
-        normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        normalConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
         normalConfig =
             T.Config
                 Frontend.app_
@@ -232,7 +232,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleMultiFileUpload
                 E2EHelper.domain
 
-        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        imageUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
         imageUploadConfig =
             T.Config
                 Frontend.app_
@@ -249,7 +249,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
-        wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        wideImageUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
         wideImageUploadConfig =
             T.Config
                 Frontend.app_
@@ -266,7 +266,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads a video file. The upload response reports no image size, just
         -- like the Rust server does for files it can't decode as an image.
-        videoUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        videoUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
         videoUploadConfig =
             T.Config
                 Frontend.app_
@@ -283,7 +283,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads an audio file. Like videoUploadConfig, the upload response
         -- reports no image size.
-        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        audioUploadConfig : T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
         audioUploadConfig =
             T.Config
                 Frontend.app_
@@ -459,7 +459,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 let
-                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
                     checkCards elmCampCardCount meetdownCardCount =
                         [ admin.checkView
                             100
@@ -632,7 +632,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 let
                     checkHover :
                         (Maybe Emoji.EmojiOrSticker -> Result String ())
-                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
                     checkHover predicate =
                         admin.checkModel
                             100
@@ -2347,7 +2347,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     ]
 
 
-backupRequests : T.Data FrontendModel BackendModel -> List HttpRequest
+backupRequests : T.Data FrontendModel_ BackendModel -> List HttpRequest
 backupRequests data =
     List.filter
         (\request ->
@@ -2359,8 +2359,8 @@ backupRequests data =
 
 
 sendMessageRateLimitTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 sendMessageRateLimitTest config =
     E2EHelper.startTest
         "SendMessage rate limiting"
@@ -2379,10 +2379,10 @@ sendMessageRateLimitTest config =
                         Id.fromInt 0
 
                     sendMessage :
-                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
                         -> Float
                         -> Int
-                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
                     sendMessage client delayInMs changeIndex =
                         client.sendToBackend
                             delayInMs
@@ -2410,7 +2410,7 @@ sendMessageRateLimitTest config =
                             Nothing ->
                                 -1
 
-                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
                     checkMessageCount label expected =
                         T.checkBackend
                             100
@@ -2475,10 +2475,10 @@ sendMessageRateLimitTest config =
 
 
 attackerTriesToLeakSensitiveData :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
     T.start
         "Attacker tries to leak/modify sensitive data"

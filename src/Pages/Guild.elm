@@ -71,7 +71,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -293,7 +293,7 @@ guildColumn :
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Bool
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 guildColumn isMobile route localUser dmChannels discordDmChannels guilds discordGuilds canScroll2 =
     let
         allUsers =
@@ -526,17 +526,17 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
         )
 
 
-elLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Element FrontendMsg
+elLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Element FrontendMsg_
 elLinkButton htmlId route attributes content =
     MyUi.elButton htmlId (PressedLink route) attributes content
 
 
-rowLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg) -> List (Element FrontendMsg) -> Element FrontendMsg
+rowLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg_) -> List (Element FrontendMsg_) -> Element FrontendMsg_
 rowLinkButton htmlId route attributes content =
     MyUi.rowButton htmlId (PressedLink route) attributes content
 
 
-loggedInAsView : LocalUser -> Element FrontendMsg
+loggedInAsView : LocalUser -> Element FrontendMsg_
 loggedInAsView localUser =
     Ui.row
         [ Ui.Font.color MyUi.font2
@@ -573,7 +573,7 @@ homePageLoggedInView :
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalState
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 homePageLoggedInView maybeOtherUserId model loggedIn local =
     case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
         ( Just fileData, _ ) ->
@@ -685,7 +685,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     ]
 
 
-guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg
+guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
     Ui.Lazy.lazy6
         (case ( canScroll model.drag, isMobile ) of
@@ -716,7 +716,7 @@ guildColumnCanScrollMobile :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 guildColumnCanScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
     guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds True
 
@@ -728,7 +728,7 @@ guildColumnCanScrollNotMobile :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 guildColumnCanScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
     guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds True
 
@@ -740,7 +740,7 @@ guildColumnCannotScrollMobile :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 guildColumnCannotScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
     guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds False
 
@@ -752,12 +752,12 @@ guildColumnCannotScrollNotMobile :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
     guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds False
 
 
-dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 dmChannelView dmRoute loggedIn local model =
     case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
         Nothing ->
@@ -827,7 +827,7 @@ discordDmChannelView :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordDmChannelView routeData loggedIn local model =
     case SeqDict.get routeData.channelId local.discordDmChannels of
         Just dmChannel ->
@@ -904,7 +904,7 @@ conversationWidth model =
               )
 
 
-guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
 guildView model guildId channelRoute loggedIn local =
     case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
         ( Just fileData, _ ) ->
@@ -1093,7 +1093,7 @@ discordGuildView :
     -> DiscordGuildRouteData
     -> LoggedIn2
     -> LocalState
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordGuildView model routeData loggedIn local =
     case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
         ( Just fileData, _ ) ->
@@ -1255,7 +1255,7 @@ discordGuildView model routeData loggedIn local =
                     guildErrorPage "Discord guild not found" local model
 
 
-guildErrorPage : String -> LocalState -> LoadedFrontend -> Element FrontendMsg
+guildErrorPage : String -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 guildErrorPage error local model =
     if MyUi.isMobile model then
         Ui.column
@@ -1301,7 +1301,7 @@ memberColumnWidth =
     200
 
 
-memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
 memberColumnNotMobile localUser membersAndOwner =
     let
         _ =
@@ -1339,7 +1339,7 @@ discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id Discord.UserId
     -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
     let
         _ =
@@ -1374,7 +1374,7 @@ discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
         ]
 
 
-memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
 memberColumnMobile canScroll2 localUser membersAndOwner =
     let
         _ =
@@ -1427,7 +1427,7 @@ discordMemberColumnMobile :
     -> LocalUser
     -> Discord.Id Discord.UserId
     -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOwner =
     let
         _ =
@@ -1479,7 +1479,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOw
         ]
 
 
-memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
+memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_
 memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
@@ -1513,7 +1513,7 @@ discordMemberLabel :
     -> LocalUser
     -> Discord.Id Discord.UserId
     -> Discord.Id Discord.UserId
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordMemberLabel isMobile localUser currentUserId userId =
     MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.idToString userId))
@@ -1577,7 +1577,7 @@ threadPreviewText allUsers threadMessageIndex channel =
             "Thread not found"
 
 
-channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
         ChannelRoute channelId threadRoute _ ->
@@ -1653,7 +1653,7 @@ channelView channelRoute guildId guild loggedIn local model =
             Ui.none
 
 
-discordChannelView : DiscordGuildRouteData -> DiscordFrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+discordChannelView : DiscordGuildRouteData -> DiscordFrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 discordChannelView routeData guild loggedIn local model =
     case routeData.channelRoute of
         DiscordChannel_ChannelRoute channelId threadRoute _ ->
@@ -1730,7 +1730,7 @@ discordChannelView routeData guild loggedIn local model =
             discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId local
 
 
-discordGuildSettingsView : Discord.Id Discord.UserId -> Discord.Id Discord.GuildId -> LocalState -> Element FrontendMsg
+discordGuildSettingsView : Discord.Id Discord.UserId -> Discord.Id Discord.GuildId -> LocalState -> Element FrontendMsg_
 discordGuildSettingsView userId guildId local =
     Ui.el
         [ Ui.height Ui.fill ]
@@ -1761,7 +1761,7 @@ discordGuildSettingsView userId guildId local =
         )
 
 
-guildSettingsForm : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
+guildSettingsForm : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
 guildSettingsForm model loggedIn local guildId guild =
     let
         isMobile =
@@ -1915,7 +1915,7 @@ editGuildFormInit =
     { deleteConfirmation = "", showDeleteConfirmation = False }
 
 
-deleteGuildSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg
+deleteGuildSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg_
 deleteGuildSection guildId guild form =
     let
         guildNameString : String
@@ -1966,7 +1966,7 @@ deleteGuildSection guildId guild form =
         ]
 
 
-deleteGuildConfirmationInput : Id GuildId -> String -> EditGuildForm -> Element FrontendMsg
+deleteGuildConfirmationInput : Id GuildId -> String -> EditGuildForm -> Element FrontendMsg_
 deleteGuildConfirmationInput guildId guildNameString form =
     let
         confirmLabel =
@@ -2016,7 +2016,7 @@ inviteLinkQrCodeView containerWidth inviteLink =
             Ui.none
 
 
-copyableText : String -> LoadedFrontend -> Element FrontendMsg
+copyableText : String -> LoadedFrontend -> Element FrontendMsg_
 copyableText text model =
     let
         isCopied : Bool
@@ -2116,7 +2116,7 @@ conversationViewHelper :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> List ( String, Element FrontendMsg )
+    -> List ( String, Element FrontendMsg_ )
 conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -2422,7 +2422,7 @@ discordConversationViewHelper :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> List ( String, Element FrontendMsg )
+    -> List ( String, Element FrontendMsg_ )
 discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -2748,7 +2748,7 @@ threadConversationViewHelper :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> List ( String, Element FrontendMsg )
+    -> List ( String, Element FrontendMsg_ )
 threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -2966,7 +2966,7 @@ discordThreadConversationViewHelper :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> List ( String, Element FrontendMsg )
+    -> List ( String, Element FrontendMsg_ )
 discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -3340,7 +3340,7 @@ scrollCloseToTop =
     300
 
 
-decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
+decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg_
 decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
         (\scrollTop scrollHeight clientHeight ->
@@ -3373,7 +3373,7 @@ emojiSelector :
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
-    -> Ui.Attribute FrontendMsg
+    -> Ui.Attribute FrontendMsg_
 emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model =
     let
         emojiConfig : EmojiConfig
@@ -3485,7 +3485,7 @@ replyToHeader :
     -> Maybe (Id messageId)
     -> SeqDict userId { a | name : PersonName }
     -> { b | messages : IdArray messageId2 (MessageState messageId2 userId) }
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
     case replyTo of
         Just messageIndex ->
@@ -3552,7 +3552,7 @@ an anchor is picked, valid anchor elements are highlighted when hovering over
 them. Once an anchor is picked an overlay captures mouse events for freehand
 drawing.
 -}
-drawingModeAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg)
+drawingModeAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingModeAttributes route drawingMode =
     if Route.toChannelHeaderTab route == Just Route.DmChannelHeaderTab_Draw then
         case drawingMode of
@@ -3577,7 +3577,7 @@ drawingModeAttributes route drawingMode =
 {-| Css transform applied to the conversation container so the area around the
 selected anchor is magnified for more precise drawing.
 -}
-drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg)
+drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
         ( Just Route.DmChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
@@ -3612,7 +3612,7 @@ conversationView :
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
         }
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -3789,7 +3789,7 @@ discordConversationView :
         }
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableCustomEmojis availableStickers =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -4046,7 +4046,7 @@ threadConversationView :
     -> LocalState
     -> String
     -> FrontendThread
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -4235,7 +4235,7 @@ discordThreadConversationView :
     -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> DiscordFrontendThread
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableCustomEmojis availableStickers channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
@@ -4402,7 +4402,7 @@ threadStarterMessage :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex channel loggedIn local model =
     let
         guildOrDmIdNoThread : AnyGuildOrDmId
@@ -4516,7 +4516,7 @@ discordThreadStarterMessage :
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex channel loggedIn local model =
     let
         currentUserId : Discord.Id Discord.UserId
@@ -4830,7 +4830,7 @@ messageEditingView :
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
@@ -4976,7 +4976,7 @@ threadMessageEditingView :
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
@@ -6894,7 +6894,7 @@ channelColumnNotMobile :
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnNotMobile localUser time guildId guild channelRoute channelNameHover =
     channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
 
@@ -6905,7 +6905,7 @@ discordChannelColumnNotMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumnNotMobile time localUser routeData guild channelNameHover =
     discordChannelColumn False (Time.millisToPosix time) localUser routeData guild channelNameHover True
 
@@ -6917,7 +6917,7 @@ channelColumnCanScrollMobile :
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnCanScrollMobile localUser time guildId guild channelRoute channelNameHover =
     channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
 
@@ -6929,7 +6929,7 @@ channelColumnCannotScrollMobile :
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnCannotScrollMobile localUser time guildId guild channelRoute channelNameHover =
     channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False
 
@@ -6940,7 +6940,7 @@ discordChannelColumnCanScrollMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumnCanScrollMobile time localUser guildId guild channelNameHover =
     discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover True
 
@@ -6951,7 +6951,7 @@ discordChannelColumnCannotScrollMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> GuildChannelNameHover
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumnCannotScrollMobile time localUser guildId guild channelNameHover =
     discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover False
 
@@ -7000,7 +7000,7 @@ channelColumn :
     -> ChannelRoute
     -> GuildChannelNameHover
     -> Bool
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 =
     let
         guildName : String
@@ -7011,7 +7011,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
         directMentions =
             SeqDict.get guildId localUser.user.directMentions
 
-        newChannelButton : Element FrontendMsg
+        newChannelButton : Element FrontendMsg_
         newChannelButton =
             case MembersAndOwner.isMember localUser.session.userId guild.membersAndOwner of
                 IsOwner ->
@@ -7139,7 +7139,7 @@ discordChannelColumn :
     -> DiscordFrontendGuild
     -> GuildChannelNameHover
     -> Bool
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumn isMobile time localUser routeData guild channelNameHover canScroll2 =
     let
         guildName : String
@@ -7253,7 +7253,7 @@ channelColumnThreads :
     -> Id ChannelId
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
@@ -7323,12 +7323,12 @@ channelColumnThreadsHelper :
     -> ChannelNotificationType
     -> Int
     -> Int
-    -> FrontendMsg
-    -> FrontendMsg
+    -> FrontendMsg_
+    -> FrontendMsg_
     -> HtmlId
     -> Route
     -> String
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThreadCount onMouseEnter onMouseLeave htmlId route name =
     Ui.row
         [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
@@ -7393,7 +7393,7 @@ discordChannelColumnThreads :
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> SeqDict (Id ChannelMessageId) DiscordFrontendThread
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumnThreads isMobile now routeData directMentions localUser channelId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
@@ -7477,7 +7477,7 @@ channelColumnRow :
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId channelId channel =
     let
         isSelected : Bool
@@ -7574,7 +7574,7 @@ discordChannelColumnRow :
     -> DiscordGuildRouteData
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordChannelColumnRow isMobile hasNotifications channelNameHover routeData channelId channel =
     let
         isSelected : Bool
@@ -7684,7 +7684,7 @@ friendsColumnLazy :
     -> Time.Posix
     -> DmChannelSelection
     -> LocalState
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
     let
         msInMinute =
@@ -7736,27 +7736,27 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
                 local.localUser
 
 
-friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
+friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 isMobile currentTime NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
+friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 True currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 False currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
+friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 True currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
-friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
+friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 False currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
@@ -7769,7 +7769,7 @@ friendsColumn :
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels discordDmChannels localUser =
     let
         _ =
@@ -7873,7 +7873,7 @@ friendLabelMobile :
     -> Id UserId
     -> FrontendUser
     -> FrontendDmChannel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 friendLabelMobile time isSelected localUser otherUserId otherUser channel =
     friendLabel True (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
 
@@ -7885,7 +7885,7 @@ friendLabelNotMobile :
     -> Id UserId
     -> FrontendUser
     -> FrontendDmChannel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 friendLabelNotMobile time isSelected localUser otherUserId otherUser channel =
     friendLabel False (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
 
@@ -7928,7 +7928,7 @@ friendLabel :
     -> Id UserId
     -> FrontendUser
     -> FrontendDmChannel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -8030,7 +8030,7 @@ discordFriendLabelMobile :
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> LocalUser
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordFriendLabelMobile time isSelected dmChannelId channel localUser =
     discordFriendLabel True (Time.millisToPosix time) isSelected dmChannelId channel localUser
 
@@ -8041,7 +8041,7 @@ discordFriendLabelNotMobile :
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> LocalUser
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordFriendLabelNotMobile time isSelected dmChannelId channel localUser =
     discordFriendLabel False (Time.millisToPosix time) isSelected dmChannelId channel localUser
 
@@ -8053,7 +8053,7 @@ discordFriendLabel :
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> LocalUser
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
     let
         _ =
@@ -8238,7 +8238,7 @@ editChannelFormInit channel =
     }
 
 
-editChannelFormView : Bool -> Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg
+editChannelFormView : Bool -> Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg_
 editChannelFormView isMobile2 guildId channelId channel form =
     let
         isEmpty : Bool
@@ -8361,7 +8361,7 @@ deleteConfirmationInput channelNameString form =
         ]
 
 
-newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
+newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg_
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
@@ -8456,7 +8456,7 @@ channelDescriptionInput form =
         ]
 
 
-newGuildFormView : NewGuildForm -> Element FrontendMsg
+newGuildFormView : NewGuildForm -> Element FrontendMsg_
 newGuildFormView form =
     Ui.column
         [ Ui.Font.color MyUi.font1

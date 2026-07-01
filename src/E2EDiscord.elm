@@ -30,7 +30,7 @@ import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel_, FrontendMsg_, ToBackend, ToFrontend)
 import Unsafe
 import User
 
@@ -39,8 +39,8 @@ import User
 descriptive error if the admin isn't loaded/logged in.
 -}
 withAdminLocalState :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.Data FrontendModel BackendModel
+    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
+    -> T.Data FrontendModel_ BackendModel
     -> (LocalState.LocalState -> Result String ())
     -> Result String ()
 withAdminLocalState admin data fn =
@@ -66,9 +66,9 @@ checkDmVisibleMessageCountDmChannelId =
 (id 185574444641550336) from the admin frontend and checks it against a predicate.
 -}
 checkDmVisibleMessageCount :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> (Int -> Bool)
-    -> T.Data FrontendModel BackendModel
+    -> T.Data FrontendModel_ BackendModel
     -> Result String ()
 checkDmVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
@@ -108,9 +108,9 @@ checkGuildVisibleMessageCountChannelId =
 checks it against a predicate.
 -}
 checkGuildVisibleMessageCount :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> (Int -> Bool)
-    -> T.Data FrontendModel BackendModel
+    -> T.Data FrontendModel_ BackendModel
     -> Result String ()
 checkGuildVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
@@ -136,10 +136,10 @@ checkGuildVisibleMessageCount admin isExpected data =
 
 
 discordTests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> List (T.EndToEndTest ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ E2EHelper.startTest
         "Got rich text embed"
@@ -183,7 +183,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         let
-                            customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmojiData
+                            customEmojiNamed : String -> T.Data FrontendModel_ BackendModel -> List CustomEmojiData
                             customEmojiNamed name data =
                                 SeqDict.values data.backend.customEmojis
                                     |> List.filter (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name == name)
@@ -1526,7 +1526,7 @@ timestamp is the current test time and the sequence number/message id are derive
 it. `content` is the raw Discord message content (so a mention is written as
 `<@userId>`).
 -}
-discordGuildMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 discordGuildMessage connection content =
     T.andThen
         100
@@ -1549,7 +1549,7 @@ channel the linked admin shares with user `137748026084163584`, sent by that oth
 user. The message timestamp is the current test time and the sequence number/message
 id are derived from it.
 -}
-discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 discordDmMessage connection content =
     T.andThen
         100
@@ -1580,7 +1580,7 @@ discordGroupDmChannelCreate =
 `discordGroupDmChannelCreate`, sent by `at0232`. The message timestamp is the current
 test time and the sequence number/message id are derived from it.
 -}
-discordGroupDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGroupDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 discordGroupDmMessage connection content =
     T.andThen
         100
@@ -1603,10 +1603,10 @@ given private channel id shows a notification circle with the given count. The c
 rendered as the badge's `aria-label`.
 -}
 friendLabelHasNotificationCircle :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 friendLabelHasNotificationCircle user channelId count =
     user.checkView
         100
@@ -1623,10 +1623,10 @@ friendLabelHasNotificationCircle user channelId count =
 given private channel id shows no notification circle with the given count.
 -}
 friendLabelHasNoNotificationCircle :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg_ FrontendModel_ ToFrontend BackendMsg BackendModel
 friendLabelHasNoNotificationCircle user channelId count =
     user.checkView
         100
@@ -1669,7 +1669,7 @@ unrelatedDiscordUserId =
 Discord users on the frontend. These are the Discord users loaded for the DM channels the
 user belongs to plus the members of whatever Discord guild the user is currently viewing.
 -}
-checkDiscordUserLoaded : String -> Bool -> Discord.Id Discord.UserId -> FrontendModel -> Result String ()
+checkDiscordUserLoaded : String -> Bool -> Discord.Id Discord.UserId -> FrontendModel_ -> Result String ()
 checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
     case model of
         Types.Loaded loaded ->

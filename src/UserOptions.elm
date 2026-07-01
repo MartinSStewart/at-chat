@@ -24,7 +24,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
@@ -59,7 +59,7 @@ viewConnectedDevice :
             , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
             , userAgent : UserAgent
         }
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 viewConnectedDevice isCurrentSession session =
     let
         browserText : String
@@ -143,7 +143,7 @@ viewConnectedDevice isCurrentSession session =
         ]
 
 
-gotoAdmin : Element FrontendMsg
+gotoAdmin : Element FrontendMsg_
 gotoAdmin =
     Ui.el
         [ Ui.paddingXY 32 0 ]
@@ -162,7 +162,7 @@ view :
     -> LoggedIn2
     -> LoadedFrontend
     -> UserOptionsModel
-    -> Element FrontendMsg
+    -> Element FrontendMsg_
 view isMobile textInputFocus time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
@@ -548,7 +548,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
         )
 
 
-discordAcknowledgement : Bool -> Element FrontendMsg
+discordAcknowledgement : Bool -> Element FrontendMsg_
 discordAcknowledgement discordAcknowledged =
     let
         acknowledgmentLabel =
@@ -596,7 +596,7 @@ numberPoint index content =
         ]
 
 
-discordUserCard : LoadedFrontend -> Discord.Id Discord.UserId -> DiscordFrontendCurrentUser -> Element FrontendMsg
+discordUserCard : LoadedFrontend -> Discord.Id Discord.UserId -> DiscordFrontendCurrentUser -> Element FrontendMsg_
 discordUserCard loaded discordUserId data =
     Ui.column
         [ Ui.spacing 8

@@ -7,7 +7,7 @@ module Pages.Home exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import MyUi
 import Route exposing (Route(..))
-import Types exposing (FrontendMsg(..), LoginStatus(..))
+import Types exposing (FrontendMsg_(..), LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -15,7 +15,7 @@ import Ui.Input
 import Ui.Shadow
 
 
-header : Bool -> Route -> LoginStatus -> Element FrontendMsg
+header : Bool -> Route -> LoginStatus -> Element FrontendMsg_
 header isMobile route loginStatus =
     Ui.el
         [ Ui.background MyUi.background1
@@ -81,7 +81,7 @@ loginButtonId =
     Dom.id "homePage_loginButton"
 
 
-view : Int -> Element FrontendMsg
+view : Int -> Element FrontendMsg_
 view windowWidth =
     Ui.column
         [ MyUi.montserrat
