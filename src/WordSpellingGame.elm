@@ -2574,7 +2574,7 @@ leaderboardView isMobile winners shared localUser =
                 |> List.sortBy (\player -> negate player.score)
     in
     Ui.column
-        [ Ui.spacing 8, Ui.height (Ui.px statusHeight) ]
+        [ Ui.spacing 8, Ui.height (Ui.px statusHeight), Ui.paddingXY 16 0 ]
         (Ui.el
             [ Ui.Font.weight 700 ]
             (Ui.text
