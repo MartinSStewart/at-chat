@@ -1217,7 +1217,11 @@ parseTimeControl setup =
 
 boardX : Coord CssPixels -> Int
 boardX windowSize =
-    MyUi.channelAndGuildColumnWidth windowSize
+    if MyUi.isMobile { windowSize = windowSize } then
+        0
+
+    else
+        MyUi.channelAndGuildColumnWidth windowSize
 
 
 boardY : number
@@ -1240,13 +1244,13 @@ boardWidth windowSize =
     cellSize windowSize * gridSize
 
 
-boardHeight : Coord CssPixels -> Int
-boardHeight windowSize =
-    boardWidth windowSize + trayHeight
+boardHeight : ValidatedSetup -> Coord CssPixels -> Int
+boardHeight setup windowSize =
+    boardWidth windowSize + trayHeight setup windowSize
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> Bool
-insideBoard windowSize coord =
+insideBoard : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Bool
+insideBoard setup windowSize coord =
     let
         x =
             boardX windowSize
@@ -1254,7 +1258,7 @@ insideBoard windowSize coord =
     (Coord.xRaw coord > x)
         && (Coord.xRaw coord < (x + boardWidth windowSize))
         && (Coord.yRaw coord > boardY)
-        && (Coord.yRaw coord < boardY + boardHeight windowSize)
+        && (Coord.yRaw coord < boardY + boardHeight setup windowSize)
 
 
 {-| Which board cell (if any) a screen position is over.
@@ -1281,9 +1285,13 @@ cellAtPosition windowSize coord =
         Nothing
 
 
-trayTileSize : number
-trayTileSize =
-    50
+trayTileSize : ValidatedSetup -> Coord CssPixels -> Float
+trayTileSize setup windowSize =
+    let
+        traySize =
+            toFloat (OneOrGreater.toInt setup.traySize)
+    in
+    min 50 ((toFloat (Coord.xRaw windowSize) - (trayTileSpacing * (traySize - 1))) / traySize)
 
 
 trayTileSpacing : number
@@ -1291,22 +1299,22 @@ trayTileSpacing =
     4
 
 
-trayTilePos : Coord CssPixels -> TrayIndex -> Coord CssPixels
-trayTilePos windowSize (TrayIndex index) =
+trayTilePos : ValidatedSetup -> Coord CssPixels -> TrayIndex -> Coord CssPixels
+trayTilePos setup windowSize (TrayIndex index) =
     Coord.xy
-        (boardX windowSize + index * (trayTileSize + trayTileSpacing))
+        (boardX windowSize + round (toFloat index * (trayTileSize setup windowSize + trayTileSpacing)))
         (trayY windowSize)
 
 
 {-| Where a tray tile is currently drawn. While a shift animation is in progress the tile eases
 from the slot it was shifted out of toward its current slot; otherwise it sits at its current slot.
 -}
-animatedTrayTilePos : Coord CssPixels -> Time.Posix -> TrayIndex -> Maybe ( Time.Posix, Int ) -> Coord CssPixels
-animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
+animatedTrayTilePos : ValidatedSetup -> Coord CssPixels -> Time.Posix -> TrayIndex -> Maybe ( Time.Posix, Int ) -> Coord CssPixels
+animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation =
     let
         dest : Coord CssPixels
         dest =
-            trayTilePos windowSize trayIndex
+            trayTilePos setup windowSize trayIndex
     in
     case shiftAnimation of
         Just ( startTime, fromSlot ) ->
@@ -1317,7 +1325,7 @@ animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
 
                 from : Coord CssPixels
                 from =
-                    trayTilePos windowSize (TrayIndex fromSlot)
+                    trayTilePos setup windowSize (TrayIndex fromSlot)
 
                 lerp : Int -> Int -> Int
                 lerp a b =
@@ -1333,8 +1341,8 @@ animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation =
 
 {-| Which tray slot (if any) a screen position is over.
 -}
-trayIndexAtPosition : Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
-trayIndexAtPosition windowSize coord trayLength =
+trayIndexAtPosition : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Int -> Maybe Int
+trayIndexAtPosition setup windowSize coord trayLength =
     let
         relX : Int
         relX =
@@ -1345,9 +1353,9 @@ trayIndexAtPosition windowSize coord trayLength =
             Coord.yRaw coord - trayY windowSize
 
         index =
-            relX // (trayTileSize + trayTileSpacing)
+            toFloat relX / (trayTileSize setup windowSize + trayTileSpacing) |> floor
     in
-    if relX >= 0 && relY >= 0 && relY < trayHeight && index < trayLength then
+    if relX >= 0 && relY >= 0 && relY < trayHeight setup windowSize && index < trayLength then
         Just index
 
     else
@@ -1390,7 +1398,7 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
         Nothing ->
-            case trayIndexAtPosition windowSize touchPosition (OneOrGreater.toInt setup.traySize) of
+            case trayIndexAtPosition setup windowSize touchPosition (OneOrGreater.toInt setup.traySize) of
                 Just index ->
                     case
                         List.Extra.findIndex
@@ -1414,8 +1422,8 @@ dragStart windowSize touches setup gameModel =
                     Game gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> Shared -> GameData -> ( Model, Bool )
-dragEnd currentTime windowSize newTouches shared gameModel =
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> ( Model, Bool )
+dragEnd currentTime windowSize newTouches setup shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
             let
@@ -1425,8 +1433,8 @@ dragEnd currentTime windowSize newTouches shared gameModel =
 
                 returnToTray : ( Model, Bool )
                 returnToTray =
-                    ( if distanceToTray windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
-                        insertIntoTray currentTime windowSize tileIndex position gameModel
+                    ( if distanceToTray setup windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
+                        insertIntoTray currentTime windowSize tileIndex position setup gameModel
 
                       else
                         Game
@@ -1529,8 +1537,8 @@ maxTraySnapDistance =
 {-| The distance (in CSS pixels) from a screen position to the nearest edge of the tray rectangle,
 or 0 when the position is inside it.
 -}
-distanceToTray : Coord CssPixels -> Coord CssPixels -> Int -> Float
-distanceToTray windowSize coord slotCount =
+distanceToTray : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Int -> Float
+distanceToTray setup windowSize coord slotCount =
     let
         left : Int
         left =
@@ -1538,7 +1546,7 @@ distanceToTray windowSize coord slotCount =
 
         right : Int
         right =
-            left + slotCount * trayTileSize + (slotCount - 1) * trayTileSpacing
+            left + round (toFloat slotCount * trayTileSize setup windowSize) + (slotCount - 1) * trayTileSpacing
 
         top : Int
         top =
@@ -1546,7 +1554,7 @@ distanceToTray windowSize coord slotCount =
 
         bottom : Int
         bottom =
-            top + trayHeight
+            top + trayHeight setup windowSize
 
         dx : Int
         dx =
@@ -1562,8 +1570,8 @@ distanceToTray windowSize coord slotCount =
 {-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
 slot and the nearest empty slot over by one to make room.
 -}
-insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> GameData -> Model
-insertIntoTray currentTime windowSize tileIndex position gameModel =
+insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> ValidatedSetup -> GameData -> Model
+insertIntoTray currentTime windowSize tileIndex position setup gameModel =
     let
         slotCount : Int
         slotCount =
@@ -1572,7 +1580,7 @@ insertIntoTray currentTime windowSize tileIndex position gameModel =
         target : Int
         target =
             toFloat (Coord.xRaw position - trayX windowSize)
-                / (trayTileSize + trayTileSpacing)
+                / (trayTileSize setup windowSize + trayTileSpacing)
                 |> round
                 |> clamp 0 (slotCount - 1)
 
@@ -2002,8 +2010,8 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         [ Ui.spacing 16, Ui.wrap, MyUi.htmlStyle "user-select" "none" ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
         , Ui.column
-            [ Ui.paddingXY 16 0 ]
-            [ statusView localUser.session.userId localUser setup shared
+            [ Ui.paddingXY 16 0, Ui.spacing 4 ]
+            [ statusView windowSize localUser.session.userId localUser setup shared
             , case isPlayerTurn localUser.session.userId shared of
                 JoinedAndItsTheirTurn ->
                     Ui.column
@@ -2139,8 +2147,8 @@ leaderboardView shared localUser =
         )
 
 
-statusView : Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
-statusView currentUserId localUser setup shared =
+statusView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
+statusView windowSize currentUserId localUser setup shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2154,6 +2162,9 @@ statusView currentUserId localUser setup shared =
                 (\_ a total -> OneOrGreater.toInt a + total)
                 0
                 (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
+
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
     in
     case getWinner shared of
         Just _ ->
@@ -2162,8 +2173,13 @@ statusView currentUserId localUser setup shared =
         Nothing ->
             Ui.column
                 [ Ui.spacing 8 ]
-                (Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft)
-                    :: List.indexedMap
+                ((if isMobile then
+                    []
+
+                  else
+                    [ Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft) ]
+                 )
+                    ++ List.indexedMap
                         (\index player ->
                             let
                                 isTheirTurn : Bool
@@ -2192,9 +2208,9 @@ statusView currentUserId localUser setup shared =
                 )
 
 
-trayHeight : number
-trayHeight =
-    trayTileSize
+trayHeight : ValidatedSetup -> Coord CssPixels -> Int
+trayHeight setup windowSize =
+    trayTileSize setup windowSize |> round
 
 
 boardView :
@@ -2329,8 +2345,8 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                         tileInFront
                                             currentTime
                                             tile.createdAt
-                                            trayTileSize
-                                            (animatedTrayTilePos windowSize currentTime trayIndex shiftAnimation)
+                                            (trayTileSize setup windowSize |> round)
+                                            (animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation)
                                             letter
 
                                     TileOnBoard ( x, y ) ->
@@ -2395,13 +2411,16 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 Nothing ->
                     Ui.noAttr
 
+        trayHeight2 =
+            trayHeight setup windowSize
+
         trayWidth : Int
         trayWidth =
-            Coord.xRaw (trayTilePos windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
+            Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
     in
     Ui.el
         [ Ui.width Ui.shrink
-        , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight))
+        , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight2))
         , Ui.pointer
         , Ui.el
             (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
@@ -2415,7 +2434,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                             [ Ui.background (Ui.rgb 119 97 97)
                             , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
                             , Ui.width (Ui.px trayWidth)
-                            , Ui.height (Ui.px (trayHeight + 4))
+                            , Ui.height (Ui.px (trayHeight2 + 4))
                             ]
                             Ui.none
                         )
