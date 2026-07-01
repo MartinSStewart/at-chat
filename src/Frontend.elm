@@ -1234,15 +1234,14 @@ updateLoaded msg model =
                                                                                     |> Maybe.andThen Game.goMatchData
                                                                             of
                                                                                 Just ( _, shared ) ->
-                                                                                    (case maybeGameModel of
-                                                                                        Just (Game.GoModel m) ->
-                                                                                            Just m
+                                                                                    case maybeGameModel of
+                                                                                        Just (Game.GoModel_Game m) ->
+                                                                                            Go.pressedKey key shared m
+                                                                                                |> Game.GoModel_Game
+                                                                                                |> Just
 
                                                                                         _ ->
                                                                                             Nothing
-                                                                                    )
-                                                                                        |> Go.pressedKey key shared
-                                                                                        |> Maybe.map Game.GoModel
 
                                                                                 Nothing ->
                                                                                     maybeGameModel

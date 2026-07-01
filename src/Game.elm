@@ -9,6 +9,7 @@ module Game exposing
     , addGoAction
     , addPublicLink
     , addWordSpellingGameAction
+    , audio
     , gameToString
     , goMatchData
     , hasPendingTurn
@@ -19,6 +20,7 @@ module Game exposing
     )
 
 import Array exposing (Array)
+import Audio exposing (Audio)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
@@ -44,7 +46,8 @@ import WordSpellingGame
 
 
 type Model
-    = GoModel Go.Model
+    = GoModel_Setup Go.SetupModel
+    | GoModel_Game Go.GameModel
     | WordSpellingGame_Setup WordSpellingGame.SetupModel
     | WordSpellingGame_Game WordSpellingGame.GameData
 
@@ -86,6 +89,26 @@ type MatchData
 addPublicLink : SecretId GamePublicId -> MatchData -> MatchData
 addPublicLink publicLink (MatchData match) =
     { match | publicLink = Just publicLink } |> MatchData
+
+
+audio : Audio.Source -> MatchData -> Model -> Audio
+audio popSound (MatchData matchData) model =
+    case matchData.data of
+        FrontendGameData_Go setup actions shared ->
+            case model of
+                GoModel_Game model2 ->
+                    Go.audio popSound model2
+
+                _ ->
+                    Audio.silence
+
+        FrontendGameData_WordSpellingGame setup _ shared ->
+            case model of
+                WordSpellingGame_Game model2 ->
+                    WordSpellingGame.audio popSound model2
+
+                _ ->
+                    Audio.silence
 
 
 initMatchData : BackendGameData -> Maybe (SecretId GamePublicId) -> MatchData
@@ -227,7 +250,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                         setup
                                         cache
                                         (case model of
-                                            Just (GoModel (Go.Game goModel2)) ->
+                                            Just (GoModel_Game goModel2) ->
                                                 goModel2
 
                                             _ ->
@@ -243,7 +266,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                                         Nothing ->
                                             newMatchId
                             in
-                            ( GoModel goModel |> Just
+                            ( GoModel_Game goModel |> Just
                             , List.concatMap
                                 (\outMsg ->
                                     case outMsg of
@@ -276,7 +299,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         otherUserId
                         goMsg
                         (case model of
-                            Just (GoModel (Go.Setup setup)) ->
+                            Just (GoModel_Setup setup) ->
                                 setup
 
                             _ ->
@@ -292,7 +315,12 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
                         Nothing ->
                             newMatchId
             in
-            ( GoModel goModel |> Just
+            ( case goModel of
+                Go.Setup setup ->
+                    GoModel_Setup setup |> Just
+
+                Go.Game gameModel ->
+                    GoModel_Game gameModel |> Just
             , List.concatMap
                 (\outMsg ->
                     case outMsg of
@@ -408,7 +436,7 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
         PressedSelectGame game ->
             case game of
                 Game_Go ->
-                    ( Just (GoModel (Go.Setup Go.initSetup)), [] )
+                    ( Just (GoModel_Setup Go.initSetup), [] )
 
                 Game_WordSpellingGame ->
                     ( Just (WordSpellingGame_Setup WordSpellingGame.initSetup), [] )
@@ -463,7 +491,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                     setup
                                     cache
                                     (case model of
-                                        Just (GoModel (Go.Game game)) ->
+                                        Just (GoModel_Game game) ->
                                             game
 
                                         _ ->
@@ -502,18 +530,11 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                 ]
                 [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
                 , case model of
-                    Just (GoModel model2) ->
-                        Go.setupView
-                            (localUser.session.userId == otherUserId)
-                            windowSize
-                            (case model2 of
-                                Go.Setup setup ->
-                                    setup
+                    Just (GoModel_Game _) ->
+                        Go.setupView (localUser.session.userId == otherUserId) windowSize Go.initSetup |> Ui.map GoSetupMsg
 
-                                _ ->
-                                    Go.initSetup
-                            )
-                            |> Ui.map GoSetupMsg
+                    Just (GoModel_Setup setup) ->
+                        Go.setupView (localUser.session.userId == otherUserId) windowSize setup |> Ui.map GoSetupMsg
 
                     Just (WordSpellingGame_Game _) ->
                         WordSpellingGame.setupView windowSize WordSpellingGame.initSetup |> Ui.map WordSpellingSetupMsg

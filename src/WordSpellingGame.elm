@@ -95,15 +95,7 @@ type alias GameData =
     { selectedCell : Maybe ( Int, Int )
     , tiles : Array Tile
     , dragging : Maybe Int
-    , -- When the player last pressed submit while their board tiles didn't form a single connected
-      -- row or column. Drives the hint under the submit button and the shake that draws attention to
-      -- the offending tiles.
-      invalidPlacement : Maybe Time.Posix
-    , -- Drives the smooth animation of the mobile board zoom. `from` is the zoom the board was
-      -- showing when the target last changed (a tile was placed, removed or a word submitted) and
-      -- `start` is when that happened; the current zoom eases from there to the target derived from
-      -- the placed tiles (see `animatedZoomState`).
-      zoomAnimation : ZoomAnimation
+    , zoomAnimation : ZoomAnimation
     }
 
 
@@ -131,7 +123,7 @@ type TilePosition
       -- inserted tile, the moment the shift started and the slot it shifted from, so the view can
       -- animate it sliding from its old slot to this one.
       TileInTray TrayIndex (Maybe ( Time.Posix, Int ))
-    | TileOnBoard ( Int, Int )
+    | TileOnBoard ( Int, Int ) Time.Posix
 
 
 {-| Opaque
@@ -204,7 +196,6 @@ initGame time setup =
                 list
                 |> Array.fromList
       , dragging = Nothing
-      , invalidPlacement = Nothing
       , zoomAnimation = { start = time, from = zoomedOutState }
       }
     , []
@@ -989,7 +980,7 @@ updateGame time currentUserId setup shared msg model =
                                         TileInTray _ _ ->
                                             Array.push tile acc
 
-                                        TileOnBoard cell ->
+                                        TileOnBoard cell _ ->
                                             if Set.member cell lineCells then
                                                 acc
 
@@ -1004,8 +995,7 @@ updateGame time currentUserId setup shared msg model =
                     ( withZoomAnimation time
                         model
                         { model
-                            | invalidPlacement = Nothing
-                            , dragging = Nothing
+                            | dragging = Nothing
                             , tiles =
                                 List.foldl
                                     (\index tray ->
@@ -1045,8 +1035,7 @@ updateGame time currentUserId setup shared msg model =
                     List.range 0 (lettersLeftIncludingTray - 1)
             in
             ( { model
-                | invalidPlacement = Nothing
-                , tiles =
+                | tiles =
                     List.map
                         (\index ->
                             { position = TileInTray (TrayIndex index) Nothing
@@ -1071,7 +1060,7 @@ placedTiles currentUserId shared model =
                 |> List.filterMap
                     (\( tile, letter ) ->
                         case tile.position of
-                            TileOnBoard cell ->
+                            TileOnBoard cell _ ->
                                 Just ( cell, letter )
 
                             TileInTray _ _ ->
@@ -1545,7 +1534,7 @@ zoomTarget model =
                 |> List.filterMap
                     (\tile ->
                         case tile.position of
-                            TileOnBoard cell ->
+                            TileOnBoard cell _ ->
                                 Just cell
 
                             TileInTray _ _ ->
@@ -1855,7 +1844,7 @@ dragStart time windowSize touches setup gameModel =
                 List.Extra.findIndex
                     (\tile ->
                         case tile.position of
-                            TileOnBoard boardPosition ->
+                            TileOnBoard boardPosition _ ->
                                 boardPosition == cell
 
                             TileInTray _ _ ->
@@ -1876,7 +1865,7 @@ dragStart time windowSize touches setup gameModel =
                         List.Extra.findIndex
                             (\tile ->
                                 case tile.position of
-                                    TileOnBoard _ ->
+                                    TileOnBoard _ _ ->
                                         False
 
                                     TileInTray trayIndex _ ->
@@ -1911,7 +1900,6 @@ dragEnd currentTime windowSize newTouches setup shared model =
                     else
                         { model
                             | dragging = Nothing
-                            , invalidPlacement = Nothing
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
@@ -1927,11 +1915,10 @@ dragEnd currentTime windowSize newTouches setup shared model =
                     else
                         { model
                             | dragging = Nothing
-                            , invalidPlacement = Nothing
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
-                                    (\tile -> { tile | position = TileOnBoard cell })
+                                    (\tile -> { tile | position = TileOnBoard cell currentTime })
                                     model.tiles
                         }
 
@@ -1963,7 +1950,7 @@ firstOpenTrayIndex draggedIndex tiles =
                                 TileInTray (TrayIndex trayIndex) _ ->
                                     Just trayIndex
 
-                                TileOnBoard _ ->
+                                TileOnBoard _ _ ->
                                     Nothing
                     )
 
@@ -1981,13 +1968,21 @@ firstOpenTrayIndex draggedIndex tiles =
 cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
 cellOccupiedByOtherTile draggedIndex cell tiles =
     Array.toIndexedList tiles
-        |> List.any (\( index, tile ) -> index /= draggedIndex && tile.position == TileOnBoard cell)
+        |> List.any
+            (\( index, tile ) ->
+                case tile.position of
+                    TileOnBoard pos _ ->
+                        (index /= draggedIndex) && pos == cell
+
+                    TileInTray trayIndex maybe ->
+                        False
+            )
 
 
 isTileOnBoard : Tile -> Bool
 isTileOnBoard tile =
     case tile.position of
-        TileOnBoard _ ->
+        TileOnBoard _ _ ->
             True
 
         TileInTray _ _ ->
@@ -2079,7 +2074,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
                                 TileInTray (TrayIndex slot) _ ->
                                     Just slot
 
-                                TileOnBoard _ ->
+                                TileOnBoard _ _ ->
                                     Nothing
                     )
                 |> Set.fromList
@@ -2137,7 +2132,6 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
     in
     { gameModel
         | dragging = Nothing
-        , invalidPlacement = Nothing
         , tiles =
             Array.indexedMap
                 (\index tile ->
@@ -2160,7 +2154,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
                                 else
                                     { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
 
-                            TileOnBoard _ ->
+                            TileOnBoard _ _ ->
                                 tile
                 )
                 gameModel.tiles
@@ -2290,18 +2284,6 @@ boardTileShakeOffset currentTime invalidPlacement =
             0
 
 
-{-| Whether the invalid-submit shake is still playing, so the view keeps redrawing each frame.
--}
-isShaking : Time.Posix -> GameData -> Bool
-isShaking currentTime model =
-    case model.invalidPlacement of
-        Just startTime ->
-            elapsedMs currentTime startTime < shakeDuration
-
-        Nothing ->
-            False
-
-
 elapsedMs : Time.Posix -> Time.Posix -> Float
 elapsedMs currentTime startTime =
     toFloat (Time.posixToMillis currentTime - Time.posixToMillis startTime)
@@ -2346,8 +2328,7 @@ isAnimating currentTime shared =
 -}
 anyTileAnimating : Time.Posix -> GameData -> Bool
 anyTileAnimating currentTime model =
-    isShaking currentTime model
-        || Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
+    Array.Extra.any (\tile -> isTileFading currentTime tile.createdAt || isTileShifting currentTime tile) model.tiles
 
 
 {-| The opacity and downward drift of a tile as it fades into place. It stays hidden for
@@ -2895,22 +2876,13 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                             :: trayAcc
                                         )
 
-                                    TileOnBoard ( x, y ) ->
+                                    TileOnBoard ( x, y ) _ ->
                                         let
                                             p : { pos : Coord CssPixels, size : Int }
                                             p =
                                                 project x y
                                         in
-                                        ( tileInFront
-                                            currentTime
-                                            tile.createdAt
-                                            p.size
-                                            (Coord.xy
-                                                (Coord.xRaw p.pos + boardTileShakeOffset currentTime model.invalidPlacement)
-                                                (Coord.yRaw p.pos)
-                                            )
-                                            letter
-                                            :: boardAcc
+                                        ( tileInFront currentTime tile.createdAt p.size p.pos letter :: boardAcc
                                         , trayAcc
                                         )
                     )
@@ -2924,7 +2896,16 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         Just ( x, y ) ->
                             if
                                 SeqDict.member ( x, y ) shared.board
-                                    || Array.Extra.any (\tile -> tile.position == TileOnBoard ( x, y )) model.tiles
+                                    || Array.Extra.any
+                                        (\tile ->
+                                            case tile.position of
+                                                TileOnBoard pos _ ->
+                                                    pos == ( x, y )
+
+                                                TileInTray trayIndex maybe ->
+                                                    False
+                                        )
+                                        model.tiles
                             then
                                 Ui.noAttr
 
@@ -3839,6 +3820,17 @@ audio : Audio.Source -> GameData -> Audio
 audio popSound model =
     Audio.group
         [ Array.toList model.tiles
-            |> List.map (\tile -> Audio.audio popSound (Duration.addTo tile.createdAt tileFadeDelay))
+            |> List.map
+                (\tile ->
+                    Audio.group
+                        [ Audio.audio popSound (Duration.addTo tile.createdAt tileFadeDelay)
+                        , case tile.position of
+                            TileInTray _ _ ->
+                                Audio.silence
+
+                            TileOnBoard _ placedAt ->
+                                Audio.audio popSound placedAt
+                        ]
+                )
             |> Audio.group
         ]

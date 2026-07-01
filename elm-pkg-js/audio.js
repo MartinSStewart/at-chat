@@ -1,4 +1,7 @@
 exports.init = async function (app) {
+    startAudio(app)
+}
+
 /**
  * @param {{ ports: { audioPortFromJS: { send: (arg: { type: number; samplesPerSecond?: number; requestId?: number; error?: any; bufferId?: number; durationInSeconds?: number; }) => void; }; audioPortToJS: { subscribe: (arg: (message: any) => void) => void; }; }; }} app
  */
@@ -332,5 +335,4 @@ function startAudio(app) {
     } else {
         console.log("Web audio is not supported in your browser.");
     }
-}
 }
