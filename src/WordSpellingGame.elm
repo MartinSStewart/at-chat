@@ -303,6 +303,14 @@ initShared setup =
     }
 
 
+remainingLettersInBagCount : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> List Player -> Int
+remainingLettersInBagCount setup board players =
+    SeqDict.foldl
+        (\_ a total -> OneOrGreater.toInt a + total)
+        0
+        (remainingLettersInBag setup board players)
+
+
 remainingLettersInBag :
     ValidatedSetup
     -> SeqDict ( Int, Int ) LetterOrWildcard
@@ -1028,8 +1036,39 @@ updateGame time currentUserId setup shared msg model =
             ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
 
         PressedReplaceTrayOrPass ->
-            ( { model | invalidPlacement = Nothing }
-            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            let
+                lettersLeftIncludingTray =
+                    remainingLettersInBagCount
+                        setup
+                        shared.board
+                        (List.Nonempty.toList shared.players
+                            |> List.filter (\player -> player.userId == currentUserId)
+                        )
+                        |> min (OneOrGreater.toInt setup.traySize)
+
+                list =
+                    List.range 0 (lettersLeftIncludingTray - 1)
+            in
+            ( { model
+                | invalidPlacement = Nothing
+                , tiles =
+                    List.map
+                        (\index ->
+                            { position = TileInTray (TrayIndex index) Nothing
+                            , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                            }
+                        )
+                        list
+                        |> Array.fromList
+              }
+            , OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time })
+                :: List.map
+                    (\index ->
+                        PlaySound
+                            (Duration.addTo time (Duration.seconds (0.2 * toFloat index) |> Quantity.plus tileFadeDelay) |> Just)
+                            "pop"
+                    )
+                    list
             )
 
 
@@ -2578,12 +2617,6 @@ statusView windowSize currentUserId localUser setup shared model =
         playerCount =
             List.Nonempty.length shared.players
 
-        lettersLeft =
-            SeqDict.foldl
-                (\_ a total -> OneOrGreater.toInt a + total)
-                0
-                (remainingLettersInBag setup shared.board (List.Nonempty.toList shared.players))
-
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
     in
@@ -2598,7 +2631,10 @@ statusView windowSize currentUserId localUser setup shared model =
                     []
 
                   else
-                    [ Ui.text ("Letters remaining: " ++ String.fromInt lettersLeft) ]
+                    [ "Letters remaining: "
+                        ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
+                        |> Ui.text
+                    ]
                  )
                     ++ List.indexedMap
                         (\index player ->
