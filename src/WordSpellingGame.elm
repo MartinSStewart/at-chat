@@ -2510,33 +2510,19 @@ statusView windowSize currentUserId localUser setup shared model =
                         (List.Nonempty.toList shared.players)
                     ++ [ case isPlayerTurn localUser.session.userId shared of
                             JoinedAndItsTheirTurn ->
-                                Ui.column
-                                    [ Ui.spacing 8 ]
-                                    [ MyUi.simpleButton
-                                        (Dom.id "wordSpellingGame_replaceTray")
-                                        PressedReplaceTrayOrPass
-                                        (case passBehavior setup shared of
-                                            ShouldReplaceTray ->
-                                                Ui.text "Replace tray"
+                                MyUi.simpleButton
+                                    (Dom.id "wordSpellingGame_replaceTray")
+                                    PressedReplaceTrayOrPass
+                                    (case passBehavior setup shared of
+                                        ShouldReplaceTray ->
+                                            Ui.text "Replace tray"
 
-                                            ShouldPass ->
-                                                Ui.text "Pass turn"
+                                        ShouldPass ->
+                                            Ui.text "Pass turn"
 
-                                            ShouldEndGame ->
-                                                Ui.text "End game"
-                                        )
-
-                                    -- When the player has tiles on the board but none of them form
-                                    -- a submittable word, there's no send button to press, so nudge
-                                    -- them towards a valid placement.
-                                    , if Array.Extra.any isTileOnBoard model.tiles && List.isEmpty (submittableLines currentUserId shared model) then
-                                        Ui.el
-                                            [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
-                                            (Ui.text "Tiles must form a connected row or column")
-
-                                      else
-                                        Ui.none
-                                    ]
+                                        ShouldEndGame ->
+                                            Ui.text "End game"
+                                    )
 
                             Joined ->
                                 Ui.none
@@ -2861,7 +2847,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
                                 , Ui.width (Ui.px p.size)
                                 , Ui.height (Ui.px p.size)
-                                , Ui.background (Ui.rgb 46 160 87)
+                                , Ui.background MyUi.buttonBackground
                                 , Ui.rounded (p.size // 4)
                                 , Ui.borderColor (Ui.rgb 255 255 255)
                                 , Ui.border 2
@@ -2869,10 +2855,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 , Ui.contentCenterY
                                 , Ui.Font.color (Ui.rgb 255 255 255)
                                 ]
-                                (Ui.el
-                                    [ Ui.width (Ui.px 24), Ui.height (Ui.px 24), Ui.centerX, Ui.centerY ]
-                                    (Ui.html Icons.sendMessage)
-                                )
+                                (Ui.html Icons.sendMessage)
                                 |> Ui.inFront
                         )
 
