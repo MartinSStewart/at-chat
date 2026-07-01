@@ -138,13 +138,25 @@ wordSpellingGameTests normalConfig =
                 , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , admin.checkView
                     100
+                    -- The leaderboard renders each player's name and score suffix as separate
+                    -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "AT: 28 (winner)", Test.Html.Selector.exactText "Stevie Steve: 21" ]
+                        [ Test.Html.Selector.exactText "AT"
+                        , Test.Html.Selector.exactText ": 28 (winner)"
+                        , Test.Html.Selector.exactText "Stevie Steve"
+                        , Test.Html.Selector.exactText ": 21"
+                        ]
                     )
                 , user.checkView
                     100
+                    -- The leaderboard renders each player's name and score suffix as separate
+                    -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "AT: 28 (winner)", Test.Html.Selector.exactText "Stevie Steve: 21" ]
+                        [ Test.Html.Selector.exactText "AT"
+                        , Test.Html.Selector.exactText ": 28 (winner)"
+                        , Test.Html.Selector.exactText "Stevie Steve"
+                        , Test.Html.Selector.exactText ": 21"
+                        ]
                     )
                 ]
             )
