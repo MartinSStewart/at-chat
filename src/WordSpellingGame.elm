@@ -9,13 +9,13 @@ module WordSpellingGame exposing
     , LetterId
     , LetterOrWildcard(..)
     , LocalChange(..)
-    , Model(..)
     , OutMsg(..)
     , PlacedWord
     , PlacementResult
     , Player
     , SetupModel
     , SetupMsg(..)
+    , SetupOrGame(..)
     , Shared
     , Tile
     , TilePosition(..)
@@ -84,11 +84,6 @@ import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGameList exposing (Dictionary)
-
-
-type Model
-    = Setup SetupModel
-    | Game GameData
 
 
 type alias GameData =
@@ -899,12 +894,17 @@ removeFromTray letterOrWildcard tray =
         List.Extra.remove Wildcard tray
 
 
+type SetupOrGame
+    = Setup SetupModel
+    | Game GameData
+
+
 updateSetup :
     Time.Posix
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( Model, List OutMsg )
+    -> ( SetupOrGame, List OutMsg )
 updateSetup time currentUserId msg setup =
     case msg of
         ChangedMainTimeInput input ->
@@ -1234,19 +1234,19 @@ trayX =
     boardX
 
 
-trayY : Coord CssPixels -> Int
-trayY windowSize =
-    boardY + boardWidth windowSize
+trayY : ValidatedSetup -> Coord CssPixels -> Int
+trayY setup windowSize =
+    boardY + boardWidth setup windowSize
 
 
-boardWidth : Coord CssPixels -> Int
-boardWidth windowSize =
-    cellSize windowSize * gridSize
+boardWidth : ValidatedSetup -> Coord CssPixels -> Int
+boardWidth setup windowSize =
+    cellSize setup windowSize * gridSize
 
 
 boardHeight : ValidatedSetup -> Coord CssPixels -> Int
 boardHeight setup windowSize =
-    boardWidth windowSize + trayHeight setup windowSize
+    boardWidth setup windowSize + trayHeight setup windowSize
 
 
 insideBoard : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Bool
@@ -1256,19 +1256,19 @@ insideBoard setup windowSize coord =
             boardX windowSize
     in
     (Coord.xRaw coord > x)
-        && (Coord.xRaw coord < (x + boardWidth windowSize))
+        && (Coord.xRaw coord < (x + boardWidth setup windowSize))
         && (Coord.yRaw coord > boardY)
         && (Coord.yRaw coord < boardY + boardHeight setup windowSize)
 
 
 {-| Which board cell (if any) a screen position is over.
 -}
-cellAtPosition : Coord CssPixels -> Coord CssPixels -> Maybe ( Int, Int )
-cellAtPosition windowSize coord =
+cellAtPosition : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Maybe ( Int, Int )
+cellAtPosition setup windowSize coord =
     let
         size : Int
         size =
-            cellSize windowSize
+            cellSize setup windowSize
 
         relX : Int
         relX =
@@ -1306,13 +1306,13 @@ or `Nothing` when there's no zoom (not on mobile, or no tiles placed yet). Both 
 touch hit-testing always agree.
 
 -}
-boardZoom : Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
-boardZoom windowSize model =
+boardZoom : ValidatedSetup -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
+boardZoom setup windowSize model =
     if MyUi.isMobile { windowSize = windowSize } then
         let
             size : Int
             size =
-                cellSize windowSize
+                cellSize setup windowSize
 
             centers : List ( Int, Int )
             centers =
@@ -1390,14 +1390,14 @@ boardZoom windowSize model =
 cell math (`cellAtPosition`) resolves it to the right cell even while the board is zoomed in. This is
 the exact inverse of the `project` transform in `boardView`. Without zoom it's the identity.
 -}
-unprojectTouch : Coord CssPixels -> GameData -> Coord CssPixels -> Coord CssPixels
-unprojectTouch windowSize model coord =
-    case boardZoom windowSize model of
+unprojectTouch : Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Coord CssPixels
+unprojectTouch windowSize setup model coord =
+    case boardZoom setup windowSize model of
         Just { zoomedCellSize, translate } ->
             let
                 effScale : Float
                 effScale =
-                    toFloat zoomedCellSize / toFloat (cellSize windowSize)
+                    toFloat zoomedCellSize / toFloat (cellSize setup windowSize)
 
                 unproject : Int -> Int -> Int -> Int
                 unproject axis boardOrigin axisTranslate =
@@ -1416,8 +1416,8 @@ touch actually within the board's on-screen square counts; a touch over the tray
 outside the board) is `Nothing`. Without this guard the zoom un-projection could pull a touch just
 below the board (e.g. dropping a tile back on the tray) up into the board's cell range.
 -}
-boardCellAtPosition : Coord CssPixels -> GameData -> Coord CssPixels -> Maybe ( Int, Int )
-boardCellAtPosition windowSize model coord =
+boardCellAtPosition : Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Maybe ( Int, Int )
+boardCellAtPosition windowSize setup model coord =
     let
         relX : Int
         relX =
@@ -1429,10 +1429,10 @@ boardCellAtPosition windowSize model coord =
 
         width : Int
         width =
-            boardWidth windowSize
+            boardWidth setup windowSize
     in
     if relX >= 0 && relX < width && relY >= 0 && relY < width then
-        cellAtPosition windowSize (unprojectTouch windowSize model coord)
+        cellAtPosition setup windowSize (unprojectTouch windowSize setup model coord)
 
     else
         Nothing
@@ -1456,7 +1456,7 @@ trayTilePos : ValidatedSetup -> Coord CssPixels -> TrayIndex -> Coord CssPixels
 trayTilePos setup windowSize (TrayIndex index) =
     Coord.xy
         (boardX windowSize + round (toFloat index * (trayTileSize setup windowSize + trayTileSpacing)))
-        (trayY windowSize)
+        (trayY setup windowSize)
 
 
 {-| Where a tray tile is currently drawn. While a shift animation is in progress the tile eases
@@ -1503,7 +1503,7 @@ trayIndexAtPosition setup windowSize coord trayLength =
 
         relY : Int
         relY =
-            Coord.yRaw coord - trayY windowSize
+            Coord.yRaw coord - trayY setup windowSize
 
         index =
             toFloat relX / (trayTileSize setup windowSize + trayTileSpacing) |> floor
@@ -1520,7 +1520,7 @@ getPlayer userId gameState =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
 
 
-dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> Model
+dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
 dragStart windowSize touches setup gameModel =
     let
         touchPosition : Coord CssPixels
@@ -1530,7 +1530,7 @@ dragStart windowSize touches setup gameModel =
         trayList =
             Array.toList gameModel.tiles
     in
-    case boardCellAtPosition windowSize gameModel touchPosition of
+    case boardCellAtPosition windowSize setup gameModel touchPosition of
         Just cell ->
             case
                 List.Extra.findIndex
@@ -1545,10 +1545,10 @@ dragStart windowSize touches setup gameModel =
                     trayList
             of
                 Just tileIndex ->
-                    Game { gameModel | dragging = Just tileIndex }
+                    { gameModel | dragging = Just tileIndex }
 
                 Nothing ->
-                    Game gameModel
+                    gameModel
 
         Nothing ->
             case trayIndexAtPosition setup windowSize touchPosition (OneOrGreater.toInt setup.traySize) of
@@ -1566,16 +1566,16 @@ dragStart windowSize touches setup gameModel =
                             trayList
                     of
                         Just tileIndex ->
-                            Game { gameModel | dragging = Just tileIndex }
+                            { gameModel | dragging = Just tileIndex }
 
                         Nothing ->
-                            Game gameModel
+                            gameModel
 
                 Nothing ->
-                    Game gameModel
+                    gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> ( Model, Bool )
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> ( GameData, Bool )
 dragEnd currentTime windowSize newTouches setup shared gameModel =
     case gameModel.dragging of
         Just tileIndex ->
@@ -1584,41 +1584,39 @@ dragEnd currentTime windowSize newTouches setup shared gameModel =
                 position =
                     Touch.touchCentroid newTouches
 
-                returnToTray : ( Model, Bool )
+                returnToTray : ( GameData, Bool )
                 returnToTray =
                     ( if distanceToTray setup windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
                         insertIntoTray currentTime windowSize tileIndex position setup gameModel
 
                       else
-                        Game
-                            { gameModel
-                                | dragging = Nothing
-                                , invalidPlacement = Nothing
-                                , tiles =
-                                    Array.Extra.update
-                                        tileIndex
-                                        (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
-                                        gameModel.tiles
-                            }
+                        { gameModel
+                            | dragging = Nothing
+                            , invalidPlacement = Nothing
+                            , tiles =
+                                Array.Extra.update
+                                    tileIndex
+                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
+                                    gameModel.tiles
+                        }
                     , False
                     )
             in
-            case boardCellAtPosition windowSize gameModel position of
+            case boardCellAtPosition windowSize setup gameModel position of
                 Just cell ->
                     if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
                         returnToTray
 
                     else
-                        ( Game
-                            { gameModel
-                                | dragging = Nothing
-                                , invalidPlacement = Nothing
-                                , tiles =
-                                    Array.Extra.update
-                                        tileIndex
-                                        (\tile -> { tile | position = TileOnBoard cell })
-                                        gameModel.tiles
-                            }
+                        ( { gameModel
+                            | dragging = Nothing
+                            , invalidPlacement = Nothing
+                            , tiles =
+                                Array.Extra.update
+                                    tileIndex
+                                    (\tile -> { tile | position = TileOnBoard cell })
+                                    gameModel.tiles
+                          }
                         , True
                         )
 
@@ -1626,7 +1624,7 @@ dragEnd currentTime windowSize newTouches setup shared gameModel =
                     returnToTray
 
         Nothing ->
-            ( Game gameModel, False )
+            ( gameModel, False )
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -1703,7 +1701,7 @@ distanceToTray setup windowSize coord slotCount =
 
         top : Int
         top =
-            trayY windowSize
+            trayY setup windowSize
 
         bottom : Int
         bottom =
@@ -1723,7 +1721,7 @@ distanceToTray setup windowSize coord slotCount =
 {-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
 slot and the nearest empty slot over by one to make room.
 -}
-insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> ValidatedSetup -> GameData -> Model
+insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> ValidatedSetup -> GameData -> GameData
 insertIntoTray currentTime windowSize tileIndex position setup gameModel =
     let
         slotCount : Int
@@ -1806,37 +1804,36 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
                     ( Nothing, Nothing ) ->
                         identity
     in
-    Game
-        { gameModel
-            | dragging = Nothing
-            , invalidPlacement = Nothing
-            , tiles =
-                Array.indexedMap
-                    (\index tile ->
-                        if index == tileIndex then
-                            -- The dropped tile appears straight at its slot (it was following the
-                            -- cursor, so there's no old tray slot to slide from).
-                            { tile | position = TileInTray (TrayIndex target) Nothing }
+    { gameModel
+        | dragging = Nothing
+        , invalidPlacement = Nothing
+        , tiles =
+            Array.indexedMap
+                (\index tile ->
+                    if index == tileIndex then
+                        -- The dropped tile appears straight at its slot (it was following the
+                        -- cursor, so there's no old tray slot to slide from).
+                        { tile | position = TileInTray (TrayIndex target) Nothing }
 
-                        else
-                            case tile.position of
-                                TileInTray (TrayIndex slot) _ ->
-                                    let
-                                        newSlot : Int
-                                        newSlot =
-                                            slotMapping slot
-                                    in
-                                    if newSlot == slot then
-                                        tile
-
-                                    else
-                                        { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
-
-                                TileOnBoard _ ->
+                    else
+                        case tile.position of
+                            TileInTray (TrayIndex slot) _ ->
+                                let
+                                    newSlot : Int
+                                    newSlot =
+                                        slotMapping slot
+                                in
+                                if newSlot == slot then
                                     tile
-                    )
-                    gameModel.tiles
-        }
+
+                                else
+                                    { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
+
+                            TileOnBoard _ ->
+                                tile
+                )
+                gameModel.tiles
+    }
 
 
 type UserStatus
@@ -2160,48 +2157,17 @@ gameView :
     -> Element GameMsg
 gameView currentTime windowSize maybeDragging localUser setup shared model =
     Ui.row
-        [ Ui.spacing 16, Ui.wrap, MyUi.htmlStyle "user-select" "none" ]
+        [ Ui.height (Ui.px (tabBodyHeight windowSize setup))
+        , Ui.background MyUi.tabBackground
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , MyUi.noShrinking
+        , Ui.spacing 16
+        , Ui.wrap
+        , MyUi.htmlStyle "user-select" "none"
+        ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , Ui.column
-            [ Ui.paddingXY 16 0, Ui.spacing 4 ]
-            [ statusView windowSize localUser.session.userId localUser setup shared
-            , case isPlayerTurn localUser.session.userId shared of
-                JoinedAndItsTheirTurn ->
-                    Ui.column
-                        [ Ui.spacing 8 ]
-                        [ Ui.row
-                            [ Ui.spacing 16 ]
-                            [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
-                            , MyUi.simpleButton
-                                (Dom.id "wordSpellingGame_replaceTray")
-                                PressedReplaceTrayOrPass
-                                (case passBehavior setup shared of
-                                    ShouldReplaceTray ->
-                                        Ui.text "Replace tray"
-
-                                    ShouldPass ->
-                                        Ui.text "Pass turn"
-
-                                    ShouldEndGame ->
-                                        Ui.text "End game"
-                                )
-                            ]
-                        , case model.invalidPlacement of
-                            Just _ ->
-                                Ui.el
-                                    [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
-                                    (Ui.text "Tiles must all be on one column or row and connected")
-
-                            Nothing ->
-                                Ui.none
-                        ]
-
-                Joined ->
-                    Ui.none
-
-                NotJoined ->
-                    MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
-            ]
+        , statusView windowSize localUser.session.userId localUser setup shared model
         ]
 
 
@@ -2260,7 +2226,7 @@ leaderboardView shared localUser =
                 |> List.sortBy (\player -> negate player.score)
     in
     Ui.column
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 8, Ui.height (Ui.px statusHeight) ]
         (Ui.el
             [ Ui.Font.weight 700 ]
             (Ui.text
@@ -2300,8 +2266,8 @@ leaderboardView shared localUser =
         )
 
 
-statusView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
-statusView windowSize currentUserId localUser setup shared =
+statusView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
+statusView windowSize currentUserId localUser setup shared model =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2325,7 +2291,7 @@ statusView windowSize currentUserId localUser setup shared =
 
         Nothing ->
             Ui.column
-                [ Ui.spacing 8 ]
+                [ Ui.spacing 8, Ui.height (Ui.px statusHeight) ]
                 ((if isMobile then
                     []
 
@@ -2358,6 +2324,43 @@ statusView windowSize currentUserId localUser setup shared =
                                 )
                         )
                         (List.Nonempty.toList shared.players)
+                    ++ [ case isPlayerTurn localUser.session.userId shared of
+                            JoinedAndItsTheirTurn ->
+                                Ui.column
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 16 ]
+                                        [ MyUi.simpleButton (Dom.id "wordSpellingGame_submitWord") PressedSubmitWord (Ui.text "Submit word")
+                                        , MyUi.simpleButton
+                                            (Dom.id "wordSpellingGame_replaceTray")
+                                            PressedReplaceTrayOrPass
+                                            (case passBehavior setup shared of
+                                                ShouldReplaceTray ->
+                                                    Ui.text "Replace tray"
+
+                                                ShouldPass ->
+                                                    Ui.text "Pass turn"
+
+                                                ShouldEndGame ->
+                                                    Ui.text "End game"
+                                            )
+                                        ]
+                                    , case model.invalidPlacement of
+                                        Just _ ->
+                                            Ui.el
+                                                [ Ui.Font.color (Ui.rgb 200 40 40), Ui.Font.size 14 ]
+                                                (Ui.text "Tiles must all be on one column or row and connected")
+
+                                        Nothing ->
+                                            Ui.none
+                                    ]
+
+                            Joined ->
+                                Ui.none
+
+                            NotJoined ->
+                                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+                       ]
                 )
 
 
@@ -2377,16 +2380,13 @@ boardView :
     -> Element GameMsg
 boardView currentTime windowSize maybeDragging currentUserId setup shared model =
     let
-        isMobile =
-            MyUi.isMobile { windowSize = windowSize }
-
         cellSize2 : Int
         cellSize2 =
-            cellSize windowSize
+            cellSize setup windowSize
 
         zoom : Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
         zoom =
-            boardZoom windowSize model
+            boardZoom setup windowSize model
 
         -- The zoomed-in cell size, i.e. how big a board cell is drawn once the mobile zoom is
         -- applied (the same as `cellSize2` when there's no zoom).
@@ -2583,7 +2583,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
                 ( Just _, Just dragging2 ) ->
-                    case boardCellAtPosition windowSize model (Touch.touchCentroid dragging2) of
+                    case boardCellAtPosition windowSize setup model (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
                                 SeqDict.member ( x, y ) shared.board
@@ -2682,7 +2682,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         ++ [ Ui.inFront
                                 (Ui.el
                                     [ Ui.background (Ui.rgb 119 97 97)
-                                    , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
+                                    , Ui.move { x = trayX windowSize, y = trayY setup windowSize, z = 0 }
                                     , Ui.width (Ui.px trayWidth)
                                     , Ui.height (Ui.px (trayHeight2 + 4))
                                     ]
@@ -2828,13 +2828,42 @@ boardViewBackground cellSize2 =
         |> Ui.column [ MyUi.noPointerEvents ]
 
 
-cellSize : Coord CssPixels -> Int
-cellSize windowSize =
-    if MyUi.isMobile { windowSize = windowSize } then
-        Coord.xRaw windowSize // gridSize
+statusHeight : number
+statusHeight =
+    100
 
-    else
-        30
+
+tabBodyHeight : Coord CssPixels -> ValidatedSetup -> Int
+tabBodyHeight windowSize setup =
+    cellSize setup windowSize
+        * gridSize
+        + trayHeight setup windowSize
+        + (if MyUi.isMobile { windowSize = windowSize } then
+            statusHeight
+
+           else
+            0
+          )
+
+
+cellSize : ValidatedSetup -> Coord CssPixels -> Int
+cellSize setup windowSize =
+    let
+        availableSize : Int
+        availableSize =
+            min
+                (round (toFloat (Coord.yRaw windowSize) * 0.8)
+                    - trayHeight setup windowSize
+                    - (if MyUi.isMobile { windowSize = windowSize } then
+                        statusHeight
+
+                       else
+                        0
+                      )
+                )
+                (Coord.xRaw windowSize)
+    in
+    min 30 (availableSize // gridSize)
 
 
 cellView : Int -> ( Int, Int ) -> Element GameMsg
