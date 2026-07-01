@@ -24,6 +24,7 @@ module WordSpellingGame exposing
     , ValidatedSetup
     , animatedTilePlacement
     , anyTileAnimating
+    , audio
     , boardY
     , dragEnd
     , dragStart
@@ -53,6 +54,7 @@ module WordSpellingGame exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Audio exposing (Audio)
 import Char
 import Color.Manipulate
 import Coord exposing (Coord)
@@ -205,19 +207,12 @@ initGame time setup =
       , invalidPlacement = Nothing
       , zoomAnimation = { start = time, from = zoomedOutState }
       }
-    , List.map
-        (\index ->
-            PlaySound
-                (Duration.addTo time (Duration.seconds (0.2 * toFloat index) |> Quantity.plus tileFadeDelay) |> Just)
-                "pop"
-        )
-        list
+    , []
     )
 
 
 type OutMsg
     = OutLocalChange LocalChange
-    | PlaySound (Maybe Time.Posix) String
 
 
 type LocalChange
@@ -1026,7 +1021,6 @@ updateGame time currentUserId setup shared msg model =
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
                             |> OutLocalChange
-                      , PlaySound Nothing "pop"
                       ]
                     )
 
@@ -1062,14 +1056,7 @@ updateGame time currentUserId setup shared msg model =
                         list
                         |> Array.fromList
               }
-            , OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time })
-                :: List.map
-                    (\index ->
-                        PlaySound
-                            (Duration.addTo time (Duration.seconds (0.2 * toFloat index) |> Quantity.plus tileFadeDelay) |> Just)
-                            "pop"
-                    )
-                    list
+            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
             )
 
 
@@ -1907,60 +1894,54 @@ dragStart time windowSize touches setup gameModel =
                     gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> ( GameData, Bool )
-dragEnd currentTime windowSize newTouches setup shared gameModel =
-    let
-        ( newModel, movedToBoard ) =
-            case gameModel.dragging of
-                Just tileIndex ->
-                    let
-                        position : Coord CssPixels
-                        position =
-                            Touch.touchCentroid newTouches
+dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
+dragEnd currentTime windowSize newTouches setup shared model =
+    (case model.dragging of
+        Just tileIndex ->
+            let
+                position : Coord CssPixels
+                position =
+                    Touch.touchCentroid newTouches
 
-                        returnToTray : ( GameData, Bool )
-                        returnToTray =
-                            ( if distanceToTray setup windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
-                                insertIntoTray currentTime windowSize tileIndex position setup gameModel
+                returnToTray : GameData
+                returnToTray =
+                    if distanceToTray setup windowSize position (Array.length model.tiles) <= maxTraySnapDistance then
+                        insertIntoTray currentTime windowSize tileIndex position setup model
 
-                              else
-                                { gameModel
-                                    | dragging = Nothing
-                                    , invalidPlacement = Nothing
-                                    , tiles =
-                                        Array.Extra.update
-                                            tileIndex
-                                            (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
-                                            gameModel.tiles
-                                }
-                            , False
-                            )
-                    in
-                    case boardCellAtPosition currentTime windowSize setup gameModel position of
-                        Just cell ->
-                            if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
-                                returnToTray
+                    else
+                        { model
+                            | dragging = Nothing
+                            , invalidPlacement = Nothing
+                            , tiles =
+                                Array.Extra.update
+                                    tileIndex
+                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) model.tiles) Nothing })
+                                    model.tiles
+                        }
+            in
+            case boardCellAtPosition currentTime windowSize setup model position of
+                Just cell ->
+                    if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell model.tiles then
+                        returnToTray
 
-                            else
-                                ( { gameModel
-                                    | dragging = Nothing
-                                    , invalidPlacement = Nothing
-                                    , tiles =
-                                        Array.Extra.update
-                                            tileIndex
-                                            (\tile -> { tile | position = TileOnBoard cell })
-                                            gameModel.tiles
-                                  }
-                                , True
-                                )
-
-                        Nothing ->
-                            returnToTray
+                    else
+                        { model
+                            | dragging = Nothing
+                            , invalidPlacement = Nothing
+                            , tiles =
+                                Array.Extra.update
+                                    tileIndex
+                                    (\tile -> { tile | position = TileOnBoard cell })
+                                    model.tiles
+                        }
 
                 Nothing ->
-                    ( gameModel, False )
-    in
-    ( withZoomAnimation currentTime gameModel newModel, movedToBoard )
+                    returnToTray
+
+        Nothing ->
+            model
+    )
+        |> withZoomAnimation currentTime model
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -3852,3 +3833,12 @@ type Letter
     | X
     | Y
     | Z
+
+
+audio : Audio.Source -> GameData -> Audio
+audio popSound model =
+    Audio.group
+        [ Array.toList model.tiles
+            |> List.map (\tile -> Audio.audio popSound (Duration.addTo tile.createdAt tileFadeDelay))
+            |> Audio.group
+        ]

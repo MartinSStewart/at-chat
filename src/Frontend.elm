@@ -122,13 +122,9 @@ app_ =
         , updateFromBackend = updateFromBackend
         , subscriptions = subscriptions
         , view = view
-        , audio = audio
+        , audio = FrontendExtra.audio
         , audioPort = { toJS = Ports.audioPortToJS, fromJS = Ports.audioPortFromJS }
         }
-
-
-audio _ model =
-    Audio.silence
 
 
 subscriptions : AudioData -> FrontendModel_ -> Subscription FrontendOnly FrontendMsg_
@@ -312,7 +308,6 @@ init url key =
 
             _ ->
                 Command.none
-        , Ports.loadSounds
         , Task.perform GotTimezone Time.here
         , Ports.loadStartupData
         ]
@@ -5839,20 +5834,12 @@ finalizeWordSpellingDrag time model loggedIn =
                     in
                     case FrontendExtra.getWordSpellingGameModel local loggedIn model of
                         Just game ->
-                            let
-                                ( game2, playSound ) =
-                                    WordSpellingGame.dragEnd time model.windowSize dragging.touches game.setup game.shared game.model
-                            in
                             ( setWordSpellingGameModel
                                 local
                                 model
-                                game2
+                                (WordSpellingGame.dragEnd time model.windowSize dragging.touches game.setup game.shared game.model)
                                 loggedIn
-                            , if playSound then
-                                Ports.playSound Nothing "pop"
-
-                              else
-                                Command.none
+                            , Command.none
                             )
 
                         Nothing ->
@@ -6629,65 +6616,6 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
-                                Server_Game _ _ gameChange ->
-                                    case gameChange of
-                                        Game.LocalChange_Go _ goChange ->
-                                            case goChange of
-                                                Go.StartMatch _ _ ->
-                                                    ( loggedIn2, Command.none )
-
-                                                Go.Action actionWithTime ->
-                                                    ( loggedIn2
-                                                    , case actionWithTime.change of
-                                                        Go.PlaceStone _ _ ->
-                                                            Ports.playSound Nothing "pop"
-
-                                                        Go.PassTurn ->
-                                                            Ports.playSound Nothing "pop"
-
-                                                        Go.MarkTerritory _ _ ->
-                                                            Command.none
-
-                                                        Go.FinishedMarking ->
-                                                            Ports.playSound Nothing "pop"
-
-                                                        Go.AcceptTerritory ->
-                                                            Ports.playSound Nothing "pop"
-
-                                                        Go.RejectTerritory ->
-                                                            Ports.playSound Nothing "pop"
-                                                    )
-
-                                        Game.CreatePublicLink _ _ ->
-                                            ( loggedIn2, Command.none )
-
-                                        Game.LocalChange_WordSpellingGame _ wsChange ->
-                                            ( loggedIn2
-                                            , case wsChange of
-                                                WordSpellingGame.Action actionWithTime ->
-                                                    case actionWithTime.change of
-                                                        WordSpellingGame.PlaceWord placedWord _ ->
-                                                            List.map
-                                                                (\index ->
-                                                                    Ports.playSound
-                                                                        (Quantity.plus
-                                                                            WordSpellingGame.tileSlideDuration
-                                                                            (Quantity.multiplyBy (toFloat index) WordSpellingGame.tileSlideStagger)
-                                                                            |> Duration.addTo actionWithTime.time
-                                                                            |> Just
-                                                                        )
-                                                                        "pop"
-                                                                )
-                                                                (List.range 0 (List.Nonempty.length placedWord.letters - 1))
-                                                                |> Command.batch
-
-                                                        _ ->
-                                                            Command.none
-
-                                                WordSpellingGame.StartMatch _ _ ->
-                                                    Command.none
-                                            )
-
                                 _ ->
                                     ( loggedIn2, Command.none )
 
@@ -7201,9 +7129,6 @@ handleWordSpellingGameOutMsgs outMsgs dmRoute model =
     List.foldl
         (\outMsg ( model2, cmds ) ->
             case outMsg of
-                Game.PlaySound maybeTime sound ->
-                    ( model2, Ports.playSound maybeTime sound :: cmds )
-
                 Game.CopyText text ->
                     let
                         ( copyModel, copyCmd ) =
