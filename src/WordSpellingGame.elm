@@ -34,6 +34,7 @@ module WordSpellingGame exposing
     , insideBoard
     , isAnimating
     , isPlayerTurn
+    , isZoomAnimating
     , placeWord
     , placementConnects
     , setupView
@@ -95,7 +96,25 @@ type alias GameData =
       -- row or column. Drives the hint under the submit button and the shake that draws attention to
       -- the offending tiles.
       invalidPlacement : Maybe Time.Posix
+    , -- Drives the smooth animation of the mobile board zoom. `from` is the zoom the board was
+      -- showing when the target last changed (a tile was placed, removed or a word submitted) and
+      -- `start` is when that happened; the current zoom eases from there to the target derived from
+      -- the placed tiles (see `animatedZoomState`).
+      zoomAnimation : ZoomAnimation
     }
+
+
+type alias ZoomAnimation =
+    { start : Time.Posix, from : ZoomState }
+
+
+{-| A resolution-independent description of the board zoom: `amount` runs 0 (no zoom, whole board
+visible) to 1 (fully zoomed in), and `focusX`/`focusY` are the point the zoom centres on as a
+fraction (0 to 1) of the board. Storing it this way (rather than in pixels) keeps it correct across
+window resizes and lets the same value drive both the drawn board and touch hit-testing.
+-}
+type alias ZoomState =
+    { amount : Float, focusX : Float, focusY : Float }
 
 
 type alias Tile =
@@ -183,6 +202,7 @@ initGame time setup =
                 |> Array.fromList
       , dragging = Nothing
       , invalidPlacement = Nothing
+      , zoomAnimation = { start = time, from = zoomedOutState }
       }
     , List.map
         (\index ->
@@ -977,21 +997,23 @@ updateGame time currentUserId setup shared msg model =
                                 Array.empty
                                 model.tiles
                     in
-                    ( { model
-                        | invalidPlacement = Nothing
-                        , dragging = Nothing
-                        , tiles =
-                            List.foldl
-                                (\index tray ->
-                                    Array.push
-                                        { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
-                                        , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
-                                        }
-                                        tray
-                                )
-                                kept
-                                (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length kept - 1))
-                      }
+                    ( withZoomAnimation time
+                        model
+                        { model
+                            | invalidPlacement = Nothing
+                            , dragging = Nothing
+                            , tiles =
+                                List.foldl
+                                    (\index tray ->
+                                        Array.push
+                                            { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
+                                            , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
+                                            }
+                                            tray
+                                    )
+                                    kept
+                                    (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length kept - 1))
+                        }
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
                             |> OutLocalChange
@@ -1469,106 +1491,198 @@ boardZoomScale =
     1.75
 
 
-{-| On mobile, once the player has placed one or more tiles on the board this turn, the board is
-zoomed in and centred on the centroid of those tiles so the surrounding cells are larger and easier
-to tap. The board's on-screen square stays the same size, so the zoomed-in board is clipped to it.
-The centre is clamped so the visible window never runs off the edge of the board (no blank space
-shows beyond the board), which means the centroid sits dead centre only when it's far enough from
-every edge.
+{-| How long, in milliseconds, the board takes to ease to a new zoom/translation.
+-}
+zoomAnimationDuration : Float
+zoomAnimationDuration =
+    250
 
-Returns the drawn (zoomed) cell size and the board-local translation that positions the zoomed grid,
-or `Nothing` when there's no zoom (not on mobile, or no tiles placed yet). Both `project` in
-`boardView` and `unprojectTouch` are defined in terms of these two values, so the drawn board and the
-touch hit-testing always agree.
+
+{-| The zoom shown when nothing is placed: fully zoomed out, centred (the focus is irrelevant while
+zoomed out, but a stable value keeps the ease-out from panning oddly).
+-}
+zoomedOutState : ZoomState
+zoomedOutState =
+    { amount = 0, focusX = 0.5, focusY = 0.5 }
+
+
+{-| The zoom the board should settle on given the tiles currently placed: fully zoomed in and
+centred on their centroid, or fully zoomed out when the board is empty.
+-}
+zoomTarget : GameData -> ZoomState
+zoomTarget model =
+    let
+        placed : List ( Int, Int )
+        placed =
+            Array.toList model.tiles
+                |> List.filterMap
+                    (\tile ->
+                        case tile.position of
+                            TileOnBoard cell ->
+                                Just cell
+
+                            TileInTray _ _ ->
+                                Nothing
+                    )
+    in
+    case placed of
+        [] ->
+            zoomedOutState
+
+        _ ->
+            let
+                count : Float
+                count =
+                    toFloat (List.length placed)
+
+                focusFraction : Int -> Float
+                focusFraction total =
+                    (toFloat total / count + 0.5) / toFloat gridSize
+            in
+            { amount = 1
+            , focusX = focusFraction (List.sum (List.map Tuple.first placed))
+            , focusY = focusFraction (List.sum (List.map Tuple.second placed))
+            }
+
+
+{-| The zoom the board is showing right now: the stored `from` eased towards `zoomTarget` over
+`zoomAnimationDuration`.
+-}
+animatedZoomState : Time.Posix -> GameData -> ZoomState
+animatedZoomState time model =
+    let
+        from : ZoomState
+        from =
+            model.zoomAnimation.from
+
+        target : ZoomState
+        target =
+            zoomTarget model
+
+        eased : Float
+        eased =
+            easeOutCubic (clamp 0 1 (elapsedMs time model.zoomAnimation.start / zoomAnimationDuration))
+
+        lerp : Float -> Float -> Float
+        lerp a b =
+            a + eased * (b - a)
+    in
+    { amount = lerp from.amount target.amount
+    , focusX = lerp from.focusX target.focusX
+    , focusY = lerp from.focusY target.focusY
+    }
+
+
+{-| Start a new zoom animation when a change to the placed tiles moves the zoom target, easing from
+whatever the board is showing at `time` towards the new target. When the target is unchanged the
+in-flight animation (if any) is left running.
+-}
+withZoomAnimation : Time.Posix -> GameData -> GameData -> GameData
+withZoomAnimation time before after =
+    if zoomTarget before == zoomTarget after then
+        after
+
+    else
+        { after | zoomAnimation = { start = time, from = animatedZoomState time before } }
+
+
+{-| Whether the mobile board zoom is mid-animation, so the view keeps redrawing each frame.
+-}
+isZoomAnimating : Time.Posix -> Coord CssPixels -> GameData -> Bool
+isZoomAnimating time windowSize model =
+    MyUi.isMobile { windowSize = windowSize }
+        && (zoomTarget model /= model.zoomAnimation.from)
+        && (elapsedMs time model.zoomAnimation.start < zoomAnimationDuration)
+
+
+{-| On mobile the board is zoomed in and centred on the centroid of the placed tiles so the
+surrounding cells are larger and easier to tap. The board's on-screen square stays the same size, so
+the zoomed-in board is clipped to it. The centre is clamped so the visible window never runs off the
+edge of the board (no blank space shows beyond the board), which means the centroid sits dead centre
+only when it's far enough from every edge.
+
+Returns the drawn (zoomed) cell size and the board-local translation that positions the zoomed grid
+for the board's current (mid-animation) zoom, or `Nothing` when there's effectively no zoom (not on
+mobile, or zoomed all the way out). Both `project` in `boardView` and `unprojectTouch` are defined in
+terms of these two values, so the drawn board and the touch hit-testing always agree.
 
 -}
-boardZoom : ValidatedSetup -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
-boardZoom setup windowSize model =
+boardZoom : Time.Posix -> ValidatedSetup -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
+boardZoom time setup windowSize model =
     if MyUi.isMobile { windowSize = windowSize } then
+        resolveZoom setup windowSize (animatedZoomState time model)
+
+    else
+        Nothing
+
+
+{-| Turn a `ZoomState` into the drawn cell size and board-local translation, or `Nothing` when it's
+so close to zoomed out that it's indistinguishable from an unzoomed board (which also lets the grid
+background stay cached instead of redrawing).
+-}
+resolveZoom : ValidatedSetup -> Coord CssPixels -> ZoomState -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
+resolveZoom setup windowSize zoomState =
+    if zoomState.amount < 0.02 then
+        Nothing
+
+    else
         let
             size : Int
             size =
                 cellSize setup windowSize
 
-            centers : List ( Int, Int )
-            centers =
-                Array.toList model.tiles
-                    |> List.filterMap
-                        (\tile ->
-                            case tile.position of
-                                TileOnBoard ( x, y ) ->
-                                    Just
-                                        ( boardX windowSize + size * x + size // 2
-                                        , boardY + size * y + size // 2
-                                        )
+            zc : Int
+            zc =
+                round ((1 + zoomState.amount * (boardZoomScale - 1)) * toFloat size)
 
-                                TileInTray _ _ ->
-                                    Nothing
-                        )
-        in
-        case centers of
-            [] ->
-                Nothing
+            -- The effective scale is derived from the rounded cell size so that the drawn grid, the
+            -- tiles and the touch hit-testing all line up exactly.
+            effScale : Float
+            effScale =
+                toFloat zc / toFloat size
 
-            _ ->
+            boardPx : Int
+            boardPx =
+                gridSize * size
+
+            -- The width/height, in unzoomed board pixels, of the region that stays visible.
+            window : Float
+            window =
+                toFloat boardPx / effScale
+
+            -- The board-local translation for one axis: centre the visible window on the focus, but
+            -- clamp it so the window can't run past either edge of the board.
+            axisTranslate : Float -> Int
+            axisTranslate focusFraction =
                 let
-                    count : Int
-                    count =
-                        List.length centers
+                    focusLocal : Float
+                    focusLocal =
+                        focusFraction * toFloat boardPx
 
-                    zc : Int
-                    zc =
-                        round (boardZoomScale * toFloat size)
-
-                    -- The effective scale is derived from the rounded cell size so that the drawn
-                    -- grid, the tiles and the touch hit-testing all line up exactly.
-                    effScale : Float
-                    effScale =
-                        toFloat zc / toFloat size
-
-                    boardPx : Int
-                    boardPx =
-                        gridSize * size
-
-                    -- The width/height, in unzoomed board pixels, of the region that stays visible.
-                    window : Float
-                    window =
-                        toFloat boardPx / effScale
-
-                    -- The board-local translation for one axis: centre the visible window on the
-                    -- centroid, but clamp it so the window can't run past either edge of the board.
-                    axisTranslate : Int -> Int -> Int
-                    axisTranslate focus boardOrigin =
-                        let
-                            focusLocal : Float
-                            focusLocal =
-                                toFloat (focus - boardOrigin)
-
-                            left : Float
-                            left =
-                                clamp 0 (toFloat boardPx - window) (focusLocal - window / 2)
-                        in
-                        round (-effScale * left)
+                    left : Float
+                    left =
+                        clamp 0 (toFloat boardPx - window) (focusLocal - window / 2)
                 in
-                Just
-                    { zoomedCellSize = zc
-                    , translate =
-                        Coord.xy
-                            (axisTranslate (List.sum (List.map Tuple.first centers) // count) (boardX windowSize))
-                            (axisTranslate (List.sum (List.map Tuple.second centers) // count) boardY)
-                    }
+                round (-effScale * left)
+        in
+        if zc == size then
+            -- No visible zoom yet (the amount rounds away); treat it as unzoomed.
+            Nothing
 
-    else
-        Nothing
+        else
+            Just
+                { zoomedCellSize = zc
+                , translate = Coord.xy (axisTranslate zoomState.focusX) (axisTranslate zoomState.focusY)
+                }
 
 
 {-| Map a screen touch position back into the board's unzoomed coordinate space, so the existing
 cell math (`cellAtPosition`) resolves it to the right cell even while the board is zoomed in. This is
 the exact inverse of the `project` transform in `boardView`. Without zoom it's the identity.
 -}
-unprojectTouch : Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Coord CssPixels
-unprojectTouch windowSize setup model coord =
-    case boardZoom setup windowSize model of
+unprojectTouch : Time.Posix -> Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Coord CssPixels
+unprojectTouch time windowSize setup model coord =
+    case boardZoom time setup windowSize model of
         Just { zoomedCellSize, translate } ->
             let
                 effScale : Float
@@ -1592,8 +1706,8 @@ touch actually within the board's on-screen square counts; a touch over the tray
 outside the board) is `Nothing`. Without this guard the zoom un-projection could pull a touch just
 below the board (e.g. dropping a tile back on the tray) up into the board's cell range.
 -}
-boardCellAtPosition : Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Maybe ( Int, Int )
-boardCellAtPosition windowSize setup model coord =
+boardCellAtPosition : Time.Posix -> Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Maybe ( Int, Int )
+boardCellAtPosition time windowSize setup model coord =
     let
         relX : Int
         relX =
@@ -1608,7 +1722,7 @@ boardCellAtPosition windowSize setup model coord =
             boardWidth setup windowSize
     in
     if relX >= 0 && relX < width && relY >= 0 && relY < width then
-        cellAtPosition setup windowSize (unprojectTouch windowSize setup model coord)
+        cellAtPosition setup windowSize (unprojectTouch time windowSize setup model coord)
 
     else
         Nothing
@@ -1696,8 +1810,8 @@ getPlayer userId gameState =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
 
 
-dragStart : Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
-dragStart windowSize touches setup gameModel =
+dragStart : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
+dragStart time windowSize touches setup gameModel =
     let
         touchPosition : Coord CssPixels
         touchPosition =
@@ -1706,7 +1820,7 @@ dragStart windowSize touches setup gameModel =
         trayList =
             Array.toList gameModel.tiles
     in
-    case boardCellAtPosition windowSize setup gameModel touchPosition of
+    case boardCellAtPosition time windowSize setup gameModel touchPosition of
         Just cell ->
             case
                 List.Extra.findIndex
@@ -1753,54 +1867,58 @@ dragStart windowSize touches setup gameModel =
 
 dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> ( GameData, Bool )
 dragEnd currentTime windowSize newTouches setup shared gameModel =
-    case gameModel.dragging of
-        Just tileIndex ->
-            let
-                position : Coord CssPixels
-                position =
-                    Touch.touchCentroid newTouches
+    let
+        ( newModel, movedToBoard ) =
+            case gameModel.dragging of
+                Just tileIndex ->
+                    let
+                        position : Coord CssPixels
+                        position =
+                            Touch.touchCentroid newTouches
 
-                returnToTray : ( GameData, Bool )
-                returnToTray =
-                    ( if distanceToTray setup windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
-                        insertIntoTray currentTime windowSize tileIndex position setup gameModel
+                        returnToTray : ( GameData, Bool )
+                        returnToTray =
+                            ( if distanceToTray setup windowSize position (Array.length gameModel.tiles) <= maxTraySnapDistance then
+                                insertIntoTray currentTime windowSize tileIndex position setup gameModel
 
-                      else
-                        { gameModel
-                            | dragging = Nothing
-                            , invalidPlacement = Nothing
-                            , tiles =
-                                Array.Extra.update
-                                    tileIndex
-                                    (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
-                                    gameModel.tiles
-                        }
-                    , False
-                    )
-            in
-            case boardCellAtPosition windowSize setup gameModel position of
-                Just cell ->
-                    if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
-                        returnToTray
+                              else
+                                { gameModel
+                                    | dragging = Nothing
+                                    , invalidPlacement = Nothing
+                                    , tiles =
+                                        Array.Extra.update
+                                            tileIndex
+                                            (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) gameModel.tiles) Nothing })
+                                            gameModel.tiles
+                                }
+                            , False
+                            )
+                    in
+                    case boardCellAtPosition currentTime windowSize setup gameModel position of
+                        Just cell ->
+                            if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
+                                returnToTray
 
-                    else
-                        ( { gameModel
-                            | dragging = Nothing
-                            , invalidPlacement = Nothing
-                            , tiles =
-                                Array.Extra.update
-                                    tileIndex
-                                    (\tile -> { tile | position = TileOnBoard cell })
-                                    gameModel.tiles
-                          }
-                        , True
-                        )
+                            else
+                                ( { gameModel
+                                    | dragging = Nothing
+                                    , invalidPlacement = Nothing
+                                    , tiles =
+                                        Array.Extra.update
+                                            tileIndex
+                                            (\tile -> { tile | position = TileOnBoard cell })
+                                            gameModel.tiles
+                                  }
+                                , True
+                                )
+
+                        Nothing ->
+                            returnToTray
 
                 Nothing ->
-                    returnToTray
-
-        Nothing ->
-            ( gameModel, False )
+                    ( gameModel, False )
+    in
+    ( withZoomAnimation currentTime gameModel newModel, movedToBoard )
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -2555,7 +2673,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
 
         zoom : Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
         zoom =
-            boardZoom setup windowSize model
+            boardZoom currentTime setup windowSize model
 
         -- The zoomed-in cell size, i.e. how big a board cell is drawn once the mobile zoom is
         -- applied (the same as `cellSize2` when there's no zoom).
@@ -2752,7 +2870,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
                 ( Just _, Just dragging2 ) ->
-                    case boardCellAtPosition windowSize setup model (Touch.touchCentroid dragging2) of
+                    case boardCellAtPosition currentTime windowSize setup model (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
                                 SeqDict.member ( x, y ) shared.board
