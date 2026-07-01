@@ -1285,6 +1285,113 @@ cellAtPosition windowSize coord =
         Nothing
 
 
+{-| How much the board is scaled up on mobile once the player has tiles placed on the board this
+turn.
+-}
+boardZoomScale : Float
+boardZoomScale =
+    1.75
+
+
+{-| On mobile, once the player has placed one or more tiles on the board this turn, the board is
+zoomed in on the centroid of those tiles so the surrounding cells are larger and easier to tap. The
+board's on-screen rectangle stays the same size, so the zoomed-in board is clipped to it.
+
+Returns the scale factor and the screen-space focal point (the centroid of the placed tiles'
+centres), or `Nothing` when there's no zoom (not on mobile, or no tiles placed yet). The transform
+keeps the focal point fixed on screen and scales everything else around it (see `project` in
+`boardView` and `unprojectTouch`).
+
+-}
+boardZoom : Coord CssPixels -> GameData -> Maybe { scale : Float, focus : Coord CssPixels }
+boardZoom windowSize model =
+    if MyUi.isMobile { windowSize = windowSize } then
+        let
+            size : Int
+            size =
+                cellSize windowSize
+
+            centers : List ( Int, Int )
+            centers =
+                Array.toList model.tiles
+                    |> List.filterMap
+                        (\tile ->
+                            case tile.position of
+                                TileOnBoard ( x, y ) ->
+                                    Just
+                                        ( boardX windowSize + size * x + size // 2
+                                        , boardY + size * y + size // 2
+                                        )
+
+                                TileInTray _ _ ->
+                                    Nothing
+                        )
+        in
+        case centers of
+            [] ->
+                Nothing
+
+            _ ->
+                let
+                    count : Int
+                    count =
+                        List.length centers
+                in
+                Just
+                    { scale = boardZoomScale
+                    , focus =
+                        Coord.xy
+                            (List.sum (List.map Tuple.first centers) // count)
+                            (List.sum (List.map Tuple.second centers) // count)
+                    }
+
+    else
+        Nothing
+
+
+{-| Map a screen touch position back into the board's unzoomed coordinate space, so the existing
+cell math (`cellAtPosition`) resolves it to the right cell even while the board is zoomed in. Without
+zoom this is the identity.
+-}
+unprojectTouch : Coord CssPixels -> GameData -> Coord CssPixels -> Coord CssPixels
+unprojectTouch windowSize model coord =
+    case boardZoom windowSize model of
+        Just { scale, focus } ->
+            Coord.xy
+                (Coord.xRaw focus + round (toFloat (Coord.xRaw coord - Coord.xRaw focus) / scale))
+                (Coord.yRaw focus + round (toFloat (Coord.yRaw coord - Coord.yRaw focus) / scale))
+
+        Nothing ->
+            coord
+
+
+{-| Which board cell (if any) a screen touch is over, taking the mobile zoom into account. Only a
+touch actually within the board's on-screen square counts; a touch over the tray (or anywhere else
+outside the board) is `Nothing`. Without this guard the zoom un-projection could pull a touch just
+below the board (e.g. dropping a tile back on the tray) up into the board's cell range.
+-}
+boardCellAtPosition : Coord CssPixels -> GameData -> Coord CssPixels -> Maybe ( Int, Int )
+boardCellAtPosition windowSize model coord =
+    let
+        relX : Int
+        relX =
+            Coord.xRaw coord - boardX windowSize
+
+        relY : Int
+        relY =
+            Coord.yRaw coord - boardY
+
+        width : Int
+        width =
+            boardWidth windowSize
+    in
+    if relX >= 0 && relX < width && relY >= 0 && relY < width then
+        cellAtPosition windowSize (unprojectTouch windowSize model coord)
+
+    else
+        Nothing
+
+
 trayTileSize : ValidatedSetup -> Coord CssPixels -> Float
 trayTileSize setup windowSize =
     let
@@ -1377,7 +1484,7 @@ dragStart windowSize touches setup gameModel =
         trayList =
             Array.toList gameModel.tiles
     in
-    case cellAtPosition windowSize touchPosition of
+    case boardCellAtPosition windowSize gameModel touchPosition of
         Just cell ->
             case
                 List.Extra.findIndex
@@ -1450,7 +1557,7 @@ dragEnd currentTime windowSize newTouches setup shared gameModel =
                     , False
                     )
             in
-            case cellAtPosition windowSize position of
+            case boardCellAtPosition windowSize gameModel position of
                 Just cell ->
                     if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell gameModel.tiles then
                         returnToTray
@@ -2228,6 +2335,45 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         cellSize2 =
             cellSize windowSize
 
+        zoom : Maybe { scale : Float, focus : Coord CssPixels }
+        zoom =
+            boardZoom windowSize model
+
+        -- The zoomed-in cell size, i.e. how big a board cell is drawn once the mobile zoom is
+        -- applied (the same as `cellSize2` when there's no zoom).
+        zoomedCellSize : Int
+        zoomedCellSize =
+            case zoom of
+                Just { scale } ->
+                    round (scale * toFloat cellSize2)
+
+                Nothing ->
+                    cellSize2
+
+        -- How far the zoomed board content is shifted (in board-local coordinates) so that the
+        -- focal point stays put while everything scales around it.
+        boardTranslate : Coord CssPixels
+        boardTranslate =
+            case zoom of
+                Just { scale, focus } ->
+                    Coord.xy
+                        (round ((1 - scale) * toFloat (Coord.xRaw focus - boardX windowSize)))
+                        (round ((1 - scale) * toFloat (Coord.yRaw focus - boardY)))
+
+                Nothing ->
+                    Coord.origin
+
+        -- A board cell's top-left position (in board-local coordinates, relative to the board's
+        -- top-left corner) and drawn size, with the mobile zoom applied.
+        project : Int -> Int -> { pos : Coord CssPixels, size : Int }
+        project x y =
+            { pos =
+                Coord.xy
+                    (Coord.xRaw boardTranslate + zoomedCellSize * x)
+                    (Coord.yRaw boardTranslate + zoomedCellSize * y)
+            , size = zoomedCellSize
+            }
+
         animatingCellSet : Set ( Int, Int )
         animatingCellSet =
             animatingCells currentTime shared
@@ -2241,11 +2387,12 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         list
 
                     else
-                        boardTileInFront
-                            cellSize2
-                            (Coord.xy (boardX windowSize + cellSize2 * x) (boardY + cellSize2 * y))
-                            letter
-                            :: list
+                        let
+                            p : { pos : Coord CssPixels, size : Int }
+                            p =
+                                project x y
+                        in
+                        boardTileInFront p.size p.pos letter :: list
                 )
                 []
                 shared.board
@@ -2274,23 +2421,30 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                     |> Maybe.map
                                         (\{ progress, red } ->
                                             let
+                                                p : { pos : Coord CssPixels, size : Int }
+                                                p =
+                                                    project x y
+
+                                                -- The tile slides in from just off the board's
+                                                -- top-left corner.
                                                 startX : Int
                                                 startX =
-                                                    boardX windowSize - cellSize2
+                                                    -p.size
 
+                                                startY : Int
                                                 startY =
-                                                    boardY - cellSize2
+                                                    -p.size
 
                                                 destX : Int
                                                 destX =
-                                                    boardX windowSize + cellSize2 * x
+                                                    Coord.xRaw p.pos
 
                                                 destY : Int
                                                 destY =
-                                                    boardY + cellSize2 * y
+                                                    Coord.yRaw p.pos
                                             in
                                             animatedTileInFront
-                                                cellSize2
+                                                p.size
                                                 (Coord.xy
                                                     (round (toFloat startX + progress * toFloat (destX - startX)))
                                                     (round (toFloat startY + progress * toFloat (destY - startY)))
@@ -2308,8 +2462,9 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 Nothing ->
                     []
 
-        trayTiles : List (Ui.Attribute GameMsg)
-        trayTiles =
+        -- The player's held tiles, split into those resting on the board (drawn in the zoomed,
+        -- clipped board layer) and those in the tray or being dragged (drawn unzoomed on top).
+        ( boardHeldTiles, trayHeldTiles ) =
             List.map2
                 Tuple.pair
                 (Array.toList model.tiles)
@@ -2320,8 +2475,9 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                     Nothing ->
                         []
                 )
-                |> List.indexedMap
-                    (\index ( tile, letter ) ->
+                |> List.indexedMap Tuple.pair
+                |> List.foldr
+                    (\( index, ( tile, letter ) ) ( boardAcc, trayAcc ) ->
                         case ( maybeDragging, Just index == model.dragging ) of
                             ( Just dragging2, True ) ->
                                 let
@@ -2329,43 +2485,58 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                     center =
                                         Touch.touchCentroid dragging2
                                 in
-                                tileInFront
+                                ( boardAcc
+                                , tileInFront
                                     currentTime
                                     tile.createdAt
-                                    cellSize2
+                                    zoomedCellSize
                                     (Coord.xy
-                                        (Coord.xRaw center - cellSize2 // 2)
-                                        (Coord.yRaw center - cellSize2 // 2)
+                                        (Coord.xRaw center - zoomedCellSize // 2)
+                                        (Coord.yRaw center - zoomedCellSize // 2)
                                     )
                                     letter
+                                    :: trayAcc
+                                )
 
                             _ ->
                                 case tile.position of
                                     TileInTray trayIndex shiftAnimation ->
-                                        tileInFront
+                                        ( boardAcc
+                                        , tileInFront
                                             currentTime
                                             tile.createdAt
                                             (trayTileSize setup windowSize |> round)
                                             (animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation)
                                             letter
+                                            :: trayAcc
+                                        )
 
                                     TileOnBoard ( x, y ) ->
-                                        tileInFront
+                                        let
+                                            p : { pos : Coord CssPixels, size : Int }
+                                            p =
+                                                project x y
+                                        in
+                                        ( tileInFront
                                             currentTime
                                             tile.createdAt
-                                            cellSize2
+                                            p.size
                                             (Coord.xy
-                                                (boardX windowSize + cellSize2 * x + boardTileShakeOffset currentTime model.invalidPlacement)
-                                                (boardY + cellSize2 * y)
+                                                (Coord.xRaw p.pos + boardTileShakeOffset currentTime model.invalidPlacement)
+                                                (Coord.yRaw p.pos)
                                             )
                                             letter
+                                            :: boardAcc
+                                        , trayAcc
+                                        )
                     )
+                    ( [], [] )
 
         dragHighlight : Ui.Attribute GameMsg
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
                 ( Just _, Just dragging2 ) ->
-                    case cellAtPosition windowSize (Touch.touchCentroid dragging2) of
+                    case boardCellAtPosition windowSize model (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
                                 SeqDict.member ( x, y ) shared.board
@@ -2374,13 +2545,18 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 Ui.noAttr
 
                             else
+                                let
+                                    p : { pos : Coord CssPixels, size : Int }
+                                    p =
+                                        project x y
+                                in
                                 Ui.inFront
                                     (Ui.el
                                         [ Ui.borderColor (Ui.rgb 0 200 255)
                                         , Ui.border 3
-                                        , Ui.width (Ui.px cellSize2)
-                                        , Ui.height (Ui.px cellSize2)
-                                        , Ui.move { x = boardX windowSize + x * cellSize2, y = boardY + y * cellSize2, z = 0 }
+                                        , Ui.width (Ui.px p.size)
+                                        , Ui.height (Ui.px p.size)
+                                        , Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
                                         , MyUi.noPointerEvents
                                         ]
                                         Ui.none
@@ -2396,13 +2572,18 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         selectedHighlight =
             case model.selectedCell of
                 Just ( x, y ) ->
+                    let
+                        p : { pos : Coord CssPixels, size : Int }
+                        p =
+                            project x y
+                    in
                     Ui.inFront
                         (Ui.el
                             [ Ui.borderColor (Ui.rgb 0 200 255)
                             , Ui.border 4
-                            , Ui.width (Ui.px cellSize2)
-                            , Ui.height (Ui.px cellSize2)
-                            , Ui.move { x = x * cellSize2, y = y * cellSize2, z = 0 }
+                            , Ui.width (Ui.px p.size)
+                            , Ui.height (Ui.px p.size)
+                            , Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
                             , MyUi.noPointerEvents
                             ]
                             Ui.none
@@ -2411,39 +2592,67 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 Nothing ->
                     Ui.noAttr
 
+        trayHeight2 : Int
         trayHeight2 =
             trayHeight setup windowSize
 
         trayWidth : Int
         trayWidth =
             Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayX windowSize
+
+        boardPx : Int
+        boardPx =
+            gridSize * cellSize2
+
+        -- The zoomed board: grid background plus the tiles/highlights that live on the board,
+        -- clipped to the board's fixed on-screen square so the zoomed-in content doesn't spill over
+        -- the tray or grow the viewport.
+        boardLayer : Element GameMsg
+        boardLayer =
+            Ui.el
+                (Ui.width (Ui.px boardPx)
+                    :: Ui.height (Ui.px boardPx)
+                    :: Ui.clip
+                    :: boardTiles
+                    ++ animatedTiles
+                    ++ boardHeldTiles
+                    ++ [ selectedHighlight, dragHighlight ]
+                )
+                (Ui.el
+                    [ Ui.move { x = Coord.xRaw boardTranslate, y = Coord.yRaw boardTranslate, z = 0 } ]
+                    (Ui.Lazy.lazy boardViewBackground zoomedCellSize)
+                )
+
+        -- The tray tiles, tray background and any tile currently being dragged, drawn unzoomed on
+        -- top of the board. Positions are in screen coordinates, so the layer is shifted back to the
+        -- board's top-left corner.
+        trayLayer : Ui.Attribute GameMsg
+        trayLayer =
+            Ui.inFront
+                (Ui.el
+                    (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
+                        :: trayHeldTiles
+                        ++ [ Ui.inFront
+                                (Ui.el
+                                    [ Ui.background (Ui.rgb 119 97 97)
+                                    , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
+                                    , Ui.width (Ui.px trayWidth)
+                                    , Ui.height (Ui.px (trayHeight2 + 4))
+                                    ]
+                                    Ui.none
+                                )
+                           ]
+                    )
+                    Ui.none
+                )
     in
     Ui.el
-        [ Ui.width Ui.shrink
-        , Ui.height (Ui.px (gridSize * cellSize2 + trayHeight2))
+        [ Ui.width (Ui.px boardPx)
+        , Ui.height (Ui.px (boardPx + trayHeight2))
         , Ui.pointer
-        , Ui.el
-            (Ui.move { x = -(boardX windowSize), y = -boardY, z = 0 }
-                :: trayTiles
-                ++ boardTiles
-                ++ animatedTiles
-                ++ [ selectedHighlight
-                   , dragHighlight
-                   , Ui.inFront
-                        (Ui.el
-                            [ Ui.background (Ui.rgb 119 97 97)
-                            , Ui.move { x = trayX windowSize, y = trayY windowSize, z = 0 }
-                            , Ui.width (Ui.px trayWidth)
-                            , Ui.height (Ui.px (trayHeight2 + 4))
-                            ]
-                            Ui.none
-                        )
-                   ]
-            )
-            Ui.none
-            |> Ui.inFront
+        , trayLayer
         ]
-        (Ui.Lazy.lazy boardViewBackground cellSize2)
+        boardLayer
 
 
 tileInFront : Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
