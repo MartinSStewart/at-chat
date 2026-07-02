@@ -3862,23 +3862,28 @@ type Letter
     | Z
 
 
-audio : Audio.Source -> GameData -> Audio
-audio popSound model =
+audio : Audio.Source -> Id UserId -> Shared -> GameData -> Audio
+audio popSound currentUserId shared model =
     Audio.group
-        [ Array.toList model.tiles
-            |> List.map
-                (\tile ->
-                    Audio.group
-                        [ Audio.audio popSound (Duration.addTo tile.createdAt tileFadeDelay)
-                        , case tile.position of
-                            TileInTray _ _ ->
-                                Audio.silence
+        [ case getPlayer currentUserId shared of
+            Just _ ->
+                Array.toList model.tiles
+                    |> List.map
+                        (\tile ->
+                            Audio.group
+                                [ Audio.audio popSound (Duration.addTo tile.createdAt tileFadeDelay)
+                                , case tile.position of
+                                    TileInTray _ _ ->
+                                        Audio.silence
 
-                            TileOnBoard _ placedAt ->
-                                Audio.audio popSound placedAt
-                        ]
-                )
-            |> Audio.group
+                                    TileOnBoard _ placedAt ->
+                                        Audio.audio popSound placedAt
+                                ]
+                        )
+                    |> Audio.group
+
+            Nothing ->
+                Audio.silence
         , case model.lastWordPlaced of
             Just { time, letterCount } ->
                 List.range 0 (letterCount - 1)

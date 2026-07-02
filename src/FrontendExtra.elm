@@ -5468,8 +5468,11 @@ audio _ model =
                             let
                                 local =
                                     Local.model loggedIn.localState
+
+                                currentUserId =
+                                    local.localUser.session.userId
                             in
-                            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                            case ( dmRoute.tab, DmChannel.otherUserId currentUserId dmRoute.channelId ) of
                                 ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
@@ -5480,7 +5483,7 @@ audio _ model =
                                                 )
                                             of
                                                 ( Just matchData, Ok popSound, Just gameModel ) ->
-                                                    Game.audio popSound matchData gameModel
+                                                    Game.audio popSound currentUserId matchData gameModel
 
                                                 _ ->
                                                     Audio.silence
