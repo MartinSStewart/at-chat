@@ -96,6 +96,11 @@ type alias GameData =
     , tiles : Array Tile
     , dragging : Maybe Int
     , zoomAnimation : ZoomAnimation
+    , -- When a word placement arrived from the server (someone else's move, or ours from another
+      -- device), along with how many letters it had. Drives the staggered pop sounds that match the
+      -- word's slide-in animation (see `audio`); the local player's own moves pop via the tile
+      -- times instead.
+      lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
     }
 
 
@@ -197,6 +202,7 @@ initGame time setup =
                 |> Array.fromList
       , dragging = Nothing
       , zoomAnimation = { start = time, from = zoomedOutState }
+      , lastWordPlaced = Nothing
       }
     , []
     )
@@ -3833,4 +3839,19 @@ audio popSound model =
                         ]
                 )
             |> Audio.group
+        , -- One pop per letter of a word placement that arrived from the server, timed to when each
+          -- tile lands in the slide-in animation (see `animatedTilePlacement`).
+          case model.lastWordPlaced of
+            Just { time, letterCount } ->
+                List.range 0 (letterCount - 1)
+                    |> List.map
+                        (\index ->
+                            Quantity.plus tileSlideDuration (Quantity.multiplyBy (toFloat index) tileSlideStagger)
+                                |> Duration.addTo time
+                                |> Audio.audio popSound
+                        )
+                    |> Audio.group
+
+            Nothing ->
+                Audio.silence
         ]
