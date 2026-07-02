@@ -91,8 +91,8 @@ addPublicLink publicLink (MatchData match) =
     { match | publicLink = Just publicLink } |> MatchData
 
 
-audio : Audio.Source -> MatchData -> Model -> Audio
-audio popSound (MatchData matchData) model =
+audio : Audio.Source -> Id UserId -> MatchData -> Model -> Audio
+audio popSound currentUserId (MatchData matchData) model =
     case matchData.data of
         FrontendGameData_Go setup actions shared ->
             case model of
@@ -105,7 +105,7 @@ audio popSound (MatchData matchData) model =
         FrontendGameData_WordSpellingGame setup _ shared ->
             case model of
                 WordSpellingGame_Game model2 ->
-                    WordSpellingGame.audio popSound model2
+                    WordSpellingGame.audio popSound currentUserId shared model2
 
                 _ ->
                     Audio.silence
