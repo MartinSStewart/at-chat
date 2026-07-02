@@ -1,11 +1,13 @@
 module E2EWordSpellingGame exposing (tests)
 
+import Audio
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Time as Time
+import FrontendExtra
 import Game
 import Id exposing (Id, UserId)
 import Json.Encode
@@ -62,8 +64,14 @@ tests normalConfig =
                         boardCell cx cy =
                             ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
                     in
-                    [ -- Admin creates a Word Spelling Game match in the DM with the other user.
-                      admin.click 100 (Dom.id "guild_openDm_2")
+                    [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                      -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
+                      -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
+                      admin.portEvent 0 "audioPortFromJs" popLoadedEvent
+                    , user.portEvent 0 "audioPortFromJs" popLoadedEvent
+
+                    -- Admin creates a Word Spelling Game match in the DM with the other user.
+                    , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
@@ -82,7 +90,13 @@ tests normalConfig =
                         , dragTile 100 admin (trayTile 1) (boardCell 7 7)
                         , dragTile 100 admin (trayTile 0) (boardCell 8 7)
                         , dragTile 100 admin (trayTile 4) (boardCell 9 7)
+                        , -- Admin is holding all 7 tray tiles (each schedules a fade-in pop) with 4 of
+                          -- them placed on the board (each schedules a placement pop): 7 + 4 = 11 pops.
+                          admin.checkModel 100 (checkPopCount 11)
                         , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                        , -- After committing LOAD, admin's board is clear and the tray is refilled back to
+                          -- 7 tiles, so only the 7 fade-in pops remain (a mover doesn't animate its own word).
+                          admin.checkModel 100 (checkPopCount 7)
                         , admin.snapshotView 5000 { name = "Place \"load\"" }
                         , user.snapshotView 0 { name = "Place \"load\"" }
                         ]
@@ -90,7 +104,11 @@ tests normalConfig =
                       -- committed O at (7,7) spells NOSE down column 7, and empties the letter bag.
                       T.collapsableGroup
                         "Place \"nose\""
-                        [ dragTile 100 user (trayTile 0) (boardCell 7 6)
+                        [ -- User now sees admin's LOAD slide in. On the receiving client that word's
+                          -- animation schedules one pop per letter (4), on top of the user's own 7
+                          -- fade-in pops for their fresh tray: 7 + 4 = 11 pops.
+                          user.checkModel 100 (checkPopCount 11)
+                        , dragTile 100 user (trayTile 0) (boardCell 7 6)
                         , dragTile 100 user (trayTile 4) (boardCell 7 8)
                         , dragTile 100 user (trayTile 1) (boardCell 7 9)
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
@@ -287,6 +305,62 @@ initSetup =
     WordSpellingGame.initSetup
 
 
+{-| The message the audio port's JS side sends back after successfully loading a sound (see
+Audio.decodeFromJSMsg: type 1 is a load success). The app only ever loads one sound, the pop
+sound, at requestId 0.
+-}
+popLoadedEvent : Json.Encode.Value
+popLoadedEvent =
+    Json.Encode.object
+        [ ( "type", Json.Encode.int 1 )
+        , ( "requestId", Json.Encode.int 0 )
+        , ( "bufferId", Json.Encode.int 0 )
+        , ( "durationInSeconds", Json.Encode.float 1 )
+        ]
+
+
 floatCoord : Coord CssPixels -> ( Float, Float )
 floatCoord coord =
     ( toFloat (Coord.xRaw coord), toFloat (Coord.yRaw coord) )
+
+
+{-| Every pop the game wants to play is a `Audio.audio popSound _` leaf in the tree
+`FrontendExtra.audio` builds. Walk that tree and collect the start time of each leaf, so a
+test can assert the pop sound fires at exactly the places the game means it to.
+-}
+popStartTimes : FrontendModel -> List Time.Posix
+popStartTimes model =
+    FrontendExtra.audio (Audio.audioData model) (Audio.userModel model)
+        |> collectPopStartTimes
+
+
+collectPopStartTimes : Audio.Audio -> List Time.Posix
+collectPopStartTimes node =
+    case node of
+        Audio.Group group ->
+            List.concatMap collectPopStartTimes group
+
+        Audio.BasicAudio { startTime } ->
+            [ startTime ]
+
+        Audio.Effect effect ->
+            collectPopStartTimes effect.audio
+
+
+{-| Assert the number of pops `FrontendExtra.audio` is currently scheduling for a client.
+The pop count is diagnostic: the game schedules one fade-in pop per tile the player holds
+(tray or board), one extra pop for each tile placed on the board this turn, and one pop per
+letter of the opponent's most recently placed word (its slide-in animation).
+-}
+checkPopCount : Int -> FrontendModel -> Result String ()
+checkPopCount expected model =
+    let
+        actual : Int
+        actual =
+            List.length (popStartTimes model)
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err ("Expected " ++ String.fromInt expected ++ " pop sounds but found " ++ String.fromInt actual)
