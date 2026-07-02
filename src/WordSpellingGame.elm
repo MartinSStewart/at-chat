@@ -1016,6 +1016,10 @@ updateGame time currentUserId setup shared msg model =
                                 )
                                 Array.empty
                                 model.tiles
+
+                        newTileCount : Int
+                        newTileCount =
+                            OneOrGreater.toInt setup.traySize - Array.length kept
                     in
                     ( withZoomAnimation time
                         model
@@ -1029,15 +1033,16 @@ updateGame time currentUserId setup shared msg model =
                                             , createdAt =
                                                 Duration.addTo
                                                     time
-                                                    (Quantity.plus
-                                                        (Duration.seconds (0.1 * toFloat index))
-                                                        invalidHoldDuration
+                                                    (Quantity.sum
+                                                        [ Duration.seconds (0.1 * toFloat index)
+                                                        , placementAnimationDuration (FilledInByBackend IsNotValid) newTileCount
+                                                        ]
                                                     )
                                             }
                                             tray
                                     )
                                     kept
-                                    (List.range 0 (OneOrGreater.toInt setup.traySize - Array.length kept - 1))
+                                    (List.range 0 (newTileCount - 1))
                         }
                     , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                             |> Action
@@ -2323,19 +2328,19 @@ elapsedMs currentTime startTime =
 {-| The moment, in milliseconds since the placement started, at which the last tile has finished
 sliding in.
 -}
-slideInEnd : Int -> Float
+slideInEnd : Int -> Duration
 slideInEnd tileCount =
-    toFloat (max 0 (tileCount - 1)) * Duration.inMilliseconds (Quantity.plus tileSlideStagger tileSlideDuration)
+    Quantity.multiplyBy (toFloat (max 0 (tileCount - 1))) (Quantity.plus tileSlideStagger tileSlideDuration)
 
 
 {-| The total length of a placement's animation. A valid placement just slides in; a rejected one
 also holds and then slides back off.
 -}
-placementAnimationDuration : ToBeFilledInByBackend IsValid -> Int -> Float
+placementAnimationDuration : ToBeFilledInByBackend IsValid -> Int -> Duration
 placementAnimationDuration isValid tileCount =
     case isValid of
         FilledInByBackend IsNotValid ->
-            slideInEnd tileCount + Duration.inMilliseconds invalidHoldDuration + slideInEnd tileCount
+            Quantity.sum [ slideInEnd tileCount, invalidHoldDuration, slideInEnd tileCount ]
 
         _ ->
             slideInEnd tileCount
@@ -2349,7 +2354,7 @@ isAnimating currentTime shared =
     case shared.lastPlacement of
         Just placement ->
             elapsedMs currentTime placement.startTime
-                < placementAnimationDuration placement.isValid (List.length placement.cells)
+                < Duration.inMilliseconds (placementAnimationDuration placement.isValid (List.length placement.cells))
 
         Nothing ->
             False
@@ -2420,11 +2425,12 @@ animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
             let
                 leaveStart : Float
                 leaveStart =
-                    Quantity.plus
-                        invalidHoldDuration
-                        (Quantity.multiplyBy (toFloat index) tileSlideStagger)
+                    Quantity.sum
+                        [ invalidHoldDuration
+                        , Quantity.multiplyBy (toFloat index) tileSlideStagger
+                        , slideInEnd tileCount
+                        ]
                         |> Duration.inMilliseconds
-                        |> (+) (slideInEnd tileCount)
 
                 leaveEnd : Float
                 leaveEnd =
@@ -2817,41 +2823,49 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         in
                         List.indexedMap
                             (\index ( ( x, y ), letterOrWildcard ) ->
-                                animatedTilePlacement isPreviousPlayer elapsed placement.isValid tileCount index
-                                    |> Maybe.map
-                                        (\{ progress, red } ->
-                                            let
-                                                p : { pos : Coord CssPixels, size : Int }
-                                                p =
-                                                    project x y
+                                case animatedTilePlacement isPreviousPlayer elapsed placement.isValid tileCount index of
+                                    Just { progress, red } ->
+                                        let
+                                            p : { pos : Coord CssPixels, size : Int }
+                                            p =
+                                                project x y
 
-                                                -- The tile slides in from just off the board's
-                                                -- top-left corner.
-                                                startX : Int
-                                                startX =
+                                            startX : Int
+                                            startX =
+                                                if red && isPreviousPlayer then
+                                                    -p.size + (cellSize2 * gridSize) // 2
+
+                                                else
                                                     -p.size
 
-                                                startY : Int
-                                                startY =
+                                            startY : Int
+                                            startY =
+                                                if red && isPreviousPlayer then
+                                                    cellSize2 * gridSize
+
+                                                else
                                                     -p.size
 
-                                                destX : Int
-                                                destX =
-                                                    Coord.xRaw p.pos
+                                            destX : Int
+                                            destX =
+                                                Coord.xRaw p.pos
 
-                                                destY : Int
-                                                destY =
-                                                    Coord.yRaw p.pos
-                                            in
-                                            animatedTileInFront
-                                                p.size
-                                                (Coord.xy
-                                                    (round (toFloat startX + progress * toFloat (destX - startX)))
-                                                    (round (toFloat startY + progress * toFloat (destY - startY)))
-                                                )
-                                                red
-                                                letterOrWildcard
-                                        )
+                                            destY : Int
+                                            destY =
+                                                Coord.yRaw p.pos
+                                        in
+                                        animatedTileInFront
+                                            p.size
+                                            (Coord.xy
+                                                (round (toFloat startX + progress * toFloat (destX - startX)))
+                                                (round (toFloat startY + progress * toFloat (destY - startY)))
+                                            )
+                                            red
+                                            letterOrWildcard
+                                            |> Just
+
+                                    Nothing ->
+                                        Nothing
                             )
                             placement.cells
                             |> List.filterMap identity
