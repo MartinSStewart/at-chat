@@ -2515,10 +2515,11 @@ gameView :
     -> Maybe (NonemptyDict Int Touch)
     -> LocalUser
     -> ValidatedSetup
+    -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging localUser setup shared model =
+gameView currentTime windowSize maybeDragging localUser setup actions shared model =
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
@@ -2537,7 +2538,7 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize localUser setup shared
+        , statusView windowSize localUser setup actions shared
         ]
 
 
@@ -2631,8 +2632,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
-statusView windowSize localUser setup shared =
+statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+statusView windowSize localUser setup actions shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2729,8 +2730,135 @@ statusView windowSize localUser setup shared =
                                     )
                             )
                             (List.Nonempty.toList shared.players)
+                        ++ recentActionsView localUser setup actions
                         ++ [ contextButton ]
                     )
+
+
+{-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
+see what just happened (who played which word for how many points, who passed, and so on).
+-}
+recentActionsView : LocalUser -> ValidatedSetup -> Array ActionWithTime -> List (Element GameMsg)
+recentActionsView localUser setup actions =
+    let
+        log : List { userId : Id UserId, description : String }
+        log =
+            actionLog setup actions
+    in
+    case List.drop (max 0 (List.length log - 2)) log of
+        [] ->
+            []
+
+        recent ->
+            Ui.el
+                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+                (Ui.text "Recent moves")
+                :: List.map
+                    (\entry ->
+                        let
+                            name : String
+                            name =
+                                case User.getUser entry.userId localUser of
+                                    Just user ->
+                                        PersonName.toString user.name
+
+                                    Nothing ->
+                                        "Someone"
+                        in
+                        Ui.row
+                            [ MyUi.prewrap, Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                            , Ui.text (" " ++ entry.description)
+                            ]
+                    )
+                    recent
+
+
+{-| Replay the whole action list from the start (the same fold `updateAction` builds the live board
+from), pairing each action with a short human-readable description. Word text and score are worked
+out from the board as it stood just before the action, which is why the running `Shared` state is
+carried through the fold.
+-}
+actionLog : ValidatedSetup -> Array ActionWithTime -> List { userId : Id UserId, description : String }
+actionLog setup actions =
+    Array.foldl
+        (\action ( shared, acc ) ->
+            ( updateAction setup action shared
+            , { userId = action.userId, description = describeAction setup shared action } :: acc
+            )
+        )
+        ( initShared setup, [] )
+        actions
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| A short description of a single action, phrased to read after the player's name (e.g.
+"played CAT (+5)"). Uses the board state from just before the action to recover the word and score.
+-}
+describeAction : ValidatedSetup -> Shared -> ActionWithTime -> String
+describeAction setup shared action =
+    case action.change of
+        PlaceWord placedWord isValid ->
+            case isValid of
+                FilledInByBackend IsNotValid ->
+                    "played an invalid word"
+
+                _ ->
+                    case placeWord shared.board placedWord of
+                        Just result ->
+                            "played "
+                                ++ headlineWord result.words
+                                ++ " (+"
+                                ++ String.fromInt result.score
+                                ++ ")"
+
+                        Nothing ->
+                            "played a word"
+
+        ReplaceTrayOrPass ->
+            case passBehavior setup shared of
+                ShouldReplaceTray ->
+                    "swapped their tiles"
+
+                ShouldPass ->
+                    "passed"
+
+                ShouldEndGame ->
+                    "ended the game"
+
+        JoinGame ->
+            "joined the game"
+
+
+{-| The longest of the words a placement formed, rendered as uppercase text, used as the headline
+word in an action description.
+-}
+headlineWord : List (List LetterOrWildcard) -> String
+headlineWord words =
+    words
+        |> List.sortBy (\word -> negate (List.length word))
+        |> List.head
+        |> Maybe.map letterOrWildcardsToString
+        |> Maybe.withDefault "a word"
+
+
+{-| Render placed tiles as uppercase text, showing a wildcard as an underscore since the board
+doesn't record which letter it stands for.
+-}
+letterOrWildcardsToString : List LetterOrWildcard -> String
+letterOrWildcardsToString letters =
+    List.map
+        (\letterOrWildcard ->
+            case letterOrWildcard of
+                Letter letter ->
+                    String.toUpper (letterText letter)
+
+                Wildcard ->
+                    "_"
+        )
+        letters
+        |> String.concat
 
 
 trayHeight : OneOrGreater -> Coord CssPixels -> Int
