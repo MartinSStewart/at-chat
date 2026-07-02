@@ -93,7 +93,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 user (trayTile 5) (boardCell 7 8)
                     , dragTile 100 user (trayTile 1) (boardCell 7 9)
                     , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
-                    , admin.snapshotView 3000 { name = "Place \"site\"" }
+                    , admin.snapshotView 5000 { name = "Place \"site\"" }
                     , user.snapshotView 0 { name = "Place \"site\"" }
                     ]
                 , T.collapsableGroup
@@ -103,7 +103,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 admin (trayTile 2) (boardCell 8 10)
                     , dragTile 100 admin (trayTile 1) (boardCell 7 10)
                     , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_10")
-                    , admin.snapshotView 3000 { name = "Place \"said\"" }
+                    , admin.snapshotView 5000 { name = "Place \"said\"" }
                     , user.snapshotView 0 { name = "Place \"said\"" }
                     ]
                 , T.collapsableGroup
@@ -113,7 +113,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 user (trayTile 6) (boardCell 10 11)
                     , dragTile 100 user (trayTile 4) (boardCell 11 11)
                     , user.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_11")
-                    , admin.snapshotView 3000 { name = "Place \"note\"" }
+                    , admin.snapshotView 5000 { name = "Place \"note\"" }
                     , user.snapshotView 0 { name = "Place \"note\"" }
                     ]
                 , T.collapsableGroup
@@ -122,7 +122,7 @@ wordSpellingGameTests normalConfig =
                     , dragTile 100 admin (trayTile 6) (boardCell 9 9)
                     , dragTile 100 admin (trayTile 5) (boardCell 9 12)
                     , admin.click 100 (Dom.id "wordSpellingGame_submitLine_v_9_8")
-                    , admin.snapshotView 3000 { name = "Place \"amino\"" }
+                    , admin.snapshotView 5000 { name = "Place \"amino\"" }
                     , user.snapshotView 0 { name = "Place \"amino\"" }
                     ]
                 , T.collapsableGroup
