@@ -50,6 +50,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message(..), UserTextMessageData)
+import MyUi
 import NonemptyDict
 import PersonName
 import Ports exposing (SubscribeData)
@@ -775,43 +776,35 @@ styles and basic block elements.
 notificationEmailContent : (userId -> String) -> String -> UserTextMessageData messageId userId -> Email.Html.Html
 notificationEmailContent userToString senderName message =
     Email.Html.div
-        [ Email.Html.Attributes.backgroundColor "#0e1428"
-        , Email.Html.Attributes.padding "24px"
+        [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
+        , Email.Html.Attributes.padding "8px"
+        , Email.Html.Attributes.borderRadius "8px"
         , Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif"
         ]
         [ Email.Html.div
-            [ Email.Html.Attributes.style "max-width" "560px"
-            , Email.Html.Attributes.backgroundColor "#202846"
-            , Email.Html.Attributes.borderRadius "8px"
-            , Email.Html.Attributes.padding "16px"
+            [ Email.Html.Attributes.color "#ffffff"
+            , Email.Html.Attributes.fontSize "16px"
+            , Email.Html.Attributes.paddingBottom "4px"
             ]
-            [ Email.Html.div
-                [ Email.Html.Attributes.color "#a0b4c8"
-                , Email.Html.Attributes.fontSize "14px"
-                , Email.Html.Attributes.paddingBottom "12px"
-                ]
-                [ Email.Html.text "You have a new message on at-chat" ]
-            , Email.Html.div
-                [ Email.Html.Attributes.color "#ffffff"
-                , Email.Html.Attributes.fontSize "16px"
-                , Email.Html.Attributes.paddingBottom "4px"
-                ]
-                [ Email.Html.strong [] [ Email.Html.text senderName ] ]
-            , Email.Html.div
-                [ Email.Html.Attributes.color "#ffffff"
-                , Email.Html.Attributes.fontSize "15px"
-                , Email.Html.Attributes.lineHeight "1.4"
-                , Email.Html.Attributes.style "white-space" "pre-wrap"
-                ]
-                (RichText.emailView { userToString = userToString, attachedFiles = message.attachedFiles } message.content)
-            , Email.Html.div
-                [ Email.Html.Attributes.paddingTop "20px" ]
+            [ Email.Html.strong [] [ Email.Html.text senderName ] ]
+        , Email.Html.div
+            [ Email.Html.Attributes.color "#ffffff"
+            , Email.Html.Attributes.fontSize "15px"
+            , Email.Html.Attributes.lineHeight "1.4"
+            , Email.Html.Attributes.style "white-space" "pre-wrap"
+            ]
+            (RichText.emailView { userToString = userToString, attachedFiles = message.attachedFiles } message.content)
+        , Email.Html.div
+            [ Email.Html.Attributes.paddingTop "20px" ]
+            [ Email.Html.b
+                []
                 [ Email.Html.a
                     [ Email.Html.Attributes.href Env.domain
                     , Email.Html.Attributes.backgroundColor "#407ab2"
                     , Email.Html.Attributes.color "#ffffff"
-                    , Email.Html.Attributes.padding "10px 16px"
-                    , Email.Html.Attributes.borderRadius "6px"
+                    , Email.Html.Attributes.fontSize "14px"
+                    , Email.Html.Attributes.padding "4px 8px"
+                    , Email.Html.Attributes.borderRadius "4px"
                     , Email.Html.Attributes.style "text-decoration" "none"
                     , Email.Html.Attributes.style "display" "inline-block"
                     ]
