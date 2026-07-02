@@ -2542,11 +2542,8 @@ gameView currentTime windowSize maybeDragging localUser setup actions shared mod
         ]
 
 
-{-| A row showing a player's profile image and name, followed by `suffix` (their score and any
-status text). Bolded when `isBold` is True (the current player's turn, or a winner).
--}
-playerRow : LocalUser -> Id UserId -> String -> Element GameMsg
-playerRow localUser userId suffix =
+playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
+playerRow localUser userId highlight suffix =
     let
         maybeUser : Maybe User.FrontendUser
         maybeUser =
@@ -2555,6 +2552,12 @@ playerRow localUser userId suffix =
     Ui.row
         [ Ui.spacing 8
         , Ui.width Ui.shrink
+        , if highlight then
+            Ui.background MyUi.mentionColor
+
+          else
+            Ui.noAttr
+        , Ui.paddingWith { left = 4, top = 4, bottom = 4, right = 8 }
         ]
         [ User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
@@ -2588,9 +2591,9 @@ leaderboardView isMobile winners shared localUser =
                 |> List.sortBy (\player -> negate player.score)
     in
     Ui.column
-        [ Ui.spacing 8, Ui.height (Ui.px statusHeight), Ui.paddingXY 16 0 ]
+        [ Ui.height (Ui.px statusHeight), Ui.paddingXY 16 0 ]
         (Ui.el
-            [ Ui.Font.weight 700 ]
+            [ Ui.Font.bold, Ui.paddingXY 0 4 ]
             (Ui.text
                 (if isTie then
                     "Game over — it's a tie!"
@@ -2613,6 +2616,7 @@ leaderboardView isMobile winners shared localUser =
                         playerRow
                             localUser
                             player.userId
+                            isWinner
                             (": "
                                 ++ String.fromInt player.score
                                 ++ (if isWinner then
@@ -2680,13 +2684,13 @@ statusView windowSize localUser setup actions shared =
             in
             if isMobile then
                 Ui.row
-                    [ Ui.paddingXY 8 0, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
+                    [ Ui.spacing 8, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
                     [ Ui.column
-                        [ Ui.centerY, Ui.spacing 4 ]
+                        [ Ui.centerY ]
                         [ case User.getUser currentPlayer.userId localUser of
                             Just user ->
                                 Ui.row
-                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2, Ui.background MyUi.mentionColor ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
                                     , Ui.text ("'s turn (" ++ String.fromInt currentPlayer.score ++ ")")
                                     ]
@@ -2696,7 +2700,7 @@ statusView windowSize localUser setup actions shared =
                         , case User.getUser nextPlayer.userId localUser of
                             Just user ->
                                 Ui.row
-                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2 ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
                                     , Ui.text (" is next (" ++ String.fromInt nextPlayer.score ++ ")")
                                     ]
@@ -2710,49 +2714,51 @@ statusView windowSize localUser setup actions shared =
             else
                 Ui.column
                     [ Ui.spacing 8, Ui.paddingXY 16 0 ]
-                    (("Letters remaining: "
-                        ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
-                        |> Ui.text
-                     )
-                        :: List.indexedMap
-                            (\index player ->
-                                playerRow
-                                    localUser
-                                    player.userId
-                                    (if index == modBy playerCount shared.turnCount then
-                                        "'s turn (" ++ String.fromInt player.score ++ ")"
+                    [ Ui.column
+                        []
+                        (("Letters remaining: "
+                            ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
+                            |> Ui.text
+                            |> Ui.el [ Ui.paddingXY 0 4 ]
+                         )
+                            :: List.indexedMap
+                                (\index player ->
+                                    playerRow
+                                        localUser
+                                        player.userId
+                                        (index == modBy playerCount shared.turnCount)
+                                        (if index == modBy playerCount shared.turnCount then
+                                            "'s turn (" ++ String.fromInt player.score ++ ")"
 
-                                     else if index == modBy playerCount (shared.turnCount + 1) then
-                                        " is next (" ++ String.fromInt player.score ++ ")"
+                                         else if index == modBy playerCount (shared.turnCount + 1) then
+                                            " is next (" ++ String.fromInt player.score ++ ")"
 
-                                     else
-                                        " (" ++ String.fromInt player.score ++ ")"
-                                    )
-                            )
-                            (List.Nonempty.toList shared.players)
-                        ++ recentActionsView localUser setup actions
-                        ++ [ contextButton ]
-                    )
+                                         else
+                                            " (" ++ String.fromInt player.score ++ ")"
+                                        )
+                                )
+                                (List.Nonempty.toList shared.players)
+                        )
+                    , Ui.column [] [ Ui.Lazy.lazy3 recentActionsView localUser setup actions, contextButton ]
+                    ]
 
 
 {-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
 see what just happened (who played which word for how many points, who passed, and so on).
 -}
-recentActionsView : LocalUser -> ValidatedSetup -> Array ActionWithTime -> List (Element GameMsg)
+recentActionsView : LocalUser -> ValidatedSetup -> Array ActionWithTime -> Element GameMsg
 recentActionsView localUser setup actions =
     let
         log : List { userId : Id UserId, description : String }
         log =
             actionLog setup actions
     in
-    case List.drop (max 0 (List.length log - 2)) log of
+    case List.drop (max 0 (List.length log - 4)) log of
         [] ->
-            []
+            Ui.none
 
         recent ->
-            Ui.el
-                [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
-                (Ui.text "Recent moves")
+            Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ] (Ui.text "Recent moves")
                 :: List.map
                     (\entry ->
                         let
@@ -2772,6 +2778,7 @@ recentActionsView localUser setup actions =
                             ]
                     )
                     recent
+                |> Ui.column [ Ui.spacing 4 ]
 
 
 {-| Replay the whole action list from the start (the same fold `updateAction` builds the live board
@@ -3242,10 +3249,10 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 in
                 Ui.inFront
                     (if canReplace then
-                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.delete)
+                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.recycle)
 
                      else
-                        Ui.el attributes (Ui.html Icons.delete)
+                        Ui.el attributes (Ui.html Icons.recycle)
                     )
 
             else
