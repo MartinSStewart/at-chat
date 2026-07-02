@@ -6615,63 +6615,99 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
-                                Server_Game _ _ gameChange ->
+                                Server_Game _ { otherUserId } gameChange ->
+                                    let
+                                        -- The pop sounds for another participant's move are played
+                                        -- declaratively: store when the move arrived in the game's
+                                        -- model and let Go.audio/WordSpellingGame.audio schedule the
+                                        -- pops from it. If the match isn't open there's no game
+                                        -- model, and no sound plays.
+                                        updateDmGame : Id Id.ChannelMessageId -> (Game.Model -> Game.Model) -> LoggedIn2
+                                        updateDmGame matchId updateFunc =
+                                            { loggedIn2
+                                                | currentDmGame =
+                                                    SeqDict.update
+                                                        ( otherUserId, Just matchId )
+                                                        (Maybe.map updateFunc)
+                                                        loggedIn2.currentDmGame
+                                            }
+                                    in
                                     case gameChange of
-                                        Game.LocalChange_Go _ goChange ->
+                                        Game.LocalChange_Go matchId goChange ->
                                             case goChange of
                                                 Go.StartMatch _ _ ->
                                                     ( loggedIn2, Command.none )
 
                                                 Go.Action actionWithTime ->
-                                                    ( loggedIn2
-                                                    , case actionWithTime.change of
-                                                        Go.PlaceStone _ _ ->
-                                                            Ports.playSound Nothing "pop"
+                                                    let
+                                                        playPop : Bool
+                                                        playPop =
+                                                            case actionWithTime.change of
+                                                                Go.PlaceStone _ _ ->
+                                                                    True
 
-                                                        Go.PassTurn ->
-                                                            Ports.playSound Nothing "pop"
+                                                                Go.PassTurn ->
+                                                                    True
 
-                                                        Go.MarkTerritory _ _ ->
-                                                            Command.none
+                                                                Go.MarkTerritory _ _ ->
+                                                                    False
 
-                                                        Go.FinishedMarking ->
-                                                            Ports.playSound Nothing "pop"
+                                                                Go.FinishedMarking ->
+                                                                    True
 
-                                                        Go.AcceptTerritory ->
-                                                            Ports.playSound Nothing "pop"
+                                                                Go.AcceptTerritory ->
+                                                                    True
 
-                                                        Go.RejectTerritory ->
-                                                            Ports.playSound Nothing "pop"
+                                                                Go.RejectTerritory ->
+                                                                    True
+                                                    in
+                                                    ( if playPop then
+                                                        updateDmGame matchId
+                                                            (\gameModel ->
+                                                                case gameModel of
+                                                                    Game.GoModel_Game goModel ->
+                                                                        Game.GoModel_Game { goModel | lastPlacedStone = Just model.time }
+
+                                                                    _ ->
+                                                                        gameModel
+                                                            )
+
+                                                      else
+                                                        loggedIn2
+                                                    , Command.none
                                                     )
 
                                         Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 
-                                        Game.LocalChange_WordSpellingGame _ wsChange ->
-                                            ( loggedIn2
-                                            , case wsChange of
+                                        Game.LocalChange_WordSpellingGame matchId wsChange ->
+                                            ( case wsChange of
                                                 WordSpellingGame.Action actionWithTime ->
                                                     case actionWithTime.change of
                                                         WordSpellingGame.PlaceWord placedWord _ ->
-                                                            List.map
-                                                                (\index ->
-                                                                    Ports.playSound
-                                                                        (Quantity.plus
-                                                                            WordSpellingGame.tileSlideDuration
-                                                                            (Quantity.multiplyBy (toFloat index) WordSpellingGame.tileSlideStagger)
-                                                                            |> Duration.addTo actionWithTime.time
-                                                                            |> Just
-                                                                        )
-                                                                        "pop"
+                                                            updateDmGame matchId
+                                                                (\gameModel ->
+                                                                    case gameModel of
+                                                                        Game.WordSpellingGame_Game gameData ->
+                                                                            Game.WordSpellingGame_Game
+                                                                                { gameData
+                                                                                    | lastWordPlaced =
+                                                                                        Just
+                                                                                            { time = model.time
+                                                                                            , letterCount = List.Nonempty.length placedWord.letters
+                                                                                            }
+                                                                                }
+
+                                                                        _ ->
+                                                                            gameModel
                                                                 )
-                                                                (List.range 0 (List.Nonempty.length placedWord.letters - 1))
-                                                                |> Command.batch
 
                                                         _ ->
-                                                            Command.none
+                                                            loggedIn2
 
                                                 WordSpellingGame.StartMatch _ _ ->
-                                                    Command.none
+                                                    loggedIn2
+                                            , Command.none
                                             )
 
                                 _ ->
