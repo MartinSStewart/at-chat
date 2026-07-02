@@ -1,9 +1,13 @@
-module E2EWordSpellingGame exposing (wordSpellingGameTests)
+module E2EWordSpellingGame exposing (wordSpellingGameMobileTests, wordSpellingGameTests)
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Effect.Time as Time
 import Game
+import Id exposing (Id, UserId)
 import Json.Encode
 import Message
 import Test.Html.Query
@@ -128,3 +132,164 @@ wordSpellingGameTests normalConfig =
                 ]
             )
         ]
+
+
+{-| A run through the same match but with both players on a phone-sized window, so the frontends use
+the mobile layout and touch events, and the board zooms in on the placed tiles (which the drop
+coordinates below account for via WordSpellingGame.boardTouchCoord).
+-}
+wordSpellingGameMobileTests :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+wordSpellingGameMobileTests normalConfig =
+    E2EHelper.startTest
+        "Word spelling game match (mobile)"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.mobileWindow
+            (\admin user ->
+                let
+                    windowSize : Coord CssPixels
+                    windowSize =
+                        Coord.xy E2EHelper.mobileWindow.width E2EHelper.mobileWindow.height
+
+                    -- Rebuild the same validated setup the game creates so we can compute exact
+                    -- board/tray touch coordinates (only its tray size and the window matter here).
+                    setup : WordSpellingGame.ValidatedSetup
+                    setup =
+                        case
+                            WordSpellingGame.updateSetup
+                                (Time.millisToPosix 0)
+                                (Id.fromInt 0)
+                                WordSpellingGame.PressedStartGame
+                                { initSetup | letters = "aadeeiilmnnoorrsstt" }
+                                |> Tuple.second
+                                |> List.filterMap
+                                    (\outMsg ->
+                                        case outMsg of
+                                            WordSpellingGame.OutLocalChange (WordSpellingGame.StartMatch _ validated) ->
+                                                Just validated
+
+                                            _ ->
+                                                Nothing
+                                    )
+                                |> List.head
+                        of
+                            Just validated ->
+                                validated
+
+                            Nothing ->
+                                Debug.todo "the fixed letters always validate"
+
+                    -- One touch, reported the way the mobile frontend decodes touch events.
+                    touchEvent : Float -> ( Float, Float ) -> Json.Encode.Value
+                    touchEvent timeStamp ( x, y ) =
+                        Json.Encode.object
+                            [ ( "timeStamp", Json.Encode.float timeStamp )
+                            , ( "touches"
+                              , Json.Encode.object
+                                    [ ( "length", Json.Encode.int 1 )
+                                    , ( "0"
+                                      , Json.Encode.object
+                                            [ ( "identifier", Json.Encode.int 0 )
+                                            , ( "clientX", Json.Encode.float x )
+                                            , ( "clientY", Json.Encode.float y )
+                                            , ( "target", Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ] )
+                                            ]
+                                      )
+                                    ]
+                              )
+                            ]
+
+                    touchEndEvent : Float -> Json.Encode.Value
+                    touchEndEvent timeStamp =
+                        Json.Encode.object [ ( "timeStamp", Json.Encode.float timeStamp ) ]
+
+                    -- Drag a tile from one screen position to another. The timeStamp is spaced far
+                    -- enough from the previous drag that the board's zoom animation has settled by
+                    -- the time the tile is dropped, matching boardTouchCoord's settled zoom.
+                    dragTile timeStamp tab from to =
+                        T.group
+                            [ tab.custom 100 (Dom.id "elm-ui-root-id") "touchstart" (touchEvent timeStamp from)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent timeStamp to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "touchmove" (touchEvent timeStamp to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "touchend" (touchEndEvent timeStamp)
+                            ]
+
+                    trayXY : Int -> ( Float, Float )
+                    trayXY slot =
+                        floatCoord (WordSpellingGame.trayTouchCoord setup windowSize slot)
+
+                    -- The screen position for board cell `cell`, given the tiles the current player
+                    -- has already placed this turn (what the mobile zoom centres on).
+                    boardXY : List ( Int, Int ) -> ( Int, Int ) -> ( Float, Float )
+                    boardXY placed cell =
+                        floatCoord (WordSpellingGame.boardTouchCoord setup windowSize placed cell)
+                in
+                [ -- Both players open the DM and the match. On mobile the "open DM" buttons live
+                  -- behind the show-members button in the channel header.
+                  admin.click 0 (Dom.id "guild_showMembers")
+                , admin.click 100 (Dom.id "guild_openDm_2")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                , admin.click 100 (Dom.id "wsg_start")
+                , user.click 2000 (Dom.id "guild_showMembers")
+                , user.click 100 (Dom.id "guild_openDm_0")
+                , user.click 100 (Dom.id "guild_openGamesTab")
+                , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                , -- Admin's fresh tray is "A O A L D O M" (slots 3,1,0,4 = L,O,A,D). LOAD covers the
+                  -- centre and scores 10. After the first tile the board zooms, so tiles 2..4 use
+                  -- boardXY with the already-placed cells.
+                  T.collapsableGroup
+                    "Place \"load\""
+                    [ dragTile 1000 admin (trayXY 3) (boardXY [] ( 6, 7 ))
+                    , dragTile 2000 admin (trayXY 1) (boardXY [ ( 6, 7 ) ] ( 7, 7 ))
+                    , dragTile 3000 admin (trayXY 0) (boardXY [ ( 6, 7 ), ( 7, 7 ) ] ( 8, 7 ))
+                    , dragTile 4000 admin (trayXY 4) (boardXY [ ( 6, 7 ), ( 7, 7 ), ( 8, 7 ) ] ( 9, 7 ))
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                    , admin.snapshotView 5000 { name = "Place \"load\" (mobile)" }
+                    ]
+                , -- User's fresh tray is "N E N E S I T" (slots 0,4,1 = N,S,E). NOSE runs down column
+                  -- 7 through the committed O, scores 4, and empties the bag.
+                  T.collapsableGroup
+                    "Place \"nose\""
+                    [ dragTile 1000 user (trayXY 0) (boardXY [] ( 7, 6 ))
+                    , dragTile 2000 user (trayXY 4) (boardXY [ ( 7, 6 ) ] ( 7, 8 ))
+                    , dragTile 3000 user (trayXY 1) (boardXY [ ( 7, 6 ), ( 7, 8 ) ] ( 7, 9 ))
+                    , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
+                    , user.snapshotView 5000 { name = "Place \"nose\" (mobile)" }
+                    ]
+                , -- The bag is empty, so both players pass (admin first) to end the game.
+                  admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                , user.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                , -- On mobile the leaderboard only lists the winner (see WordSpellingGame.leaderboardView).
+                  admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT"
+                        , Test.Html.Selector.exactText ": 10 (winner)"
+                        ]
+                    )
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT"
+                        , Test.Html.Selector.exactText ": 10 (winner)"
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+initSetup : WordSpellingGame.SetupModel
+initSetup =
+    WordSpellingGame.initSetup
+
+
+floatCoord : Coord CssPixels -> ( Float, Float )
+floatCoord coord =
+    ( toFloat (Coord.xRaw coord), toFloat (Coord.yRaw coord) )

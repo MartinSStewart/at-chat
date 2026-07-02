@@ -28,6 +28,7 @@ module WordSpellingGame exposing
     , animatedTilePlacement
     , anyTileAnimating
     , audio
+    , boardTouchCoord
     , boardY
     , dragEnd
     , dragStart
@@ -43,6 +44,7 @@ module WordSpellingGame exposing
     , placementConnects
     , setupView
     , trayDropSlot
+    , trayTouchCoord
     , updateAction
     , updateGame
     , updateSetup
@@ -1563,20 +1565,24 @@ centred on their centroid, or fully zoomed out when the board is empty.
 -}
 zoomTarget : GameData -> ZoomState
 zoomTarget model =
-    let
-        placed : List ( Int, Int )
-        placed =
-            Array.toList model.tiles
-                |> List.filterMap
-                    (\tile ->
-                        case tile.position of
-                            TileOnBoard cell _ ->
-                                Just cell
+    Array.toList model.tiles
+        |> List.filterMap
+            (\tile ->
+                case tile.position of
+                    TileOnBoard cell _ ->
+                        Just cell
 
-                            TileInTray _ _ ->
-                                Nothing
-                    )
-    in
+                    TileInTray _ _ ->
+                        Nothing
+            )
+        |> zoomStateForCells
+
+
+{-| The settled zoom for a board with these tiles placed on it: fully zoomed in and centred on their
+centroid, or fully zoomed out when none are placed.
+-}
+zoomStateForCells : List ( Int, Int ) -> ZoomState
+zoomStateForCells placed =
     case placed of
         [] ->
             zoomedOutState
@@ -1801,6 +1807,55 @@ trayTilePos setup windowSize (TrayIndex index) =
     Coord.xy
         (boardX windowSize + round (toFloat index * (trayTileSize setup windowSize + trayTileSpacing)))
         (trayY setup windowSize)
+
+
+{-| The screen coordinate at the centre of a tray slot, used by end-to-end tests to touch a tile.
+-}
+trayTouchCoord : ValidatedSetup -> Coord CssPixels -> Int -> Coord CssPixels
+trayTouchCoord setup windowSize slot =
+    let
+        pos : Coord CssPixels
+        pos =
+            trayTilePos setup windowSize (TrayIndex slot)
+
+        half : Int
+        half =
+            round (trayTileSize setup windowSize) // 2
+    in
+    Coord.xy (Coord.xRaw pos + half) (Coord.yRaw pos + half)
+
+
+{-| The screen coordinate to touch to drop a tile on board cell `( tx, ty )`, given the tiles the
+current player has already placed this turn (which is what the mobile zoom centres on). Used by
+end-to-end tests, this is the forward of the `unprojectTouch` hit-test: touching here resolves back
+to `( tx, ty )`. The zoom is taken as settled (as it is a frame after the previous drop).
+-}
+boardTouchCoord : ValidatedSetup -> Coord CssPixels -> List ( Int, Int ) -> ( Int, Int ) -> Coord CssPixels
+boardTouchCoord setup windowSize placedCells ( tx, ty ) =
+    let
+        size : Int
+        size =
+            cellSize setup windowSize
+    in
+    case resolveZoom setup windowSize (zoomStateForCells placedCells) of
+        Just { zoomedCellSize, translate } ->
+            let
+                effScale : Float
+                effScale =
+                    toFloat zoomedCellSize / toFloat size
+
+                project : Int -> Int -> Int -> Int
+                project cell boardOrigin axisTranslate =
+                    boardOrigin + axisTranslate + round (effScale * (toFloat (cell * size) + toFloat size / 2))
+            in
+            Coord.xy
+                (project tx (boardX windowSize) (Coord.xRaw translate))
+                (project ty boardY (Coord.yRaw translate))
+
+        Nothing ->
+            Coord.xy
+                (boardX windowSize + tx * size + size // 2)
+                (boardY + ty * size + size // 2)
 
 
 {-| Where a tray tile is currently drawn. While a shift animation is in progress the tile eases
