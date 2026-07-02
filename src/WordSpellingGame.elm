@@ -2,7 +2,7 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
-    , Drag
+    , Drag(..)
     , GameData
     , GameMsg(..)
     , IsValid(..)
@@ -93,6 +93,8 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGameList exposing (Dictionary)
 
 
+{-| OpaqueVariants
+-}
 type Drag
     = Dragging Int
     | NotDragging

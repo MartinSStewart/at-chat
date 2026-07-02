@@ -1,10 +1,10 @@
 module Audio exposing
-    ( elementWithAudio, documentWithAudio, applicationWithAudio, Model, Msg, AudioData
+    ( elementWithAudio, documentWithAudio, applicationWithAudio, Model(..), Msg(..), AudioData
     , AudioCmd, loadAudio, LoadError(..), Source, cmdMap, cmdBatch, cmdNone
-    , Audio(..), audioData, audio, group, silence, length, audioWithConfig, audioDefaultConfig, PlayAudioConfig, LoopConfig
+    , Audio(..), audio, group, silence, length, audioWithConfig, audioDefaultConfig, PlayAudioConfig, LoopConfig
     , scaleVolume, scaleVolumeAt, offsetBy
     , lamderaFrontendWithAudio, migrateModel, migrateMsg
-    , userModel, userMsg
+    , audioData, userModel, userMsg
     )
 
 {-|
@@ -61,7 +61,7 @@ import Time
 import Url exposing (Url)
 
 
-{-| The top level model for our program.
+{-| OpaqueVariants. The top level model for our program.
 This contains the model for your app as well as extra data needed to keep track of what audio is playing.
 -}
 type Model userMsg userModel
@@ -123,7 +123,7 @@ length (AudioData audioData_) source =
         |> Maybe.withDefault Quantity.zero
 
 
-{-| The top level msg for our program.
+{-| OpaqueVariants. The top level msg for our program.
 This contains the msg type your app uses in addition to msgs that are needed to handle when audio gets loaded.
 -}
 type Msg userMsg
