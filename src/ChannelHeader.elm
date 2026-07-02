@@ -33,6 +33,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet
 import Thread
+import Touch
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Accessibility
@@ -577,7 +578,9 @@ tabBodyView local loggedIn model =
                             Game.view
                                 model.time
                                 model.windowSize
-                                (case model.drag of
+                                -- Touches are reported from the viewport top (behind the safe-area
+                                -- inset); shift them to match the board laid out below the inset.
+                                ((case model.drag of
                                     NoDrag ->
                                         Nothing
 
@@ -586,6 +589,8 @@ tabBodyView local loggedIn model =
 
                                     Dragging dragging ->
                                         Just dragging.touches
+                                 )
+                                    |> Maybe.map (Touch.removeSafeAreaTopInset model.safeAreaInsetTop)
                                 )
                                 model.lastCopied
                                 local.localUser

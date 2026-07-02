@@ -75,6 +75,7 @@ module E2EHelper exposing
     , startTest
     , startTime
     , startupDataJson
+    , startupDataJsonWithInset
     , tallDesktopWindow
     , tallSnapshot
     , uploadImageAttachment
@@ -162,12 +163,21 @@ domain =
 -}
 startupDataJson : String -> Json.Encode.Value
 startupDataJson userAgent =
+    startupDataJsonWithInset userAgent 0
+
+
+{-| Like [`startupDataJson`](#startupDataJson) but with a nonzero safe-area top inset (e.g. a phone
+notch), so a test can check that touch coordinates are adjusted for it.
+-}
+startupDataJsonWithInset : String -> Int -> Json.Encode.Value
+startupDataJsonWithInset userAgent safeAreaInsetTop =
     Json.Encode.object
         [ ( "timeOrigin", Json.Encode.float 0 )
         , ( "userAgent", Json.Encode.string userAgent )
         , ( "scrollbarWidth", Json.Encode.int 20 )
         , ( "isPwa", Json.Encode.bool False )
         , ( "notificationPermission", Json.Encode.string "denied" )
+        , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
         ]
 
 

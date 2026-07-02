@@ -4,6 +4,7 @@ module Touch exposing
     , averageTouchMove
     , decodeTouchEvent
     , decoderPointerEvent
+    , removeSafeAreaTopInset
     , touchCentroid
     )
 
@@ -35,6 +36,28 @@ touchCentroid touches =
 
 type ScreenCoordinate
     = ScreenCoordinate Never
+
+
+{-| Touch events report positions relative to the viewport's top-left, which on a phone is behind
+the safe-area inset (e.g. the notch). The UI is laid out below that inset, so shift the touches up
+by it before mapping them onto on-screen elements. A zero inset (desktop, most cases) is a no-op.
+-}
+removeSafeAreaTopInset : Int -> NonemptyDict Int Touch -> NonemptyDict Int Touch
+removeSafeAreaTopInset insetTop touches =
+    if insetTop == 0 then
+        touches
+
+    else
+        NonemptyDict.map
+            (\_ touch ->
+                { touch
+                    | client =
+                        Point2d.translateBy
+                            (Vector2d.xy Quantity.zero (CssPixels.cssPixels (toFloat -insetTop)))
+                            touch.client
+                }
+            )
+            touches
 
 
 {-| The event's timeStamp is a DOMHighResTimeStamp: the time elapsed since `performance.timeOrigin`, not a unix timestamp. Offset it by the timeOrigin loaded at startup to get a Time.Posix.

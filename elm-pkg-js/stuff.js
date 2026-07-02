@@ -477,13 +477,29 @@ exports.init = async function init(app)
             window.navigator.standalone === true ||
             document.referrer.includes('android-app://');
 
+        // The safe-area inset at the top of the screen (e.g. the notch on a phone), in pixels.
+        // Touch events report positions relative to the viewport top (behind the inset), but the UI
+        // is laid out below it, so the game board needs this to line drops up with the finger.
+        const insetProbe = document.createElement('div');
+        insetProbe.style.position = 'fixed';
+        insetProbe.style.top = '0';
+        insetProbe.style.left = '0';
+        insetProbe.style.width = '0';
+        insetProbe.style.height = 'env(safe-area-inset-top)';
+        insetProbe.style.visibility = 'hidden';
+        insetProbe.style.pointerEvents = 'none';
+        document.body.appendChild(insetProbe);
+        const safeAreaInsetTop = insetProbe.getBoundingClientRect().height;
+        insetProbe.parentNode.removeChild(insetProbe);
+
         app.ports.load_startup_data_from_js.send({
             // Event timeStamps are milliseconds since timeOrigin, not since the unix epoch
             timeOrigin: performance.timeOrigin,
             userAgent: window.navigator.userAgent,
             scrollbarWidth: scrollbarWidth,
             isPwa: isPwa,
-            notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported"
+            notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
+            safeAreaInsetTop: safeAreaInsetTop
         });
     });
 
