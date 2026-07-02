@@ -12,7 +12,7 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 
 
 loginTests :

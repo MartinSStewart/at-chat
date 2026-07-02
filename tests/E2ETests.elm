@@ -48,7 +48,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, LocalChange(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserSession exposing (SetViewing(..))
 import VisibleMessages

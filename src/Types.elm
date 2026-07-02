@@ -48,7 +48,7 @@ module Types exposing
 
 import AiChat
 import Array exposing (Array)
-import Audio exposing (Audio)
+import Audio
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import Call exposing (CallId, ChannelSidebarMode, FromJs)

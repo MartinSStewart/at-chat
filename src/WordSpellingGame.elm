@@ -2,6 +2,7 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
+    , Drag
     , GameData
     , GameMsg(..)
     , IsValid(..)
@@ -22,6 +23,8 @@ module WordSpellingGame exposing
     , TrayIndex(..)
     , UserStatus(..)
     , ValidatedSetup
+    , ZoomAnimation
+    , ZoomState
     , animatedTilePlacement
     , anyTileAnimating
     , audio
@@ -39,10 +42,7 @@ module WordSpellingGame exposing
     , placeWord
     , placementConnects
     , setupView
-    , tileSlideDuration
-    , tileSlideStagger
     , trayDropSlot
-    , trayY
     , updateAction
     , updateGame
     , updateSetup
@@ -2010,19 +2010,9 @@ cellOccupiedByOtherTile draggedIndex cell tiles =
                     TileOnBoard pos _ ->
                         (index /= draggedIndex) && pos == cell
 
-                    TileInTray trayIndex maybe ->
+                    TileInTray _ _ ->
                         False
             )
-
-
-isTileOnBoard : Tile -> Bool
-isTileOnBoard tile =
-    case tile.position of
-        TileOnBoard _ _ ->
-            True
-
-        TileInTray _ _ ->
-            False
 
 
 {-| How close (in CSS pixels) the cursor has to be to the tray for a dropped tile to snap into it
@@ -2281,43 +2271,6 @@ isTileShifting currentTime tile =
 
         _ ->
             False
-
-
-{-| How long, in milliseconds, the player's board tiles jiggle after an invalid submit.
--}
-shakeDuration : Float
-shakeDuration =
-    450
-
-
-{-| How far, in CSS pixels, the shake displaces a tile at its strongest (it decays to zero over
-`shakeDuration`).
--}
-shakeAmplitude : Float
-shakeAmplitude =
-    5
-
-
-{-| The horizontal shake offset for the player's board tiles after an invalid submit. It oscillates
-and decays to zero over `shakeDuration`, and is zero when no invalid submit is active.
--}
-boardTileShakeOffset : Time.Posix -> Maybe Time.Posix -> Int
-boardTileShakeOffset currentTime invalidPlacement =
-    case invalidPlacement of
-        Just startTime ->
-            let
-                progress : Float
-                progress =
-                    elapsedMs currentTime startTime / shakeDuration
-            in
-            if progress < 1 then
-                round (sin (progress * pi * 6) * shakeAmplitude * (1 - progress))
-
-            else
-                0
-
-        Nothing ->
-            0
 
 
 elapsedMs : Time.Posix -> Time.Posix -> Float
@@ -2951,7 +2904,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                                 TileOnBoard pos _ ->
                                                     pos == ( x, y )
 
-                                                TileInTray trayIndex maybe ->
+                                                TileInTray _ _ ->
                                                     False
                                         )
                                         model.tiles

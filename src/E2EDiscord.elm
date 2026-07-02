@@ -31,7 +31,7 @@ import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendModel_, FrontendMsg, FrontendMsg_, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import Unsafe
 import User
 
