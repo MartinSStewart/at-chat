@@ -1012,7 +1012,13 @@ updateGame time currentUserId setup shared msg model =
                                     (\index tray ->
                                         Array.push
                                             { position = TileInTray (firstOpenTrayIndex Nothing tray) Nothing
-                                            , createdAt = Duration.addTo time (Duration.seconds (0.1 * toFloat index))
+                                            , createdAt =
+                                                Duration.addTo
+                                                    time
+                                                    (Quantity.plus
+                                                        (Duration.seconds (0.1 * toFloat index))
+                                                        invalidHoldDuration
+                                                    )
                                             }
                                             tray
                                     )
@@ -2205,9 +2211,9 @@ tileSlideStagger =
 {-| How long, in milliseconds, rejected tiles sit on the board (turned red) before sliding back
 off again.
 -}
-invalidHoldDuration : Float
+invalidHoldDuration : Duration
 invalidHoldDuration =
-    2000
+    Duration.milliseconds 2000
 
 
 tileFadeDelay : Duration
@@ -2315,7 +2321,7 @@ placementAnimationDuration : ToBeFilledInByBackend IsValid -> Int -> Float
 placementAnimationDuration isValid tileCount =
     case isValid of
         FilledInByBackend IsNotValid ->
-            slideInEnd tileCount + invalidHoldDuration + slideInEnd tileCount
+            slideInEnd tileCount + Duration.inMilliseconds invalidHoldDuration + slideInEnd tileCount
 
         _ ->
             slideInEnd tileCount
@@ -2400,7 +2406,11 @@ animatedTilePlacement isPlayerWhoPlacedTiles elapsed isValid tileCount index =
             let
                 leaveStart : Float
                 leaveStart =
-                    slideInEnd tileCount + invalidHoldDuration + toFloat index * Duration.inMilliseconds tileSlideStagger
+                    Quantity.plus
+                        invalidHoldDuration
+                        (Quantity.multiplyBy (toFloat index) tileSlideStagger)
+                        |> Duration.inMilliseconds
+                        |> (+) (slideInEnd tileCount)
 
                 leaveEnd : Float
                 leaveEnd =
