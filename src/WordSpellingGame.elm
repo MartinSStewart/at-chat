@@ -1486,19 +1486,19 @@ trayX =
     boardX
 
 
-trayY : ValidatedSetup -> Coord CssPixels -> Int
-trayY setup windowSize =
-    boardY + boardWidth setup windowSize
+trayY : OneOrGreater -> Coord CssPixels -> Int
+trayY traySize windowSize =
+    boardY + boardWidth traySize windowSize
 
 
-boardWidth : ValidatedSetup -> Coord CssPixels -> Int
-boardWidth setup windowSize =
-    cellSize setup windowSize * gridSize
+boardWidth : OneOrGreater -> Coord CssPixels -> Int
+boardWidth traySize windowSize =
+    cellSize traySize windowSize * gridSize
 
 
-boardHeight : ValidatedSetup -> Coord CssPixels -> Int
-boardHeight setup windowSize =
-    boardWidth setup windowSize + trayHeight setup windowSize
+boardHeight : OneOrGreater -> Coord CssPixels -> Int
+boardHeight traySize windowSize =
+    boardWidth traySize windowSize + trayHeight traySize windowSize
 
 
 insideBoard : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Bool
@@ -1508,9 +1508,9 @@ insideBoard setup windowSize coord =
             boardX windowSize
     in
     (Coord.xRaw coord > x)
-        && (Coord.xRaw coord < (x + boardWidth setup windowSize))
+        && (Coord.xRaw coord < (x + boardWidth setup.traySize windowSize))
         && (Coord.yRaw coord > boardY)
-        && (Coord.yRaw coord < boardY + boardHeight setup windowSize)
+        && (Coord.yRaw coord < boardY + boardHeight setup.traySize windowSize)
 
 
 {-| Which board cell (if any) a screen position is over.
@@ -1520,7 +1520,7 @@ cellAtPosition setup windowSize coord =
     let
         size : Int
         size =
-            cellSize setup windowSize
+            cellSize setup.traySize windowSize
 
         relX : Int
         relX =
@@ -1665,10 +1665,10 @@ mobile, or zoomed all the way out). Both `project` in `boardView` and `unproject
 terms of these two values, so the drawn board and the touch hit-testing always agree.
 
 -}
-boardZoom : Time.Posix -> ValidatedSetup -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
-boardZoom time setup windowSize model =
+boardZoom : Time.Posix -> OneOrGreater -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
+boardZoom time traySize windowSize model =
     if MyUi.isMobile { windowSize = windowSize } then
-        resolveZoom setup windowSize (animatedZoomState time model)
+        resolveZoom traySize windowSize (animatedZoomState time model)
 
     else
         Nothing
@@ -1678,8 +1678,8 @@ boardZoom time setup windowSize model =
 so close to zoomed out that it's indistinguishable from an unzoomed board (which also lets the grid
 background stay cached instead of redrawing).
 -}
-resolveZoom : ValidatedSetup -> Coord CssPixels -> ZoomState -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
-resolveZoom setup windowSize zoomState =
+resolveZoom : OneOrGreater -> Coord CssPixels -> ZoomState -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
+resolveZoom traySize windowSize zoomState =
     if zoomState.amount < 0.02 then
         Nothing
 
@@ -1687,7 +1687,7 @@ resolveZoom setup windowSize zoomState =
         let
             size : Int
             size =
-                cellSize setup windowSize
+                cellSize traySize windowSize
 
             zc : Int
             zc =
@@ -1740,12 +1740,12 @@ the exact inverse of the `project` transform in `boardView`. Without zoom it's t
 -}
 unprojectTouch : Time.Posix -> Coord CssPixels -> ValidatedSetup -> GameData -> Coord CssPixels -> Coord CssPixels
 unprojectTouch time windowSize setup model coord =
-    case boardZoom time setup windowSize model of
+    case boardZoom time setup.traySize windowSize model of
         Just { zoomedCellSize, translate } ->
             let
                 effScale : Float
                 effScale =
-                    toFloat zoomedCellSize / toFloat (cellSize setup windowSize)
+                    toFloat zoomedCellSize / toFloat (cellSize setup.traySize windowSize)
 
                 unproject : Int -> Int -> Int -> Int
                 unproject axis boardOrigin axisTranslate =
@@ -1777,7 +1777,7 @@ boardCellAtPosition time windowSize setup model coord =
 
         width : Int
         width =
-            boardWidth setup windowSize
+            boardWidth setup.traySize windowSize
     in
     if relX >= 0 && relX < width && relY >= 0 && relY < width then
         cellAtPosition setup windowSize (unprojectTouch time windowSize setup model coord)
@@ -1786,13 +1786,13 @@ boardCellAtPosition time windowSize setup model coord =
         Nothing
 
 
-trayTileSize : ValidatedSetup -> Coord CssPixels -> Float
-trayTileSize setup windowSize =
+trayTileSize : OneOrGreater -> Coord CssPixels -> Float
+trayTileSize traySize windowSize =
     let
         -- One slot per tray tile plus one more for the replace-tray button drawn next to the tray.
         slots : Float
         slots =
-            toFloat (OneOrGreater.toInt setup.traySize + 1)
+            toFloat (OneOrGreater.toInt traySize + 1)
     in
     min 50 ((toFloat (Coord.xRaw windowSize) - (trayTileSpacing * (slots - 1))) / slots)
 
@@ -1802,25 +1802,25 @@ trayTileSpacing =
     4
 
 
-trayTilePos : ValidatedSetup -> Coord CssPixels -> TrayIndex -> Coord CssPixels
-trayTilePos setup windowSize (TrayIndex index) =
+trayTilePos : OneOrGreater -> Coord CssPixels -> TrayIndex -> Coord CssPixels
+trayTilePos traySize windowSize (TrayIndex index) =
     Coord.xy
-        (boardX windowSize + round (toFloat index * (trayTileSize setup windowSize + trayTileSpacing)))
-        (trayY setup windowSize)
+        (boardX windowSize + round (toFloat index * (trayTileSize traySize windowSize + trayTileSpacing)))
+        (trayY traySize windowSize)
 
 
 {-| The screen coordinate at the centre of a tray slot, used by end-to-end tests to touch a tile.
 -}
-trayTouchCoord : ValidatedSetup -> Coord CssPixels -> Int -> Coord CssPixels
-trayTouchCoord setup windowSize slot =
+trayTouchCoord : OneOrGreater -> Coord CssPixels -> Int -> Coord CssPixels
+trayTouchCoord traySize windowSize slot =
     let
         pos : Coord CssPixels
         pos =
-            trayTilePos setup windowSize (TrayIndex slot)
+            trayTilePos traySize windowSize (TrayIndex slot)
 
         half : Int
         half =
-            round (trayTileSize setup windowSize) // 2
+            round (trayTileSize traySize windowSize) // 2
     in
     Coord.xy (Coord.xRaw pos + half) (Coord.yRaw pos + half)
 
@@ -1830,14 +1830,14 @@ current player has already placed this turn (which is what the mobile zoom centr
 end-to-end tests, this is the forward of the `unprojectTouch` hit-test: touching here resolves back
 to `( tx, ty )`. The zoom is taken as settled (as it is a frame after the previous drop).
 -}
-boardTouchCoord : ValidatedSetup -> Coord CssPixels -> List ( Int, Int ) -> ( Int, Int ) -> Coord CssPixels
-boardTouchCoord setup windowSize placedCells ( tx, ty ) =
+boardTouchCoord : OneOrGreater -> Coord CssPixels -> List ( Int, Int ) -> ( Int, Int ) -> Coord CssPixels
+boardTouchCoord traySize windowSize placedCells ( tx, ty ) =
     let
         size : Int
         size =
-            cellSize setup windowSize
+            cellSize traySize windowSize
     in
-    case resolveZoom setup windowSize (zoomStateForCells placedCells) of
+    case resolveZoom traySize windowSize (zoomStateForCells placedCells) of
         Just { zoomedCellSize, translate } ->
             let
                 effScale : Float
@@ -1866,7 +1866,7 @@ animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation =
     let
         dest : Coord CssPixels
         dest =
-            trayTilePos setup windowSize trayIndex
+            trayTilePos setup.traySize windowSize trayIndex
     in
     case shiftAnimation of
         Just ( startTime, fromSlot ) ->
@@ -1877,7 +1877,7 @@ animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation =
 
                 from : Coord CssPixels
                 from =
-                    trayTilePos setup windowSize (TrayIndex fromSlot)
+                    trayTilePos setup.traySize windowSize (TrayIndex fromSlot)
 
                 lerp : Int -> Int -> Int
                 lerp a b =
@@ -1902,12 +1902,12 @@ trayIndexAtPosition setup windowSize coord trayLength =
 
         relY : Int
         relY =
-            Coord.yRaw coord - trayY setup windowSize
+            Coord.yRaw coord - trayY setup.traySize windowSize
 
         index =
-            toFloat relX / (trayTileSize setup windowSize + trayTileSpacing) |> floor
+            toFloat relX / (trayTileSize setup.traySize windowSize + trayTileSpacing) |> floor
     in
-    if relX >= 0 && relY >= 0 && relY < trayHeight setup windowSize && index < trayLength then
+    if relX >= 0 && relY >= 0 && relY < trayHeight setup.traySize windowSize && index < trayLength then
         Just index
 
     else
@@ -2090,15 +2090,15 @@ distanceToTray setup windowSize coord slotCount =
 
         right : Int
         right =
-            left + round (toFloat slotCount * trayTileSize setup windowSize) + (slotCount - 1) * trayTileSpacing
+            left + round (toFloat slotCount * trayTileSize setup.traySize windowSize) + (slotCount - 1) * trayTileSpacing
 
         top : Int
         top =
-            trayY setup windowSize
+            trayY setup.traySize windowSize
 
         bottom : Int
         bottom =
-            top + trayHeight setup windowSize
+            top + trayHeight setup.traySize windowSize
 
         dx : Int
         dx =
@@ -2140,7 +2140,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
 
         target : Int
         target =
-            trayDropSlot (trayTileSize setup windowSize) (trayX windowSize) (Coord.xRaw position) slotCount
+            trayDropSlot (trayTileSize setup.traySize windowSize) (trayX windowSize) (Coord.xRaw position) slotCount
 
         occupied : Set Int
         occupied =
@@ -2527,7 +2527,7 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
      else
         Ui.row
     )
-        [ Ui.height (Ui.px (tabBodyHeight windowSize setup))
+        [ Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
         , Ui.background MyUi.tabBackground
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
@@ -2731,9 +2731,9 @@ statusView windowSize localUser setup shared =
                     )
 
 
-trayHeight : ValidatedSetup -> Coord CssPixels -> Int
-trayHeight setup windowSize =
-    trayTileSize setup windowSize |> round
+trayHeight : OneOrGreater -> Coord CssPixels -> Int
+trayHeight traySize windowSize =
+    trayTileSize traySize windowSize |> round
 
 
 boardView :
@@ -2749,11 +2749,11 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
     let
         cellSize2 : Int
         cellSize2 =
-            cellSize setup windowSize
+            cellSize setup.traySize windowSize
 
         zoom : Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
         zoom =
-            boardZoom currentTime setup windowSize model
+            boardZoom currentTime setup.traySize windowSize model
 
         -- The zoomed-in cell size, i.e. how big a board cell is drawn once the mobile zoom is
         -- applied (the same as `cellSize2` when there's no zoom).
@@ -2927,7 +2927,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                         , tileInFront
                                             currentTime
                                             tile.createdAt
-                                            (trayTileSize setup windowSize |> round)
+                                            (trayTileSize setup.traySize windowSize |> round)
                                             (animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation)
                                             letter
                                             :: trayAcc
@@ -3067,11 +3067,11 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
 
         trayHeight2 : Int
         trayHeight2 =
-            trayHeight setup windowSize
+            trayHeight setup.traySize windowSize
 
         trayWidth : Int
         trayWidth =
-            Coord.xRaw (trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayTileSpacing - trayX windowSize
+            Coord.xRaw (trayTilePos setup.traySize windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))) - trayTileSpacing - trayX windowSize
 
         -- A tray-tile sized button next to the tray that replaces the player's tray with fresh
         -- letters. It's greyed out and does nothing once the letter bag is empty (there's nothing
@@ -3082,11 +3082,11 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 let
                     pos : Coord CssPixels
                     pos =
-                        trayTilePos setup windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))
+                        trayTilePos setup.traySize windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))
 
                     buttonSize : Int
                     buttonSize =
-                        round (trayTileSize setup windowSize)
+                        round (trayTileSize setup.traySize windowSize)
 
                     canReplace : Bool
                     canReplace =
@@ -3158,7 +3158,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                         ++ [ Ui.inFront
                                 (Ui.el
                                     [ Ui.background (Ui.rgb 119 97 97)
-                                    , Ui.move { x = trayX windowSize, y = trayY setup windowSize, z = 0 }
+                                    , Ui.move { x = trayX windowSize, y = trayY setup.traySize windowSize, z = 0 }
                                     , Ui.width (Ui.px trayWidth)
                                     , Ui.height (Ui.px (trayHeight2 + 4))
                                     ]
@@ -3309,11 +3309,11 @@ statusHeight =
     70
 
 
-tabBodyHeight : Coord CssPixels -> ValidatedSetup -> Int
-tabBodyHeight windowSize setup =
-    cellSize setup windowSize
+tabBodyHeight : Coord CssPixels -> OneOrGreater -> Int
+tabBodyHeight windowSize traySize =
+    cellSize traySize windowSize
         * gridSize
-        + trayHeight setup windowSize
+        + trayHeight traySize windowSize
         + (if MyUi.isMobile { windowSize = windowSize } then
             statusHeight
 
@@ -3323,14 +3323,14 @@ tabBodyHeight windowSize setup =
         + 10
 
 
-cellSize : ValidatedSetup -> Coord CssPixels -> Int
-cellSize setup windowSize =
+cellSize : OneOrGreater -> Coord CssPixels -> Int
+cellSize traySize windowSize =
     let
         availableSize : Int
         availableSize =
             min
                 (round (toFloat (Coord.yRaw windowSize) * 0.7)
-                    - trayHeight setup windowSize
+                    - trayHeight traySize windowSize
                     - (if MyUi.isMobile { windowSize = windowSize } then
                         statusHeight
 

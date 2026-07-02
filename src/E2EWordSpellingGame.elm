@@ -9,9 +9,9 @@ import Effect.Test as T
 import Effect.Time as Time
 import FrontendExtra
 import Game
-import Id exposing (Id, UserId)
 import Json.Encode
 import Message
+import OneOrGreater
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -165,34 +165,6 @@ tests normalConfig =
                         windowSize =
                             Coord.xy E2EHelper.mobileWindow.width E2EHelper.mobileWindow.height
 
-                        -- Rebuild the same validated setup the game creates so we can compute exact
-                        -- board/tray touch coordinates (only its tray size and the window matter here).
-                        setup : WordSpellingGame.ValidatedSetup
-                        setup =
-                            case
-                                WordSpellingGame.updateSetup
-                                    (Time.millisToPosix 0)
-                                    (Id.fromInt 0)
-                                    WordSpellingGame.PressedStartGame
-                                    { initSetup | letters = "aadeeiilmnnoorrsstt" }
-                                    |> Tuple.second
-                                    |> List.filterMap
-                                        (\outMsg ->
-                                            case outMsg of
-                                                WordSpellingGame.OutLocalChange (WordSpellingGame.StartMatch _ validated) ->
-                                                    Just validated
-
-                                                _ ->
-                                                    Nothing
-                                        )
-                                    |> List.head
-                            of
-                                Just validated ->
-                                    validated
-
-                                Nothing ->
-                                    Debug.todo "the fixed letters always validate"
-
                         -- One touch, reported the way the mobile frontend decodes touch events.
                         touchEvent : Float -> ( Float, Float ) -> Json.Encode.Value
                         touchEvent timeStamp ( x, y ) =
@@ -230,13 +202,13 @@ tests normalConfig =
 
                         trayXY : Int -> ( Float, Float )
                         trayXY slot =
-                            floatCoord (WordSpellingGame.trayTouchCoord setup windowSize slot)
+                            floatCoord (WordSpellingGame.trayTouchCoord OneOrGreater.seven windowSize slot)
 
                         -- The screen position for board cell `cell`, given the tiles the current player
                         -- has already placed this turn (what the mobile zoom centres on).
                         boardXY : List ( Int, Int ) -> ( Int, Int ) -> ( Float, Float )
                         boardXY placed cell =
-                            floatCoord (WordSpellingGame.boardTouchCoord setup windowSize placed cell)
+                            floatCoord (WordSpellingGame.boardTouchCoord OneOrGreater.seven windowSize placed cell)
                     in
                     [ -- Both players open the DM and the match. On mobile the "open DM" buttons live
                       -- behind the show-members button in the channel header.
@@ -298,11 +270,6 @@ tests normalConfig =
                 )
             ]
         ]
-
-
-initSetup : WordSpellingGame.SetupModel
-initSetup =
-    WordSpellingGame.initSetup
 
 
 {-| The message the audio port's JS side sends back after successfully loading a sound (see
