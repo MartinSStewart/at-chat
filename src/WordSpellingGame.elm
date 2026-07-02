@@ -163,6 +163,7 @@ type GameMsg
     = PressedSubmitWord PlacedWord
     | PressedJoinGame
     | PressedReplaceTrayOrPass
+    | PressedClearBoard
 
 
 type alias SetupModel =
@@ -1086,6 +1087,37 @@ updateGame time currentUserId setup shared msg model =
                         |> Array.fromList
               }
             , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            )
+
+        PressedClearBoard ->
+            -- Send every tile the player has resting on the board back to the tray, keeping the tiles
+            -- already in the tray where they are and filling the freed slots (mirrors how `dragEnd`
+            -- returns a single tile). The order of `model.tiles` is preserved since it's index-aligned
+            -- with the player's tray letters (see `placedTiles`).
+            ( { model
+                | dragging = NotDragging
+                , tiles =
+                    Array.foldl
+                        (\tile ( acc, taken ) ->
+                            case tile.position of
+                                TileInTray _ _ ->
+                                    ( Array.push tile acc, taken )
+
+                                TileOnBoard _ _ ->
+                                    let
+                                        index : Int
+                                        index =
+                                            lowestFreeTrayIndex 0 taken
+                                    in
+                                    ( Array.push { tile | position = TileInTray (TrayIndex index) Nothing } acc
+                                    , Set.insert index taken
+                                    )
+                        )
+                        ( Array.empty, trayIndicesInUse model.tiles )
+                        model.tiles
+                        |> Tuple.first
+              }
+            , []
             )
 
 
@@ -2024,6 +2056,34 @@ dragEnd currentTime windowSize newTouches setup shared model =
         |> withZoomAnimation currentTime model
 
 
+{-| The tray slots currently occupied by tiles resting in the tray (board tiles don't count).
+-}
+trayIndicesInUse : Array Tile -> Set Int
+trayIndicesInUse tiles =
+    Array.foldl
+        (\tile set ->
+            case tile.position of
+                TileInTray (TrayIndex index) _ ->
+                    Set.insert index set
+
+                TileOnBoard _ _ ->
+                    set
+        )
+        Set.empty
+        tiles
+
+
+{-| The lowest tray index at or above `n` that isn't in `taken`.
+-}
+lowestFreeTrayIndex : Int -> Set Int -> Int
+lowestFreeTrayIndex n taken =
+    if Set.member n taken then
+        lowestFreeTrayIndex (n + 1) taken
+
+    else
+        n
+
+
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
 the tray.
 -}
@@ -2515,10 +2575,11 @@ gameView :
     -> Maybe (NonemptyDict Int Touch)
     -> LocalUser
     -> ValidatedSetup
+    -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging localUser setup shared model =
+gameView currentTime windowSize maybeDragging localUser setup actions shared model =
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
@@ -2537,15 +2598,12 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize localUser setup shared
+        , statusView windowSize localUser setup actions shared
         ]
 
 
-{-| A row showing a player's profile image and name, followed by `suffix` (their score and any
-status text). Bolded when `isBold` is True (the current player's turn, or a winner).
--}
-playerRow : LocalUser -> Id UserId -> String -> Element GameMsg
-playerRow localUser userId suffix =
+playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
+playerRow localUser userId highlight suffix =
     let
         maybeUser : Maybe User.FrontendUser
         maybeUser =
@@ -2554,6 +2612,12 @@ playerRow localUser userId suffix =
     Ui.row
         [ Ui.spacing 8
         , Ui.width Ui.shrink
+        , if highlight then
+            Ui.background MyUi.mentionColor
+
+          else
+            Ui.noAttr
+        , Ui.paddingWith { left = 4, top = 4, bottom = 4, right = 8 }
         ]
         [ User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
@@ -2587,9 +2651,9 @@ leaderboardView isMobile winners shared localUser =
                 |> List.sortBy (\player -> negate player.score)
     in
     Ui.column
-        [ Ui.spacing 8, Ui.height (Ui.px statusHeight), Ui.paddingXY 16 0 ]
+        [ Ui.height (Ui.px statusHeight), Ui.paddingXY 16 0 ]
         (Ui.el
-            [ Ui.Font.weight 700 ]
+            [ Ui.Font.bold, Ui.paddingXY 0 4 ]
             (Ui.text
                 (if isTie then
                     "Game over — it's a tie!"
@@ -2612,6 +2676,7 @@ leaderboardView isMobile winners shared localUser =
                         playerRow
                             localUser
                             player.userId
+                            isWinner
                             (": "
                                 ++ String.fromInt player.score
                                 ++ (if isWinner then
@@ -2631,8 +2696,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
-statusView windowSize localUser setup shared =
+statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+statusView windowSize localUser setup actions shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2679,13 +2744,13 @@ statusView windowSize localUser setup shared =
             in
             if isMobile then
                 Ui.row
-                    [ Ui.paddingXY 8 0, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
+                    [ Ui.spacing 8, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
                     [ Ui.column
-                        [ Ui.centerY, Ui.spacing 4 ]
+                        [ Ui.centerY ]
                         [ case User.getUser currentPlayer.userId localUser of
                             Just user ->
                                 Ui.row
-                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2, Ui.background MyUi.mentionColor ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
                                     , Ui.text ("'s turn (" ++ String.fromInt currentPlayer.score ++ ")")
                                     ]
@@ -2695,7 +2760,7 @@ statusView windowSize localUser setup shared =
                         , case User.getUser nextPlayer.userId localUser of
                             Just user ->
                                 Ui.row
-                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2 ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
                                     , Ui.text (" is next (" ++ String.fromInt nextPlayer.score ++ ")")
                                     ]
@@ -2709,28 +2774,158 @@ statusView windowSize localUser setup shared =
             else
                 Ui.column
                     [ Ui.spacing 8, Ui.paddingXY 16 0 ]
-                    (("Letters remaining: "
-                        ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
-                        |> Ui.text
-                     )
-                        :: List.indexedMap
-                            (\index player ->
-                                playerRow
-                                    localUser
-                                    player.userId
-                                    (if index == modBy playerCount shared.turnCount then
-                                        "'s turn (" ++ String.fromInt player.score ++ ")"
+                    [ Ui.column
+                        []
+                        (("Letters remaining: "
+                            ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
+                            |> Ui.text
+                            |> Ui.el [ Ui.paddingXY 0 4 ]
+                         )
+                            :: List.indexedMap
+                                (\index player ->
+                                    playerRow
+                                        localUser
+                                        player.userId
+                                        (index == modBy playerCount shared.turnCount)
+                                        (if index == modBy playerCount shared.turnCount then
+                                            "'s turn (" ++ String.fromInt player.score ++ ")"
 
-                                     else if index == modBy playerCount (shared.turnCount + 1) then
-                                        " is next (" ++ String.fromInt player.score ++ ")"
+                                         else if index == modBy playerCount (shared.turnCount + 1) then
+                                            " is next (" ++ String.fromInt player.score ++ ")"
 
-                                     else
-                                        " (" ++ String.fromInt player.score ++ ")"
-                                    )
-                            )
-                            (List.Nonempty.toList shared.players)
-                        ++ [ contextButton ]
+                                         else
+                                            " (" ++ String.fromInt player.score ++ ")"
+                                        )
+                                )
+                                (List.Nonempty.toList shared.players)
+                        )
+                    , Ui.column [] [ Ui.Lazy.lazy3 recentActionsView localUser setup actions, contextButton ]
+                    ]
+
+
+{-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
+see what just happened (who played which word for how many points, who passed, and so on).
+-}
+recentActionsView : LocalUser -> ValidatedSetup -> Array ActionWithTime -> Element GameMsg
+recentActionsView localUser setup actions =
+    let
+        log : List { userId : Id UserId, description : String }
+        log =
+            actionLog setup actions
+    in
+    case List.drop (max 0 (List.length log - 4)) log of
+        [] ->
+            Ui.none
+
+        recent ->
+            Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ] (Ui.text "Recent moves")
+                :: List.map
+                    (\entry ->
+                        let
+                            name : String
+                            name =
+                                case User.getUser entry.userId localUser of
+                                    Just user ->
+                                        PersonName.toString user.name
+
+                                    Nothing ->
+                                        "Someone"
+                        in
+                        Ui.row
+                            [ MyUi.prewrap, Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                            , Ui.text (" " ++ entry.description)
+                            ]
                     )
+                    recent
+                |> Ui.column [ Ui.spacing 4 ]
+
+
+{-| Replay the whole action list from the start (the same fold `updateAction` builds the live board
+from), pairing each action with a short human-readable description. Word text and score are worked
+out from the board as it stood just before the action, which is why the running `Shared` state is
+carried through the fold.
+-}
+actionLog : ValidatedSetup -> Array ActionWithTime -> List { userId : Id UserId, description : String }
+actionLog setup actions =
+    Array.foldl
+        (\action ( shared, acc ) ->
+            ( updateAction setup action shared
+            , { userId = action.userId, description = describeAction setup shared action } :: acc
+            )
+        )
+        ( initShared setup, [] )
+        actions
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| A short description of a single action, phrased to read after the player's name (e.g.
+"played CAT (+5)"). Uses the board state from just before the action to recover the word and score.
+-}
+describeAction : ValidatedSetup -> Shared -> ActionWithTime -> String
+describeAction setup shared action =
+    case action.change of
+        PlaceWord placedWord isValid ->
+            case isValid of
+                FilledInByBackend IsNotValid ->
+                    "played an invalid word"
+
+                _ ->
+                    case placeWord shared.board placedWord of
+                        Just result ->
+                            "played "
+                                ++ headlineWord result.words
+                                ++ " (+"
+                                ++ String.fromInt result.score
+                                ++ ")"
+
+                        Nothing ->
+                            "played a word"
+
+        ReplaceTrayOrPass ->
+            case passBehavior setup shared of
+                ShouldReplaceTray ->
+                    "swapped their tiles"
+
+                ShouldPass ->
+                    "passed"
+
+                ShouldEndGame ->
+                    "ended the game"
+
+        JoinGame ->
+            "joined the game"
+
+
+{-| The longest of the words a placement formed, rendered as uppercase text, used as the headline
+word in an action description.
+-}
+headlineWord : List (List LetterOrWildcard) -> String
+headlineWord words =
+    words
+        |> List.sortBy (\word -> negate (List.length word))
+        |> List.head
+        |> Maybe.map letterOrWildcardsToString
+        |> Maybe.withDefault "a word"
+
+
+{-| Render placed tiles as uppercase text, showing a wildcard as an underscore since the board
+doesn't record which letter it stands for.
+-}
+letterOrWildcardsToString : List LetterOrWildcard -> String
+letterOrWildcardsToString letters =
+    List.map
+        (\letterOrWildcard ->
+            case letterOrWildcard of
+                Letter letter ->
+                    String.toUpper (letterText letter)
+
+                Wildcard ->
+                    "_"
+        )
+        letters
+        |> String.concat
 
 
 trayHeight : OneOrGreater -> Coord CssPixels -> Int
@@ -3114,10 +3309,10 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 in
                 Ui.inFront
                     (if canReplace then
-                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.delete)
+                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.recycle)
 
                      else
-                        Ui.el attributes (Ui.html Icons.delete)
+                        Ui.el attributes (Ui.html Icons.recycle)
                     )
 
             else
@@ -3126,6 +3321,85 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         boardPx : Int
         boardPx =
             gridSize * cellSize2
+
+        -- A large clear button pinned to a top corner of the board viewport, shown only while the
+        -- player has tiles resting on the board. It sits in whichever top corner is farther from the
+        -- tiles being placed, so it stays out of the way, and is drawn bigger than a grid cell to
+        -- stand out. Clicking it returns every placed tile to the tray (see `PressedClearBoard`).
+        clearButton : Ui.Attribute GameMsg
+        clearButton =
+            let
+                placed : List ( ( Int, Int ), LetterOrWildcard )
+                placed =
+                    placedTiles currentUserId shared model
+            in
+            case ( getWinner shared, placed ) of
+                ( Nothing, _ :: _ ) ->
+                    let
+                        buttonSize : Int
+                        buttonSize =
+                            round (toFloat cellSize2 * 1.6)
+
+                        -- Centre of each placed tile in on-screen viewport coordinates (so the zoom is
+                        -- accounted for), used to decide which top corner is farther away.
+                        centers : List ( Float, Float )
+                        centers =
+                            List.map
+                                (\( ( x, y ), _ ) ->
+                                    let
+                                        p : { pos : Coord CssPixels, size : Int }
+                                        p =
+                                            project x y
+                                    in
+                                    ( toFloat (Coord.xRaw p.pos) + toFloat p.size / 2
+                                    , toFloat (Coord.yRaw p.pos) + toFloat p.size / 2
+                                    )
+                                )
+                                placed
+
+                        count : Float
+                        count =
+                            toFloat (List.length placed)
+
+                        centroidX : Float
+                        centroidX =
+                            List.sum (List.map Tuple.first centers) / count
+
+                        centroidY : Float
+                        centroidY =
+                            List.sum (List.map Tuple.second centers) / count
+
+                        distanceSquaredTo : Float -> Float
+                        distanceSquaredTo cornerX =
+                            (centroidX - cornerX) ^ 2 + centroidY ^ 2
+
+                        buttonX : Int
+                        buttonX =
+                            if distanceSquaredTo (toFloat boardPx) > distanceSquaredTo 0 then
+                                boardPx - buttonSize
+
+                            else
+                                0
+                    in
+                    Ui.inFront
+                        (MyUi.elButton (Dom.id "wordSpellingGame_clearBoard")
+                            PressedClearBoard
+                            [ Ui.move { x = buttonX, y = 0, z = 0 }
+                            , Ui.width (Ui.px buttonSize)
+                            , Ui.height (Ui.px buttonSize)
+                            , Ui.background MyUi.buttonBackground
+                            , Ui.rounded (buttonSize // 5)
+                            , Ui.borderColor (Ui.rgb 255 255 255)
+                            , Ui.border 2
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.Font.color (Ui.rgb 255 255 255)
+                            ]
+                            (Ui.html Icons.delete)
+                        )
+
+                _ ->
+                    Ui.noAttr
 
         -- The zoomed board: grid background plus the tiles/highlights that live on the board,
         -- clipped to the board's fixed on-screen square so the zoomed-in content doesn't spill over
@@ -3140,7 +3414,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                     ++ boardTiles
                     ++ animatedTiles
                     ++ boardHeldTiles
-                    ++ [ selectedHighlight, dragHighlight ]
+                    ++ [ selectedHighlight, dragHighlight, clearButton ]
                 )
                 (Ui.el
                     [ Ui.move { x = Coord.xRaw boardTranslate, y = Coord.yRaw boardTranslate, z = 0 } ]
