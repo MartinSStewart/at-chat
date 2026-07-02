@@ -82,6 +82,18 @@ tests normalConfig =
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                    , T.collapsableGroup
+                        "Clear placed tiles"
+                        [ -- Admin drags one tile onto the board: 7 fade-in pops for the held tiles plus
+                          -- 1 placement pop for the tile now resting on the board.
+                          dragTile 100 admin (trayTile 3) (boardCell 6 7)
+                        , admin.checkModel 100 (checkPopCount 8)
+                        , -- The clear button only appears while the player has tiles on the board.
+                          -- Clicking it returns every placed tile to the tray, so the placement pop is
+                          -- gone and only the 7 fade-in pops remain.
+                          admin.click 100 (Dom.id "wordSpellingGame_clearBoard")
+                        , admin.checkModel 100 (checkPopCount 7)
+                        ]
                     , -- Admin's fresh tray is "A O A L D O M" in slots 0..6, so LOAD is slots 3,1,0,4.
                       -- It covers the centre square (7,7) and scores double for the whole word: 10.
                       T.collapsableGroup

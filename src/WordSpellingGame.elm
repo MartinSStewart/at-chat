@@ -163,6 +163,7 @@ type GameMsg
     = PressedSubmitWord PlacedWord
     | PressedJoinGame
     | PressedReplaceTrayOrPass
+    | PressedClearBoard
 
 
 type alias SetupModel =
@@ -1086,6 +1087,37 @@ updateGame time currentUserId setup shared msg model =
                         |> Array.fromList
               }
             , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            )
+
+        PressedClearBoard ->
+            -- Send every tile the player has resting on the board back to the tray, keeping the tiles
+            -- already in the tray where they are and filling the freed slots (mirrors how `dragEnd`
+            -- returns a single tile). The order of `model.tiles` is preserved since it's index-aligned
+            -- with the player's tray letters (see `placedTiles`).
+            ( { model
+                | dragging = NotDragging
+                , tiles =
+                    Array.foldl
+                        (\tile ( acc, taken ) ->
+                            case tile.position of
+                                TileInTray _ _ ->
+                                    ( Array.push tile acc, taken )
+
+                                TileOnBoard _ _ ->
+                                    let
+                                        index : Int
+                                        index =
+                                            lowestFreeTrayIndex 0 taken
+                                    in
+                                    ( Array.push { tile | position = TileInTray (TrayIndex index) Nothing } acc
+                                    , Set.insert index taken
+                                    )
+                        )
+                        ( Array.empty, trayIndicesInUse model.tiles )
+                        model.tiles
+                        |> Tuple.first
+              }
+            , []
             )
 
 
@@ -2022,6 +2054,34 @@ dragEnd currentTime windowSize newTouches setup shared model =
             model
     )
         |> withZoomAnimation currentTime model
+
+
+{-| The tray slots currently occupied by tiles resting in the tray (board tiles don't count).
+-}
+trayIndicesInUse : Array Tile -> Set Int
+trayIndicesInUse tiles =
+    Array.foldl
+        (\tile set ->
+            case tile.position of
+                TileInTray (TrayIndex index) _ ->
+                    Set.insert index set
+
+                TileOnBoard _ _ ->
+                    set
+        )
+        Set.empty
+        tiles
+
+
+{-| The lowest tray index at or above `n` that isn't in `taken`.
+-}
+lowestFreeTrayIndex : Int -> Set Int -> Int
+lowestFreeTrayIndex n taken =
+    if Set.member n taken then
+        lowestFreeTrayIndex (n + 1) taken
+
+    else
+        n
 
 
 {-| The lowest tray slot not occupied by another tile, used when a dragged tile is returned to
@@ -3262,6 +3322,85 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         boardPx =
             gridSize * cellSize2
 
+        -- A large clear button pinned to a top corner of the board viewport, shown only while the
+        -- player has tiles resting on the board. It sits in whichever top corner is farther from the
+        -- tiles being placed, so it stays out of the way, and is drawn bigger than a grid cell to
+        -- stand out. Clicking it returns every placed tile to the tray (see `PressedClearBoard`).
+        clearButton : Ui.Attribute GameMsg
+        clearButton =
+            let
+                placed : List ( ( Int, Int ), LetterOrWildcard )
+                placed =
+                    placedTiles currentUserId shared model
+            in
+            case ( getWinner shared, placed ) of
+                ( Nothing, _ :: _ ) ->
+                    let
+                        buttonSize : Int
+                        buttonSize =
+                            round (toFloat cellSize2 * 1.6)
+
+                        -- Centre of each placed tile in on-screen viewport coordinates (so the zoom is
+                        -- accounted for), used to decide which top corner is farther away.
+                        centers : List ( Float, Float )
+                        centers =
+                            List.map
+                                (\( ( x, y ), _ ) ->
+                                    let
+                                        p : { pos : Coord CssPixels, size : Int }
+                                        p =
+                                            project x y
+                                    in
+                                    ( toFloat (Coord.xRaw p.pos) + toFloat p.size / 2
+                                    , toFloat (Coord.yRaw p.pos) + toFloat p.size / 2
+                                    )
+                                )
+                                placed
+
+                        count : Float
+                        count =
+                            toFloat (List.length placed)
+
+                        centroidX : Float
+                        centroidX =
+                            List.sum (List.map Tuple.first centers) / count
+
+                        centroidY : Float
+                        centroidY =
+                            List.sum (List.map Tuple.second centers) / count
+
+                        distanceSquaredTo : Float -> Float
+                        distanceSquaredTo cornerX =
+                            (centroidX - cornerX) ^ 2 + centroidY ^ 2
+
+                        buttonX : Int
+                        buttonX =
+                            if distanceSquaredTo (toFloat boardPx) > distanceSquaredTo 0 then
+                                boardPx - buttonSize
+
+                            else
+                                0
+                    in
+                    Ui.inFront
+                        (MyUi.elButton (Dom.id "wordSpellingGame_clearBoard")
+                            PressedClearBoard
+                            [ Ui.move { x = buttonX, y = 0, z = 0 }
+                            , Ui.width (Ui.px buttonSize)
+                            , Ui.height (Ui.px buttonSize)
+                            , Ui.background MyUi.buttonBackground
+                            , Ui.rounded (buttonSize // 5)
+                            , Ui.borderColor (Ui.rgb 255 255 255)
+                            , Ui.border 2
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.Font.color (Ui.rgb 255 255 255)
+                            ]
+                            (Ui.html Icons.delete)
+                        )
+
+                _ ->
+                    Ui.noAttr
+
         -- The zoomed board: grid background plus the tiles/highlights that live on the board,
         -- clipped to the board's fixed on-screen square so the zoomed-in content doesn't spill over
         -- the tray or grow the viewport.
@@ -3275,7 +3414,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                     ++ boardTiles
                     ++ animatedTiles
                     ++ boardHeldTiles
-                    ++ [ selectedHighlight, dragHighlight ]
+                    ++ [ selectedHighlight, dragHighlight, clearButton ]
                 )
                 (Ui.el
                     [ Ui.move { x = Coord.xRaw boardTranslate, y = Coord.yRaw boardTranslate, z = 0 } ]
