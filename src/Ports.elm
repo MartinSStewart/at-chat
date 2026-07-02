@@ -254,6 +254,9 @@ type alias StartupData =
     , scrollbarWidth : Int
     , pwaStatus : PwaStatus
     , notificationPermission : NotificationPermission
+    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Touch events
+      -- report positions from the viewport top (behind the inset) while the UI is laid out below it.
+      safeAreaInsetTop : Int
     }
 
 
@@ -275,6 +278,7 @@ startupDataSub msg =
                     , scrollbarWidth = 0
                     , pwaStatus = BrowserView
                     , notificationPermission = NotAsked
+                    , safeAreaInsetTop = 0
                     }
                 |> msg
         )
@@ -282,12 +286,17 @@ startupDataSub msg =
 
 decodeStartupData : Json.Decode.Decoder StartupData
 decodeStartupData =
-    Json.Decode.map5 StartupData
+    Json.Decode.map6 StartupData
         (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
         (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
         (Json.Decode.field "scrollbarWidth" Json.Decode.int)
         (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
         (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
+        (Json.Decode.oneOf
+            [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
+            , Json.Decode.succeed 0
+            ]
+        )
 
 
 pwaStatusFromBool : Bool -> PwaStatus

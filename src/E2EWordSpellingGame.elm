@@ -165,7 +165,16 @@ tests normalConfig =
                         windowSize =
                             Coord.xy E2EHelper.mobileWindow.width E2EHelper.mobileWindow.height
 
-                        -- One touch, reported the way the mobile frontend decodes touch events.
+                        -- A representative phone-notch safe-area inset, in pixels.
+                        safeAreaInsetTop : Int
+                        safeAreaInsetTop =
+                            47
+
+                        -- One touch, reported the way the mobile frontend decodes touch events. The
+                        -- board coordinates the drags aim at are in the layout space below the safe-area
+                        -- inset, but a real device reports touches from the viewport top, so the inset is
+                        -- added back into clientY here. The frontend must subtract it again to hit the
+                        -- right cell (regression test for safe-area-inset drag handling).
                         touchEvent : Float -> ( Float, Float ) -> Json.Encode.Value
                         touchEvent timeStamp ( x, y ) =
                             Json.Encode.object
@@ -177,7 +186,7 @@ tests normalConfig =
                                           , Json.Encode.object
                                                 [ ( "identifier", Json.Encode.int 0 )
                                                 , ( "clientX", Json.Encode.float x )
-                                                , ( "clientY", Json.Encode.float y )
+                                                , ( "clientY", Json.Encode.float (y + toFloat safeAreaInsetTop) )
                                                 , ( "target", Json.Encode.object [ ( "id", Json.Encode.string "elm-ui-root-id" ) ] )
                                                 ]
                                           )
@@ -210,9 +219,15 @@ tests normalConfig =
                         boardXY placed cell =
                             floatCoord (WordSpellingGame.boardTouchCoord OneOrGreater.seven windowSize placed cell)
                     in
-                    [ -- Both players open the DM and the match. On mobile the "open DM" buttons live
-                      -- behind the show-members button in the channel header.
-                      admin.click 0 (Dom.id "guild_showMembers")
+                    [ -- Pretend both players are on a phone with a notch: their touch coordinates come
+                      -- in offset by the safe-area inset (see touchEvent), and the frontend has to undo
+                      -- that offset when hit-testing the board.
+                      admin.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset E2EHelper.firefoxDesktop safeAreaInsetTop)
+                    , user.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset E2EHelper.firefoxDesktop safeAreaInsetTop)
+
+                    -- Both players open the DM and the match. On mobile the "open DM" buttons live
+                    -- behind the show-members button in the channel header.
+                    , admin.click 0 (Dom.id "guild_showMembers")
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))

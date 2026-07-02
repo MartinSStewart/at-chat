@@ -368,6 +368,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , imageViewer = Nothing
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
+            , safeAreaInsetTop = startupData.safeAreaInsetTop
             }
 
         ( model2, cmdA ) =
@@ -1639,7 +1640,7 @@ updateLoaded msg model =
                                                         (WordSpellingGame.dragStart
                                                             time
                                                             model.windowSize
-                                                            startTouches
+                                                            (Touch.removeSafeAreaTopInset model.safeAreaInsetTop startTouches)
                                                             data.setup
                                                             data.model
                                                         )
@@ -2927,6 +2928,7 @@ updateLoaded msg model =
                 , pwaStatus = startupData.pwaStatus
                 , notificationPermission = startupData.notificationPermission
                 , timeOrigin = startupData.timeOrigin
+                , safeAreaInsetTop = startupData.safeAreaInsetTop
               }
             , Command.none
             )
@@ -5836,7 +5838,7 @@ finalizeWordSpellingDrag time model loggedIn =
                             ( setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd time model.windowSize dragging.touches game.setup game.shared game.model)
+                                (WordSpellingGame.dragEnd time model.windowSize (Touch.removeSafeAreaTopInset model.safeAreaInsetTop dragging.touches) game.setup game.shared game.model)
                                 loggedIn
                             , Command.none
                             )
@@ -5871,7 +5873,13 @@ dragTarget startTouches model =
                 insideBoard =
                     case FrontendExtra.getWordSpellingGameModel local loggedIn model of
                         Just data ->
-                            WordSpellingGame.insideBoard data.setup model.windowSize centroid
+                            -- The board is laid out below the safe-area inset, so undo it before the
+                            -- hit-test (the call thumbnail above is positioned including the inset, so
+                            -- its check keeps the raw centroid).
+                            WordSpellingGame.insideBoard
+                                data.setup
+                                model.windowSize
+                                (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.safeAreaInsetTop startTouches))
 
                         Nothing ->
                             False

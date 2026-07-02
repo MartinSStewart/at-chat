@@ -183,6 +183,9 @@ type alias LoadedFrontend =
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
+    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Used to line
+      -- touch coordinates (reported from the viewport top) up with the UI laid out below the inset.
+      safeAreaInsetTop : Int
     }
 
 
