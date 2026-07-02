@@ -2344,8 +2344,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         , E2EGo.goTurnNotificationDotTest normalConfig
         , E2EGo.publicGoMatchViewTest normalConfig
         ]
-    , E2EWordSpellingGame.wordSpellingGameTests normalConfig
-    , E2EWordSpellingGame.wordSpellingGameMobileTests normalConfig
+    , E2EWordSpellingGame.tests normalConfig
     ]
 
 

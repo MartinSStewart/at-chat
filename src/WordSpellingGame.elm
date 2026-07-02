@@ -2535,7 +2535,7 @@ gameView currentTime windowSize maybeDragging localUser setup shared model =
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize localUser.session.userId localUser setup shared model
+        , statusView windowSize localUser setup shared
         ]
 
 
@@ -2629,8 +2629,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> Shared -> GameData -> Element GameMsg
-statusView windowSize currentUserId localUser setup shared model =
+statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Shared -> Element GameMsg
+statusView windowSize localUser setup shared =
     let
         currentPlayer : Player
         currentPlayer =
