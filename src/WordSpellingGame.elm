@@ -412,24 +412,38 @@ updateAction setup action shared =
                                         (IdArray.toList player.tray)
                                         (List.Nonempty.toList placedWord.letters)
 
-                                drawn : List LetterOrWildcard
-                                drawn =
-                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                        Just drawCount ->
-                                            getLetters
-                                                drawCount
-                                                setup
-                                                result.board
-                                                (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
-                                                    |> List.Nonempty.toList
-                                                )
-                                                shared.turnCount
-
-                                        Nothing ->
-                                            []
-
+                                tray : IdArray LetterId LetterOrWildcard
                                 tray =
-                                    remainingTray ++ drawn |> IdArray.fromList
+                                    case isValid of
+                                        FilledInByBackend IsNotValid ->
+                                            -- The placed letters return to the player's tray instead
+                                            -- of going back in the bag, and nothing new is drawn.
+                                            -- They're appended after the kept letters so they land in
+                                            -- the tray slots the placement freed up (the local tile
+                                            -- model refilled those slots on submit).
+                                            remainingTray
+                                                ++ List.Nonempty.toList placedWord.letters
+                                                |> IdArray.fromList
+
+                                        _ ->
+                                            let
+                                                drawn : List LetterOrWildcard
+                                                drawn =
+                                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                                        Just drawCount ->
+                                                            getLetters
+                                                                drawCount
+                                                                setup
+                                                                result.board
+                                                                (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
+                                                                    |> List.Nonempty.toList
+                                                                )
+                                                                shared.turnCount
+
+                                                        Nothing ->
+                                                            []
+                                            in
+                                            remainingTray ++ drawn |> IdArray.fromList
                             in
                             { shared
                                 | board =
