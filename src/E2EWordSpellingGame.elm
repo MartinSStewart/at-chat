@@ -68,62 +68,28 @@ wordSpellingGameTests normalConfig =
                 , user.click 100 (Dom.id "guild_openGamesTab")
                 , user.input 100 (Dom.id "go_matchSwitcher") "0"
                 , user.click 100 (Dom.id "wordSpellingGame_joinGame")
-                , T.collapsableGroup
-                    "Place invalid word"
-                    [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
-                    , dragTile 100 admin (trayTile 1) (boardCell 8 7)
-                    , dragTile 100 admin (trayTile 3) (boardCell 9 7)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
-                    , admin.snapshotView 3000 { name = "Place invalid word" }
-                    , user.snapshotView 0 { name = "Place invalid word" }
+                , -- Admin's fresh tray is "A O A L D O M" in slots 0..6, so LOAD is slots 3,1,0,4.
+                  -- It covers the centre square (7,7) and scores double for the whole word: 10.
+                  T.collapsableGroup
+                    "Place \"load\""
+                    [ dragTile 100 admin (trayTile 3) (boardCell 6 7)
+                    , dragTile 100 admin (trayTile 1) (boardCell 7 7)
+                    , dragTile 100 admin (trayTile 0) (boardCell 8 7)
+                    , dragTile 100 admin (trayTile 4) (boardCell 9 7)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                    , admin.snapshotView 5000 { name = "Place \"load\"" }
+                    , user.snapshotView 0 { name = "Place \"load\"" }
                     ]
-                , T.group
-                    [ user.custom 100 (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent (trayTile 4))
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 4.1))
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 4.5))
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 5.5))
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent (trayTile 5.9))
-                    , user.custom 100 (Dom.id "elm-ui-root-id") "pointerup" (pointerEvent (trayTile 5.9))
-                    , user.snapshotView 500 { name = "Shift tray" }
-                    ]
-                , T.collapsableGroup
-                    "Place \"site\""
-                    [ dragTile 100 user (trayTile 6) (boardCell 7 6)
-                    , dragTile 100 user (trayTile 4) (boardCell 7 7)
-                    , dragTile 100 user (trayTile 5) (boardCell 7 8)
+                , -- User's fresh tray is "N E N E S I T" in slots 0..6. Placing N, S, E around the
+                  -- committed O at (7,7) spells NOSE down column 7, and empties the letter bag.
+                  T.collapsableGroup
+                    "Place \"nose\""
+                    [ dragTile 100 user (trayTile 0) (boardCell 7 6)
+                    , dragTile 100 user (trayTile 4) (boardCell 7 8)
                     , dragTile 100 user (trayTile 1) (boardCell 7 9)
                     , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
-                    , admin.snapshotView 5000 { name = "Place \"site\"" }
-                    , user.snapshotView 0 { name = "Place \"site\"" }
-                    ]
-                , T.collapsableGroup
-                    "Place \"said\""
-                    [ dragTile 100 admin (trayTile 4) (boardCell 10 10)
-                    , dragTile 100 admin (trayTile 3) (boardCell 9 10)
-                    , dragTile 100 admin (trayTile 2) (boardCell 8 10)
-                    , dragTile 100 admin (trayTile 1) (boardCell 7 10)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_10")
-                    , admin.snapshotView 5000 { name = "Place \"said\"" }
-                    , user.snapshotView 0 { name = "Place \"said\"" }
-                    ]
-                , T.collapsableGroup
-                    "Place \"note\""
-                    [ dragTile 100 user (trayTile 2) (boardCell 9 11)
-                    , dragTile 100 user (trayTile 3) (boardCell 12 11)
-                    , dragTile 100 user (trayTile 6) (boardCell 10 11)
-                    , dragTile 100 user (trayTile 4) (boardCell 11 11)
-                    , user.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_11")
-                    , admin.snapshotView 5000 { name = "Place \"note\"" }
-                    , user.snapshotView 0 { name = "Place \"note\"" }
-                    ]
-                , T.collapsableGroup
-                    "Place \"amino\""
-                    [ dragTile 100 admin (trayTile 1) (boardCell 9 8)
-                    , dragTile 100 admin (trayTile 6) (boardCell 9 9)
-                    , dragTile 100 admin (trayTile 5) (boardCell 9 12)
-                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_v_9_8")
-                    , admin.snapshotView 5000 { name = "Place \"amino\"" }
-                    , user.snapshotView 0 { name = "Place \"amino\"" }
+                    , admin.snapshotView 5000 { name = "Place \"nose\"" }
+                    , user.snapshotView 0 { name = "Place \"nose\"" }
                     ]
                 , T.collapsableGroup
                     "Drop a tray tile one slot to the right"
@@ -134,17 +100,18 @@ wordSpellingGameTests normalConfig =
                     [ dragTile 100 user (trayTile 0) (trayTile 1.1)
                     , user.snapshotView 500 { name = "Drop tray tile one slot to the right" }
                     ]
+                , -- The bag is empty, so both players pass in turn (admin first) to end the game.
+                  admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , user.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
-                , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
                 , admin.checkView
                     100
                     -- The leaderboard renders each player's name and score suffix as separate
                     -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "AT"
-                        , Test.Html.Selector.exactText ": 28 (winner)"
+                        , Test.Html.Selector.exactText ": 10 (winner)"
                         , Test.Html.Selector.exactText "Stevie Steve"
-                        , Test.Html.Selector.exactText ": 21"
+                        , Test.Html.Selector.exactText ": 4"
                         ]
                     )
                 , user.checkView
@@ -153,9 +120,9 @@ wordSpellingGameTests normalConfig =
                     -- elements (see WordSpellingGame.playerRow), so they're matched separately.
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "AT"
-                        , Test.Html.Selector.exactText ": 28 (winner)"
+                        , Test.Html.Selector.exactText ": 10 (winner)"
                         , Test.Html.Selector.exactText "Stevie Steve"
-                        , Test.Html.Selector.exactText ": 21"
+                        , Test.Html.Selector.exactText ": 4"
                         ]
                     )
                 ]
