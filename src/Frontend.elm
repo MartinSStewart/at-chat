@@ -6615,6 +6615,65 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
+                                Server_Game _ _ gameChange ->
+                                    case gameChange of
+                                        Game.LocalChange_Go _ goChange ->
+                                            case goChange of
+                                                Go.StartMatch _ _ ->
+                                                    ( loggedIn2, Command.none )
+
+                                                Go.Action actionWithTime ->
+                                                    ( loggedIn2
+                                                    , case actionWithTime.change of
+                                                        Go.PlaceStone _ _ ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.PassTurn ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.MarkTerritory _ _ ->
+                                                            Command.none
+
+                                                        Go.FinishedMarking ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.AcceptTerritory ->
+                                                            Ports.playSound Nothing "pop"
+
+                                                        Go.RejectTerritory ->
+                                                            Ports.playSound Nothing "pop"
+                                                    )
+
+                                        Game.CreatePublicLink _ _ ->
+                                            ( loggedIn2, Command.none )
+
+                                        Game.LocalChange_WordSpellingGame _ wsChange ->
+                                            ( loggedIn2
+                                            , case wsChange of
+                                                WordSpellingGame.Action actionWithTime ->
+                                                    case actionWithTime.change of
+                                                        WordSpellingGame.PlaceWord placedWord _ ->
+                                                            List.map
+                                                                (\index ->
+                                                                    Ports.playSound
+                                                                        (Quantity.plus
+                                                                            WordSpellingGame.tileSlideDuration
+                                                                            (Quantity.multiplyBy (toFloat index) WordSpellingGame.tileSlideStagger)
+                                                                            |> Duration.addTo actionWithTime.time
+                                                                            |> Just
+                                                                        )
+                                                                        "pop"
+                                                                )
+                                                                (List.range 0 (List.Nonempty.length placedWord.letters - 1))
+                                                                |> Command.batch
+
+                                                        _ ->
+                                                            Command.none
+
+                                                WordSpellingGame.StartMatch _ _ ->
+                                                    Command.none
+                                            )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
