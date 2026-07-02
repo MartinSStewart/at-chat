@@ -3559,7 +3559,13 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                 ( ( d4, spoilerIndex4 ), embedIndex4, html ) =
                                                     viewHelper
                                                         True
-                                                        showLargeContent
+                                                        (case showLargeContent of
+                                                            ShowLargeContent containerWidth ->
+                                                                ShowLargeContent (containerWidth - bulletPointLeftPadding)
+
+                                                            NoLargeContent ->
+                                                                NoLargeContent
+                                                        )
                                                         maybePressedSpoiler
                                                         maybeOnPressImage
                                                         onPressLink
@@ -3586,7 +3592,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 ShowLargeContent _ ->
                                     [ Html.ul
                                         [ Html.Attributes.style "margin" "0"
-                                        , Html.Attributes.style "padding-left" "24px"
+                                        , Html.Attributes.style "padding-left" (String.fromInt bulletPointLeftPadding ++ "px")
                                         ]
                                         (List.map (Html.li []) listItems)
                                     ]
@@ -3598,6 +3604,11 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+bulletPointLeftPadding : number
+bulletPointLeftPadding =
+    24
 
 
 embedContainerMaxWidth : number
