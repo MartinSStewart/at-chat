@@ -2126,7 +2126,7 @@ isPressMsg msg =
                 _ ->
                     False
 
-        LoadedPopSound result ->
+        LoadedPopSound _ ->
             False
 
 
@@ -5497,5 +5497,5 @@ audio _ model =
                         _ ->
                             Audio.silence
 
-                NotLoggedIn record ->
+                NotLoggedIn _ ->
                     Audio.silence
