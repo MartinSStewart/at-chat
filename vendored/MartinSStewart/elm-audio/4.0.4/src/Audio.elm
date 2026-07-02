@@ -1,10 +1,10 @@
 module Audio exposing
     ( elementWithAudio, documentWithAudio, applicationWithAudio, Model(..), Msg(..), AudioData
-    , AudioCmd, loadAudio, LoadError(..), Source, cmdMap, cmdBatch, cmdNone
+    , AudioCmd, loadAudio, LoadError(..), Source(..), cmdMap, cmdBatch, cmdNone
     , Audio(..), audio, group, silence, length, audioWithConfig, audioDefaultConfig, PlayAudioConfig, LoopConfig
     , scaleVolume, scaleVolumeAt, offsetBy
     , lamderaFrontendWithAudio, migrateModel, migrateMsg
-    , audioData, userModel, userMsg
+    , AudioLoadRequest_, BufferId(..), FlattenedAudio, FromJSMsg(..), Model_, audioData, userModel, userMsg
     )
 
 {-|
@@ -72,6 +72,8 @@ type alias NodeGroupId =
     Int
 
 
+{-| Opaque
+-}
 type alias Model_ userMsg userModel =
     { audioState : Dict NodeGroupId FlattenedAudio
     , nodeGroupIdCounter : Int
@@ -131,6 +133,8 @@ type Msg userMsg
     | UserMsg userMsg
 
 
+{-| Opaque
+-}
 type FromJSMsg
     = AudioLoadSuccess { requestId : Int, bufferId : BufferId, duration : Duration }
     | AudioLoadFailed { requestId : Int, error : LoadError }
@@ -138,6 +142,8 @@ type FromJSMsg
     | JsonParseError { error : String }
 
 
+{-| Opaque
+-}
 type alias AudioLoadRequest_ userMsg =
     { userMsg : Nonempty ( Result LoadError Source, userMsg ), audioUrl : String }
 
@@ -668,6 +674,8 @@ fromJSPortSub json =
             FromJSMsg (JsonParseError { error = JD.errorToString error })
 
 
+{-| Opaque
+-}
 type BufferId
     = BufferId Int
 
@@ -918,6 +926,8 @@ encodeAudioLoadRequest index audioLoad =
         ]
 
 
+{-| Opaque
+-}
 type alias FlattenedAudio =
     { source : Source
     , startTime : Time.Posix
@@ -982,7 +992,7 @@ type EffectType
     | Offset Duration
 
 
-{-| Audio data we can use to play sounds
+{-| OpaqueVariants. Audio data we can use to play sounds
 -}
 type Source
     = File { bufferId : BufferId }
