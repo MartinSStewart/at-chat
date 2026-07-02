@@ -8,6 +8,7 @@ module OneOrGreater exposing
     , nine
     , one
     , plus
+    , seven
     , six
     , three
     , toInt
@@ -49,6 +50,11 @@ four =
 six : OneOrGreater
 six =
     OneOrGreater 6
+
+
+seven : OneOrGreater
+seven =
+    OneOrGreater 7
 
 
 eight : OneOrGreater

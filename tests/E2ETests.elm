@@ -1,6 +1,7 @@
 module E2ETests exposing (main, setup)
 
 import Array exposing (Array)
+import Audio
 import Backend
 import Bytes exposing (Bytes)
 import Codec
@@ -637,7 +638,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         admin.checkModel
                             100
                             (\model ->
-                                case model of
+                                case Audio.userModel model of
                                     Types.Loaded loaded ->
                                         case loaded.loginStatus of
                                             Types.LoggedIn loggedIn ->
@@ -1428,7 +1429,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , E2EHelper.writeMessage user 100 "Here's a reply!"
                 , E2EHelper.writeMessage user 100 "And another reply"
-                , user.update 100 (Types.VisibilityChanged Hidden)
+                , user.update 100 (Audio.userMsg (Types.VisibilityChanged Hidden))
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -2009,7 +2010,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
-                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
                 , admin.click 100 (Dom.id "guild_deleteChannel")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
@@ -2169,7 +2170,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "newChannelName") "with-message"
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , E2EHelper.writeMessage admin 100 "I have content"
-                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
 
                 -- First click reveals the confirmation input but does not delete
@@ -2343,7 +2344,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         , E2EGo.goTurnNotificationDotTest normalConfig
         , E2EGo.publicGoMatchViewTest normalConfig
         ]
-    , E2EWordSpellingGame.wordSpellingGameTests normalConfig
+    , E2EWordSpellingGame.tests normalConfig
     ]
 
 
@@ -2507,7 +2508,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                             E2EHelper.desktopWindow
                             (\attacker ->
                                 [ E2EHelper.handleLogin E2EHelper.chromeDesktop E2EHelper.attackerEmail attacker
-                                , attacker.update 0 Types.EnableToFrontendLogging
+                                , attacker.update 0 (Audio.userMsg Types.EnableToFrontendLogging)
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
                                 , T.andThen
@@ -2631,7 +2632,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                         , attacker.checkModel
                                             100
                                             (\model ->
-                                                case model of
+                                                case Audio.userModel model of
                                                     Types.Loaded loaded ->
                                                         case loaded.toFrontendLogs of
                                                             Just toFrontendLogs ->

@@ -1,6 +1,7 @@
 module E2EDiscord exposing (discordTests)
 
 import Array
+import Audio
 import Backend
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
@@ -44,7 +45,7 @@ withAdminLocalState :
     -> (LocalState.LocalState -> Result String ())
     -> Result String ()
 withAdminLocalState admin data fn =
-    case SeqDict.get admin.clientId data.frontends of
+    case SeqDict.get admin.clientId data.frontends |> Maybe.map Audio.userModel of
         Just (Types.Loaded loaded) ->
             case loaded.loginStatus of
                 Types.LoggedIn loggedIn ->
@@ -586,6 +587,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                                 (GuildOrDmId (GuildOrDmId_Guild (Id.fromInt 0) (Id.fromInt 0)))
                                                 NoThread
                                                 (MessageInput.TypedMessage (Sticker.idToString (Id.fromInt 3)))
+                                                |> Audio.userMsg
                                             )
                                         , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
                                         ]
@@ -1671,7 +1673,7 @@ user belongs to plus the members of whatever Discord guild the user is currently
 -}
 checkDiscordUserLoaded : String -> Bool -> Discord.Id Discord.UserId -> FrontendModel -> Result String ()
 checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
-    case model of
+    case Audio.userModel model of
         Types.Loaded loaded ->
             case loaded.loginStatus of
                 Types.LoggedIn loggedIn ->

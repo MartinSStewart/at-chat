@@ -86,6 +86,7 @@ module E2EHelper exposing
 
 import AiChat exposing (AiModelName(..))
 import Array
+import Audio
 import Backend
 import Broadcast
 import Call
@@ -1150,7 +1151,7 @@ dmCallTest isMobile normalConfig =
                     , T.checkState
                         100
                         (\data ->
-                            case SeqDict.get user.clientId data.frontends of
+                            case SeqDict.get user.clientId data.frontends |> Maybe.map Audio.userModel of
                                 Just (Types.Loaded loaded) ->
                                     case loaded.loginStatus of
                                         Types.LoggedIn loggedIn ->
@@ -1719,7 +1720,7 @@ tallSnapshot user delayInMs name =
     T.andThen
         0
         (\data ->
-            case SeqDict.get user.clientId data.frontends of
+            case SeqDict.get user.clientId data.frontends |> Maybe.map Audio.userModel of
                 Just frontend ->
                     let
                         windowSize : Coord CssPixels
@@ -2115,9 +2116,9 @@ handleInternalRequests discordStickerPacks currentRequest rest =
 startTest :
     String
     -> Time.Posix
-    -> T.Config toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel
-    -> List (T.Action toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel)
-    -> T.EndToEndTest toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 startTest name startTime2 config actions =
     T.start
         name
@@ -2134,13 +2135,13 @@ startTest name startTime2 config actions =
                     [ handleLogin firefoxDesktop attackerEmail attacker
                     , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                     , attacker.click 100 (Dom.id "loginForm_submit")
-                    , attacker.update 100 Types.EnableToFrontendLogging
+                    , attacker.update 100 (Audio.userMsg Types.EnableToFrontendLogging)
                     ]
                 , T.group actions
                 , attacker.checkModel
                     100
                     (\model ->
-                        case model of
+                        case Audio.userModel model of
                             Types.Loaded loaded ->
                                 case loaded.toFrontendLogs of
                                     Just toFrontendLogs ->

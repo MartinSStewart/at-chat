@@ -7,13 +7,13 @@ module Go exposing
     , GameMsg(..)
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , Model(..)
     , OutMsg(..)
     , Phase(..)
     , PublicGoMatchData
     , PublicGoMatchResponse
     , SetupModel
     , SetupMsg(..)
+    , SetupOrGame(..)
     , Shared
     , SizeSelection(..)
     , Snapshot
@@ -21,6 +21,7 @@ module Go exposing
     , Stone(..)
     , TimeControl
     , ValidatedSetup
+    , audio
     , boardSize9
     , currentPlayersTurn
     , deadStones
@@ -41,6 +42,7 @@ module Go exposing
     )
 
 import Array exposing (Array)
+import Audio exposing (Audio)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
@@ -131,6 +133,7 @@ type alias Shared =
 type alias GameModel =
     { viewingMovesBack : Int
     , lastError : Maybe String
+    , lastPlacedStone : Maybe Time.Posix
     }
 
 
@@ -247,11 +250,6 @@ type SizeSelection
     | CustomSize
 
 
-type Model
-    = Setup SetupModel
-    | Game GameModel
-
-
 initSetup : SetupModel
 initSetup =
     { widthInput = "9"
@@ -364,7 +362,7 @@ handicapPositions setup =
 
 initGame : GameModel
 initGame =
-    { viewingMovesBack = 0, lastError = Nothing }
+    { viewingMovesBack = 0, lastError = Nothing, lastPlacedStone = Nothing }
 
 
 initGameState : ValidatedSetup -> Shared
@@ -469,7 +467,6 @@ type LocalChange
 
 type OutMsg
     = OutLocalChange LocalChange
-    | PlaySound String
 
 
 otherStone : Stone -> Stone
@@ -1000,19 +997,14 @@ parseTimeControl model =
                                 Ok (Just { mainTime = Duration.minutes minutes, increment = Duration.seconds inc })
 
 
-pressedKey : String -> Shared -> Maybe Model -> Maybe Model
+pressedKey : String -> Shared -> GameModel -> GameModel
 pressedKey key shared model =
-    case model of
-        Just (Game model2) ->
-            case key of
-                "ArrowLeft" ->
-                    stepBack shared model2 |> Game |> Just
+    case key of
+        "ArrowLeft" ->
+            stepBack shared model
 
-                "ArrowRight" ->
-                    stepForward model2 |> Game |> Just
-
-                _ ->
-                    Game model2 |> Just
+        "ArrowRight" ->
+            stepForward model
 
         _ ->
             model
@@ -1076,13 +1068,18 @@ validateSetup creatorId otherPlayerId model =
             Err err
 
 
+type SetupOrGame
+    = Setup SetupModel
+    | Game GameModel
+
+
 updateSetup :
     Time.Posix
     -> Id UserId
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( Model, List OutMsg )
+    -> ( SetupOrGame, List OutMsg )
 updateSetup time creatorId otherPlayerId msg model =
     case msg of
         ChangedWidthInput input ->
@@ -1246,12 +1243,12 @@ updateGame :
     -> ValidatedSetup
     -> Shared
     -> GameModel
-    -> ( Model, List OutMsg )
+    -> ( GameModel, List OutMsg )
 updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), [] )
+                ( jumpToLatest model, [] )
 
             else
                 case state.phase of
@@ -1259,83 +1256,82 @@ updateGame currentTime currentUserId msg setup state model =
                         if isLocalUsersTurn currentUserId setup state && hasTimeToDoAction currentTime state then
                             case tryPlace setup x y state of
                                 Ok _ ->
-                                    ( Game model
-                                    , [ PlaySound "pop"
-                                      , Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
+                                    ( { model | lastPlacedStone = Just currentTime }
+                                    , [ Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
                                       ]
                                     )
 
                                 Err error ->
-                                    ( Game { model | lastError = Just error }, [] )
+                                    ( { model | lastError = Just error }, [] )
 
                         else
-                            ( Game model, [] )
+                            ( model, [] )
 
                     Marking ->
                         if isLocalUsersTurn currentUserId setup state then
-                            ( Game model
+                            ( model
                             , [ Action { time = currentTime, change = MarkTerritory x y } |> OutLocalChange ]
                             )
 
                         else
-                            ( Game model, [] )
+                            ( model, [] )
 
                     Confirming ->
-                        ( Game model, [] )
+                        ( model, [] )
 
                     Scored _ ->
-                        ( Game model, [] )
+                        ( model, [] )
 
         PressedPass ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), [] )
+                ( jumpToLatest model, [] )
 
             else
                 case ( state.phase, hasTimeToDoAction currentTime state ) of
                     ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
-                            ( Game model
+                            ( model
                             , [ Action { time = currentTime, change = PassTurn } |> OutLocalChange ]
                             )
 
                         else
-                            ( Game model, [] )
+                            ( model, [] )
 
                     _ ->
-                        ( Game model, [] )
+                        ( model, [] )
 
         PressedDoneMarking ->
             case state.phase of
                 Marking ->
-                    ( Game model
+                    ( model
                     , [ Action { time = currentTime, change = FinishedMarking } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, [] )
+                    ( model, [] )
 
         PressedAgree ->
             case state.phase of
                 Confirming ->
-                    ( Game model
+                    ( model
                     , [ Action { time = currentTime, change = AcceptTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, [] )
+                    ( model, [] )
 
         PressedDisagree ->
             case state.phase of
                 Confirming ->
-                    ( Game model
+                    ( model
                     , [ Action { time = currentTime, change = RejectTerritory } |> OutLocalChange ]
                     )
 
                 _ ->
-                    ( Game model, [] )
+                    ( model, [] )
 
         SpectatorMsg spectatorMsg ->
-            ( Game (updateSpectator spectatorMsg state model), [] )
+            ( updateSpectator spectatorMsg state model, [] )
 
 
 updateSpectator : SpectatorMsg -> Shared -> GameModel -> GameModel
@@ -2367,3 +2363,13 @@ clickTargets width height =
                                 []
                         )
             )
+
+
+audio : Audio.Source -> GameModel -> Audio
+audio popSound model =
+    case model.lastPlacedStone of
+        Just placedAt ->
+            Audio.audio popSound placedAt
+
+        Nothing ->
+            Audio.silence

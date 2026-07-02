@@ -1,5 +1,6 @@
 module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages)
 
+import Audio
 import Coord
 import Date exposing (Date)
 import Drawing
@@ -99,10 +100,10 @@ drawOnMessages imageUploadConfig =
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
 
                                 -- The Ctrl+Z and Ctrl+Shift+Z hotkeys undo and redo the stroke too
-                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" })
+                                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = False, key = "z" }))
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 0)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 0)
-                                , admin.update 100 (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" })
+                                , admin.update 100 (Audio.userMsg (Types.KeyDown { ctrlKey = True, metaKey = False, shiftKey = True, key = "z" }))
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , admin.snapshotView 100 { name = "Drawing stroke anchored to a profile image" }

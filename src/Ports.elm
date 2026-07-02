@@ -9,6 +9,8 @@ port module Ports exposing
     , StartupData
     , SubscribeData
     , SubscribeKeys
+    , audioPortFromJS
+    , audioPortToJS
     , checkNotificationPermissionResponse
     , closeNotifications
     , copyImageToClipboard
@@ -20,10 +22,8 @@ port module Ports exposing
     , focusChanged
     , hapticFeedback
     , loadServiceWorkerData
-    , loadSounds
     , loadStartupData
     , pageHasFocus
-    , playSound
     , registerPushSubscription
     , registerPushSubscriptionToJs
     , registerServiceWorker
@@ -58,13 +58,13 @@ import Url exposing (Url)
 import UserAgent exposing (UserAgent)
 
 
+port audioPortToJS : Json.Encode.Value -> Cmd msg
+
+
+port audioPortFromJS : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port exec_command_to_js : Json.Encode.Value -> Cmd msg
-
-
-port load_sounds_to_js : Json.Encode.Value -> Cmd msg
-
-
-port play_sound : Json.Encode.Value -> Cmd msg
 
 
 port copy_to_clipboard_to_js : Json.Encode.Value -> Cmd msg
@@ -550,32 +550,6 @@ showNotification title body =
         (Json.Encode.object
             [ ( "title", Json.Encode.string title )
             , ( "body", Json.Encode.string body )
-            ]
-        )
-
-
-loadSounds : Command FrontendOnly toMsg msg
-loadSounds =
-    Command.sendToJs "load_sounds_to_js" load_sounds_to_js Json.Encode.null
-
-
-{-| Play a sound. `Nothing` plays it immediately; `Just time` schedules it to play at the given
-time.
--}
-playSound : Maybe Time.Posix -> String -> Command FrontendOnly toMsg msg
-playSound maybeTime name =
-    Command.sendToJs "play_sound"
-        play_sound
-        (Json.Encode.object
-            [ ( "name", Json.Encode.string name )
-            , ( "time"
-              , case maybeTime of
-                    Just time ->
-                        Json.Encode.int (Time.posixToMillis time)
-
-                    Nothing ->
-                        Json.Encode.null
-              )
             ]
         )
 

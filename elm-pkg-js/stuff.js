@@ -256,7 +256,9 @@ exports.init = async function init(app)
       }
     }
 
-    customElements.define('lottie-player', LottiePlayer);
+    if (!customElements.get('lottie-player')) {
+        customElements.define('lottie-player', LottiePlayer);
+    }
 
     class AnimatedImagePlayer extends HTMLElement {
       static get observedAttributes() { return ['src', 'start-playing']; }
@@ -333,7 +335,9 @@ exports.init = async function init(app)
       }
     }
 
-    customElements.define('animated-image-player', AnimatedImagePlayer);
+    if (!customElements.get('animated-image-player')) {
+        customElements.define('animated-image-player', AnimatedImagePlayer);
+    }
 
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
@@ -528,32 +532,6 @@ exports.init = async function init(app)
                     //element.setSelectionRange(0, 5);
                 }
             });
-    });
-
-    let context = null;
-    let sounds = {};
-    app.ports.load_sounds_to_js.subscribe((a) => {
-        context = new AudioContext();
-        loadAudio("pop", context, sounds);
-        //app.ports.load_sounds_from_js.send(null);
-    });
-    app.ports.play_sound.subscribe((a) => {
-        try {
-            const source = context.createBufferSource();
-            if (sounds[a.name]) {
-                source.buffer = sounds[a.name];
-                source.connect(context.destination);
-                if (a.time === null) {
-                    source.start(0);
-                } else {
-                    // a.time is wall-clock milliseconds; convert it into the audio context clock.
-                    const delaySeconds = (a.time - Date.now()) / 1000;
-                    source.start(delaySeconds <= 0 ? 0 : context.currentTime + delaySeconds);
-                }
-            }
-        }
-        catch (error) {
-        }
     });
 
     app.ports.haptic_feedback.subscribe((a) => {

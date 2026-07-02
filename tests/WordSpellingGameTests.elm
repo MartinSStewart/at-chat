@@ -233,6 +233,34 @@ tests =
                         [ ( 0, 0 ), ( 1, 0 ) ]
                         |> Expect.equal False
             ]
+        , Test.describe "trayDropSlot snaps a dropped tile to the slot nearest the cursor"
+            -- The dragged tile is drawn centred on the cursor. With 50px tiles laid out from x=0
+            -- (4px spacing, so a 54px pitch), slot n's centre sits at n*54 + 25.
+            [ Test.test "a tile dropped on a slot's centre lands in that slot" <|
+                \_ ->
+                    -- Slot 3's centre is 3*54 + 25 = 187.
+                    WordSpellingGame.trayDropSlot 50 0 187 7
+                        |> Expect.equal 3
+            , Test.test "a tile dropped just right of a slot's centre stays in that slot" <|
+                \_ ->
+                    -- Dropped centred at 195: still clearly over slot 3, so it must land in slot 3.
+                    -- (The old off-by-one snapped this a whole slot too far, to slot 4.)
+                    WordSpellingGame.trayDropSlot 50 0 195 7
+                        |> Expect.equal 3
+            , Test.test "a tile dropped just left of a slot's centre stays in that slot" <|
+                \_ ->
+                    -- Slot 4's centre is 4*54 + 25 = 241; dropped centred at 233 it lands in slot 4.
+                    WordSpellingGame.trayDropSlot 50 0 233 7
+                        |> Expect.equal 4
+            , Test.test "dropping past the last slot clamps to the tray" <|
+                \_ ->
+                    WordSpellingGame.trayDropSlot 50 0 100000 7
+                        |> Expect.equal 6
+            , Test.test "dropping left of the tray clamps to the first slot" <|
+                \_ ->
+                    WordSpellingGame.trayDropSlot 50 0 -100 7
+                        |> Expect.equal 0
+            ]
         , Test.describe "animatedTilePlacement positions tiles from the start time"
             [ Test.test "an observer's tile starts at the top-left corner and slides to its cell" <|
                 \_ ->

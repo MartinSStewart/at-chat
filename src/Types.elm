@@ -13,8 +13,10 @@ module Types exposing
     , ExportState
     , ExportStateProgress
     , FileDrag(..)
-    , FrontendModel(..)
-    , FrontendMsg(..)
+    , FrontendModel
+    , FrontendModel_(..)
+    , FrontendMsg
+    , FrontendMsg_(..)
     , GuildChannelNameHover(..)
     , InitialLoadRequest(..)
     , LoadStatus(..)
@@ -46,6 +48,7 @@ module Types exposing
 
 import AiChat
 import Array exposing (Array)
+import Audio
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import Call exposing (CallId, ChannelSidebarMode, FromJs)
@@ -123,7 +126,11 @@ import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
 
 
-type FrontendModel
+type alias FrontendModel =
+    Audio.Model FrontendMsg_ FrontendModel_
+
+
+type FrontendModel_
     = Loading LoadingFrontend
     | Loaded LoadedFrontend
 
@@ -138,6 +145,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
+    , popSound : Result Audio.LoadError Audio.Source
     }
 
 
@@ -174,6 +182,7 @@ type alias LoadedFrontend =
     , imageViewer : Maybe ImageViewer.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
+    , popSound : Result Audio.LoadError Audio.Source
     }
 
 
@@ -417,7 +426,11 @@ type alias WaitingForLoginTokenData =
     }
 
 
-type FrontendMsg
+type alias FrontendMsg =
+    Audio.Msg FrontendMsg_
+
+
+type FrontendMsg_
     = UrlClicked UrlRequest
     | UrlChanged Url
     | GotTime Time.Posix
@@ -553,6 +566,7 @@ type FrontendMsg
     | PressedLoadServiceWorkerData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
+    | LoadedPopSound (Result Audio.LoadError Audio.Source)
 
 
 type ScrollPosition

@@ -1,5 +1,6 @@
 module E2EMedia exposing (audioAttachmentTest, imageViewerTests, videoAttachmentTest)
 
+import Audio
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -52,7 +53,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -82,7 +83,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -113,7 +114,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -200,7 +201,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -270,7 +271,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -322,7 +323,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
@@ -350,7 +351,7 @@ imageViewerTests imageUploadConfig =
                             if
                                 List.any
                                     (\( _, frontend ) ->
-                                        case frontend of
+                                        case Audio.userModel frontend of
                                             Types.Loaded loaded ->
                                                 case loaded.imageViewer of
                                                     Just imageViewer ->
