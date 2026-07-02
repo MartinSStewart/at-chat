@@ -2687,7 +2687,7 @@ statusView windowSize currentUserId localUser setup shared model =
                                 Ui.row
                                     [ Ui.width Ui.shrink ]
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
-                                    , Ui.text (" is next (" ++ String.fromInt currentPlayer.score ++ ")")
+                                    , Ui.text (" is next (" ++ String.fromInt nextPlayer.score ++ ")")
                                     ]
 
                             Nothing ->
@@ -2709,13 +2709,13 @@ statusView windowSize currentUserId localUser setup shared model =
                                     localUser
                                     player.userId
                                     (if index == modBy playerCount shared.turnCount then
-                                        "'s turn (" ++ String.fromInt currentPlayer.score ++ ")"
+                                        "'s turn (" ++ String.fromInt player.score ++ ")"
 
                                      else if index == modBy playerCount (shared.turnCount + 1) then
-                                        " is next (" ++ String.fromInt currentPlayer.score ++ ")"
+                                        " is next (" ++ String.fromInt player.score ++ ")"
 
                                      else
-                                        " (" ++ String.fromInt currentPlayer.score ++ ")"
+                                        " (" ++ String.fromInt player.score ++ ")"
                                     )
                             )
                             (List.Nonempty.toList shared.players)
