@@ -6616,22 +6616,6 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_Game _ { otherUserId } gameChange ->
-                                    let
-                                        -- The pop sounds for another participant's move are played
-                                        -- declaratively: store when the move arrived in the game's
-                                        -- model and let Go.audio/WordSpellingGame.audio schedule the
-                                        -- pops from it. If the match isn't open there's no game
-                                        -- model, and no sound plays.
-                                        updateDmGame : Id Id.ChannelMessageId -> (Game.Model -> Game.Model) -> LoggedIn2
-                                        updateDmGame matchId updateFunc =
-                                            { loggedIn2
-                                                | currentDmGame =
-                                                    SeqDict.update
-                                                        ( otherUserId, Just matchId )
-                                                        (Maybe.map updateFunc)
-                                                        loggedIn2.currentDmGame
-                                            }
-                                    in
                                     case gameChange of
                                         Game.LocalChange_Go matchId goChange ->
                                             case goChange of
@@ -6662,15 +6646,20 @@ updateLoadedFromBackend msg model =
                                                                     True
                                                     in
                                                     ( if playPop then
-                                                        updateDmGame matchId
-                                                            (\gameModel ->
-                                                                case gameModel of
-                                                                    Game.GoModel_Game goModel ->
-                                                                        Game.GoModel_Game { goModel | lastPlacedStone = Just model.time }
+                                                        { loggedIn2
+                                                            | currentDmGame =
+                                                                SeqDict.updateIfExists
+                                                                    ( otherUserId, Just matchId )
+                                                                    (\gameModel ->
+                                                                        case gameModel of
+                                                                            Game.GoModel_Game goModel ->
+                                                                                Game.GoModel_Game { goModel | lastPlacedStone = Just model.time }
 
-                                                                    _ ->
-                                                                        gameModel
-                                                            )
+                                                                            _ ->
+                                                                                gameModel
+                                                                    )
+                                                                    loggedIn2.currentDmGame
+                                                        }
 
                                                       else
                                                         loggedIn2
@@ -6680,27 +6669,32 @@ updateLoadedFromBackend msg model =
                                         Game.CreatePublicLink _ _ ->
                                             ( loggedIn2, Command.none )
 
-                                        Game.LocalChange_WordSpellingGame matchId wsChange ->
-                                            ( case wsChange of
-                                                WordSpellingGame.Action actionWithTime ->
-                                                    case actionWithTime.change of
+                                        Game.LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
+                                            ( case wordSpellinGameChange of
+                                                WordSpellingGame.Action action ->
+                                                    case action.change of
                                                         WordSpellingGame.PlaceWord placedWord _ ->
-                                                            updateDmGame matchId
-                                                                (\gameModel ->
-                                                                    case gameModel of
-                                                                        Game.WordSpellingGame_Game gameData ->
-                                                                            Game.WordSpellingGame_Game
-                                                                                { gameData
-                                                                                    | lastWordPlaced =
-                                                                                        Just
-                                                                                            { time = model.time
-                                                                                            , letterCount = List.Nonempty.length placedWord.letters
-                                                                                            }
-                                                                                }
+                                                            { loggedIn2
+                                                                | currentDmGame =
+                                                                    SeqDict.updateIfExists
+                                                                        ( otherUserId, Just matchId )
+                                                                        (\gameModel ->
+                                                                            case gameModel of
+                                                                                Game.WordSpellingGame_Game gameData ->
+                                                                                    Game.WordSpellingGame_Game
+                                                                                        { gameData
+                                                                                            | lastWordPlaced =
+                                                                                                { time = model.time
+                                                                                                , letterCount = List.Nonempty.length placedWord.letters
+                                                                                                }
+                                                                                                    |> Just
+                                                                                        }
 
-                                                                        _ ->
-                                                                            gameModel
-                                                                )
+                                                                                _ ->
+                                                                                    gameModel
+                                                                        )
+                                                                        loggedIn2.currentDmGame
+                                                            }
 
                                                         _ ->
                                                             loggedIn2

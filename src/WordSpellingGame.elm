@@ -91,10 +91,15 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGameList exposing (Dictionary)
 
 
+type Drag
+    = Dragging Int
+    | NotDragging
+
+
 type alias GameData =
     { selectedCell : Maybe ( Int, Int )
     , tiles : Array Tile
-    , dragging : Maybe Int
+    , dragging : Drag
     , zoomAnimation : ZoomAnimation
     , -- When a word placement arrived from the server (someone else's move, or ours from another
       -- device), along with how many letters it had. Drives the staggered pop sounds that match the
@@ -200,7 +205,7 @@ initGame time setup =
                 )
                 list
                 |> Array.fromList
-      , dragging = Nothing
+      , dragging = NotDragging
       , zoomAnimation = { start = time, from = zoomedOutState }
       , lastWordPlaced = Nothing
       }
@@ -1001,7 +1006,7 @@ updateGame time currentUserId setup shared msg model =
                     ( withZoomAnimation time
                         model
                         { model
-                            | dragging = Nothing
+                            | dragging = NotDragging
                             , tiles =
                                 List.foldl
                                     (\index tray ->
@@ -1859,7 +1864,7 @@ dragStart time windowSize touches setup gameModel =
                     trayList
             of
                 Just tileIndex ->
-                    { gameModel | dragging = Just tileIndex }
+                    { gameModel | dragging = Dragging tileIndex }
 
                 Nothing ->
                     gameModel
@@ -1880,7 +1885,7 @@ dragStart time windowSize touches setup gameModel =
                             trayList
                     of
                         Just tileIndex ->
-                            { gameModel | dragging = Just tileIndex }
+                            { gameModel | dragging = Dragging tileIndex }
 
                         Nothing ->
                             gameModel
@@ -1892,7 +1897,7 @@ dragStart time windowSize touches setup gameModel =
 dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
 dragEnd currentTime windowSize newTouches setup shared model =
     (case model.dragging of
-        Just tileIndex ->
+        Dragging tileIndex ->
             let
                 position : Coord CssPixels
                 position =
@@ -1905,7 +1910,7 @@ dragEnd currentTime windowSize newTouches setup shared model =
 
                     else
                         { model
-                            | dragging = Nothing
+                            | dragging = NotDragging
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
@@ -1920,7 +1925,7 @@ dragEnd currentTime windowSize newTouches setup shared model =
 
                     else
                         { model
-                            | dragging = Nothing
+                            | dragging = NotDragging
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
@@ -1931,7 +1936,7 @@ dragEnd currentTime windowSize newTouches setup shared model =
                 Nothing ->
                     returnToTray
 
-        Nothing ->
+        NotDragging ->
             model
     )
         |> withZoomAnimation currentTime model
@@ -2137,7 +2142,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
                         identity
     in
     { gameModel
-        | dragging = Nothing
+        | dragging = NotDragging
         , tiles =
             Array.indexedMap
                 (\index tile ->
@@ -2849,7 +2854,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 |> List.indexedMap Tuple.pair
                 |> List.foldr
                     (\( index, ( tile, letter ) ) ( boardAcc, trayAcc ) ->
-                        case ( maybeDragging, Just index == model.dragging ) of
+                        case ( maybeDragging, Dragging index == model.dragging ) of
                             ( Just dragging2, True ) ->
                                 let
                                     center : Coord CssPixels
@@ -2897,7 +2902,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         dragHighlight : Ui.Attribute GameMsg
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
-                ( Just _, Just dragging2 ) ->
+                ( Dragging _, Just dragging2 ) ->
                     case boardCellAtPosition currentTime windowSize setup model (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
                             if
@@ -2967,55 +2972,52 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         -- tile is being dragged, when it isn't the player's turn, or once the game is over.
         lineButtons : List (Ui.Attribute GameMsg)
         lineButtons =
-            if
-                (model.dragging == Nothing)
-                    && (getWinner shared == Nothing)
-                    && (isPlayerTurn currentUserId shared == JoinedAndItsTheirTurn)
-            then
-                submittableLines currentUserId shared model
-                    |> List.map
-                        (\line ->
-                            let
-                                ( bx, by ) =
-                                    line.buttonCell
+            case ( model.dragging, getWinner shared, isPlayerTurn currentUserId shared ) of
+                ( NotDragging, Nothing, JoinedAndItsTheirTurn ) ->
+                    submittableLines currentUserId shared model
+                        |> List.map
+                            (\line ->
+                                let
+                                    ( bx, by ) =
+                                        line.buttonCell
 
-                                p : { pos : Coord CssPixels, size : Int }
-                                p =
-                                    project bx by
+                                    p : { pos : Coord CssPixels, size : Int }
+                                    p =
+                                        project bx by
 
-                                idString : String
-                                idString =
-                                    "wordSpellingGame_submitLine_"
-                                        ++ (if line.placedWord.isVertical then
-                                                "v"
+                                    idString : String
+                                    idString =
+                                        "wordSpellingGame_submitLine_"
+                                            ++ (if line.placedWord.isVertical then
+                                                    "v"
 
-                                            else
-                                                "h"
-                                           )
-                                        ++ "_"
-                                        ++ String.fromInt (Tuple.first line.placedWord.start)
-                                        ++ "_"
-                                        ++ String.fromInt (Tuple.second line.placedWord.start)
-                            in
-                            MyUi.elButton (Dom.id idString)
-                                (PressedSubmitWord line.placedWord)
-                                [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
-                                , Ui.width (Ui.px p.size)
-                                , Ui.height (Ui.px p.size)
-                                , Ui.background MyUi.buttonBackground
-                                , Ui.rounded (p.size // 4)
-                                , Ui.borderColor (Ui.rgb 255 255 255)
-                                , Ui.border 2
-                                , Ui.contentCenterX
-                                , Ui.contentCenterY
-                                , Ui.Font.color (Ui.rgb 255 255 255)
-                                ]
-                                (Ui.html Icons.sendMessage)
-                                |> Ui.inFront
-                        )
+                                                else
+                                                    "h"
+                                               )
+                                            ++ "_"
+                                            ++ String.fromInt (Tuple.first line.placedWord.start)
+                                            ++ "_"
+                                            ++ String.fromInt (Tuple.second line.placedWord.start)
+                                in
+                                MyUi.elButton (Dom.id idString)
+                                    (PressedSubmitWord line.placedWord)
+                                    [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
+                                    , Ui.width (Ui.px p.size)
+                                    , Ui.height (Ui.px p.size)
+                                    , Ui.background MyUi.buttonBackground
+                                    , Ui.rounded (p.size // 4)
+                                    , Ui.borderColor (Ui.rgb 255 255 255)
+                                    , Ui.border 2
+                                    , Ui.contentCenterX
+                                    , Ui.contentCenterY
+                                    , Ui.Font.color (Ui.rgb 255 255 255)
+                                    ]
+                                    (Ui.html Icons.sendMessage)
+                                    |> Ui.inFront
+                            )
 
-            else
-                []
+                _ ->
+                    []
 
         trayHeight2 : Int
         trayHeight2 =
@@ -3839,9 +3841,7 @@ audio popSound model =
                         ]
                 )
             |> Audio.group
-        , -- One pop per letter of a word placement that arrived from the server, timed to when each
-          -- tile lands in the slide-in animation (see `animatedTilePlacement`).
-          case model.lastWordPlaced of
+        , case model.lastWordPlaced of
             Just { time, letterCount } ->
                 List.range 0 (letterCount - 1)
                     |> List.map
