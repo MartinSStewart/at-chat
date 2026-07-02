@@ -131,6 +131,7 @@ tests normalConfig =
                             , Test.Html.Selector.exactText ": 4"
                             ]
                         )
+                    , admin.snapshotView 0 { name = "Game ended" }
                     ]
                 )
             ]
@@ -238,11 +239,13 @@ tests normalConfig =
                       T.collapsableGroup
                         "Place \"load\""
                         [ dragTile 1000 admin (trayXY 3) (boardXY [] ( 6, 7 ))
+                        , admin.snapshotView 100 { name = "Place \"l\"" }
                         , dragTile 2000 admin (trayXY 1) (boardXY [ ( 6, 7 ) ] ( 7, 7 ))
+                        , admin.snapshotView 100 { name = "Place \"o\"" }
                         , dragTile 3000 admin (trayXY 0) (boardXY [ ( 6, 7 ), ( 7, 7 ) ] ( 8, 7 ))
                         , dragTile 4000 admin (trayXY 4) (boardXY [ ( 6, 7 ), ( 7, 7 ), ( 8, 7 ) ] ( 9, 7 ))
                         , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
-                        , admin.snapshotView 5000 { name = "Place \"load\" (mobile)" }
+                        , admin.snapshotView 5000 { name = "Place \"load\"" }
                         ]
                     , -- User's fresh tray is "N E N E S I T" (slots 0,4,1 = N,S,E). NOSE runs down column
                       -- 7 through the committed O, scores 4, and empties the bag.
@@ -252,7 +255,7 @@ tests normalConfig =
                         , dragTile 2000 user (trayXY 4) (boardXY [ ( 7, 6 ) ] ( 7, 8 ))
                         , dragTile 3000 user (trayXY 1) (boardXY [ ( 7, 6 ), ( 7, 8 ) ] ( 7, 9 ))
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
-                        , user.snapshotView 5000 { name = "Place \"nose\" (mobile)" }
+                        , user.snapshotView 5000 { name = "Place \"nose\"" }
                         ]
                     , -- The bag is empty, so both players pass (admin first) to end the game.
                       admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
@@ -272,6 +275,7 @@ tests normalConfig =
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             ]
                         )
+                    , admin.snapshotView 0 { name = "Game ended" }
                     ]
                 )
             ]
