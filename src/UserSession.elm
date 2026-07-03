@@ -31,7 +31,6 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
@@ -40,7 +39,6 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -114,12 +112,11 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : Time.Posix -> SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
-init time sessionId userId currentlyViewing userAgent =
+init : Time.Posix -> SessionId -> Id UserId -> UserAgent -> UserSession
+init time sessionId userId userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
-    , currentlyViewing = currentlyViewing
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
@@ -138,7 +135,6 @@ toFrontend : Id UserId -> UserSession -> Maybe FrontendUserSession
 toFrontend currentUserId userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode
-        , currentlyViewing = userSession.currentlyViewing
         , userAgent = userSession.userAgent
         }
             |> Just

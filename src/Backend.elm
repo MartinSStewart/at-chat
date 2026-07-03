@@ -67,6 +67,7 @@ import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
@@ -360,27 +361,14 @@ update msg model =
         UserConnected sessionId clientId ->
             ( { model
                 | connections =
-                    SeqDict.update
+                    SeqDictHelper.addToDict
                         sessionId
-                        (\maybeValue ->
-                            (case maybeValue of
-                                Just value ->
-                                    NonemptyDict.insert clientId
-                                        { lastRequest = NoRequestsMade
-                                        , call = NotInCall
-                                        , remoteCallData = Call.defaultRemoteCallData
-                                        }
-                                        value
-
-                                Nothing ->
-                                    NonemptyDict.singleton clientId
-                                        { lastRequest = NoRequestsMade
-                                        , call = NotInCall
-                                        , remoteCallData = Call.defaultRemoteCallData
-                                        }
-                            )
-                                |> Just
-                        )
+                        clientId
+                        { lastRequest = NoRequestsMade
+                        , call = NotInCall
+                        , remoteCallData = Call.defaultRemoteCallData
+                        , currentlyViewing = Nothing
+                        }
                         model.connections
               }
             , Lamdera.sendToFrontend clientId (YouConnected clientId)
@@ -413,6 +401,7 @@ update msg model =
                                     { lastRequest = LastRequest time
                                     , call = data.call
                                     , remoteCallData = data.remoteCallData
+                                    , currentlyViewing = data.currentlyViewing
                                     }
                                 )
                             )
@@ -909,12 +898,12 @@ update msg model =
                             ( model2
                             , Broadcast.toUserAlt
                                 discordUser.linkedTo
-                                (\session ->
+                                (\session connection ->
                                     let
                                         linkedAndOtherDiscordUsers =
                                             BackendExtra.getLinkedDiscordUsersAndOtherUsers
                                                 session.userId
-                                                session.currentlyViewing
+                                                connection.currentlyViewing
                                                 model2
                                     in
                                     Server_DiscordUserLoadingDataIsDone
@@ -2091,8 +2080,7 @@ disconnectClient time sessionId clientId model =
 
                 model2 =
                     { model
-                        | sessions = SeqDict.insert sessionId (UserSession.setCurrentlyViewing Nothing session) model.sessions
-                        , connections = connections
+                        | connections = connections
                         , dmChannels =
                             case removedConnection.call of
                                 ConnectingToCall (Call.DmRoomId otherUserId) ->

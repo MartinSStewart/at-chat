@@ -323,21 +323,19 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
                         ( Just user, Nothing ) ->
                             let
+                                currentlyViewing =
+                                    requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+
                                 session : UserSession
                                 session =
-                                    UserSession.init
-                                        time
-                                        sessionId
-                                        pendingLogin.userId
-                                        (requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
-                                        userAgent
+                                    UserSession.init time sessionId pendingLogin.userId userAgent
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
                             , Command.batch
-                                [ getLoginData sessionId clientId session user requestMessagesFor model
+                                [ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
                                     |> LoginSuccess
                                     |> LoginWithTokenResponse
                                     |> Lamdera.sendToFrontends sessionId
@@ -348,7 +346,6 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                     (Server_NewSession
                                         session.sessionIdHash
                                         { notificationMode = session.notificationMode
-                                        , currentlyViewing = session.currentlyViewing
                                         , userAgent = session.userAgent
                                         }
                                         |> ServerChange
@@ -460,15 +457,16 @@ validateAttachedFiles uploadedFiles dict =
 getLoginData :
     SessionId
     -> ClientId
+    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
     -> UserSession
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId clientId session user requestMessagesFor model =
+getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model =
     let
         linkedAndOtherDiscordUsers =
-            getLinkedDiscordUsersAndOtherUsers session.userId session.currentlyViewing model
+            getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
     in
     { session = session
     , adminData =

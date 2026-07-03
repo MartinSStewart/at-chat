@@ -298,7 +298,7 @@ toUser clientToSkip sessionToSkip userId msg model =
         |> Command.batch
 
 
-toUserAlt : Id UserId -> (UserSession -> LocalMsg) -> BackendModel -> Command BackendOnly ToFrontend msg
+toUserAlt : Id UserId -> (UserSession -> LocalState.ConnectionData -> LocalMsg) -> BackendModel -> Command BackendOnly ToFrontend msg
 toUserAlt userId sessionToMsg model =
     SeqDict.filterMap
         (\sessionId otherUserSession ->
@@ -306,8 +306,8 @@ toUserAlt userId sessionToMsg model =
                 case SeqDict.get sessionId model.connections of
                     Just clientIds ->
                         List.map
-                            (\( otherClientId, _ ) ->
-                                sessionToMsg otherUserSession
+                            (\( otherClientId, connection ) ->
+                                sessionToMsg otherUserSession connection
                                     |> ChangeBroadcast
                                     |> Lamdera.sendToFrontend otherClientId
                             )
