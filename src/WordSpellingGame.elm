@@ -3410,6 +3410,13 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 (Ui.width (Ui.px boardPx)
                     :: Ui.height (Ui.px boardPx)
                     :: Ui.clip
+                    -- The board tiles/background are positioned with `Ui.move`, which emits a 3D
+                    -- `translate` (e.g. `translate: Xpx Ypx 0px`). Chrome promotes those to their own
+                    -- composited layers, and a plain `overflow: hidden` ancestor doesn't clip composited
+                    -- layers unless it's itself a paint-containment boundary. `contain: paint` makes this
+                    -- element that boundary so the zoomed-in board is clipped on Chrome too (Firefox and
+                    -- Safari already clip without it).
+                    :: MyUi.htmlStyle "contain" "paint"
                     :: lineButtons
                     ++ boardTiles
                     ++ animatedTiles
