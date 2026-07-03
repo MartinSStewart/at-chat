@@ -513,6 +513,7 @@ loginDataToLocalState userAgent timezone loginData =
     , joinGuildError = Nothing
     , localUser =
         { session = loginData.session
+        , currentlyViewing = loginData.currentlyViewing
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , discordUsers = loginData.discordUsers

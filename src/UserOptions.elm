@@ -475,7 +475,11 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice True local.localUser.session
+                    (viewConnectedDevice True
+                        { notificationMode = local.localUser.session.notificationMode
+                        , currentlyViewing = local.localUser.currentlyViewing
+                        , userAgent = local.localUser.session.userAgent
+                        }
                         :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions)
                     )
                 , Ui.row

@@ -1191,7 +1191,7 @@ routeViewingLocalChange local route =
         localChange =
             LocalState.routeToViewing route local
     in
-    if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
+    if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.currentlyViewing then
         Nothing
 
     else
@@ -3813,9 +3813,7 @@ changeUpdate localMsg local =
                     if sessionIdHash == localUser.session.sessionIdHash then
                         { local
                             | localUser =
-                                { localUser
-                                    | session = UserSession.setCurrentlyViewing currentlyViewing localUser.session
-                                }
+                                { localUser | currentlyViewing = currentlyViewing }
                         }
 
                     else

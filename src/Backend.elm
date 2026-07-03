@@ -3990,9 +3990,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
+                                clientId
                                 guildId
                                 userId
-                                (\session _ user _ -> helper session user)
+                                (\session _ _ user _ -> helper session user)
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
                             BackendExtra.asDiscordDmUser_AllowUserThatNeedsAuthAgain
@@ -4443,9 +4444,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
+                                clientId
                                 guildId
                                 currentDiscordUserId
-                                (\session _ user guild ->
+                                (\session connectionData _ user guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model
@@ -4469,7 +4471,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     channelId
                                                     currentDiscordUserId
                                                     ({ messages = loadMessagesHelper channel
-                                                     , newUsers = getNewUsers session guildId guild
+                                                     , newUsers = getNewUsers connectionData guildId guild
                                                      }
                                                         |> FilledInByBackend
                                                     )
@@ -4490,9 +4492,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
+                                clientId
                                 guildId
                                 currentDiscordUserId
-                                (\session _ user guild ->
+                                (\session connectionData _ user guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model
@@ -4525,7 +4528,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         SeqDict.get threadId channel.threads
                                                             |> Maybe.withDefault Thread.discordBackendInit
                                                             |> loadMessagesHelper
-                                                     , newUsers = getNewUsers session guildId guild
+                                                     , newUsers = getNewUsers connectionData guildId guild
                                                      }
                                                         |> FilledInByBackend
                                                     )
@@ -4644,9 +4647,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             BackendExtra.asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
+                                clientId
                                 guildId
                                 currentUserId
-                                (\_ _ _ guild ->
+                                (\_ _ _ _ guild ->
                                     ( model
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
