@@ -2542,33 +2542,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\session _ ->
                     case
-                        List.Extra.findMap
-                            (\( sessionIdToLogOut, sessionToLogOut ) ->
-                                if sessionToLogOut.sessionIdHash == sessionIdHashToLogOut then
-                                    Just sessionIdToLogOut
-
-                                else
-                                    Nothing
-                            )
+                        List.Extra.find
+                            (\( _, sessionToLogOut ) -> sessionToLogOut.sessionIdHash == sessionIdHashToLogOut)
                             (SeqDict.toList model.sessions)
                     of
-                        Just sessionIdToLogOut ->
-                            BackendExtra.asUser
-                                model
-                                sessionIdToLogOut
-                                (\_ _ ->
-                                    ( { model | sessions = SeqDict.remove sessionIdToLogOut model.sessions }
-                                    , Command.batch
-                                        [ Lamdera.sendToFrontends sessionIdToLogOut LoggedOutSession
-                                        , Broadcast.toUser
-                                            Nothing
-                                            (Just sessionIdToLogOut)
-                                            session.userId
-                                            (Server_LoggedOut session.sessionIdHash |> ServerChange)
-                                            model
-                                        ]
-                                    )
+                        Just ( sessionIdToLogOut, sessionToLogOut ) ->
+                            if session.userId == sessionToLogOut.userId then
+                                ( { model | sessions = SeqDict.remove sessionIdToLogOut model.sessions }
+                                , Command.batch
+                                    [ Lamdera.sendToFrontends sessionIdToLogOut LoggedOutSession
+                                    , Broadcast.toUser
+                                        Nothing
+                                        (Just sessionIdToLogOut)
+                                        session.userId
+                                        (Server_LoggedOut session.sessionIdHash |> ServerChange)
+                                        model
+                                    ]
                                 )
+
+                            else
+                                ( model, Command.none )
 
                         Nothing ->
                             ( model, Command.none )
