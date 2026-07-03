@@ -58,6 +58,7 @@ module E2EHelper exposing
     , linkDiscordAndLogin
     , linkDiscordUrl
     , linkSecondDiscordAccount
+    , logoutOtherSessionButtonId
     , mobileWindow
     , mockCloudflareSfu
     , noMissingMessages
@@ -409,6 +410,14 @@ sessionIdAttackerHash =
 sessionId4Hash : SessionIdHash
 sessionId4Hash =
     SessionIdHash.fromSessionId sessionId4
+
+
+{-| The id of the "Logout other" button shown next to another session in the connected devices list.
+Mirrors the id built in `UserOptions.viewConnectedDevice`.
+-}
+logoutOtherSessionButtonId : SessionId -> HtmlId
+logoutOtherSessionButtonId sessionId =
+    Dom.id ("options_logout_other_" ++ SessionIdHash.toString (SessionIdHash.fromSessionId sessionId))
 
 
 handleLogin :
