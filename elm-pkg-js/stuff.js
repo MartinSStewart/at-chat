@@ -453,7 +453,7 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.load_startup_data_to_js.subscribe((a) => {
+    function sendStartupData() {
         // original code found here https://stackoverflow.com/a/13382873
         // Creating invisible container
         const outer = document.createElement('div');
@@ -493,15 +493,34 @@ exports.init = async function init(app)
         insetProbe.parentNode.removeChild(insetProbe);
 
         app.ports.load_startup_data_from_js.send({
-            // Event timeStamps are milliseconds since timeOrigin, not since the unix epoch
-            timeOrigin: performance.timeOrigin,
+            // Event timeStamps are milliseconds since timeOrigin (the monotonic performance clock),
+            // not since the unix epoch. We convert them to a wall-clock Time.Posix by adding
+            // timeOrigin. `performance.timeOrigin` is fixed at page load, but the monotonic clock
+            // that event timeStamps use pauses/diverges from wall time while the tab is backgrounded
+            // or the machine sleeps, so a fixed origin makes touch times drift (off by a second, then
+            // by far more after a long sleep). Instead we compute the origin as
+            // `Date.now() - performance.now()`, and re-send it whenever the page becomes visible/
+            // focused again (see the listeners below) so it re-anchors to the current wall clock.
+            timeOrigin: Date.now() - performance.now(),
             userAgent: window.navigator.userAgent,
             scrollbarWidth: scrollbarWidth,
             isPwa: isPwa,
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
             safeAreaInsetTop: safeAreaInsetTop
         });
+    }
+
+    app.ports.load_startup_data_to_js.subscribe((a) => {
+        sendStartupData();
     });
+
+    // Re-anchor timeOrigin after the tab was backgrounded or the machine slept, since the monotonic
+    // clock behind event timeStamps drifts from wall time during those periods.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') sendStartupData();
+    });
+    window.addEventListener('focus', sendStartupData);
+    window.addEventListener('pageshow', sendStartupData);
 
     app.ports.shift_scroll_by_element_delta_to_js.subscribe((data) => {
         const element = document.getElementById(data.elementId);

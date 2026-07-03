@@ -246,7 +246,7 @@ serviceWorkerData msg =
         )
 
 
-{-| Data loaded from JS once at app startup. `timeOrigin` is `performance.timeOrigin`, needed to convert event timeStamps (which are milliseconds since timeOrigin) into a Time.Posix.
+{-| Data loaded from JS at app startup (and re-sent when the page regains visibility/focus). `timeOrigin` is the wall-clock origin of the monotonic performance clock (`Date.now() - performance.now()`), needed to convert event timeStamps (which are milliseconds since that origin) into a Time.Posix. It's re-sent so it can be re-anchored to wall time after the monotonic clock drifts while backgrounded or asleep.
 -}
 type alias StartupData =
     { timeOrigin : Time.Posix

@@ -102,7 +102,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PwaStatus, RegisterPushSubscription, SubscribeData)
+import Ports exposing (NotificationPermission, RegisterPushSubscription, SubscribeData)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
@@ -166,15 +166,9 @@ type alias LoadedFrontend =
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe MyUi.LastCopy
-    , notificationPermission : NotificationPermission
-    , pwaStatus : PwaStatus
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , scrollbarWidth : Int
-    , userAgent : UserAgent
-    , -- performance.timeOrigin, used to convert event timeStamps (milliseconds since timeOrigin) into Time.Posix
-      timeOrigin : Time.Posix
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
@@ -183,9 +177,7 @@ type alias LoadedFrontend =
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
-    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Used to line
-      -- touch coordinates (reported from the viewport top) up with the UI laid out below the inset.
-      safeAreaInsetTop : Int
+    , startupData : Ports.StartupData
     }
 
 

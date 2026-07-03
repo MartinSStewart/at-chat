@@ -590,7 +590,7 @@ tabBodyView local loggedIn model =
                                     Dragging dragging ->
                                         Just dragging.touches
                                  )
-                                    |> Maybe.map (Touch.removeSafeAreaTopInset model.safeAreaInsetTop)
+                                    |> Maybe.map (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop)
                                 )
                                 model.lastCopied
                                 local.localUser

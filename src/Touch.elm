@@ -60,7 +60,7 @@ removeSafeAreaTopInset insetTop touches =
             touches
 
 
-{-| The event's timeStamp is a DOMHighResTimeStamp: the time elapsed since `performance.timeOrigin`, not a unix timestamp. Offset it by the timeOrigin loaded at startup to get a Time.Posix.
+{-| The event's timeStamp is a DOMHighResTimeStamp: the time elapsed since the monotonic performance clock's origin, not a unix timestamp. Offset it by the timeOrigin from JS (re-anchored to wall time whenever the page regains visibility/focus) to get a Time.Posix.
 -}
 decodeTouchEvent : (Duration -> NonemptyDict Int Touch -> msg) -> Decoder msg
 decodeTouchEvent msg =

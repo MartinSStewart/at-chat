@@ -353,14 +353,9 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
-            , notificationPermission = startupData.notificationPermission
-            , pwaStatus = startupData.pwaStatus
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , scrollbarWidth = startupData.scrollbarWidth
-            , userAgent = startupData.userAgent
-            , timeOrigin = startupData.timeOrigin
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
@@ -368,7 +363,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , imageViewer = Nothing
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
-            , safeAreaInsetTop = startupData.safeAreaInsetTop
+            , startupData = startupData
             }
 
         ( model2, cmdA ) =
@@ -752,15 +747,15 @@ updateLoaded msg model =
                         LoginForm.update
                             (\email -> GetLoginTokenRequest (Untrusted.untrust email) |> Lamdera.sendToBackend)
                             (\loginToken ->
-                                LoginWithTokenRequest requestMessagesFor loginToken model.userAgent
+                                LoginWithTokenRequest requestMessagesFor loginToken model.startupData.userAgent
                                     |> Lamdera.sendToBackend
                             )
                             (\loginToken ->
-                                LoginWithTwoFactorRequest requestMessagesFor loginToken model.userAgent
+                                LoginWithTwoFactorRequest requestMessagesFor loginToken model.startupData.userAgent
                                     |> Lamdera.sendToBackend
                             )
                             (\name ->
-                                FinishUserCreationRequest requestMessagesFor name model.userAgent
+                                FinishUserCreationRequest requestMessagesFor name model.startupData.userAgent
                                     |> Lamdera.sendToBackend
                             )
                             loginFormMsg
@@ -1490,16 +1485,20 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         CheckedNotificationPermission notificationPermission ->
-            ( { model | notificationPermission = notificationPermission }, Command.none )
+            let
+                startupData =
+                    model.startupData
+            in
+            ( { model | startupData = { startupData | notificationPermission = notificationPermission } }, Command.none )
 
         TouchStart maybeGuildOrDmIdAndMessageIndex timeStamp touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing (Duration.addTo model.timeOrigin timeStamp) touches model
+            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing (Duration.addTo model.startupData.timeOrigin timeStamp) touches model
 
         TouchMoved timeStamp newTouches ->
             let
                 time : Time.Posix
                 time =
-                    Duration.addTo model.timeOrigin timeStamp
+                    Duration.addTo model.startupData.timeOrigin timeStamp
             in
             case model.drag of
                 Dragging dragging ->
@@ -1641,7 +1640,7 @@ updateLoaded msg model =
                                                         (WordSpellingGame.dragStart
                                                             time
                                                             model.windowSize
-                                                            (Touch.removeSafeAreaTopInset model.safeAreaInsetTop startTouches)
+                                                            (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches)
                                                             data.setup
                                                             data.model
                                                         )
@@ -1666,10 +1665,10 @@ updateLoaded msg model =
                             ( model, Command.none )
 
         TouchEnd timeStamp ->
-            handleTouchEnd (Duration.addTo model.timeOrigin timeStamp) model
+            handleTouchEnd (Duration.addTo model.startupData.timeOrigin timeStamp) model
 
         TouchCancel timeStamp ->
-            handleTouchEnd (Duration.addTo model.timeOrigin timeStamp) model
+            handleTouchEnd (Duration.addTo model.startupData.timeOrigin timeStamp) model
 
         ChannelSidebarAnimated elapsedTime ->
             let
@@ -2363,7 +2362,13 @@ updateLoaded msg model =
                         model
 
                 MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl touches ->
-                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl (Duration.addTo model.timeOrigin timeStamp) touches model
+                    touchStart
+                        (Just ( guildOrDmId, threadRoute, isThreadStarter ))
+                        maybeImageUrl
+                        maybeLinkUrl
+                        (Duration.addTo model.startupData.timeOrigin timeStamp)
+                        touches
+                        model
 
                 MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
@@ -2923,14 +2928,7 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( { model
-                | scrollbarWidth = startupData.scrollbarWidth
-                , userAgent = startupData.userAgent
-                , pwaStatus = startupData.pwaStatus
-                , notificationPermission = startupData.notificationPermission
-                , timeOrigin = startupData.timeOrigin
-                , safeAreaInsetTop = startupData.safeAreaInsetTop
-              }
+            ( { model | startupData = startupData }
             , Command.none
             )
 
@@ -4166,7 +4164,7 @@ updateLoaded msg model =
                                             }
                                       }
                                     , Effect.File.Download.bytes
-                                        ("recording " ++ UserAgent.browserToString model.userAgent.browser)
+                                        ("recording " ++ UserAgent.browserToString model.startupData.userAgent.browser)
                                         recording.mimeType
                                         recording.data
                                     )
@@ -4279,7 +4277,7 @@ updateLoaded msg model =
                                     FileDragging dragStart (OneOrGreater.increment count)
 
                                 NoFileDrag _ ->
-                                    FileDragging (Duration.addTo model.timeOrigin timeStamp) OneOrGreater.one
+                                    FileDragging (Duration.addTo model.startupData.timeOrigin timeStamp) OneOrGreater.one
                       }
                     , Command.none
                     )
@@ -5311,7 +5309,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             , case maybeHtmlId of
                 Just htmlId ->
                     Command.batch
-                        [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                        [ if model.startupData.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
                             Command.none
 
                           else
@@ -5839,7 +5837,7 @@ finalizeWordSpellingDrag time model loggedIn =
                             ( setWordSpellingGameModel
                                 local
                                 model
-                                (WordSpellingGame.dragEnd time model.windowSize (Touch.removeSafeAreaTopInset model.safeAreaInsetTop dragging.touches) game.setup game.shared game.model)
+                                (WordSpellingGame.dragEnd time model.windowSize (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop dragging.touches) game.setup game.shared game.model)
                                 loggedIn
                             , Command.none
                             )
@@ -5880,7 +5878,7 @@ dragTarget startTouches model =
                             WordSpellingGame.insideBoard
                                 data.setup
                                 model.windowSize
-                                (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.safeAreaInsetTop startTouches))
+                                (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
 
                         Nothing ->
                             False
@@ -6044,7 +6042,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.timezone model.userAgent loginData model
+                                    loadedInitHelper model.timezone model.startupData.userAgent loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -6755,7 +6753,7 @@ updateLoadedFromBackend msg model =
                         (\loggedIn ->
                             ( { loggedIn
                                 | localState =
-                                    loginDataToLocalState model.userAgent model.timezone loginData |> Local.init
+                                    loginDataToLocalState model.startupData.userAgent model.timezone loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
@@ -6919,7 +6917,7 @@ view _ model =
                                     notLoggedIn.textInputFocus
                                     (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     loaded.windowSize
-                                    loaded.pwaStatus
+                                    loaded.startupData.pwaStatus
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
                                         [ Ui.background MyUi.background3
@@ -6974,7 +6972,7 @@ view _ model =
                                                     notLoggedIn.textInputFocus
                                                     loginForm2
                                                     loaded.windowSize
-                                                    loaded.pwaStatus
+                                                    loaded.startupData.pwaStatus
                                                     |> Ui.map LoginFormMsg
 
                                             Nothing ->
@@ -7017,7 +7015,7 @@ view _ model =
                                     (loaded.aiChatModel.chatHistory == "")
                                         && (loaded.aiChatModel.message == "")
                                         && MyUi.isMobile loaded
-                                        && (loaded.pwaStatus == BrowserView)
+                                        && (loaded.startupData.pwaStatus == BrowserView)
                                   then
                                     Ui.inFront
                                         (Ui.el
