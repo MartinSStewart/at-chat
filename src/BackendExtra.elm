@@ -1619,7 +1619,7 @@ toBackendLog toBackend =
         AdminToBackend _ ->
             ToBackendLog_AdminToBackend
 
-        LogOutRequest ->
+        LogOutRequest _ ->
             ToBackendLog_LogOutRequest
 
         LocalModelChangeRequest _ localChange ->

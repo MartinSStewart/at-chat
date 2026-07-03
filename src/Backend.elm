@@ -2536,22 +2536,42 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\_ _ -> updateFromFrontendAdmin clientId adminToBackend model)
 
-        LogOutRequest ->
+        LogOutRequest sessionIdHashToLogOut ->
             BackendExtra.asUser
                 model
                 sessionId
                 (\session _ ->
-                    ( { model | sessions = SeqDict.remove sessionId model.sessions }
-                    , Command.batch
-                        [ Lamdera.sendToFrontends sessionId LoggedOutSession
-                        , Broadcast.toUser
-                            Nothing
-                            (Just sessionId)
-                            session.userId
-                            (Server_LoggedOut session.sessionIdHash |> ServerChange)
-                            model
-                        ]
-                    )
+                    case
+                        List.Extra.findMap
+                            (\( sessionIdToLogOut, sessionToLogOut ) ->
+                                if sessionToLogOut.sessionIdHash == sessionIdHashToLogOut then
+                                    Just sessionIdToLogOut
+
+                                else
+                                    Nothing
+                            )
+                            (SeqDict.toList model.sessions)
+                    of
+                        Just sessionIdToLogOut ->
+                            BackendExtra.asUser
+                                model
+                                sessionIdToLogOut
+                                (\_ _ ->
+                                    ( { model | sessions = SeqDict.remove sessionIdToLogOut model.sessions }
+                                    , Command.batch
+                                        [ Lamdera.sendToFrontends sessionIdToLogOut LoggedOutSession
+                                        , Broadcast.toUser
+                                            Nothing
+                                            (Just sessionIdToLogOut)
+                                            session.userId
+                                            (Server_LoggedOut session.sessionIdHash |> ServerChange)
+                                            model
+                                        ]
+                                    )
+                                )
+
+                        Nothing ->
+                            ( model, Command.none )
                 )
 
         LocalModelChangeRequest changeId localMsg ->

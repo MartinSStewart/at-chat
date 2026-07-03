@@ -442,7 +442,7 @@ type FrontendMsg_
     | LoginFormMsg LoginForm.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg
-    | PressedLogOut
+    | PressedLogOut SessionIdHash
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
@@ -620,7 +620,7 @@ type ToBackend
     | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
     | GetLoginTokenRequest (Untrusted EmailAddress)
     | AdminToBackend Pages.Admin.ToBackend
-    | LogOutRequest
+    | LogOutRequest SessionIdHash
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)

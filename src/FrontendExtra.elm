@@ -1732,7 +1732,7 @@ isPressMsg msg =
         AdminPageMsg _ ->
             False
 
-        PressedLogOut ->
+        PressedLogOut _ ->
             True
 
         ElmUiMsg _ ->

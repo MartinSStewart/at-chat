@@ -785,8 +785,8 @@ updateLoaded msg model =
                             else
                                 ( model2, Command.none )
 
-        PressedLogOut ->
-            ( model, Lamdera.sendToBackend LogOutRequest )
+        PressedLogOut sessionId ->
+            ( model, Lamdera.sendToBackend (LogOutRequest sessionId) )
 
         ScrolledToLogSection ->
             ( model, Command.none )

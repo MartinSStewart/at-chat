@@ -386,6 +386,31 @@ sessionId4 =
     Lamdera.sessionIdFromString "sessionId4"
 
 
+sessionId0Hash : SessionIdHash
+sessionId0Hash =
+    SessionIdHash.fromSessionId sessionId0
+
+
+sessionId1Hash : SessionIdHash
+sessionId1Hash =
+    SessionIdHash.fromSessionId sessionId1
+
+
+sessionId2Hash : SessionIdHash
+sessionId2Hash =
+    SessionIdHash.fromSessionId sessionId2
+
+
+sessionIdAttackerHash : SessionIdHash
+sessionIdAttackerHash =
+    SessionIdHash.fromSessionId sessionIdAttacker
+
+
+sessionId4Hash : SessionIdHash
+sessionId4Hash =
+    SessionIdHash.fromSessionId sessionId4
+
+
 handleLogin :
     String
     -> EmailAddress
@@ -2582,8 +2607,12 @@ allAttackerToBackendChanges =
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
     , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
-    , -- Make sure this one is last
-      LogOutRequest
+    , LogOutRequest sessionId0Hash
+    , LogOutRequest sessionId1Hash
+    , LogOutRequest sessionId2Hash
+    , LogOutRequest sessionId4Hash
+    , -- Make sure this one is last. It actually logs out the attacker
+      LogOutRequest sessionIdAttackerHash
     ]
 
 

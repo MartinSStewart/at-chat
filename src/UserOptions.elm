@@ -22,7 +22,7 @@ import RichText
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -53,10 +53,11 @@ domainWhitelistToString domains =
 
 
 viewConnectedDevice :
-    Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
+    SessionIdHash
+    -> Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
     -> UserAgent
     -> Element FrontendMsg_
-viewConnectedDevice otherCurrentlyViewing userAgent =
+viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
     let
         browserText : String
         browserText =
@@ -128,6 +129,26 @@ viewConnectedDevice otherCurrentlyViewing userAgent =
                 |> Ui.text
                 |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
             ]
+        , MyUi.simpleButton
+            (case otherCurrentlyViewing of
+                Just _ ->
+                    Dom.id ("options_logout_other_" ++ SessionIdHash.toString sessionId)
+
+                Nothing ->
+                    Dom.id "options_logout"
+            )
+            (PressedLogOut sessionId)
+            (case otherCurrentlyViewing of
+                Just _ ->
+                    Ui.text "Logout other"
+
+                Nothing ->
+                    Ui.row
+                        [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 }, Ui.contentCenterY ]
+                        [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html Icons.logoutSvg)
+                        , Ui.text "Logout"
+                        ]
+            )
         ]
 
 
@@ -463,25 +484,16 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice Nothing local.localUser.session.userAgent
+                    (viewConnectedDevice local.localUser.session.sessionIdHash Nothing local.localUser.session.userAgent
                         :: List.map
-                            (\otherSession ->
-                                viewConnectedDevice (Just otherSession.currentlyViewing) otherSession.userAgent
+                            (\( otherSessionId, otherSession ) ->
+                                viewConnectedDevice otherSessionId (Just otherSession.currentlyViewing) otherSession.userAgent
                             )
-                            (SeqDict.values local.otherSessions)
+                            (SeqDict.toList local.otherSessions)
                     )
                 , Ui.row
                     [ Ui.paddingXY 16 0 ]
-                    [ MyUi.simpleButton
-                        (Dom.id "options_logout")
-                        PressedLogOut
-                        (Ui.row
-                            [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 } ]
-                            [ Ui.el [ Ui.width (Ui.px 26) ] (Ui.html Icons.logoutSvg)
-                            , Ui.text "Logout"
-                            ]
-                        )
-                    , case loaded.versionNumber of
+                    [ case loaded.versionNumber of
                         Just version ->
                             Ui.el
                                 [ Ui.Font.size 12
