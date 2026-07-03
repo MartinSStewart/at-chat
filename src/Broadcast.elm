@@ -632,15 +632,19 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
 userGetAllConnections : Id UserId -> BackendModel -> List LocalState.ConnectionData
 userGetAllConnections userId model =
     SeqDict.toList model.sessions
-        |> List.filterMap
+        |> List.concatMap
             (\( sessionId, session ) ->
                 if session.userId == userId then
-                    SeqDict.get sessionId model.connections
+                    case SeqDict.get sessionId model.connections of
+                        Just connection ->
+                            NonemptyDict.values connection |> List.Nonempty.toList
+
+                        Nothing ->
+                            []
 
                 else
-                    Nothing
+                    []
             )
-        |> List.concatMap (NonemptyDict.values >> List.Nonempty.toList)
 
 
 notification :

@@ -54,10 +54,9 @@ domainWhitelistToString domains =
 
 viewConnectedDevice :
     Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
-    -> NotificationMode
     -> UserAgent
     -> Element FrontendMsg_
-viewConnectedDevice otherCurrentlyViewing notificationMode userAgent =
+viewConnectedDevice otherCurrentlyViewing userAgent =
     let
         browserText : String
         browserText =
@@ -464,16 +463,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice
-                        Nothing
-                        local.localUser.session.notificationMode
-                        local.localUser.session.userAgent
+                    (viewConnectedDevice Nothing local.localUser.session.userAgent
                         :: List.map
                             (\otherSession ->
-                                viewConnectedDevice
-                                    (Just otherSession.currentlyViewing)
-                                    otherSession.notificationMode
-                                    otherSession.userAgent
+                                viewConnectedDevice (Just otherSession.currentlyViewing) otherSession.userAgent
                             )
                             (SeqDict.values local.otherSessions)
                     )

@@ -1019,7 +1019,7 @@ isViewing guildOrDmId threadRoute local =
     in
     (local.localUser.currentlyViewing == a)
         || List.any
-            (\otherSession -> SeqDict.values otherSession.currentlyViewing |> List.any ((==) a))
+            (\otherSession -> SeqDict.values otherSession.currentlyViewing |> List.member a)
             (SeqDict.values local.otherSessions)
 
 

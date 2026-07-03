@@ -8,7 +8,6 @@ module UserSession exposing
     , UserSession
     , ViewDiscordGuildData
     , init
-    , setCurrentlyViewing
     , setViewingToCurrentlyViewing
     , toFrontend
     )
@@ -20,7 +19,6 @@ import Effect.Time as Time
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
@@ -123,14 +121,6 @@ init time sessionId userId userAgent =
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     }
-
-
-setCurrentlyViewing :
-    Maybe ( AnyGuildOrDmId, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
-setCurrentlyViewing viewing session =
-    { session | currentlyViewing = viewing }
 
 
 toFrontend : Id UserId -> SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )) -> UserSession -> Maybe FrontendUserSession
