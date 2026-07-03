@@ -102,7 +102,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PwaStatus, RegisterPushSubscription, SubscribeData)
+import Ports exposing (NotificationPermission, RegisterPushSubscription, SubscribeData)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
