@@ -978,7 +978,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\adminA ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
-                , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "(Current device)" ]
+                , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -986,7 +986,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.desktopWindow
                     (\adminB ->
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "(Current device)" ]
+                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , T.connectFrontend
                             100
@@ -999,7 +999,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     adminA
                                     [ "Mobile • Safari"
                                     , "Desktop • Firefox"
-                                    , "(Current device)"
+                                    , "Current device"
                                     , "Desktop • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
@@ -1008,13 +1008,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     [ "Mobile • Safari"
                                     , "Desktop • Firefox"
                                     , "Desktop • Chrome"
-                                    , "(Current device)"
+                                    , "Current device"
                                     ]
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
                         , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox", "(Current device)" ]
+                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox", "Current device" ]
                         ]
                     )
                 ]

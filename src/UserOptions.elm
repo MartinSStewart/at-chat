@@ -108,24 +108,27 @@ viewConnectedDevice otherCurrentlyViewing notificationMode userAgent =
                 Tablet ->
                     Ui.html Icons.tablet
             )
-        , deviceText ++ " • " ++ browserText |> Ui.text
-        , (case otherCurrentlyViewing of
-            Just currentlyViewing ->
-                case SeqDict.size currentlyViewing of
-                    1 ->
-                        ""
+        , Ui.column
+            [ Ui.spacing 2 ]
+            [ deviceText ++ " • " ++ browserText |> Ui.text
+            , (case otherCurrentlyViewing of
+                Just currentlyViewing ->
+                    case SeqDict.size currentlyViewing of
+                        1 ->
+                            ""
 
-                    0 ->
-                        "(Idle)"
+                        0 ->
+                            "Idle"
 
-                    count ->
-                        "(" ++ String.fromInt count ++ " connections)"
+                        count ->
+                            "(" ++ String.fromInt count ++ " connections)"
 
-            Nothing ->
-                "(Current device)"
-          )
-            |> Ui.text
-            |> Ui.el [ Ui.Font.color MyUi.font3 ]
+                Nothing ->
+                    "Current device"
+              )
+                |> Ui.text
+                |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
+            ]
         ]
 
 
