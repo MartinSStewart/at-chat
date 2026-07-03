@@ -1060,7 +1060,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
-                    , case model.notificationPermission of
+                    , case model.startupData.notificationPermission of
                         Ports.Granted ->
                             let
                                 users : SeqDict (Id UserId) FrontendUser
@@ -1125,7 +1125,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.setFavicon "/favicon-red.ico"
-                    , case model.notificationPermission of
+                    , case model.startupData.notificationPermission of
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)

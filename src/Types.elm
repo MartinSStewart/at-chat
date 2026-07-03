@@ -166,17 +166,9 @@ type alias LoadedFrontend =
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe MyUi.LastCopy
-    , notificationPermission : NotificationPermission
-    , pwaStatus : PwaStatus
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , scrollbarWidth : Int
-    , userAgent : UserAgent
-    , -- Wall-clock origin of the monotonic performance clock (Date.now() - performance.now()), used to
-      -- convert event timeStamps (milliseconds since that origin) into Time.Posix. Re-anchored by JS
-      -- whenever the page regains visibility/focus so it doesn't drift while backgrounded or asleep.
-      timeOrigin : Time.Posix
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
@@ -185,9 +177,7 @@ type alias LoadedFrontend =
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
-    , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Used to line
-      -- touch coordinates (reported from the viewport top) up with the UI laid out below the inset.
-      safeAreaInsetTop : Int
+    , startupData : Ports.StartupData
     }
 
 
