@@ -1015,11 +1015,11 @@ isViewing : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Bool
 isViewing guildOrDmId threadRoute local =
     let
         a =
-            ( guildOrDmId, threadRoute ) |> Just
+            Just ( guildOrDmId, threadRoute )
     in
     (local.localUser.currentlyViewing == a)
         || List.any
-            (\otherSession -> otherSession.currentlyViewing == a)
+            (\otherSession -> SeqDict.values otherSession.currentlyViewing |> List.any ((==) a))
             (SeqDict.values local.otherSessions)
 
 
@@ -3804,7 +3804,7 @@ changeUpdate localMsg local =
                 Server_LoggedOut sessionId ->
                     { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
 
-                Server_CurrentlyViewing sessionIdHash currentlyViewing ->
+                Server_CurrentlyViewing sessionIdHash clientId currentlyViewing ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3821,9 +3821,25 @@ changeUpdate localMsg local =
                             | otherSessions =
                                 SeqDict.updateIfExists
                                     sessionIdHash
-                                    (UserSession.setCurrentlyViewing currentlyViewing)
+                                    (\session ->
+                                        { session
+                                            | currentlyViewing =
+                                                SeqDict.insert clientId currentlyViewing session.currentlyViewing
+                                        }
+                                    )
                                     local.otherSessions
                         }
+
+                Server_ClientDisconnected sessionId clientId ->
+                    { local
+                        | otherSessions =
+                            SeqDict.updateIfExists
+                                sessionId
+                                (\session ->
+                                    { session | currentlyViewing = SeqDict.remove clientId session.currentlyViewing }
+                                )
+                                local.otherSessions
+                    }
 
                 Server_TextEditor serverChange2 ->
                     { local | textEditor = TextEditor.changeUpdate serverChange2 local.textEditor }

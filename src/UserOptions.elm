@@ -5,6 +5,7 @@ import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
@@ -19,7 +20,7 @@ import Ports
 import Range exposing (Range)
 import RichText
 import Route
-import SeqDict
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash
 import Time
@@ -52,19 +53,15 @@ domainWhitelistToString domains =
 
 
 viewConnectedDevice :
-    Bool
-    ->
-        { a
-            | notificationMode : NotificationMode
-            , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
-            , userAgent : UserAgent
-        }
+    Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
+    -> NotificationMode
+    -> UserAgent
     -> Element FrontendMsg_
-viewConnectedDevice isCurrentSession session =
+viewConnectedDevice otherCurrentlyViewing notificationMode userAgent =
     let
         browserText : String
         browserText =
-            case session.userAgent.browser of
+            case userAgent.browser of
                 Chrome ->
                     "Chrome"
 
@@ -85,7 +82,7 @@ viewConnectedDevice isCurrentSession session =
 
         deviceText : String
         deviceText =
-            case session.userAgent.device of
+            case userAgent.device of
                 Desktop ->
                     "Desktop"
 
@@ -94,24 +91,14 @@ viewConnectedDevice isCurrentSession session =
 
                 Tablet ->
                     "Tablet"
-
-        currentActivity : String
-        currentActivity =
-            case session.currentlyViewing of
-                Just _ ->
-                    "Active"
-
-                Nothing ->
-                    "Idle"
     in
     Ui.row
-        [ Ui.spacing 8
-        ]
+        [ Ui.spacing 8 ]
         [ Ui.el
             [ Ui.width (Ui.px 36)
             , Ui.height (Ui.px 36)
             ]
-            (case session.userAgent.device of
+            (case userAgent.device of
                 Desktop ->
                     Ui.html Icons.desktop
 
@@ -121,25 +108,24 @@ viewConnectedDevice isCurrentSession session =
                 Tablet ->
                     Ui.html Icons.tablet
             )
-        , Ui.column
-            [ Ui.spacing 2 ]
-            [ Ui.text
-                (deviceText
-                    ++ " • "
-                    ++ browserText
-                    ++ (if isCurrentSession then
-                            " (current device)"
+        , deviceText ++ " • " ++ browserText |> Ui.text
+        , (case otherCurrentlyViewing of
+            Just currentlyViewing ->
+                case SeqDict.size currentlyViewing of
+                    1 ->
+                        ""
 
-                        else
-                            ""
-                       )
-                )
-            , Ui.el
-                [ Ui.Font.size 14
-                , Ui.Font.color (Ui.rgb 128 128 128)
-                ]
-                (Ui.text currentActivity)
-            ]
+                    0 ->
+                        " (Idle)"
+
+                    count ->
+                        " (" ++ String.fromInt count ++ " connections)"
+
+            Nothing ->
+                " (Current device)"
+          )
+            |> Ui.text
+            |> Ui.el [ Ui.Font.color MyUi.font3 ]
         ]
 
 
@@ -475,12 +461,18 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice True
-                        { notificationMode = local.localUser.session.notificationMode
-                        , currentlyViewing = local.localUser.currentlyViewing
-                        , userAgent = local.localUser.session.userAgent
-                        }
-                        :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions)
+                    (viewConnectedDevice
+                        Nothing
+                        local.localUser.session.notificationMode
+                        local.localUser.session.userAgent
+                        :: List.map
+                            (\otherSession ->
+                                viewConnectedDevice
+                                    (Just otherSession.currentlyViewing)
+                                    otherSession.notificationMode
+                                    otherSession.userAgent
+                            )
+                            (SeqDict.values local.otherSessions)
                     )
                 , Ui.row
                     [ Ui.paddingXY 16 0 ]

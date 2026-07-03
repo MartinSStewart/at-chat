@@ -2099,7 +2099,7 @@ disconnectClient time sessionId clientId model =
                     Nothing
                     Nothing
                     session.userId
-                    (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                    (Server_ClientDisconnected session.sessionIdHash clientId |> ServerChange)
                     model2
                 , case removedConnection.call of
                     ConnectingToCall (Call.DmRoomId otherUserId) ->
@@ -2415,7 +2415,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Server_NewSession
                                                 session.sessionIdHash
                                                 { notificationMode = session.notificationMode
-                                                , currentlyViewing = currentlyViewing
+                                                , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                                 , userAgent = session.userAgent
                                                 }
                                                 |> ServerChange
@@ -4175,17 +4175,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         currentlyViewing =
                             UserSession.setViewingToCurrentlyViewing viewing
 
-                        updateSession : ConnectionData -> ConnectionData
-                        updateSession connection =
-                            UserSession.setCurrentlyViewing currentlyViewing connection
-
                         broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
                         broadcastCmd session =
                             Broadcast.toUser
+                                (Just clientId)
                                 Nothing
-                                (Just sessionId)
                                 session.userId
-                                (Server_CurrentlyViewing session.sessionIdHash currentlyViewing |> ServerChange)
+                                (Server_CurrentlyViewing session.sessionIdHash clientId currentlyViewing |> ServerChange)
                                 model
 
                         getNewUsers :
@@ -4436,7 +4432,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                                 model.connections
                                       }
-                                    , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
                                     )
                                 )
 

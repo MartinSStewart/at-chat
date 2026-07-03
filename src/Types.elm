@@ -863,7 +863,8 @@ type ServerChange
     | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | Server_ClientDisconnected SessionIdHash ClientId
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)

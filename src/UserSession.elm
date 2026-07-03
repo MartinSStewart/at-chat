@@ -15,11 +15,12 @@ module UserSession exposing
 
 import Discord
 import Effect.Http as Http
-import Effect.Lamdera exposing (SessionId)
+import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
+import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
@@ -39,7 +40,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+    , currentlyViewing : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     , userAgent : UserAgent
     }
 
@@ -132,11 +133,11 @@ setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 
 
-toFrontend : Id UserId -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) } -> UserSession -> Maybe FrontendUserSession
-toFrontend currentUserId connection userSession =
+toFrontend : Id UserId -> SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )) -> UserSession -> Maybe FrontendUserSession
+toFrontend currentUserId currentlyViewing userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode
-        , currentlyViewing = connection.currentlyViewing
+        , currentlyViewing = currentlyViewing
         , userAgent = userSession.userAgent
         }
             |> Just

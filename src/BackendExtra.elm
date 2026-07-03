@@ -347,7 +347,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                     (Server_NewSession
                                         session.sessionIdHash
                                         { notificationMode = session.notificationMode
-                                        , currentlyViewing = currentlyViewing
+                                        , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                         , userAgent = session.userAgent
                                         }
                                         |> ServerChange
@@ -595,19 +595,16 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             |> List.filterMap
                 (\( otherSessionId, otherSession ) ->
                     let
-                        connection : { currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
+                        connection : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
                         connection =
-                            { currentlyViewing =
-                                case SeqDict.get otherSessionId model.connections of
-                                    Just connections ->
-                                        NonemptyDict.values connections
-                                            |> List.Nonempty.toList
-                                            |> List.filterMap .currentlyViewing
-                                            |> List.head
+                            case SeqDict.get otherSessionId model.connections of
+                                Just connections ->
+                                    SeqDict.map
+                                        (\_ connection2 -> connection2.currentlyViewing)
+                                        (NonemptyDict.toSeqDict connections)
 
-                                    Nothing ->
-                                        Nothing
-                            }
+                                Nothing ->
+                                    SeqDict.empty
                     in
                     case UserSession.toFrontend session.userId connection otherSession of
                         Just frontendSession ->
