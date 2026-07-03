@@ -1052,7 +1052,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- adminB has been logged out and is shown the login page
                         , E2EHelper.hasText adminB [ "Login/Signup" ]
 
-                        -- adminA itself stays logged in
+                        -- adminB's session is removed from adminA's connected devices list, and adminA
+                        -- itself stays logged in
+                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
                         , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
                         ]
                     )

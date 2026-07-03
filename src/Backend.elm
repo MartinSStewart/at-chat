@@ -2555,7 +2555,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing
                                         (Just sessionIdToLogOut)
                                         session.userId
-                                        (Server_LoggedOut session.sessionIdHash |> ServerChange)
+                                        (Server_LoggedOut sessionToLogOut.sessionIdHash |> ServerChange)
                                         model
                                     ]
                                 )
