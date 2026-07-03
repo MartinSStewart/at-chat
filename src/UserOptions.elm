@@ -116,13 +116,13 @@ viewConnectedDevice otherCurrentlyViewing notificationMode userAgent =
                         ""
 
                     0 ->
-                        " (Idle)"
+                        "(Idle)"
 
                     count ->
-                        " (" ++ String.fromInt count ++ " connections)"
+                        "(" ++ String.fromInt count ++ " connections)"
 
             Nothing ->
-                " (Current device)"
+                "(Current device)"
           )
             |> Ui.text
             |> Ui.el [ Ui.Font.color MyUi.font3 ]
