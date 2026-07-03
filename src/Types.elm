@@ -173,7 +173,9 @@ type alias LoadedFrontend =
     , aiChatModel : AiChat.FrontendModel
     , scrollbarWidth : Int
     , userAgent : UserAgent
-    , -- performance.timeOrigin, used to convert event timeStamps (milliseconds since timeOrigin) into Time.Posix
+    , -- Wall-clock origin of the monotonic performance clock (Date.now() - performance.now()), used to
+      -- convert event timeStamps (milliseconds since that origin) into Time.Posix. Re-anchored by JS
+      -- whenever the page regains visibility/focus so it doesn't drift while backgrounded or asleep.
       timeOrigin : Time.Posix
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
