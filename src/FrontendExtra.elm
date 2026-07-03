@@ -1017,7 +1017,7 @@ isViewing guildOrDmId threadRoute local =
         a =
             ( guildOrDmId, threadRoute ) |> Just
     in
-    (local.localUser.session.currentlyViewing == a)
+    (local.localUser.currentlyViewing == a)
         || List.any
             (\otherSession -> otherSession.currentlyViewing == a)
             (SeqDict.values local.otherSessions)
@@ -2610,12 +2610,6 @@ changeUpdate localMsg local =
                         localUser : LocalUser
                         localUser =
                             local.localUser
-
-                        session : UserSession
-                        session =
-                            UserSession.setCurrentlyViewing
-                                (UserSession.setViewingToCurrentlyViewing viewing)
-                                localUser.session
                     in
                     case viewing of
                         ViewDm otherUserId messagesLoaded ->
@@ -2623,7 +2617,7 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user = User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
@@ -2638,7 +2632,7 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
@@ -2660,7 +2654,7 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user = User.setLastDmViewed (DiscordDmChannelLastViewed channelId) localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
@@ -2674,7 +2668,7 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user = User.setLastChannelViewed guildId channelId NoThread localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
@@ -2689,7 +2683,7 @@ changeUpdate localMsg local =
                                     { localUser
                                         | user =
                                             User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                     }
                                 , guilds =
                                     SeqDict.updateIfExists
@@ -2710,7 +2704,7 @@ changeUpdate localMsg local =
                             }
 
                         StopViewingChannel ->
-                            { local | localUser = { localUser | session = session } }
+                            { local | localUser = { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing } }
 
                         ViewDiscordChannel guildId channelId _ backendData ->
                             { local
@@ -2722,7 +2716,7 @@ changeUpdate localMsg local =
                                                 channelId
                                                 NoThread
                                                 localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->
@@ -2759,7 +2753,7 @@ changeUpdate localMsg local =
                                                 channelId
                                                 (ViewThread threadId)
                                                 localUser.user
-                                        , session = session
+                                        , currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
                                         , discordUsers =
                                             case backendData of
                                                 FilledInByBackend backendData2 ->

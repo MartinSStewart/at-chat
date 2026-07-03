@@ -39,6 +39,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -131,10 +132,11 @@ setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 
 
-toFrontend : Id UserId -> UserSession -> Maybe FrontendUserSession
-toFrontend currentUserId userSession =
+toFrontend : Id UserId -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) } -> UserSession -> Maybe FrontendUserSession
+toFrontend currentUserId connection userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode
+        , currentlyViewing = connection.currentlyViewing
         , userAgent = userSession.userAgent
         }
             |> Just

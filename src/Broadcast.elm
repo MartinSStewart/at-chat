@@ -631,8 +631,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
 
 userGetAllSessions : Id UserId -> BackendModel -> List ( SessionId, UserSession )
 userGetAllSessions userId model =
-    SeqDict.toList model.sessions
-        |> List.filter (\( _, session ) -> session.userId == userId)
+    SeqDict.toList model.sessions |> List.filter (\( _, session ) -> session.userId == userId)
 
 
 notification :

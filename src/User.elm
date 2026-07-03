@@ -569,6 +569,7 @@ discordUserDataToFrontendUser discordUserData =
 
 type alias LocalUser =
     { session : UserSession
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers

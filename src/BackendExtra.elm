@@ -323,6 +323,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
                         ( Just user, Nothing ) ->
                             let
+                                currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
                                 currentlyViewing =
                                     requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
@@ -469,6 +470,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
     in
     { session = session
+    , currentlyViewing = currentlyViewing
     , adminData =
         if user.isAdmin then
             case requestMessagesFor of

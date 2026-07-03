@@ -48,7 +48,7 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
 import MembersAndOwner
@@ -2249,14 +2249,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     case Broadcast.getUserFromSessionId sessionId model of
                         Just ( session, user ) ->
                             let
-                                session2 : UserSession
-                                session2 =
-                                    UserSession.setCurrentlyViewing
-                                        (BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor)
-                                        session
+                                currentlyViewing =
+                                    BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
                             in
-                            ( { model | sessions = SeqDict.insert sessionId session2 model.sessions }
-                            , BackendExtra.getLoginData sessionId clientId session2 user requestMessagesFor model
+                            ( { model
+                                | connections =
+                                    SeqDict.updateIfExists
+                                        sessionId
+                                        (NonemptyDict.updateIfExists
+                                            clientId
+                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                        )
+                                        model.connections
+                              }
+                            , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -2306,29 +2312,47 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             userId =
                                 Id.nextId (NonemptyDict.toSeqDict model.users)
 
+                            currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                            currentlyViewing =
+                                BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
+
                             session : UserSession
                             session =
                                 UserSession.init
                                     time
                                     sessionId
                                     userId
-                                    (BackendExtra.requestedForToGuildOrDmId userId requestMessagesFor)
                                     userAgent
 
                             newUser : BackendUser
                             newUser =
                                 User.init time personName pendingLogin.emailAddress False
 
-                            model3 : BackendModel
-                            model3 =
+                            model2 : BackendModel
+                            model2 =
                                 { model
                                     | sessions = SeqDict.insert sessionId session model.sessions
                                     , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                                     , users = NonemptyDict.insert userId newUser model.users
+                                    , connections =
+                                        SeqDict.updateIfExists
+                                            sessionId
+                                            (NonemptyDict.updateIfExists
+                                                clientId
+                                                (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                            )
+                                            model.connections
                                 }
                         in
-                        ( model3
-                        , BackendExtra.getLoginData sessionId clientId session newUser requestMessagesFor model3
+                        ( model2
+                        , BackendExtra.getLoginData
+                            sessionId
+                            clientId
+                            currentlyViewing
+                            session
+                            newUser
+                            requestMessagesFor
+                            model2
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -2352,21 +2376,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
                                     let
+                                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                                        currentlyViewing =
+                                            BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+
                                         session : UserSession
                                         session =
-                                            UserSession.init
-                                                time
-                                                sessionId
-                                                pendingLogin.userId
-                                                (BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
-                                                userAgent
+                                            UserSession.init time sessionId pendingLogin.userId userAgent
                                     in
                                     ( { model
                                         | sessions = SeqDict.insert sessionId session model.sessions
+                                        , connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
                                         , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                                       }
                                     , Command.batch
-                                        [ BackendExtra.getLoginData sessionId clientId session user requestMessagesFor model
+                                        [ BackendExtra.getLoginData
+                                            sessionId
+                                            clientId
+                                            currentlyViewing
+                                            session
+                                            user
+                                            requestMessagesFor
+                                            model
                                             |> LoginSuccess
                                             |> LoginWithTokenResponse
                                             |> Lamdera.sendToFrontends sessionId
@@ -2377,7 +2415,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Server_NewSession
                                                 session.sessionIdHash
                                                 { notificationMode = session.notificationMode
-                                                , currentlyViewing = session.currentlyViewing
+                                                , currentlyViewing = currentlyViewing
                                                 , userAgent = session.userAgent
                                                 }
                                                 |> ServerChange
@@ -4132,13 +4170,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewingChannel : Maybe ( AnyGuildOrDmId, ThreadRoute )
-                        viewingChannel =
+                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                        currentlyViewing =
                             UserSession.setViewingToCurrentlyViewing viewing
 
-                        updateSession : UserSession -> UserSession
-                        updateSession session =
-                            UserSession.setCurrentlyViewing viewingChannel session
+                        updateSession : ConnectionData -> ConnectionData
+                        updateSession connection =
+                            UserSession.setCurrentlyViewing currentlyViewing connection
 
                         broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
                         broadcastCmd session =
@@ -4146,16 +4184,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Nothing
                                 (Just sessionId)
                                 session.userId
-                                (Server_CurrentlyViewing session.sessionIdHash viewingChannel |> ServerChange)
+                                (Server_CurrentlyViewing session.sessionIdHash currentlyViewing |> ServerChange)
                                 model
 
                         getNewUsers :
-                            UserSession
+                            ConnectionData
                             -> Discord.Id Discord.GuildId
                             -> DiscordBackendGuild
                             -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-                        getNewUsers session guildId guild =
-                            case session.currentlyViewing of
+                        getNewUsers connection guildId guild =
+                            case connection.currentlyViewing of
                                 Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ previousGuildId _), _ ) ->
                                     if guildId == previousGuildId then
                                         SeqDict.empty
@@ -4196,8 +4234,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 session.userId
                                                 (User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) user)
                                                 model.users
-                                        , sessions =
-                                            SeqDict.insert sessionId (updateSession session) model.sessions
+                                        , connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
                                       }
                                     , Command.batch
                                         [ ViewDm otherUserId (loadMessagesHelper dmChannel |> FilledInByBackend)
@@ -4221,8 +4265,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 session.userId
                                                 (User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) user)
                                                 model.users
-                                        , sessions =
-                                            SeqDict.insert sessionId (updateSession session) model.sessions
+                                        , connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
                                       }
                                     , Command.batch
                                         [ ViewDmThread
@@ -4253,8 +4303,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 session.userId
                                                 (User.setLastDmViewed (DiscordDmChannelLastViewed dmChannelId) user)
                                                 model.users
-                                        , sessions =
-                                            SeqDict.insert sessionId (updateSession session) model.sessions
+                                        , connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
                                       }
                                     , Command.batch
                                         [ ViewDiscordDm
@@ -4283,8 +4339,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         session.userId
                                                         (User.setLastChannelViewed guildId channelId NoThread user)
                                                         model.users
-                                                , sessions =
-                                                    SeqDict.insert sessionId (updateSession session) model.sessions
+                                                , connections =
+                                                    SeqDict.updateIfExists
+                                                        sessionId
+                                                        (NonemptyDict.updateIfExists
+                                                            clientId
+                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                        )
+                                                        model.connections
                                               }
                                             , Command.batch
                                                 [ ViewChannel
@@ -4323,8 +4385,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user
                                                         )
                                                         model.users
-                                                , sessions =
-                                                    SeqDict.insert sessionId (updateSession session) model.sessions
+                                                , connections =
+                                                    SeqDict.updateIfExists
+                                                        sessionId
+                                                        (NonemptyDict.updateIfExists
+                                                            clientId
+                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                        )
+                                                        model.connections
                                               }
                                             , Command.batch
                                                 [ ViewChannelThread
@@ -4358,7 +4426,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 (\session _ ->
                                     ( { model
-                                        | sessions = SeqDict.insert sessionId (updateSession session) model.sessions
+                                        | connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
                                       }
                                     , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                                     )
@@ -4379,8 +4454,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         session.userId
                                                         (User.setLastDiscordChannelViewed guildId channelId NoThread user)
                                                         model.users
-                                                , sessions =
-                                                    SeqDict.insert sessionId (updateSession session) model.sessions
+                                                , connections =
+                                                    SeqDict.updateIfExists
+                                                        sessionId
+                                                        (NonemptyDict.updateIfExists
+                                                            clientId
+                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                        )
+                                                        model.connections
                                               }
                                             , Command.batch
                                                 [ ViewDiscordChannel
@@ -4425,8 +4506,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user
                                                         )
                                                         model.users
-                                                , sessions =
-                                                    SeqDict.insert sessionId (updateSession session) model.sessions
+                                                , connections =
+                                                    SeqDict.updateIfExists
+                                                        sessionId
+                                                        (NonemptyDict.updateIfExists
+                                                            clientId
+                                                            (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                        )
+                                                        model.connections
                                               }
                                             , Command.batch
                                                 [ ViewDiscordChannelThread
@@ -5074,14 +5161,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\session user ->
                     let
-                        session2 : UserSession
-                        session2 =
-                            UserSession.setCurrentlyViewing
-                                (BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor)
-                                session
+                        currentlyViewing =
+                            BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
                     in
-                    ( { model | sessions = SeqDict.insert sessionId session2 model.sessions }
-                    , BackendExtra.getLoginData sessionId clientId session2 user requestMessagesFor model
+                    ( { model
+                        | connections =
+                            SeqDict.updateIfExists
+                                sessionId
+                                (NonemptyDict.updateIfExists
+                                    clientId
+                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                )
+                                model.connections
+                      }
+                    , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId

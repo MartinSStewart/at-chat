@@ -789,6 +789,7 @@ type ToFrontend
 
 type alias LoginData =
     { session : UserSession
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
