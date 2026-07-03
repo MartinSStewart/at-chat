@@ -442,7 +442,7 @@ type FrontendMsg_
     | LoginFormMsg LoginForm.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg
-    | PressedLogOut
+    | PressedLogOut SessionIdHash
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
@@ -620,7 +620,7 @@ type ToBackend
     | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
     | GetLoginTokenRequest (Untrusted EmailAddress)
     | AdminToBackend Pages.Admin.ToBackend
-    | LogOutRequest
+    | LogOutRequest SessionIdHash
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
@@ -789,6 +789,7 @@ type ToFrontend
 
 type alias LoginData =
     { session : UserSession
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
@@ -862,7 +863,8 @@ type ServerChange
     | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | Server_ClientDisconnected SessionIdHash ClientId
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)

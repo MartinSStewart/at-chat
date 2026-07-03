@@ -323,21 +323,20 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
                         ( Just user, Nothing ) ->
                             let
+                                currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                                currentlyViewing =
+                                    requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
+
                                 session : UserSession
                                 session =
-                                    UserSession.init
-                                        time
-                                        sessionId
-                                        pendingLogin.userId
-                                        (requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
-                                        userAgent
+                                    UserSession.init time sessionId pendingLogin.userId userAgent
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
                             , Command.batch
-                                [ getLoginData sessionId clientId session user requestMessagesFor model
+                                [ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
                                     |> LoginSuccess
                                     |> LoginWithTokenResponse
                                     |> Lamdera.sendToFrontends sessionId
@@ -348,7 +347,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                     (Server_NewSession
                                         session.sessionIdHash
                                         { notificationMode = session.notificationMode
-                                        , currentlyViewing = session.currentlyViewing
+                                        , currentlyViewing = SeqDict.singleton clientId currentlyViewing
                                         , userAgent = session.userAgent
                                         }
                                         |> ServerChange
@@ -460,17 +459,19 @@ validateAttachedFiles uploadedFiles dict =
 getLoginData :
     SessionId
     -> ClientId
+    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
     -> UserSession
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId clientId session user requestMessagesFor model =
+getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model =
     let
         linkedAndOtherDiscordUsers =
-            getLinkedDiscordUsersAndOtherUsers session.userId session.currentlyViewing model
+            getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
     in
     { session = session
+    , currentlyViewing = currentlyViewing
     , adminData =
         if user.isAdmin then
             case requestMessagesFor of
@@ -592,8 +593,20 @@ getLoginData sessionId clientId session user requestMessagesFor model =
         SeqDict.remove sessionId model.sessions
             |> SeqDict.toList
             |> List.filterMap
-                (\( _, otherSession ) ->
-                    case UserSession.toFrontend session.userId otherSession of
+                (\( otherSessionId, otherSession ) ->
+                    let
+                        connection : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+                        connection =
+                            case SeqDict.get otherSessionId model.connections of
+                                Just connections ->
+                                    SeqDict.map
+                                        (\_ connection2 -> connection2.currentlyViewing)
+                                        (NonemptyDict.toSeqDict connections)
+
+                                Nothing ->
+                                    SeqDict.empty
+                    in
+                    case UserSession.toFrontend session.userId connection otherSession of
                         Just frontendSession ->
                             Just ( otherSession.sessionIdHash, frontendSession )
 
@@ -1168,10 +1181,10 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                             let
                                 isViewing =
                                     List.any
-                                        (\( _, userSession ) ->
-                                            userSession.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
+                                        (\connection ->
+                                            connection.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
                                         )
-                                        (Broadcast.userGetAllSessions userId2 model)
+                                        (Broadcast.userGetAllConnections userId2 model)
                             in
                             if isViewing then
                                 users
@@ -1606,7 +1619,7 @@ toBackendLog toBackend =
         AdminToBackend _ ->
             ToBackendLog_AdminToBackend
 
-        LogOutRequest ->
+        LogOutRequest _ ->
             ToBackendLog_LogOutRequest
 
         LocalModelChangeRequest _ localChange ->
@@ -1837,13 +1850,18 @@ asDiscordGuildMember model sessionId guildId discordUserId func =
 asDiscordGuildMember_AllowUserThatNeedsAuthAgain :
     BackendModel
     -> SessionId
+    -> ClientId
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
-    -> (UserSession -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> LocalState.ConnectionData -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discordUserId func =
-    case SeqDict.get sessionId model.sessions of
-        Just session ->
+asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildId discordUserId func =
+    case
+        ( SeqDict.get sessionId model.sessions
+        , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
+        )
+    of
+        ( Just session, Just connection ) ->
             case
                 ( NonemptyDict.get session.userId model.users
                 , SeqDict.get guildId model.discordGuilds
@@ -1859,6 +1877,7 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                             IsMember ->
                                 func
                                     session
+                                    connection
                                     { user = discordUser.user
                                     , linkedTo = discordUser.linkedTo
                                     , icon = discordUser.icon
@@ -1870,6 +1889,7 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                             IsOwner ->
                                 func
                                     session
+                                    connection
                                     { user = discordUser.user
                                     , linkedTo = discordUser.linkedTo
                                     , icon = discordUser.icon
@@ -1888,10 +1908,10 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                                 ( model, Command.none )
 
                             IsMember ->
-                                func session discordUser user guild
+                                func session connection discordUser user guild
 
                             IsOwner ->
-                                func session discordUser user guild
+                                func session connection discordUser user guild
 
                     else
                         ( model, Command.none )
@@ -1899,7 +1919,7 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                 _ ->
                     ( model, Command.none )
 
-        Nothing ->
+        _ ->
             ( model, Command.none )
 
 

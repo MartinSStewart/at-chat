@@ -27,7 +27,7 @@ module Broadcast exposing
     , toSession
     , toUser
     , toUserAlt
-    , userGetAllSessions
+    , userGetAllConnections
     )
 
 import Codec exposing (Codec)
@@ -298,7 +298,7 @@ toUser clientToSkip sessionToSkip userId msg model =
         |> Command.batch
 
 
-toUserAlt : Id UserId -> (UserSession -> LocalMsg) -> BackendModel -> Command BackendOnly ToFrontend msg
+toUserAlt : Id UserId -> (UserSession -> LocalState.ConnectionData -> LocalMsg) -> BackendModel -> Command BackendOnly ToFrontend msg
 toUserAlt userId sessionToMsg model =
     SeqDict.filterMap
         (\sessionId otherUserSession ->
@@ -306,8 +306,8 @@ toUserAlt userId sessionToMsg model =
                 case SeqDict.get sessionId model.connections of
                     Just clientIds ->
                         List.map
-                            (\( otherClientId, _ ) ->
-                                sessionToMsg otherUserSession
+                            (\( otherClientId, connection ) ->
+                                sessionToMsg otherUserSession connection
                                     |> ChangeBroadcast
                                     |> Lamdera.sendToFrontend otherClientId
                             )
@@ -470,15 +470,15 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                 let
                     isViewing =
                         List.any
-                            (\( _, userSession ) ->
-                                case userSession.currentlyViewing of
+                            (\connection ->
+                                case connection.currentlyViewing of
                                     Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), viewingThreadRoute ) ->
                                         viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
 
                                     _ ->
                                         False
                             )
-                            (userGetAllSessions userId2 model)
+                            (userGetAllConnections userId2 model)
                 in
                 if isViewing then
                     ( sessions, cmds )
@@ -563,15 +563,15 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                             isViewing : Bool
                             isViewing =
                                 List.any
-                                    (\( _, userSession ) ->
-                                        case userSession.currentlyViewing of
+                                    (\connection ->
+                                        case connection.currentlyViewing of
                                             Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ viewingGuildId viewingChannelId), viewingThreadRoute ) ->
                                                 viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
 
                                             _ ->
                                                 False
                                     )
-                                    (userGetAllSessions discordUser.linkedTo model)
+                                    (userGetAllConnections discordUser.linkedTo model)
                         in
                         if isViewing then
                             ( sessions, cmds )
@@ -629,10 +629,22 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
             ( model.sessions, [] )
 
 
-userGetAllSessions : Id UserId -> BackendModel -> List ( SessionId, UserSession )
-userGetAllSessions userId model =
+userGetAllConnections : Id UserId -> BackendModel -> List LocalState.ConnectionData
+userGetAllConnections userId model =
     SeqDict.toList model.sessions
-        |> List.filter (\( _, session ) -> session.userId == userId)
+        |> List.concatMap
+            (\( sessionId, session ) ->
+                if session.userId == userId then
+                    case SeqDict.get sessionId model.connections of
+                        Just connection ->
+                            NonemptyDict.values connection |> List.Nonempty.toList
+
+                        Nothing ->
+                            []
+
+                else
+                    []
+            )
 
 
 notification :
@@ -822,15 +834,15 @@ notificationEmailFrom =
 isViewingDiscordDm : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
 isViewingDiscordDm channelId userId2 model =
     List.any
-        (\( _, userSession ) ->
-            case userSession.currentlyViewing of
+        (\connection ->
+            case connection.currentlyViewing of
                 Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
                     data.channelId == channelId
 
                 _ ->
                     False
         )
-        (userGetAllSessions userId2 model)
+        (userGetAllConnections userId2 model)
 
 
 discordDmNotification :
@@ -1106,15 +1118,15 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
         isViewing : Bool
         isViewing =
             List.any
-                (\( _, userSession ) ->
-                    case userSession.currentlyViewing of
+                (\connection ->
+                    case connection.currentlyViewing of
                         Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), viewingThreadRoute ) ->
                             viewingUserId == userId && viewingThreadRoute == threadRouteNoReply
 
                         _ ->
                             False
                 )
-                (userGetAllSessions otherUserId model)
+                (userGetAllConnections otherUserId model)
 
         ( sessions, cmds ) =
             if userId == otherUserId || isViewing then

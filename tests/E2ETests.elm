@@ -978,7 +978,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\adminA ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
-                , E2EHelper.hasExactText adminA [ "Desktop • Firefox (current device)" ]
+                , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -986,7 +986,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.desktopWindow
                     (\adminB ->
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
-                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox (current device)" ]
+                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , T.connectFrontend
                             100
@@ -998,7 +998,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 , E2EHelper.hasExactText
                                     adminA
                                     [ "Mobile • Safari"
-                                    , "Desktop • Firefox (current device)"
+                                    , "Desktop • Firefox"
+                                    , "Current device"
                                     , "Desktop • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
@@ -1006,13 +1007,55 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     adminC
                                     [ "Mobile • Safari"
                                     , "Desktop • Firefox"
-                                    , "Desktop • Chrome (current device)"
+                                    , "Desktop • Chrome"
+                                    , "Current device"
                                     ]
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
                         , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
-                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox (current device)" ]
+                        , E2EHelper.hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox", "Current device" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Logout another session linked to you"
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\adminA ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
+                , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\adminB ->
+                        [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
+
+                        -- adminA sees adminB's session in the connected devices list
+                        , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
+
+                        -- adminB is logged in (it's viewing the app, not the login page)
+                        , E2EHelper.hasNotText adminB [ "Login/Signup" ]
+
+                        -- adminA logs out adminB's session
+                        , adminA.click 100 (E2EHelper.logoutOtherSessionButtonId E2EHelper.sessionId1)
+
+                        -- adminB has been logged out and is shown the login page
+                        , E2EHelper.hasText adminB [ "Login/Signup" ]
+
+                        -- adminB's session is removed from adminA's connected devices list, and adminA
+                        -- itself stays logged in
+                        , E2EHelper.hasNotExactText adminA [ "Mobile • Safari" ]
+                        , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
                         ]
                     )
                 ]

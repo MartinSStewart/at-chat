@@ -513,6 +513,7 @@ loginDataToLocalState userAgent timezone loginData =
     , joinGuildError = Nothing
     , localUser =
         { session = loginData.session
+        , currentlyViewing = loginData.currentlyViewing
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , discordUsers = loginData.discordUsers
@@ -784,8 +785,8 @@ updateLoaded msg model =
                             else
                                 ( model2, Command.none )
 
-        PressedLogOut ->
-            ( model, Lamdera.sendToBackend LogOutRequest )
+        PressedLogOut sessionId ->
+            ( model, Lamdera.sendToBackend (LogOutRequest sessionId) )
 
         ScrolledToLogSection ->
             ( model, Command.none )

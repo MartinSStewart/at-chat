@@ -3410,6 +3410,14 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                 (Ui.width (Ui.px boardPx)
                     :: Ui.height (Ui.px boardPx)
                     :: Ui.clip
+                    -- elm-ui's base element class sets `min-height: min-content`, and Chrome (unlike
+                    -- Firefox and Safari) lets that beat the explicit `height` above. When the board is
+                    -- zoomed in, the in-flow background grid is taller than the board square, so on
+                    -- Chrome this element itself grew to the grid's full height and `Ui.clip` clipped at
+                    -- the enlarged box, letting the zoomed board spill out the bottom (only the bottom:
+                    -- elm-ui resets `min-width` but not `min-height`). Resetting min-height keeps the
+                    -- element at boardPx so the clip actually cuts the zoomed content off.
+                    :: MyUi.htmlStyle "min-height" "0"
                     :: lineButtons
                     ++ boardTiles
                     ++ animatedTiles
@@ -3635,6 +3643,13 @@ cellView cellSize2 position =
                 Ui.background (Ui.rgb 250 250 250)
         , Ui.width (Ui.px cellSize2)
         , Ui.height (Ui.px cellSize2)
+
+        -- The center cell's star label has a line box taller than the cell (font-size 0.8×cell with
+        -- inherited line-height 1.4). On Chrome, elm-ui's `min-height: min-content` beats the explicit
+        -- `height` above, so that one cell — and with it the whole center row — grew taller than the
+        -- other rows, showing two horizontal strips of page background across the board. Resetting
+        -- min-height keeps every cell exactly cellSize2 tall.
+        , MyUi.htmlStyle "min-height" "0"
         , Ui.borderWith { left = 0, right = 1, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.inputBorder
         , Ui.contentCenterX

@@ -8,14 +8,13 @@ module UserSession exposing
     , UserSession
     , ViewDiscordGuildData
     , init
-    , setCurrentlyViewing
     , setViewingToCurrentlyViewing
     , toFrontend
     )
 
 import Discord
 import Effect.Http as Http
-import Effect.Lamdera exposing (SessionId)
+import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
@@ -31,7 +30,6 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     , signedInAt : Time.Posix
@@ -40,7 +38,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+    , currentlyViewing : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     , userAgent : UserAgent
     }
 
@@ -114,31 +112,22 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : Time.Posix -> SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
-init time sessionId userId currentlyViewing userAgent =
+init : Time.Posix -> SessionId -> Id UserId -> UserAgent -> UserSession
+init time sessionId userId userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
-    , currentlyViewing = currentlyViewing
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
     , signedInAt = time
     }
 
 
-setCurrentlyViewing :
-    Maybe ( AnyGuildOrDmId, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
-setCurrentlyViewing viewing session =
-    { session | currentlyViewing = viewing }
-
-
-toFrontend : Id UserId -> UserSession -> Maybe FrontendUserSession
-toFrontend currentUserId userSession =
+toFrontend : Id UserId -> SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )) -> UserSession -> Maybe FrontendUserSession
+toFrontend currentUserId currentlyViewing userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode
-        , currentlyViewing = userSession.currentlyViewing
+        , currentlyViewing = currentlyViewing
         , userAgent = userSession.userAgent
         }
             |> Just

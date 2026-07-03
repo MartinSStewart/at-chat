@@ -5,6 +5,7 @@ import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
@@ -19,9 +20,9 @@ import Ports
 import Range exposing (Range)
 import RichText
 import Route
-import SeqDict
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -52,19 +53,15 @@ domainWhitelistToString domains =
 
 
 viewConnectedDevice :
-    Bool
-    ->
-        { a
-            | notificationMode : NotificationMode
-            , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
-            , userAgent : UserAgent
-        }
+    SessionIdHash
+    -> Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
+    -> UserAgent
     -> Element FrontendMsg_
-viewConnectedDevice isCurrentSession session =
+viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
     let
         browserText : String
         browserText =
-            case session.userAgent.browser of
+            case userAgent.browser of
                 Chrome ->
                     "Chrome"
 
@@ -85,7 +82,7 @@ viewConnectedDevice isCurrentSession session =
 
         deviceText : String
         deviceText =
-            case session.userAgent.device of
+            case userAgent.device of
                 Desktop ->
                     "Desktop"
 
@@ -94,24 +91,14 @@ viewConnectedDevice isCurrentSession session =
 
                 Tablet ->
                     "Tablet"
-
-        currentActivity : String
-        currentActivity =
-            case session.currentlyViewing of
-                Just _ ->
-                    "Active"
-
-                Nothing ->
-                    "Idle"
     in
     Ui.row
-        [ Ui.spacing 8
-        ]
+        [ Ui.spacing 8 ]
         [ Ui.el
             [ Ui.width (Ui.px 36)
             , Ui.height (Ui.px 36)
             ]
-            (case session.userAgent.device of
+            (case userAgent.device of
                 Desktop ->
                     Ui.html Icons.desktop
 
@@ -123,23 +110,45 @@ viewConnectedDevice isCurrentSession session =
             )
         , Ui.column
             [ Ui.spacing 2 ]
-            [ Ui.text
-                (deviceText
-                    ++ " • "
-                    ++ browserText
-                    ++ (if isCurrentSession then
-                            " (current device)"
-
-                        else
+            [ deviceText ++ " • " ++ browserText |> Ui.text
+            , (case otherCurrentlyViewing of
+                Just currentlyViewing ->
+                    case SeqDict.size currentlyViewing of
+                        1 ->
                             ""
-                       )
-                )
-            , Ui.el
-                [ Ui.Font.size 14
-                , Ui.Font.color (Ui.rgb 128 128 128)
-                ]
-                (Ui.text currentActivity)
+
+                        0 ->
+                            "Idle"
+
+                        count ->
+                            "(" ++ String.fromInt count ++ " connections)"
+
+                Nothing ->
+                    "Current device"
+              )
+                |> Ui.text
+                |> Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ]
             ]
+        , MyUi.simpleButton
+            (case otherCurrentlyViewing of
+                Just _ ->
+                    Dom.id ("options_logout_other_" ++ SessionIdHash.toString sessionId)
+
+                Nothing ->
+                    Dom.id "options_logout"
+            )
+            (PressedLogOut sessionId)
+            (case otherCurrentlyViewing of
+                Just _ ->
+                    Ui.text "Logout other"
+
+                Nothing ->
+                    Ui.row
+                        [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 }, Ui.contentCenterY ]
+                        [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html Icons.logoutSvg)
+                        , Ui.text "Logout"
+                        ]
+            )
         ]
 
 
@@ -475,21 +484,16 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice True local.localUser.session
-                        :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions)
+                    (viewConnectedDevice local.localUser.session.sessionIdHash Nothing local.localUser.session.userAgent
+                        :: List.map
+                            (\( otherSessionId, otherSession ) ->
+                                viewConnectedDevice otherSessionId (Just otherSession.currentlyViewing) otherSession.userAgent
+                            )
+                            (SeqDict.toList local.otherSessions)
                     )
                 , Ui.row
                     [ Ui.paddingXY 16 0 ]
-                    [ MyUi.simpleButton
-                        (Dom.id "options_logout")
-                        PressedLogOut
-                        (Ui.row
-                            [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 } ]
-                            [ Ui.el [ Ui.width (Ui.px 26) ] (Ui.html Icons.logoutSvg)
-                            , Ui.text "Logout"
-                            ]
-                        )
-                    , case loaded.versionNumber of
+                    [ case loaded.versionNumber of
                         Just version ->
                             Ui.el
                                 [ Ui.Font.size 12

@@ -570,6 +570,7 @@ type alias ConnectionData =
     { lastRequest : LastRequest
     , call : CallStatus
     , remoteCallData : Call.RemoteCallData
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     }
 
 

@@ -1834,16 +1834,6 @@ sessionsSection timezone user adminData =
                             , Ui.text ("User ID: " ++ Id.toString session.userId)
                             , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
                             , Ui.text ("Push subscription: " ++ pushSubscriptionToString timezone session.pushSubscription)
-                            , Ui.text
-                                ("Currently viewing: "
-                                    ++ (case session.currentlyViewing of
-                                            Just _ ->
-                                                "yes"
-
-                                            Nothing ->
-                                                "no"
-                                       )
-                                )
                             , Ui.text ("User agent: " ++ userAgentToString session.userAgent)
                             , Ui.text
                                 ("Signed in at: "
