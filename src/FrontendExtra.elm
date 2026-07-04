@@ -1675,38 +1675,9 @@ routeRequestChannelHelper sameChannel maybeOtherUserId tab threadRoute local log
                 Just (Route.DmChannelHeaderTab_Games (Just messageId)) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
-                            case SeqDict.get messageId dmChannel.games of
-                                Just matchData ->
-                                    case Game.wordSpellingMatchData matchData of
-                                        Just ( setup, _ ) ->
-                                            let
-                                                game =
-                                                    SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel
-                                            in
-                                            case SeqDict.get messageId game.startedGames of
-                                                Just (Game.WordSpellingGame_Game _) ->
-                                                    loggedIn
-
-                                                _ ->
-                                                    { loggedIn
-                                                        | games =
-                                                            SeqDict.insert
-                                                                otherUserId
-                                                                { game
-                                                                    | startedGames =
-                                                                        SeqDict.insert
-                                                                            messageId
-                                                                            (WordSpellingGame.initGame model3.time setup |> Game.WordSpellingGame_Game)
-                                                                            game.startedGames
-                                                                }
-                                                                loggedIn.games
-                                                    }
-
-                                        Nothing ->
-                                            loggedIn
-
-                                Nothing ->
-                                    loggedIn
+                            { loggedIn
+                                | games = Game.routeRequest model3.time otherUserId messageId dmChannel.games loggedIn.games
+                            }
 
                         Nothing ->
                             loggedIn
@@ -1714,18 +1685,6 @@ routeRequestChannelHelper sameChannel maybeOtherUserId tab threadRoute local log
                 _ ->
                     loggedIn
 
-        --case getWordSpellingGameModel local loggedIn model3 of
-        --    Just data ->
-        --        { loggedIn
-        --            | games =
-        --                SeqDict.updateIfExists
-        --                    otherUserId
-        --                    (Game.WordSpellingGame_Game data.model)
-        --                    loggedIn.games
-        --        }
-        --
-        --    Nothing ->
-        --        loggedIn
         Nothing ->
             loggedIn
     , if sameChannel then

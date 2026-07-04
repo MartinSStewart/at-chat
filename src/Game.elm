@@ -16,11 +16,11 @@ module Game exposing
     , dragStart
     , gameChangeFromServer
     , gameToString
-    , goMatchData
     , hasPendingTurn
     , initMatchData
     , initModel
     , pressedKey
+    , routeRequest
     , update
     , view
     , wordSpellingMatchData
@@ -148,18 +148,6 @@ initMatchData gameData publicLink =
         |> MatchData
 
 
-{-| Extract the Go setup and current game state from a match, if it is a Go match.
--}
-goMatchData : MatchData -> Maybe ( Go.ValidatedSetup, Go.Shared )
-goMatchData (MatchData match) =
-    case match.data of
-        FrontendGameData_Go setup _ state ->
-            Just ( setup, state )
-
-        FrontendGameData_WordSpellingGame _ _ _ ->
-            Nothing
-
-
 {-| Extract the word spelling setup and current game state from a match, if it is one.
 -}
 wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared )
@@ -184,6 +172,64 @@ addGoAction action (MatchData match) =
                     match.data
     }
         |> MatchData
+
+
+routeRequest :
+    Time.Posix
+    -> Id UserId
+    -> Id ChannelMessageId
+    -> SeqDict (Id ChannelMessageId) MatchData
+    -> SeqDict (Id UserId) Model
+    -> SeqDict (Id UserId) Model
+routeRequest time otherUserId matchId matchData models =
+    case SeqDict.get matchId matchData of
+        Just (MatchData matchData2) ->
+            SeqDict.update
+                otherUserId
+                (\maybeModel ->
+                    let
+                        model =
+                            Maybe.withDefault initModel maybeModel
+                    in
+                    (case matchData2.data of
+                        FrontendGameData_Go setup _ state ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just game ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    GoModel_Game Go.initGame |> Just
+                                        )
+                                        model.startedGames
+                            }
+
+                        FrontendGameData_WordSpellingGame setup _ _ ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just game ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    WordSpellingGame.initGame time setup |> WordSpellingGame_Game |> Just
+                                        )
+                                        model.startedGames
+                            }
+                    )
+                        |> Just
+                )
+                models
+
+        Nothing ->
+            models
 
 
 addWordSpellingGameAction : WordSpellingGame.ActionWithTime -> MatchData -> MatchData
@@ -800,13 +846,18 @@ pressedKey matchId key matchData maybeGameModel =
             maybeGameModel
 
 
-gameChangeFromServer : Time.Posix -> LocalChange -> Model -> Model
-gameChangeFromServer time gameChange model =
-    case gameChange of
+gameChangeFromServer : Time.Posix -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time gameChange maybeModel =
+    let
+        model : Model
+        model =
+            Maybe.withDefault initModel maybeModel
+    in
+    (case gameChange of
         LocalChange_Go matchId goChange ->
             case goChange of
                 Go.StartMatch _ _ ->
-                    model
+                    { model | startedGames = SeqDict.insert matchId (GoModel_Game Go.initGame) model.startedGames }
 
                 Go.Action actionWithTime ->
                     let
@@ -855,6 +906,15 @@ gameChangeFromServer time gameChange model =
 
         LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
             case wordSpellinGameChange of
+                WordSpellingGame.StartMatch serverTime setup ->
+                    { model
+                        | startedGames =
+                            SeqDict.insert
+                                matchId
+                                (WordSpellingGame_Game (WordSpellingGame.initGame serverTime setup))
+                                model.startedGames
+                    }
+
                 WordSpellingGame.Action action ->
                     case action.change of
                         WordSpellingGame.PlaceWord placedWord _ ->
@@ -882,6 +942,5 @@ gameChangeFromServer time gameChange model =
 
                         _ ->
                             model
-
-                WordSpellingGame.StartMatch _ _ ->
-                    model
+    )
+        |> Just

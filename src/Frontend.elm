@@ -6627,7 +6627,7 @@ updateLoadedFromBackend msg model =
                                 Server_Game _ { otherUserId } gameChange ->
                                     ( { loggedIn2
                                         | games =
-                                            SeqDict.updateIfExists
+                                            SeqDict.update
                                                 otherUserId
                                                 (Game.gameChangeFromServer model.time gameChange)
                                                 loggedIn2.games
