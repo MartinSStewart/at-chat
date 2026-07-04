@@ -64,7 +64,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , drawButton isMobile currentChannelHeaderTab
                     ]
 
-            GuildOrDmId_Guild _ _ ->
+            GuildOrDmId_Guild guildId channelId ->
                 Ui.row
                     [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
@@ -77,7 +77,11 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile currentChannelHeaderTab
+                        [ LocalState.getGuildAndChannel guildId channelId local
+                            |> Maybe.map (\( _, channel2 ) -> channel2.games)
+                            |> Maybe.withDefault SeqDict.empty
+                            |> Ui.Lazy.lazy4 gameButton isMobile currentChannelHeaderTab local.localUser.session.userId
+                        , drawButton isMobile currentChannelHeaderTab
                         , showFilesButton
                         ]
                     ]
@@ -555,7 +559,6 @@ tabBodyView local loggedIn model =
                                     gameTabBody
                                         (GuildOrDmId_Guild guildId channelId)
                                         maybeMatchId
-                                        False
                                         local
                                         loggedIn
                                         channel2.games
@@ -590,7 +593,6 @@ tabBodyView local loggedIn model =
                             gameTabBody
                                 (GuildOrDmId_Dm otherUserId)
                                 maybeMatchId
-                                (local.localUser.session.userId == otherUserId)
                                 local
                                 loggedIn
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
@@ -737,13 +739,12 @@ tabBodyView local loggedIn model =
 gameTabBody :
     GuildOrDmId
     -> Maybe (Id ChannelMessageId)
-    -> Bool
     -> LocalState
     -> LoggedIn2
     -> SeqDict (Id ChannelMessageId) Game.MatchData
     -> LoadedFrontend
     -> Maybe (Element FrontendMsg_)
-gameTabBody guildOrDmId maybeMatchId isPersonalDm local loggedIn matchData model =
+gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
     Game.view
         model.time
         model.windowSize
@@ -763,7 +764,7 @@ gameTabBody guildOrDmId maybeMatchId isPersonalDm local loggedIn matchData model
         )
         model.lastCopied
         local.localUser
-        isPersonalDm
+        guildOrDmId
         maybeMatchId
         matchData
         (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)

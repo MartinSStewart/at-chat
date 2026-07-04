@@ -9,9 +9,12 @@ import Effect.Test as T
 import Effect.Time as Time
 import FrontendExtra
 import Game
+import Id exposing (ChannelMessageId, Id)
 import Json.Encode
+import List.Nonempty
 import Message
 import OneOrGreater
+import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -464,7 +467,78 @@ tests normalConfig =
                     ]
                 )
             ]
+        , E2EHelper.startTest
+            "Word spelling game in a guild channel"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    [ -- Both users start out viewing the guild's first channel. Go needs a fixed
+                      -- opponent chosen at setup time, so guild channels only offer word spelling.
+                      admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot
+                            [ Test.Html.Selector.id ("game_select_" ++ Game.gameToString Message.GameType_Go) ]
+                        )
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_start")
+                    , T.checkState
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                    if List.Nonempty.length shared.players == 1 then
+                                        Ok ()
+
+                                    else
+                                        Err "Expected only the match creator to have joined"
+
+                                _ ->
+                                    Err "Expected one word spelling game in the guild channel"
+                        )
+                    , T.andThen
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( matchId, _ ) ] ->
+                                    [ -- The other guild member opens the games tab, selects the match, and joins.
+                                      user.click 100 (Dom.id "guild_openGamesTab")
+                                    , user.input 100 (Dom.id "go_matchSwitcher") (String.fromInt (Id.toInt matchId))
+                                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , T.checkState
+                                        100
+                                        (\state2 ->
+                                            case guildChannelGames state2.backend of
+                                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                                    if List.Nonempty.length shared.players == 2 then
+                                                        Ok ()
+
+                                                    else
+                                                        Err "Expected both guild members to have joined the match"
+
+                                                _ ->
+                                                    Err "Expected one word spelling game in the guild channel"
+                                        )
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Expected one word spelling game in the guild channel") ]
+                        )
+                    ]
+                )
+            ]
         ]
+
+
+{-| All games stored in guild channels (as opposed to DM channels) on the backend.
+-}
+guildChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameData )
+guildChannelGames backend =
+    SeqDict.values backend.guilds
+        |> List.concatMap (\guild -> SeqDict.values guild.channels)
+        |> List.concatMap (\channel -> SeqDict.toList channel.games)
 
 
 {-| The message the audio port's JS side sends back after successfully loading a sound (see

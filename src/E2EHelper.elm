@@ -153,6 +153,7 @@ import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import WordSpellingGame
 
 
 domain : Url
@@ -2765,7 +2766,7 @@ allAttackerLocalChanges =
     , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
     , Local_VoiceChatChange Call.Local_PublishConnected
     , Local_Game
-        { otherUserId = Broadcast.adminUserId }
+        (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.LocalChange_Go
             (Id.fromInt 0)
             (Go.StartMatch
@@ -2781,8 +2782,16 @@ allAttackerLocalChanges =
             )
         )
     , Local_Game
-        { otherUserId = Broadcast.adminUserId }
+        (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
+    , Local_Game
+        (GuildOrDmId_Guild legitGuildId channelId)
+        (Game.LocalChange_WordSpellingGame
+            (Id.fromInt 0)
+            (WordSpellingGame.Action
+                { userId = normalUserId, time = messageTime, change = WordSpellingGame.JoinGame }
+            )
+        )
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     , Local_Drawing
         guildOrDmId_guild

@@ -5070,85 +5070,148 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_VoiceChatChange voiceChatLocalChange ->
                     handleVoiceChatChange time changeId clientId sessionId voiceChatLocalChange model
 
-                Local_Game otherUserId gameChange ->
-                    BackendExtra.asDmUser
-                        model
-                        sessionId
-                        otherUserId
-                        (\session _ _ dmChannelId dmChannel ->
-                            case gameChange of
-                                Game.LocalChange_Go matchId goChange ->
-                                    handleGoGame
-                                        time
-                                        session
-                                        clientId
-                                        changeId
-                                        otherUserId
-                                        matchId
-                                        goChange
-                                        dmChannelId
-                                        dmChannel
-                                        model
+                Local_Game guildOrDmId gameChange ->
+                    case guildOrDmId of
+                        GuildOrDmId_Dm otherUserId ->
+                            BackendExtra.asDmUser
+                                model
+                                sessionId
+                                { otherUserId = otherUserId }
+                                (\session _ _ dmChannelId dmChannel ->
+                                    case gameChange of
+                                        Game.LocalChange_Go matchId goChange ->
+                                            handleGoGame
+                                                time
+                                                session
+                                                clientId
+                                                changeId
+                                                otherUserId
+                                                matchId
+                                                goChange
+                                                dmChannelId
+                                                dmChannel
+                                                model
 
-                                Game.CreatePublicLink matchId _ ->
-                                    case SeqDict.get matchId dmChannel.games of
-                                        Just _ ->
-                                            case OneToOne.first ( dmChannelId, matchId ) model.goMatchPublicIds of
-                                                Just publicId ->
-                                                    ( model
-                                                    , Game.CreatePublicLink matchId (FilledInByBackend publicId)
-                                                        |> Local_Game otherUserId
-                                                        |> LocalChangeResponse changeId
-                                                        |> Lamdera.sendToFrontend clientId
-                                                    )
+                                        Game.CreatePublicLink matchId _ ->
+                                            case SeqDict.get matchId dmChannel.games of
+                                                Just _ ->
+                                                    case OneToOne.first ( dmChannelId, matchId ) model.goMatchPublicIds of
+                                                        Just publicId ->
+                                                            ( model
+                                                            , Game.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                                |> Local_Game guildOrDmId
+                                                                |> LocalChangeResponse changeId
+                                                                |> Lamdera.sendToFrontend clientId
+                                                            )
+
+                                                        Nothing ->
+                                                            let
+                                                                ( model3, publicId ) =
+                                                                    SecretId.getShortUniqueId time model
+
+                                                                localMsg2 : Game.LocalChange
+                                                                localMsg2 =
+                                                                    Game.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                            in
+                                                            ( { model3
+                                                                | goMatchPublicIds =
+                                                                    OneToOne.insert
+                                                                        publicId
+                                                                        ( dmChannelId, matchId )
+                                                                        model3.goMatchPublicIds
+                                                              }
+                                                            , Command.batch
+                                                                [ Local_Game guildOrDmId localMsg2
+                                                                    |> LocalChangeResponse changeId
+                                                                    |> Lamdera.sendToFrontend clientId
+                                                                , Broadcast.toDmChannelExcludingOne
+                                                                    clientId
+                                                                    session.userId
+                                                                    otherUserId
+                                                                    (\otherUserId2 ->
+                                                                        Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                                    )
+                                                                    model3
+                                                                ]
+                                                            )
 
                                                 Nothing ->
-                                                    let
-                                                        ( model3, publicId ) =
-                                                            SecretId.getShortUniqueId time model
+                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                                        localMsg2 : Game.LocalChange
-                                                        localMsg2 =
-                                                            Game.CreatePublicLink matchId (FilledInByBackend publicId)
-                                                    in
-                                                    ( { model3
-                                                        | goMatchPublicIds =
-                                                            OneToOne.insert
-                                                                publicId
-                                                                ( dmChannelId, matchId )
-                                                                model3.goMatchPublicIds
-                                                      }
-                                                    , Command.batch
-                                                        [ Local_Game otherUserId localMsg2
-                                                            |> LocalChangeResponse changeId
-                                                            |> Lamdera.sendToFrontend clientId
-                                                        , Broadcast.toDmChannelExcludingOne
-                                                            clientId
-                                                            session.userId
-                                                            otherUserId.otherUserId
-                                                            (\otherUserId2 ->
-                                                                Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
-                                                            )
-                                                            model3
-                                                        ]
-                                                    )
+                                        Game.LocalChange_WordSpellingGame matchId wsChange ->
+                                            handleWordSpellingGame
+                                                time
+                                                session
+                                                clientId
+                                                changeId
+                                                guildOrDmId
+                                                dmChannel
+                                                (\dmChannel2 model2 ->
+                                                    { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
+                                                )
+                                                (\localMsg2 model2 ->
+                                                    Broadcast.toDmChannelExcludingOne
+                                                        clientId
+                                                        session.userId
+                                                        otherUserId
+                                                        (\otherUserId2 ->
+                                                            Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                        )
+                                                        model2
+                                                )
+                                                matchId
+                                                wsChange
+                                                model
+                                )
+
+                        GuildOrDmId_Guild guildId channelId ->
+                            BackendExtra.asGuildMember
+                                model
+                                sessionId
+                                guildId
+                                (\session _ guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            case gameChange of
+                                                Game.LocalChange_WordSpellingGame matchId wsChange ->
+                                                    handleWordSpellingGame
+                                                        time
+                                                        session
+                                                        clientId
+                                                        changeId
+                                                        guildOrDmId
+                                                        channel
+                                                        (\channel2 model2 ->
+                                                            { model2
+                                                                | guilds =
+                                                                    SeqDict.insert
+                                                                        guildId
+                                                                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                                                                        model2.guilds
+                                                            }
+                                                        )
+                                                        (\localMsg2 model2 ->
+                                                            Broadcast.toGuildExcludingOne
+                                                                clientId
+                                                                guildId
+                                                                (Server_Game session.userId guildOrDmId localMsg2 |> ServerChange)
+                                                                model2
+                                                        )
+                                                        matchId
+                                                        wsChange
+                                                        model
+
+                                                -- Go matches need a fixed opponent so they are DM-only for now
+                                                Game.LocalChange_Go _ _ ->
+                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                                -- Public links only exist for Go matches, which are DM-only
+                                                Game.CreatePublicLink _ _ ->
+                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                                Game.LocalChange_WordSpellingGame matchId wsChange ->
-                                    handleWordSpellingGame
-                                        time
-                                        session
-                                        clientId
-                                        changeId
-                                        otherUserId
-                                        dmChannelId
-                                        dmChannel
-                                        matchId
-                                        wsChange
-                                        model
-                        )
+                                )
 
                 Local_Drawing guildOrDmId anchor drawingChange ->
                     BackendExtra.handleDrawingChange sessionId clientId changeId guildOrDmId anchor drawingChange model
@@ -5342,7 +5405,7 @@ handleGoGame :
     -> UserSession
     -> ClientId
     -> ChangeId
-    -> { otherUserId : Id UserId }
+    -> Id UserId
     -> Id ChannelMessageId
     -> Go.LocalChange
     -> DmChannelId
@@ -5382,15 +5445,15 @@ handleGoGame time session clientId changeId otherUserId matchId goChange dmChann
                         model.dmChannels
               }
             , Command.batch
-                [ Local_Game otherUserId localMsg2
+                [ Local_Game (GuildOrDmId_Dm otherUserId) localMsg2
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toDmChannelExcludingOne
                     clientId
                     session.userId
-                    otherUserId.otherUserId
+                    otherUserId
                     (\otherUserId2 ->
-                        Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                        Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
                     )
                     model
                 ]
@@ -5428,15 +5491,15 @@ handleGoGame time session clientId changeId otherUserId matchId goChange dmChann
                                     model.dmChannels
                           }
                         , Command.batch
-                            [ Local_Game otherUserId localMsg2
+                            [ Local_Game (GuildOrDmId_Dm otherUserId) localMsg2
                                 |> LocalChangeResponse changeId
                                 |> Lamdera.sendToFrontend clientId
                             , Broadcast.toDmChannelExcludingOne
                                 clientId
                                 session.userId
-                                otherUserId.otherUserId
+                                otherUserId
                                 (\otherUserId2 ->
-                                    Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
+                                    Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
                                 )
                                 model
                             ]
@@ -5454,18 +5517,32 @@ handleWordSpellingGame :
     -> UserSession
     -> ClientId
     -> ChangeId
-    -> { otherUserId : Id UserId }
-    -> DmChannelId
-    -> DmChannel
+    -> GuildOrDmId
+    ->
+        { c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+        }
+    ->
+        ({ c
+            | messages : IdArray ChannelMessageId (Message ChannelMessageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
+            , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
+         }
+         -> BackendModel
+         -> BackendModel
+        )
+    -> (Game.LocalChange -> BackendModel -> Command BackendOnly ToFrontend BackendMsg)
     -> Id ChannelMessageId
     -> WordSpellingGame.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dmChannel matchId wsChange model =
+handleWordSpellingGame time session clientId changeId guildOrDmId channel setChannel broadcast matchId wsChange model =
     case wsChange of
         WordSpellingGame.StartMatch _ setup ->
             let
-                ( messageId, dmChannel2 ) =
+                ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
                             time
@@ -5474,46 +5551,35 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                             Drawing.emptyDrawing
                             GameType_WordSpellingGame
                         )
-                        dmChannel
+                        channel
 
                 localMsg2 : Game.LocalChange
                 localMsg2 =
                     Game.LocalChange_WordSpellingGame messageId (WordSpellingGame.StartMatch time setup)
             in
-            ( { model
-                | dmChannels =
-                    SeqDict.insert
-                        dmChannelId
-                        { dmChannel2
-                            | games =
-                                SeqDict.insert
-                                    messageId
-                                    (Game.GameData_WordSpellingGame
-                                        setup
-                                        Array.empty
-                                        (WordSpellingGame.initShared setup)
-                                    )
-                                    dmChannel2.games
-                        }
-                        model.dmChannels
-              }
+            ( setChannel
+                { channel2
+                    | games =
+                        SeqDict.insert
+                            messageId
+                            (Game.GameData_WordSpellingGame
+                                setup
+                                Array.empty
+                                (WordSpellingGame.initShared setup)
+                            )
+                            channel2.games
+                }
+                model
             , Command.batch
-                [ Local_Game otherUserId localMsg2
+                [ Local_Game guildOrDmId localMsg2
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
-                , Broadcast.toDmChannelExcludingOne
-                    clientId
-                    session.userId
-                    otherUserId.otherUserId
-                    (\otherUserId2 ->
-                        Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
-                    )
-                    model
+                , broadcast localMsg2 model
                 ]
             )
 
         WordSpellingGame.Action action ->
-            case ( action.userId == session.userId, SeqDict.get matchId dmChannel.games ) of
+            case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_WordSpellingGame setup actions shared) ) ->
                     let
                         action2 =
@@ -5550,35 +5616,24 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                                 matchId
                                 (WordSpellingGame.Action action2)
                     in
-                    ( { model
-                        | dmChannels =
-                            SeqDict.insert
-                                dmChannelId
-                                { dmChannel
-                                    | games =
-                                        SeqDict.insert
-                                            matchId
-                                            (Game.GameData_WordSpellingGame
-                                                setup
-                                                (Array.push action2 actions)
-                                                (WordSpellingGame.updateAction setup action2 shared)
-                                            )
-                                            dmChannel.games
-                                }
-                                model.dmChannels
-                      }
+                    ( setChannel
+                        { channel
+                            | games =
+                                SeqDict.insert
+                                    matchId
+                                    (Game.GameData_WordSpellingGame
+                                        setup
+                                        (Array.push action2 actions)
+                                        (WordSpellingGame.updateAction setup action2 shared)
+                                    )
+                                    channel.games
+                        }
+                        model
                     , Command.batch
-                        [ Local_Game otherUserId localMsg2
+                        [ Local_Game guildOrDmId localMsg2
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
-                        , Broadcast.toDmChannelExcludingOne
-                            clientId
-                            session.userId
-                            otherUserId.otherUserId
-                            (\otherUserId2 ->
-                                Server_Game session.userId { otherUserId = otherUserId2 } localMsg2
-                            )
-                            model
+                        , broadcast localMsg2 model
                         ]
                     )
 

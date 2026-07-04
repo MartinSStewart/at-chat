@@ -196,14 +196,14 @@ subscriptions _ model =
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
                                 , case FrontendExtra.currentGame (Local.model loggedIn.localState) loaded of
-                                    Just { otherUserId, matchId, match } ->
+                                    Just { guildOrDmId, matchId, match } ->
                                         if
                                             Game.isAnimating
                                                 loaded.time
                                                 loaded.windowSize
                                                 matchId
                                                 match
-                                                (SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel)
+                                                (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
                                         then
                                             Effect.Browser.Events.onAnimationFrame GotTime
 
@@ -1199,54 +1199,29 @@ updateLoaded msg model =
                     FrontendExtra.handleRedo model
 
                 _ ->
-                    case model.route of
-                        DmRoute dmRoute ->
-                            case dmRoute.tab of
-                                Just (ChannelHeaderTab_Games maybeMatchId) ->
-                                    FrontendExtra.updateLoggedIn
-                                        (\loggedIn ->
-                                            case loggedIn.textInputFocus of
-                                                Just _ ->
-                                                    ( loggedIn, Command.none )
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case loggedIn.textInputFocus of
+                                Just _ ->
+                                    ( loggedIn, Command.none )
 
-                                                Nothing ->
-                                                    let
-                                                        local =
-                                                            Local.model loggedIn.localState
-                                                    in
-                                                    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
-                                                        Just otherUserId ->
-                                                            let
-                                                                dmChannel : FrontendDmChannel
-                                                                dmChannel =
-                                                                    SeqDict.get otherUserId local.dmChannels
-                                                                        |> Maybe.withDefault DmChannel.frontendInit
-                                                            in
-                                                            case maybeMatchId of
-                                                                Just matchId ->
-                                                                    ( { loggedIn
-                                                                        | games =
-                                                                            SeqDict.update
-                                                                                otherUserId
-                                                                                (Game.pressedKey matchId key dmChannel.games)
-                                                                                loggedIn.games
-                                                                      }
-                                                                    , Command.none
-                                                                    )
+                                Nothing ->
+                                    case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                                        Just { guildOrDmId, matchId, match } ->
+                                            ( { loggedIn
+                                                | games =
+                                                    SeqDict.update
+                                                        guildOrDmId
+                                                        (Game.pressedKey matchId key match)
+                                                        loggedIn.games
+                                              }
+                                            , Command.none
+                                            )
 
-                                                                Nothing ->
-                                                                    ( loggedIn, Command.none )
-
-                                                        Nothing ->
-                                                            ( loggedIn, Command.none )
-                                        )
-                                        model
-
-                                _ ->
-                                    ( model, Command.none )
-
-                        _ ->
-                            ( model, Command.none )
+                                        Nothing ->
+                                            ( loggedIn, Command.none )
+                        )
+                        model
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model
@@ -1616,41 +1591,26 @@ updateLoaded msg model =
                                                 loggedIn
 
                                         Drag_Game ->
-                                            let
-                                                local : LocalState
-                                                local =
-                                                    Local.model loggedIn.localState
-                                            in
-                                            case model.route of
-                                                DmRoute dmRoute ->
-                                                    case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                                                        ( Just (Route.ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
-                                                            case SeqDict.get otherUserId local.dmChannels of
-                                                                Just dmChannel ->
-                                                                    { loggedIn
-                                                                        | games =
-                                                                            SeqDict.updateIfExists
-                                                                                otherUserId
-                                                                                (Game.dragStart
-                                                                                    time
-                                                                                    model.windowSize
-                                                                                    (Touch.removeSafeAreaTopInset
-                                                                                        model.startupData.safeAreaInsetTop
-                                                                                        startTouches
-                                                                                    )
-                                                                                    messageId
-                                                                                    dmChannel.games
-                                                                                )
-                                                                                loggedIn.games
-                                                                    }
+                                            case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                                                Just { guildOrDmId, matchId, match } ->
+                                                    { loggedIn
+                                                        | games =
+                                                            SeqDict.updateIfExists
+                                                                guildOrDmId
+                                                                (Game.dragStart
+                                                                    time
+                                                                    model.windowSize
+                                                                    (Touch.removeSafeAreaTopInset
+                                                                        model.startupData.safeAreaInsetTop
+                                                                        startTouches
+                                                                    )
+                                                                    matchId
+                                                                    match
+                                                                )
+                                                                loggedIn.games
+                                                    }
 
-                                                                Nothing ->
-                                                                    loggedIn
-
-                                                        _ ->
-                                                            loggedIn
-
-                                                _ ->
+                                                Nothing ->
                                                     loggedIn
                                     , Command.none
                                     )
@@ -1997,33 +1957,25 @@ updateLoaded msg model =
             )
 
         GameMsg gameMsg ->
-            case ( model.route, model.loginStatus ) of
-                ( DmRoute dmRoute, LoggedIn loggedIn ) ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     let
                         local =
                             Local.model loggedIn.localState
                     in
-                    case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                        ( Just (ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
+                    case FrontendExtra.currentGamesTab local model.route of
+                        Just gamesTab ->
                             let
-                                dmChannel =
-                                    SeqDict.get otherUserId local.dmChannels
-                                        |> Maybe.withDefault DmChannel.frontendInit
-
-                                newMatchId : Id Id.ChannelMessageId
-                                newMatchId =
-                                    DmChannel.latestMessageId dmChannel |> Id.increment
-
                                 ( gameModel2, outMsgs ) =
                                     Game.update
                                         model.time
                                         local.localUser.session.userId
-                                        otherUserId
+                                        gamesTab.guildOrDmId
                                         gameMsg
-                                        newMatchId
-                                        (case maybeMatchId of
+                                        gamesTab.newMatchId
+                                        (case gamesTab.maybeMatchId of
                                             Just matchId ->
-                                                case SeqDict.get matchId dmChannel.games of
+                                                case SeqDict.get matchId gamesTab.channelGames of
                                                     Just matchData ->
                                                         Just ( matchId, matchData )
 
@@ -2033,7 +1985,7 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
                                         )
-                                        (SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel)
+                                        (SeqDict.get gamesTab.guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
 
                                 ( loggedIn2, localChangeCmd ) =
                                     List.foldl
@@ -2042,7 +1994,7 @@ updateLoaded msg model =
                                                 Game.OutLocalChange change ->
                                                     FrontendExtra.handleLocalChange
                                                         model.time
-                                                        (Just (Local_Game { otherUserId = otherUserId } change))
+                                                        (Just (Local_Game gamesTab.guildOrDmId change))
                                                         accLoggedIn
                                                         accCmd
 
@@ -2051,7 +2003,7 @@ updateLoaded msg model =
                                         )
                                         ( { loggedIn
                                             | games =
-                                                SeqDict.update otherUserId (\_ -> Just gameModel2) loggedIn.games
+                                                SeqDict.update gamesTab.guildOrDmId (\_ -> Just gameModel2) loggedIn.games
                                           }
                                         , Command.none
                                         )
@@ -2060,15 +2012,14 @@ updateLoaded msg model =
                                 ( model2, effectCmd ) =
                                     handleWordSpellingGameOutMsgs
                                         outMsgs
-                                        dmRoute
                                         { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
-                        _ ->
+                        Nothing ->
                             ( model, Command.none )
 
-                _ ->
+                NotLoggedIn _ ->
                     ( model, Command.none )
 
         UserNameEditableMsg editableMsg ->
@@ -2723,41 +2674,18 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
-                            case model.route of
-                                DmRoute dmRoute ->
-                                    FrontendExtra.routePush
-                                        model
-                                        (DmRoute { dmRoute | tab = Just (ChannelHeaderTab_Games (Just messageId)) })
+                            let
+                                newRoute : Route
+                                newRoute =
+                                    Route.setChannelHeaderTab
+                                        (Just (ChannelHeaderTab_Games (Just messageId)))
+                                        model.route
+                            in
+                            if newRoute == model.route then
+                                ( model, Command.none )
 
-                                HomePageRoute ->
-                                    ( model, Command.none )
-
-                                AdminRoute _ ->
-                                    ( model, Command.none )
-
-                                GuildRoute _ _ ->
-                                    ( model, Command.none )
-
-                                DiscordGuildRoute _ ->
-                                    ( model, Command.none )
-
-                                DiscordDmRoute _ ->
-                                    ( model, Command.none )
-
-                                AiChatRoute ->
-                                    ( model, Command.none )
-
-                                SlackOAuthRedirect _ ->
-                                    ( model, Command.none )
-
-                                TextEditorRoute ->
-                                    ( model, Command.none )
-
-                                LinkDiscord _ ->
-                                    ( model, Command.none )
-
-                                PublicGoMatchRoute _ ->
-                                    ( model, Command.none )
+                            else
+                                FrontendExtra.routePush model newRoute
 
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
@@ -5810,44 +5738,29 @@ finalizeWordSpellingDrag time model loggedIn =
         Dragging dragging ->
             case dragging.target of
                 Drag_Game ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    case model.route of
-                        DmRoute dmRoute ->
-                            ( case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                                ( Just (ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
-                                    case SeqDict.get otherUserId local.dmChannels of
-                                        Just dmChannel ->
-                                            { loggedIn
-                                                | games =
-                                                    SeqDict.updateIfExists
-                                                        otherUserId
-                                                        (Game.dragEnd
-                                                            time
-                                                            model.windowSize
-                                                            (Touch.removeSafeAreaTopInset
-                                                                model.startupData.safeAreaInsetTop
-                                                                dragging.touches
-                                                            )
-                                                            messageId
-                                                            dmChannel.games
-                                                        )
-                                                        loggedIn.games
-                                            }
+                    ( case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                        Just { guildOrDmId, matchId, match } ->
+                            { loggedIn
+                                | games =
+                                    SeqDict.updateIfExists
+                                        guildOrDmId
+                                        (Game.dragEnd
+                                            time
+                                            model.windowSize
+                                            (Touch.removeSafeAreaTopInset
+                                                model.startupData.safeAreaInsetTop
+                                                dragging.touches
+                                            )
+                                            matchId
+                                            match
+                                        )
+                                        loggedIn.games
+                            }
 
-                                        Nothing ->
-                                            loggedIn
-
-                                _ ->
-                                    loggedIn
-                            , Command.none
-                            )
-
-                        _ ->
-                            ( loggedIn, Command.none )
+                        Nothing ->
+                            loggedIn
+                    , Command.none
+                    )
 
                 _ ->
                     ( loggedIn, Command.none )
@@ -6626,11 +6539,11 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
-                                Server_Game _ { otherUserId } gameChange ->
+                                Server_Game _ guildOrDmId gameChange ->
                                     ( { loggedIn2
                                         | games =
                                             SeqDict.update
-                                                otherUserId
+                                                guildOrDmId
                                                 (Game.gameChangeFromServer model.time gameChange)
                                                 loggedIn2.games
                                       }
@@ -7143,10 +7056,9 @@ routeToInitialDataRequest route =
 
 handleWordSpellingGameOutMsgs :
     List Game.OutMsg
-    -> Route.DmRouteData
     -> LoadedFrontend
     -> ( LoadedFrontend, List (Command FrontendOnly ToBackend FrontendMsg_) )
-handleWordSpellingGameOutMsgs outMsgs dmRoute model =
+handleWordSpellingGameOutMsgs outMsgs model =
     List.foldl
         (\outMsg ( model2, cmds ) ->
             case outMsg of
@@ -7162,7 +7074,7 @@ handleWordSpellingGameOutMsgs outMsgs dmRoute model =
                         ( pushModel, pushCmd ) =
                             FrontendExtra.routePush
                                 model2
-                                (DmRoute { dmRoute | tab = Just (ChannelHeaderTab_Games newSelected) })
+                                (Route.setChannelHeaderTab (Just (ChannelHeaderTab_Games newSelected)) model2.route)
                     in
                     ( pushModel, pushCmd :: cmds )
 

@@ -887,7 +887,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
-    | Server_Game (Id UserId) { otherUserId : Id UserId } Game.LocalChange
+    | Server_Game (Id UserId) GuildOrDmId Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
 
 
@@ -932,5 +932,5 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
-    | Local_Game { otherUserId : Id UserId } Game.LocalChange
+    | Local_Game GuildOrDmId Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

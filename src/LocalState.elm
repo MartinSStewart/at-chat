@@ -310,7 +310,7 @@ type alias BackendChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
-    , games : SeqDict (Id ChannelMessageId) Game.MatchData
+    , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     }
 
 
@@ -472,7 +472,9 @@ channelToFrontend threadRoute channel =
                     (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
             , dateDividerDrawings = channel.dateDividerDrawings
-            , games = channel.games
+            , games =
+                -- Guild matches never have public links (those are Go-only, and Go is DM-only)
+                SeqDict.map (\_ gameData -> Game.initMatchData gameData Nothing) channel.games
             }
                 |> Just
 
