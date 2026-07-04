@@ -24,6 +24,8 @@ module Go exposing
     , boardSize9
     , currentPlayersTurn
     , deadStones
+    , dragEnd
+    , dragStart
     , foldActions
     , gameView
     , initGame
@@ -2366,3 +2368,13 @@ audio popSound model =
 
         Nothing ->
             Audio.silence
+
+
+dragStart : GameModel -> GameModel
+dragStart model =
+    model
+
+
+dragEnd : GameModel -> GameModel
+dragEnd model =
+    model

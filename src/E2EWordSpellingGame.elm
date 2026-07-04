@@ -285,7 +285,7 @@ tests normalConfig =
                       -- (The bingo bonus is zeroed so the final score stays easy to read.)
                       admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
                     , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aaaa"

@@ -521,7 +521,7 @@ disableTextSelect isMobile model =
                     Drag_Channel ->
                         False
 
-                    Drag_WordSpellingGameBoard ->
+                    Drag_Game ->
                         True
 
 

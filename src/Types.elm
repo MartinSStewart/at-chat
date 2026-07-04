@@ -197,7 +197,7 @@ type Drag
 type DragTarget
     = Drag_Channel
     | Drag_CallThumbnail
-    | Drag_WordSpellingGameBoard
+    | Drag_Game
 
 
 type LoginStatus

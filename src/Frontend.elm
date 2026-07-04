@@ -1503,7 +1503,7 @@ updateLoaded msg model =
                                             Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
                                     }
 
-                                Drag_WordSpellingGameBoard ->
+                                Drag_Game ->
                                     loggedIn
 
                                 Drag_Channel ->
@@ -1613,25 +1613,40 @@ updateLoaded msg model =
                                             else
                                                 loggedIn
 
-                                        Drag_WordSpellingGameBoard ->
+                                        Drag_Game ->
                                             let
-                                                local2 : LocalState
-                                                local2 =
+                                                local : LocalState
+                                                local =
                                                     Local.model loggedIn.localState
                                             in
-                                            case FrontendExtra.getWordSpellingGameModel local2 loggedIn model of
-                                                Just data ->
-                                                    setWordSpellingGameModel
-                                                        local2
-                                                        model
-                                                        (WordSpellingGame.dragStart
-                                                            time
-                                                            model.windowSize
-                                                            (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches)
-                                                            data.setup
-                                                            data.model
-                                                        )
-                                                        loggedIn
+                                            case model.route of
+                                                DmRoute dmRoute ->
+                                                    case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                                                        ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                                            case SeqDict.get otherUserId local.dmChannels of
+                                                                Just dmChannel ->
+                                                                    { loggedIn
+                                                                        | games =
+                                                                            SeqDict.updateIfExists
+                                                                                otherUserId
+                                                                                (Game.dragStart
+                                                                                    time
+                                                                                    model.windowSize
+                                                                                    (Touch.removeSafeAreaTopInset
+                                                                                        model.startupData.safeAreaInsetTop
+                                                                                        startTouches
+                                                                                    )
+                                                                                    messageId
+                                                                                    dmChannel.games
+                                                                                )
+                                                                                loggedIn.games
+                                                                    }
+
+                                                                Nothing ->
+                                                                    loggedIn
+
+                                                        _ ->
+                                                            loggedIn
 
                                                 _ ->
                                                     loggedIn
@@ -2034,10 +2049,7 @@ updateLoaded msg model =
                                         )
                                         ( { loggedIn
                                             | games =
-                                                SeqDict.update
-                                                    ( otherUserId, maybeMatchId )
-                                                    (\_ -> gameModel2)
-                                                    loggedIn.games
+                                                SeqDict.update otherUserId (\_ -> Just gameModel2) loggedIn.games
                                           }
                                         , Command.none
                                         )
@@ -5790,46 +5802,49 @@ handleTouchEnd time model =
         { model | drag = NoDrag, dragPrevious = model.drag }
 
 
-setWordSpellingGameModel : LocalState -> LoadedFrontend -> WordSpellingGame.GameData -> LoggedIn2 -> LoggedIn2
-setWordSpellingGameModel local model game loggedIn =
-    case model.route of
-        DmRoute dmRoute ->
-            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
-                    { loggedIn
-                        | games =
-                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGame_Game game) loggedIn.games
-                    }
-
-                _ ->
-                    loggedIn
-
-        _ ->
-            loggedIn
-
-
 finalizeWordSpellingDrag : Time.Posix -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 finalizeWordSpellingDrag time model loggedIn =
     case model.drag of
         Dragging dragging ->
             case dragging.target of
-                Drag_WordSpellingGameBoard ->
+                Drag_Game ->
                     let
                         local : LocalState
                         local =
                             Local.model loggedIn.localState
                     in
-                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
-                        Just game ->
-                            ( setWordSpellingGameModel
-                                local
-                                model
-                                (WordSpellingGame.dragEnd time model.windowSize (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop dragging.touches) game.setup game.shared game.model)
-                                loggedIn
+                    case model.route of
+                        DmRoute dmRoute ->
+                            ( case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel ->
+                                            { loggedIn
+                                                | games =
+                                                    SeqDict.updateIfExists
+                                                        otherUserId
+                                                        (Game.dragEnd
+                                                            time
+                                                            model.windowSize
+                                                            (Touch.removeSafeAreaTopInset
+                                                                model.startupData.safeAreaInsetTop
+                                                                dragging.touches
+                                                            )
+                                                            messageId
+                                                            dmChannel.games
+                                                        )
+                                                        loggedIn.games
+                                            }
+
+                                        Nothing ->
+                                            loggedIn
+
+                                _ ->
+                                    loggedIn
                             , Command.none
                             )
 
-                        Nothing ->
+                        _ ->
                             ( loggedIn, Command.none )
 
                 _ ->
@@ -5876,7 +5891,7 @@ dragTarget startTouches model =
                         Just Drag_CallThumbnail
 
                     else if insideBoard then
-                        Just Drag_WordSpellingGameBoard
+                        Just Drag_Game
 
                     else if isMobile then
                         Just Drag_Channel
@@ -5886,7 +5901,7 @@ dragTarget startTouches model =
 
                 _ ->
                     if insideBoard then
-                        Just Drag_WordSpellingGameBoard
+                        Just Drag_Game
 
                     else if isMobile then
                         Just Drag_Channel
@@ -6610,93 +6625,15 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_Game _ { otherUserId } gameChange ->
-                                    case gameChange of
-                                        Game.LocalChange_Go matchId goChange ->
-                                            case goChange of
-                                                Go.StartMatch _ _ ->
-                                                    ( loggedIn2, Command.none )
-
-                                                Go.Action actionWithTime ->
-                                                    let
-                                                        playPop : Bool
-                                                        playPop =
-                                                            case actionWithTime.change of
-                                                                Go.PlaceStone _ _ ->
-                                                                    True
-
-                                                                Go.PassTurn ->
-                                                                    True
-
-                                                                Go.MarkTerritory _ _ ->
-                                                                    False
-
-                                                                Go.FinishedMarking ->
-                                                                    True
-
-                                                                Go.AcceptTerritory ->
-                                                                    True
-
-                                                                Go.RejectTerritory ->
-                                                                    True
-                                                    in
-                                                    ( if playPop then
-                                                        { loggedIn2
-                                                            | games =
-                                                                SeqDict.updateIfExists
-                                                                    ( otherUserId, Just matchId )
-                                                                    (\gameModel ->
-                                                                        case gameModel of
-                                                                            Game.GoModel_Game goModel ->
-                                                                                Game.GoModel_Game { goModel | lastPlacedStone = Just model.time }
-
-                                                                            _ ->
-                                                                                gameModel
-                                                                    )
-                                                                    loggedIn2.games
-                                                        }
-
-                                                      else
-                                                        loggedIn2
-                                                    , Command.none
-                                                    )
-
-                                        Game.CreatePublicLink _ _ ->
-                                            ( loggedIn2, Command.none )
-
-                                        Game.LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
-                                            ( case wordSpellinGameChange of
-                                                WordSpellingGame.Action action ->
-                                                    case action.change of
-                                                        WordSpellingGame.PlaceWord placedWord _ ->
-                                                            { loggedIn2
-                                                                | games =
-                                                                    SeqDict.updateIfExists
-                                                                        ( otherUserId, Just matchId )
-                                                                        (\gameModel ->
-                                                                            case gameModel of
-                                                                                Game.WordSpellingGame_Game gameData ->
-                                                                                    Game.WordSpellingGame_Game
-                                                                                        { gameData
-                                                                                            | lastWordPlaced =
-                                                                                                { time = model.time
-                                                                                                , letterCount = List.Nonempty.length placedWord.letters
-                                                                                                }
-                                                                                                    |> Just
-                                                                                        }
-
-                                                                                _ ->
-                                                                                    gameModel
-                                                                        )
-                                                                        loggedIn2.games
-                                                            }
-
-                                                        _ ->
-                                                            loggedIn2
-
-                                                WordSpellingGame.StartMatch _ _ ->
-                                                    loggedIn2
-                                            , Command.none
-                                            )
+                                    ( { loggedIn2
+                                        | games =
+                                            SeqDict.updateIfExists
+                                                otherUserId
+                                                (Game.gameChangeFromServer model.time gameChange)
+                                                loggedIn2.games
+                                      }
+                                    , Command.none
+                                    )
 
                                 _ ->
                                     ( loggedIn2, Command.none )
