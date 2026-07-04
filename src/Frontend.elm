@@ -459,7 +459,8 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
-            , currentDmGame = SeqDict.empty
+            , games = SeqDict.empty
+            , gamesSetup = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
@@ -1220,33 +1221,37 @@ updateLoaded msg model =
                                                                     SeqDict.get otherUserId local.dmChannels
                                                                         |> Maybe.withDefault DmChannel.frontendInit
                                                             in
-                                                            ( { loggedIn
-                                                                | currentDmGame =
-                                                                    SeqDict.update
-                                                                        ( otherUserId, maybeMatchId )
-                                                                        (\maybeGameModel ->
-                                                                            case
-                                                                                maybeMatchId
-                                                                                    |> Maybe.andThen (\matchId -> SeqDict.get matchId dmChannel.games)
-                                                                                    |> Maybe.andThen Game.goMatchData
-                                                                            of
-                                                                                Just ( _, shared ) ->
-                                                                                    case maybeGameModel of
-                                                                                        Just (Game.GoModel_Game m) ->
-                                                                                            Go.pressedKey key shared m
-                                                                                                |> Game.GoModel_Game
-                                                                                                |> Just
+                                                            case maybeMatchId of
+                                                                Just matchId ->
+                                                                    ( { loggedIn
+                                                                        | games =
+                                                                            SeqDict.update
+                                                                                ( otherUserId, matchId )
+                                                                                (\maybeGameModel ->
+                                                                                    case
+                                                                                        SeqDict.get matchId dmChannel.games
+                                                                                            |> Maybe.andThen Game.goMatchData
+                                                                                    of
+                                                                                        Just ( _, shared ) ->
+                                                                                            case maybeGameModel of
+                                                                                                Just (Game.GoModel_Game m) ->
+                                                                                                    Go.pressedKey key shared m
+                                                                                                        |> Game.GoModel_Game
+                                                                                                        |> Just
 
-                                                                                        _ ->
-                                                                                            Nothing
+                                                                                                _ ->
+                                                                                                    Nothing
 
-                                                                                Nothing ->
-                                                                                    maybeGameModel
-                                                                        )
-                                                                        loggedIn.currentDmGame
-                                                              }
-                                                            , Command.none
-                                                            )
+                                                                                        Nothing ->
+                                                                                            maybeGameModel
+                                                                                )
+                                                                                loggedIn.games
+                                                                      }
+                                                                    , Command.none
+                                                                    )
+
+                                                                Nothing ->
+                                                                    ( loggedIn, Command.none )
 
                                                         Nothing ->
                                                             ( loggedIn, Command.none )
@@ -2029,7 +2034,7 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
                                         )
-                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
+                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.games)
 
                                 ( loggedIn2, localChangeCmd ) =
                                     List.foldl
@@ -2046,11 +2051,11 @@ updateLoaded msg model =
                                                     ( accLoggedIn, accCmd )
                                         )
                                         ( { loggedIn
-                                            | currentDmGame =
+                                            | games =
                                                 SeqDict.update
                                                     ( otherUserId, maybeMatchId )
                                                     (\_ -> gameModel2)
-                                                    loggedIn.currentDmGame
+                                                    loggedIn.games
                                           }
                                         , Command.none
                                         )
@@ -5810,8 +5815,8 @@ setWordSpellingGameModel local model game loggedIn =
             case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
                 ( Just (DmChannelHeaderTab_Games messageId), Just otherUserId ) ->
                     { loggedIn
-                        | currentDmGame =
-                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGame_Game game) loggedIn.currentDmGame
+                        | games =
+                            SeqDict.insert ( otherUserId, messageId ) (Game.WordSpellingGame_Game game) loggedIn.games
                     }
 
                 _ ->
@@ -6654,7 +6659,7 @@ updateLoadedFromBackend msg model =
                                                     in
                                                     ( if playPop then
                                                         { loggedIn2
-                                                            | currentDmGame =
+                                                            | games =
                                                                 SeqDict.updateIfExists
                                                                     ( otherUserId, Just matchId )
                                                                     (\gameModel ->
@@ -6665,7 +6670,7 @@ updateLoadedFromBackend msg model =
                                                                             _ ->
                                                                                 gameModel
                                                                     )
-                                                                    loggedIn2.currentDmGame
+                                                                    loggedIn2.games
                                                         }
 
                                                       else
@@ -6682,7 +6687,7 @@ updateLoadedFromBackend msg model =
                                                     case action.change of
                                                         WordSpellingGame.PlaceWord placedWord _ ->
                                                             { loggedIn2
-                                                                | currentDmGame =
+                                                                | games =
                                                                     SeqDict.updateIfExists
                                                                         ( otherUserId, Just matchId )
                                                                         (\gameModel ->
@@ -6700,7 +6705,7 @@ updateLoadedFromBackend msg model =
                                                                                 _ ->
                                                                                     gameModel
                                                                         )
-                                                                        loggedIn2.currentDmGame
+                                                                        loggedIn2.games
                                                             }
 
                                                         _ ->

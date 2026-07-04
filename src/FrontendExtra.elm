@@ -1622,7 +1622,7 @@ getWordSpellingGameModel local loggedIn model =
                                             , setup = setup
                                             , shared = shared
                                             , model =
-                                                case SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame of
+                                                case SeqDict.get ( otherUserId, Just messageId ) loggedIn.games of
                                                     Just (Game.WordSpellingGame_Game gameModel) ->
                                                         gameModel
 
@@ -1661,11 +1661,11 @@ routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedI
             case getWordSpellingGameModel local loggedIn model3 of
                 Just data ->
                     { loggedIn
-                        | currentDmGame =
+                        | games =
                             SeqDict.insert
                                 ( otherUserId, Just data.matchId )
                                 (Game.WordSpellingGame_Game data.model)
-                                loggedIn.currentDmGame
+                                loggedIn.games
                     }
 
                 Nothing ->
@@ -5487,7 +5487,7 @@ audio _ model =
                                             case
                                                 ( SeqDict.get messageId dmChannel.games
                                                 , loaded.popSound
-                                                , SeqDict.get ( otherUserId, Just messageId ) loggedIn.currentDmGame
+                                                , SeqDict.get ( otherUserId, Just messageId ) loggedIn.games
                                                 )
                                             of
                                                 ( Just matchData, Ok popSound, Just gameModel ) ->

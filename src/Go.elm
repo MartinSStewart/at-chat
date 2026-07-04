@@ -7,7 +7,6 @@ module Go exposing
     , GameMsg(..)
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , OutMsg(..)
     , Phase(..)
     , PublicGoMatchData
     , PublicGoMatchResponse
@@ -463,10 +462,6 @@ type alias ActionWithTime =
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action ActionWithTime
-
-
-type OutMsg
-    = OutLocalChange LocalChange
 
 
 otherStone : Stone -> Stone
@@ -1074,45 +1069,44 @@ type SetupOrGame
 
 
 updateSetup :
-    Time.Posix
-    -> Id UserId
+    Id UserId
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( SetupOrGame, List OutMsg )
-updateSetup time creatorId otherPlayerId msg model =
+    -> ( SetupOrGame, Maybe ValidatedSetup )
+updateSetup creatorId otherPlayerId msg model =
     case msg of
         ChangedWidthInput input ->
-            ( Setup { model | widthInput = input, error = Nothing }, [] )
+            ( Setup { model | widthInput = input, error = Nothing }, Nothing )
 
         ChangedHeightInput input ->
-            ( Setup { model | heightInput = input, error = Nothing }, [] )
+            ( Setup { model | heightInput = input, error = Nothing }, Nothing )
 
         ChangedHandicapInput input ->
-            ( Setup { model | handicapInput = input, error = Nothing }, [] )
+            ( Setup { model | handicapInput = input, error = Nothing }, Nothing )
 
         ChangedKomiInput input ->
-            ( Setup { model | komiInput = input, error = Nothing }, [] )
+            ( Setup { model | komiInput = input, error = Nothing }, Nothing )
 
         ChangedMainTimeInput input ->
-            ( Setup { model | mainTimeInput = input, error = Nothing }, [] )
+            ( Setup { model | mainTimeInput = input, error = Nothing }, Nothing )
 
         ChangedIncrementInput input ->
-            ( Setup { model | incrementInput = input, error = Nothing }, [] )
+            ( Setup { model | incrementInput = input, error = Nothing }, Nothing )
 
         SelectedSize selection ->
-            ( Setup { model | sizeSelection = selection, error = Nothing }, [] )
+            ( Setup { model | sizeSelection = selection, error = Nothing }, Nothing )
 
         SelectedPlayingAs stone ->
-            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, [] )
+            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Nothing )
 
         PressedStartGame ->
             case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
-                    ( Game initGame, [ OutLocalChange (StartMatch time setup) ] )
+                    ( Game initGame, Just setup )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, [] )
+                    ( Setup { model | error = Just error }, Nothing )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1243,12 +1237,12 @@ updateGame :
     -> ValidatedSetup
     -> Shared
     -> GameModel
-    -> ( GameModel, List OutMsg )
+    -> ( GameModel, Maybe ActionWithTime )
 updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
-                ( jumpToLatest model, [] )
+                ( jumpToLatest model, Nothing )
 
             else
                 case state.phase of
@@ -1257,81 +1251,80 @@ updateGame currentTime currentUserId msg setup state model =
                             case tryPlace setup x y state of
                                 Ok _ ->
                                     ( { model | lastPlacedStone = Just currentTime }
-                                    , [ Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
-                                      ]
+                                    , Just { time = currentTime, change = PlaceStone x y }
                                     )
 
                                 Err error ->
-                                    ( { model | lastError = Just error }, [] )
+                                    ( { model | lastError = Just error }, Nothing )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     Marking ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( model
-                            , [ Action { time = currentTime, change = MarkTerritory x y } |> OutLocalChange ]
+                            , Just { time = currentTime, change = MarkTerritory x y }
                             )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     Confirming ->
-                        ( model, [] )
+                        ( model, Nothing )
 
                     Scored _ ->
-                        ( model, [] )
+                        ( model, Nothing )
 
         PressedPass ->
             if isViewingPast model then
-                ( jumpToLatest model, [] )
+                ( jumpToLatest model, Nothing )
 
             else
                 case ( state.phase, hasTimeToDoAction currentTime state ) of
                     ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( model
-                            , [ Action { time = currentTime, change = PassTurn } |> OutLocalChange ]
+                            , Just { time = currentTime, change = PassTurn }
                             )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     _ ->
-                        ( model, [] )
+                        ( model, Nothing )
 
         PressedDoneMarking ->
             case state.phase of
                 Marking ->
                     ( model
-                    , [ Action { time = currentTime, change = FinishedMarking } |> OutLocalChange ]
+                    , Just { time = currentTime, change = FinishedMarking }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedAgree ->
             case state.phase of
                 Confirming ->
                     ( model
-                    , [ Action { time = currentTime, change = AcceptTerritory } |> OutLocalChange ]
+                    , Just { time = currentTime, change = AcceptTerritory }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedDisagree ->
             case state.phase of
                 Confirming ->
                     ( model
-                    , [ Action { time = currentTime, change = RejectTerritory } |> OutLocalChange ]
+                    , Just { time = currentTime, change = RejectTerritory }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         SpectatorMsg spectatorMsg ->
-            ( updateSpectator spectatorMsg state model, [] )
+            ( updateSpectator spectatorMsg state model, Nothing )
 
 
 updateSpectator : SpectatorMsg -> Shared -> GameModel -> GameModel

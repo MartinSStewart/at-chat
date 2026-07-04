@@ -246,7 +246,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
-    , currentDmGame : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Game.Model
+    , games : SeqDict (Id UserId) Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
