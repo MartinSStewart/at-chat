@@ -5358,7 +5358,7 @@ handleGoGame time session clientId changeId otherUserId matchId goChange dmChann
                             session.userId
                             SeqDict.empty
                             Drawing.emptyDrawing
-                            Game_Go
+                            GameType_Go
                         )
                         dmChannel
 
@@ -5470,7 +5470,7 @@ handleWordSpellingGame time session clientId changeId otherUserId dmChannelId dm
                             session.userId
                             SeqDict.empty
                             Drawing.emptyDrawing
-                            Game_WordSpellingGame
+                            GameType_WordSpellingGame
                         )
                         dmChannel
 

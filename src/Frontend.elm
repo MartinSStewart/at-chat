@@ -2016,7 +2016,7 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
                                         )
-                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.games)
+                                        (SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel)
 
                                 ( loggedIn2, localChangeCmd ) =
                                     List.foldl

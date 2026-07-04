@@ -6420,7 +6420,7 @@ callStartedCard userId startedAt endedAt allUsers =
 goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> GameType -> Element MessageViewMsg
 goMatchStartedCard messageId userId allUsers game =
     case game of
-        Game_Go ->
+        GameType_Go ->
             eventCard
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
@@ -6428,7 +6428,7 @@ goMatchStartedCard messageId userId allUsers game =
                 (User.toString userId allUsers)
                 "started a Go match"
 
-        Game_WordSpellingGame ->
+        GameType_WordSpellingGame ->
             eventCard
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard

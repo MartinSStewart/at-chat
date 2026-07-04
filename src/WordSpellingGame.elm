@@ -42,6 +42,7 @@ module WordSpellingGame exposing
     , isZoomAnimating
     , placeWord
     , placementConnects
+    , pressedKey
     , setupView
     , trayDropSlot
     , trayTouchCoord
@@ -205,6 +206,11 @@ initSetup =
 defaultFullTrayBonus : number
 defaultFullTrayBonus =
     50
+
+
+pressedKey : GameData -> GameData
+pressedKey model =
+    model
 
 
 initGame : Time.Posix -> ValidatedSetup -> GameData

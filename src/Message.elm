@@ -50,8 +50,8 @@ type Message messageId userId
 
 
 type GameType
-    = Game_Go
-    | Game_WordSpellingGame
+    = GameType_Go
+    | GameType_WordSpellingGame
 
 
 maxEmbeds : number

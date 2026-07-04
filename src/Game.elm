@@ -387,10 +387,10 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         PressedSelectGame game ->
             case game of
-                Game_Go ->
+                GameType_Go ->
                     ( { model | setup = GoModel_Setup Go.initSetup }, [] )
 
-                Game_WordSpellingGame ->
+                GameType_WordSpellingGame ->
                     ( { model | setup = WordSpellingGame_Setup WordSpellingGame.initSetup }, [] )
 
         PressedReset ->
@@ -530,18 +530,18 @@ goShareView lastCopied matchId maybePublicLink =
 
 allGames : List GameType
 allGames =
-    [ Game_Go
-    , Game_WordSpellingGame
+    [ GameType_Go
+    , GameType_WordSpellingGame
     ]
 
 
 gameToString : GameType -> String
 gameToString game =
     case game of
-        Game_Go ->
+        GameType_Go ->
             "Go"
 
-        Game_WordSpellingGame ->
+        GameType_WordSpellingGame ->
             "Word Spelling Game"
 
 
@@ -669,19 +669,40 @@ matchSwitcherView isMobile maybeMatchId matches =
 
 pressedKey : Id ChannelMessageId -> String -> SeqDict (Id ChannelMessageId) MatchData -> Maybe Model -> Maybe Model
 pressedKey matchId key matchData maybeGameModel =
-    case
-        SeqDict.get matchId matchData
-            |> Maybe.andThen goMatchData
-    of
-        Just ( _, shared ) ->
-            case maybeGameModel of
-                Just (GoModel_Game m) ->
-                    Go.pressedKey key shared m
-                        |> GoModel_Game
-                        |> Just
+    let
+        model : Model
+        model =
+            Maybe.withDefault initModel maybeGameModel
+    in
+    case SeqDict.get matchId matchData of
+        Just (MatchData matchData2) ->
+            { model
+                | startedGames =
+                    SeqDict.updateIfExists
+                        matchId
+                        (\game ->
+                            case matchData2.data of
+                                FrontendGameData_Go setup _ shared ->
+                                    case game of
+                                        GoModel_Game game2 ->
+                                            Go.pressedKey key shared game2
+                                                |> GoModel_Game
 
-                _ ->
-                    Nothing
+                                        _ ->
+                                            game
 
-        Nothing ->
+                                FrontendGameData_WordSpellingGame _ _ shared ->
+                                    case game of
+                                        WordSpellingGame_Game game2 ->
+                                            WordSpellingGame.pressedKey game2
+                                                |> WordSpellingGame_Game
+
+                                        _ ->
+                                            game
+                        )
+                        model.startedGames
+            }
+                |> Just
+
+        _ ->
             maybeGameModel

@@ -73,7 +73,7 @@ tests normalConfig =
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.collapsableGroup
@@ -208,7 +208,7 @@ tests normalConfig =
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
                     , admin.click 100 (Dom.id "wsg_start")
 
@@ -410,7 +410,7 @@ tests normalConfig =
                     , admin.click 0 (Dom.id "guild_showMembers")
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
                     , admin.click 100 (Dom.id "wsg_start")
                     , user.click 2000 (Dom.id "guild_showMembers")

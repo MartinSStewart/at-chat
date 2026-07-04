@@ -4434,7 +4434,7 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                         dmChannel2 : FrontendDmChannel
                                         dmChannel2 =
                                             LocalState.createChannelMessageFrontend
-                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_Go)
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing GameType_Go)
                                                 dmChannel
 
                                         newMatchId : Id ChannelMessageId
@@ -4476,7 +4476,7 @@ gameChangeUpdate changeBy otherUserId gameChange local =
                                         dmChannel2 : FrontendDmChannel
                                         dmChannel2 =
                                             LocalState.createChannelMessageFrontend
-                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing Game_WordSpellingGame)
+                                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing GameType_WordSpellingGame)
                                                 dmChannel
 
                                         newMatchId : Id ChannelMessageId
