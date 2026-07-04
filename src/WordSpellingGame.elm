@@ -3500,11 +3500,12 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                     -- elm-ui resets `min-width` but not `min-height`). Resetting min-height keeps the
                     -- element at boardPx so the clip actually cuts the zoomed content off.
                     :: MyUi.htmlStyle "min-height" "0"
+                    :: clearButton
                     :: lineButtons
                     ++ boardTiles
                     ++ animatedTiles
                     ++ boardHeldTiles
-                    ++ [ selectedHighlight, dragHighlight, clearButton ]
+                    ++ [ selectedHighlight, dragHighlight ]
                 )
                 (Ui.el
                     [ Ui.move { x = Coord.xRaw boardTranslate, y = Coord.yRaw boardTranslate, z = 0 } ]
