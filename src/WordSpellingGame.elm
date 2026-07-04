@@ -1504,7 +1504,7 @@ validateSetup createdBy time setup =
                             { createdBy = createdBy
                             , timeControls = timeControls
                             , traySize = traySize
-                            , fullTrayBonus = max 0 setup.fullTrayBonus
+                            , fullTrayBonus = setup.fullTrayBonus
                             , seed =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
@@ -2770,8 +2770,8 @@ statusView windowSize isPersonalDm localUser setup actions shared =
         joinWarning =
             if soloJoinWarning then
                 Ui.el
-                    [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14, MyUi.prewrap ]
-                    (Ui.text "No one else has joined yet — no one can join once you make another move.")
+                    [ Ui.Font.color MyUi.errorColor, MyUi.prewrap ]
+                    (Ui.text "No one else has joined yet.\nOnce you make a second move no one can join.")
 
             else
                 Ui.none
@@ -2953,8 +2953,8 @@ describeAction setup shared action =
                                 ++ headlineWord result.words
                                 ++ " (+"
                                 ++ String.fromInt (result.score + bonus)
-                                ++ (if bonus > 0 then
-                                        ", full tray!"
+                                ++ (if bonus == 0 then
+                                        ", bingo!"
 
                                     else
                                         ""
@@ -3918,9 +3918,17 @@ setupView windowSize setup =
                 24
             )
         , Ui.background MyUi.tabBackground
+        , Ui.height (Ui.px (tabBodyHeight windowSize OneOrGreater.seven))
+        , Ui.heightMin 0
+        , Ui.scrollable
         ]
         [ setupSection
-            "Tray size (letters each player holds)"
+            (Ui.row
+                []
+                [ Ui.text "Tray size"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
+                ]
+            )
             (numberInput
                 { htmlId = "wsg_traySizeInput"
                 , minValue = 1
@@ -3930,24 +3938,34 @@ setupView windowSize setup =
                 }
             )
         , setupSection
-            "Full-tray bonus (points for placing a word using your whole tray)"
+            (Ui.row
+                []
+                [ Ui.text "Bingo bonus"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
+                ]
+            )
             (numberInput
                 { htmlId = "wsg_fullTrayBonusInput"
-                , minValue = 0
+                , minValue = -999
                 , maxValue = 999
                 , value = String.fromInt setup.fullTrayBonus
                 , onChange = ChangedFullTrayBonusInput
                 }
             )
         , setupSection
-            "Time control"
+            (Ui.text "Time control")
             (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
                 [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
                 , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                 ]
             )
         , setupSection
-            "Letter distribution (spaces are wildcards)"
+            (Ui.row
+                []
+                [ Ui.text "Letter distribution"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
+                ]
+            )
             (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
                 [ lettersInput setup.letters
                 , if setup.letters == defaultLetters then
@@ -3967,11 +3985,11 @@ setupView windowSize setup =
         ]
 
 
-setupSection : String -> Element SetupMsg -> Element SetupMsg
+setupSection : Element SetupMsg -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
-        [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text title)
+        [ Ui.spacing 8, MyUi.prewrap ]
+        [ Ui.el [ Ui.Font.weight 600 ] title
         , content
         ]
 
