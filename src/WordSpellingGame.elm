@@ -32,6 +32,7 @@ module WordSpellingGame exposing
     , boardY
     , dragEnd
     , dragStart
+    , fullTrayBonusScore
     , gameView
     , initGame
     , initSetup
@@ -49,6 +50,7 @@ module WordSpellingGame exposing
     , updateGame
     , updateSetup
     , validatePlacement
+    , validateSetup
     )
 
 {-| Were calling it this to avoid the Scrabble trademark
@@ -152,6 +154,7 @@ type SetupMsg
     = ChangedMainTimeInput String
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
+    | ChangedFullTrayBonusInput String
     | ChangedLettersInput String
     | PressedResetLetters
     | PressedStartGame
@@ -170,6 +173,7 @@ type alias SetupModel =
     { mainTimeInput : String
     , incrementInput : String
     , traySize : Int
+    , fullTrayBonus : Int
     , error : Maybe String
     , letters : String
     }
@@ -178,6 +182,7 @@ type alias SetupModel =
 type alias ValidatedSetup =
     { timeControls : TimeControl
     , traySize : OneOrGreater
+    , fullTrayBonus : Int
     , createdBy : Id UserId
     , seed : Int
     , letters : NonemptyDict LetterOrWildcard OneOrGreater
@@ -189,9 +194,18 @@ initSetup =
     { mainTimeInput = "10"
     , incrementInput = "5"
     , traySize = 7
+    , fullTrayBonus = defaultFullTrayBonus
     , error = Nothing
     , letters = defaultLetters
     }
+
+
+{-| The default points awarded for placing a word that uses every tile in a full tray (the
+"bingo" bonus). Configurable per game in the setup view.
+-}
+defaultFullTrayBonus : number
+defaultFullTrayBonus =
+    50
 
 
 initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
@@ -397,6 +411,19 @@ getWinner shared =
             Nothing
 
 
+{-| The extra points awarded for placing a word that empties a full tray in one move (a "bingo").
+A placement can only draw from the player's tray, which never holds more than `traySize` tiles, so
+placing exactly `traySize` letters means every tile of a full tray was used. Returns 0 otherwise.
+-}
+fullTrayBonusScore : ValidatedSetup -> PlacedWord -> Int
+fullTrayBonusScore setup placedWord =
+    if List.Nonempty.length placedWord.letters == OneOrGreater.toInt setup.traySize then
+        setup.fullTrayBonus
+
+    else
+        0
+
+
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
     case action.change of
@@ -469,7 +496,7 @@ updateAction setup action shared =
                                                         player.score
 
                                                     _ ->
-                                                        player.score + result.score
+                                                        player.score + result.score + fullTrayBonusScore setup placedWord
                                         }
                                         shared.players
                                 , turnCount = shared.turnCount + 1
@@ -972,6 +999,15 @@ updateSetup time currentUserId msg setup =
             , []
             )
 
+        ChangedFullTrayBonusInput input ->
+            ( { setup
+                | fullTrayBonus = String.toInt (String.trim input) |> Maybe.withDefault setup.fullTrayBonus
+                , error = Nothing
+              }
+                |> Setup
+            , []
+            )
+
         ChangedLettersInput input ->
             ( Setup { setup | letters = input, error = Nothing }, [] )
 
@@ -1468,6 +1504,7 @@ validateSetup createdBy time setup =
                             { createdBy = createdBy
                             , timeControls = timeControls
                             , traySize = traySize
+                            , fullTrayBonus = max 0 setup.fullTrayBonus
                             , seed =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
@@ -2907,10 +2944,21 @@ describeAction setup shared action =
                 _ ->
                     case placeWord shared.board placedWord of
                         Just result ->
+                            let
+                                bonus : Int
+                                bonus =
+                                    fullTrayBonusScore setup placedWord
+                            in
                             "played "
                                 ++ headlineWord result.words
                                 ++ " (+"
-                                ++ String.fromInt result.score
+                                ++ String.fromInt (result.score + bonus)
+                                ++ (if bonus > 0 then
+                                        ", full tray!"
+
+                                    else
+                                        ""
+                                   )
                                 ++ ")"
 
                         Nothing ->
@@ -3879,6 +3927,16 @@ setupView windowSize setup =
                 , maxValue = 20
                 , value = String.fromInt setup.traySize
                 , onChange = ChangedTraySizeInput
+                }
+            )
+        , setupSection
+            "Full-tray bonus (points for placing a word using your whole tray)"
+            (numberInput
+                { htmlId = "wsg_fullTrayBonusInput"
+                , minValue = 0
+                , maxValue = 999
+                , value = String.fromInt setup.fullTrayBonus
+                , onChange = ChangedFullTrayBonusInput
                 }
             )
         , setupSection

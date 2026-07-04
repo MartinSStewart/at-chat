@@ -1,6 +1,8 @@
 module WordSpellingGameTests exposing (tests)
 
+import Effect.Time as Time
 import Expect
+import Id
 import List.Nonempty exposing (Nonempty(..))
 import SeqDict exposing (SeqDict)
 import Test exposing (Test)
@@ -27,6 +29,22 @@ word =
 placedWord : ( Int, Int ) -> Bool -> Letter -> List Letter -> PlacedWord
 placedWord start isVertical first rest =
     { start = start, isVertical = isVertical, letters = Nonempty (Letter first) (List.map Letter rest) }
+
+
+{-| A validated setup with the given tray size and full-tray bonus, keeping every other option at
+its default. Fails loudly (via the caller) if the defaults ever stop validating.
+-}
+validatedSetup : Int -> Int -> Result String WordSpellingGame.ValidatedSetup
+validatedSetup traySize bonus =
+    let
+        base : WordSpellingGame.SetupModel
+        base =
+            WordSpellingGame.initSetup
+    in
+    WordSpellingGame.validateSetup
+        (Id.fromInt 0)
+        (Time.millisToPosix 0)
+        { base | traySize = traySize, fullTrayBonus = bonus }
 
 
 tests : Test
@@ -209,6 +227,36 @@ tests =
                         existing
                         (placedWord ( 7, 4 ) False A [])
                         |> Expect.equal (Err ())
+            ]
+        , Test.describe "the full-tray bonus rewards emptying a full tray in one move"
+            [ Test.test "placing a word that uses every tile of the tray earns the configured bonus" <|
+                \_ ->
+                    case validatedSetup 5 40 of
+                        Ok setup ->
+                            -- Five placed letters with a tray size of five: the whole tray was used.
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 5, 7 ) False H [ E, L, L, O ])
+                                |> Expect.equal 40
+
+                        Err error ->
+                            Expect.fail error
+            , Test.test "placing a shorter word earns no bonus" <|
+                \_ ->
+                    case validatedSetup 5 40 of
+                        Ok setup ->
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False C [ A, T ])
+                                |> Expect.equal 0
+
+                        Err error ->
+                            Expect.fail error
+            , Test.test "a zero bonus adds nothing even for a full-tray word" <|
+                \_ ->
+                    case validatedSetup 3 0 of
+                        Ok setup ->
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False C [ A, T ])
+                                |> Expect.equal 0
+
+                        Err error ->
+                            Expect.fail error
             ]
         , Test.describe "placementConnects keeps words from floating in empty space"
             [ Test.test "the first word must cover the centre square" <|
