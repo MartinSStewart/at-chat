@@ -597,7 +597,7 @@ tabBodyView local loggedIn model =
                                 otherUserId
                                 maybeMatchId
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
-                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.games)
+                                (SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel)
                                 |> Ui.map GameMsg
                                 |> Just
 

@@ -460,7 +460,6 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = Call.initModel
             , games = SeqDict.empty
-            , gamesSetup = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
@@ -1226,25 +1225,8 @@ updateLoaded msg model =
                                                                     ( { loggedIn
                                                                         | games =
                                                                             SeqDict.update
-                                                                                ( otherUserId, matchId )
-                                                                                (\maybeGameModel ->
-                                                                                    case
-                                                                                        SeqDict.get matchId dmChannel.games
-                                                                                            |> Maybe.andThen Game.goMatchData
-                                                                                    of
-                                                                                        Just ( _, shared ) ->
-                                                                                            case maybeGameModel of
-                                                                                                Just (Game.GoModel_Game m) ->
-                                                                                                    Go.pressedKey key shared m
-                                                                                                        |> Game.GoModel_Game
-                                                                                                        |> Just
-
-                                                                                                _ ->
-                                                                                                    Nothing
-
-                                                                                        Nothing ->
-                                                                                            maybeGameModel
-                                                                                )
+                                                                                otherUserId
+                                                                                (Game.pressedKey matchId key dmChannel.games)
                                                                                 loggedIn.games
                                                                       }
                                                                     , Command.none

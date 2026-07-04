@@ -433,7 +433,7 @@ callStartedText endedAt =
             "Call started"
 
 
-gameStartedText : Message.Game -> String
+gameStartedText : Message.GameType -> String
 gameStartedText game =
     case game of
         Message.Game_Go ->

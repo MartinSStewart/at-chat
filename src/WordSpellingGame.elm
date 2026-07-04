@@ -10,7 +10,6 @@ module WordSpellingGame exposing
     , LetterId
     , LetterOrWildcard(..)
     , LocalChange(..)
-    , OutMsg(..)
     , PlacedWord
     , PlacementResult
     , Player
@@ -208,32 +207,26 @@ defaultFullTrayBonus =
     50
 
 
-initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
+initGame : Time.Posix -> ValidatedSetup -> GameData
 initGame time setup =
     let
         list =
             List.range 0 (OneOrGreater.toInt setup.traySize - 1)
     in
-    ( { selectedCell = Nothing
-      , tiles =
-            List.map
-                (\index ->
-                    { position = TileInTray (TrayIndex index) Nothing
-                    , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
-                    }
-                )
-                list
-                |> Array.fromList
-      , dragging = NotDragging
-      , zoomAnimation = { start = time, from = zoomedOutState }
-      , lastWordPlaced = Nothing
-      }
-    , []
-    )
-
-
-type OutMsg
-    = OutLocalChange LocalChange
+    { selectedCell = Nothing
+    , tiles =
+        List.map
+            (\index ->
+                { position = TileInTray (TrayIndex index) Nothing
+                , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                }
+            )
+            list
+            |> Array.fromList
+    , dragging = NotDragging
+    , zoomAnimation = { start = time, from = zoomedOutState }
+    , lastWordPlaced = Nothing
+    }
 
 
 type LocalChange
@@ -995,14 +988,14 @@ updateSetup :
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( SetupOrGame, List OutMsg )
+    -> ( SetupOrGame, Maybe ValidatedSetup )
 updateSetup time currentUserId msg setup =
     case msg of
         ChangedMainTimeInput input ->
-            ( Setup { setup | mainTimeInput = input, error = Nothing }, [] )
+            ( Setup { setup | mainTimeInput = input, error = Nothing }, Nothing )
 
         ChangedIncrementInput input ->
-            ( Setup { setup | incrementInput = input, error = Nothing }, [] )
+            ( Setup { setup | incrementInput = input, error = Nothing }, Nothing )
 
         ChangedTraySizeInput input ->
             ( { setup
@@ -1010,7 +1003,7 @@ updateSetup time currentUserId msg setup =
                 , error = Nothing
               }
                 |> Setup
-            , []
+            , Nothing
             )
 
         ChangedFullTrayBonusInput input ->
@@ -1019,29 +1012,25 @@ updateSetup time currentUserId msg setup =
                 , error = Nothing
               }
                 |> Setup
-            , []
+            , Nothing
             )
 
         ChangedLettersInput input ->
-            ( Setup { setup | letters = input, error = Nothing }, [] )
+            ( Setup { setup | letters = input, error = Nothing }, Nothing )
 
         PressedResetLetters ->
-            ( Setup { setup | letters = defaultLetters, error = Nothing }, [] )
+            ( Setup { setup | letters = defaultLetters, error = Nothing }, Nothing )
 
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
-                    let
-                        ( model, outMsgs ) =
-                            initGame time validated
-                    in
-                    ( Game model, OutLocalChange (StartMatch time validated) :: outMsgs )
+                    ( initGame time validated |> Game, Just validated )
 
                 Err error ->
-                    ( Setup { setup | error = Just error }, [] )
+                    ( Setup { setup | error = Just error }, Nothing )
 
 
-updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, Maybe ActionWithTime )
 updateGame time currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
@@ -1103,17 +1092,14 @@ updateGame time currentUserId setup shared msg model =
                                     kept
                                     (List.range 0 (newTileCount - 1))
                         }
-                    , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
-                            |> Action
-                            |> OutLocalChange
-                      ]
+                    , Just { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                     )
 
                 Nothing ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedJoinGame ->
-            ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
+            ( model, Just { userId = currentUserId, change = JoinGame, time = time } )
 
         PressedReplaceTrayOrPass ->
             let
@@ -1140,7 +1126,7 @@ updateGame time currentUserId setup shared msg model =
                         list
                         |> Array.fromList
               }
-            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            , Just { userId = currentUserId, change = ReplaceTrayOrPass, time = time }
             )
 
         PressedClearBoard ->
@@ -1171,7 +1157,7 @@ updateGame time currentUserId setup shared msg model =
                         model.tiles
                         |> Tuple.first
               }
-            , []
+            , Nothing
             )
 
 

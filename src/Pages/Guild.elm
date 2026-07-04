@@ -49,7 +49,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (Game(..), Message(..), MessageState(..), UserTextMessageData)
+import Message exposing (GameType(..), Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
@@ -6417,7 +6417,7 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Game -> Element MessageViewMsg
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> GameType -> Element MessageViewMsg
 goMatchStartedCard messageId userId allUsers game =
     case game of
         Game_Go ->

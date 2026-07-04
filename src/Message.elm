@@ -1,6 +1,5 @@
 module Message exposing
     ( ChangeAttachments(..)
-    , Game(..)
     , GameType(..)
     , Message(..)
     , MessageNoReply(..)

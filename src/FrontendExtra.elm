@@ -72,7 +72,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Game(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -1255,6 +1255,7 @@ enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model 
             routeRequestChannelHelper
                 sameChannel
                 Nothing
+                Nothing
                 threadRoute
                 (Local.model loggedIn.localState)
                 (case showMembers of
@@ -1521,6 +1522,7 @@ routeRequest previousRoute newRoute model =
                     routeRequestChannelHelper
                         sameDmRoute
                         (DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId)
+                        dmRoute.tab
                         dmRoute.threadRoute
                         local
                         (startOpeningChannelSidebar loggedIn)
@@ -1550,6 +1552,7 @@ routeRequest previousRoute newRoute model =
                 (\loggedIn ->
                     routeRequestChannelHelper
                         sameDmRoute
+                        Nothing
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
@@ -1603,7 +1606,11 @@ updateLoggedIn updateFunc model =
 
 
 type alias WordSpellingGameData =
-    { matchId : Id ChannelMessageId, setup : WordSpellingGame.ValidatedSetup, shared : WordSpellingGame.Shared, model : WordSpellingGame.GameData }
+    { matchId : Id ChannelMessageId
+    , setup : WordSpellingGame.ValidatedSetup
+    , shared : WordSpellingGame.Shared
+    , model : WordSpellingGame.GameData
+    }
 
 
 getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGameData
@@ -1622,12 +1629,17 @@ getWordSpellingGameModel local loggedIn model =
                                             , setup = setup
                                             , shared = shared
                                             , model =
-                                                case SeqDict.get ( otherUserId, Just messageId ) loggedIn.games of
-                                                    Just (Game.WordSpellingGame_Game gameModel) ->
-                                                        gameModel
+                                                case SeqDict.get otherUserId loggedIn.games of
+                                                    Just gameModel ->
+                                                        case SeqDict.get messageId gameModel.startedGames of
+                                                            Just (Game.WordSpellingGame_Game game2) ->
+                                                                game2
+
+                                                            _ ->
+                                                                WordSpellingGame.initGame model.time setup
 
                                                     _ ->
-                                                        WordSpellingGame.initGame model.time setup |> Tuple.first
+                                                        WordSpellingGame.initGame model.time setup
                                             }
                                                 |> Just
 
@@ -1650,27 +1662,70 @@ getWordSpellingGameModel local loggedIn model =
 routeRequestChannelHelper :
     Bool
     -> Maybe (Id UserId)
+    -> Maybe Route.ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-routeRequestChannelHelper sameChannel maybeOtherUserId threadRoute local loggedIn model3 =
+routeRequestChannelHelper sameChannel maybeOtherUserId tab threadRoute local loggedIn model3 =
     ( case maybeOtherUserId of
         Just otherUserId ->
-            case getWordSpellingGameModel local loggedIn model3 of
-                Just data ->
-                    { loggedIn
-                        | games =
-                            SeqDict.insert
-                                ( otherUserId, Just data.matchId )
-                                (Game.WordSpellingGame_Game data.model)
-                                loggedIn.games
-                    }
+            case tab of
+                Just (Route.DmChannelHeaderTab_Games (Just messageId)) ->
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case SeqDict.get messageId dmChannel.games of
+                                Just matchData ->
+                                    case Game.wordSpellingMatchData matchData of
+                                        Just ( setup, _ ) ->
+                                            let
+                                                game =
+                                                    SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel
+                                            in
+                                            case SeqDict.get messageId game.startedGames of
+                                                Just (Game.WordSpellingGame_Game _) ->
+                                                    loggedIn
 
-                Nothing ->
+                                                _ ->
+                                                    { loggedIn
+                                                        | games =
+                                                            SeqDict.insert
+                                                                otherUserId
+                                                                { game
+                                                                    | startedGames =
+                                                                        SeqDict.insert
+                                                                            messageId
+                                                                            (WordSpellingGame.initGame model3.time setup |> Game.WordSpellingGame_Game)
+                                                                            game.startedGames
+                                                                }
+                                                                loggedIn.games
+                                                    }
+
+                                        Nothing ->
+                                            loggedIn
+
+                                Nothing ->
+                                    loggedIn
+
+                        Nothing ->
+                            loggedIn
+
+                _ ->
                     loggedIn
 
+        --case getWordSpellingGameModel local loggedIn model3 of
+        --    Just data ->
+        --        { loggedIn
+        --            | games =
+        --                SeqDict.updateIfExists
+        --                    otherUserId
+        --                    (Game.WordSpellingGame_Game data.model)
+        --                    loggedIn.games
+        --        }
+        --
+        --    Nothing ->
+        --        loggedIn
         Nothing ->
             loggedIn
     , if sameChannel then
@@ -5484,14 +5539,11 @@ audio _ model =
                                 ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
-                                            case
-                                                ( SeqDict.get messageId dmChannel.games
-                                                , loaded.popSound
-                                                , SeqDict.get ( otherUserId, Just messageId ) loggedIn.games
-                                                )
-                                            of
-                                                ( Just matchData, Ok popSound, Just gameModel ) ->
-                                                    Game.audio popSound currentUserId matchData gameModel
+                                            case ( SeqDict.get messageId dmChannel.games, loaded.popSound ) of
+                                                ( Just matchData, Ok popSound ) ->
+                                                    SeqDict.get otherUserId loggedIn.games
+                                                        |> Maybe.withDefault Game.initModel
+                                                        |> Game.audio popSound currentUserId messageId matchData
 
                                                 _ ->
                                                     Audio.silence

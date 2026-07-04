@@ -52,7 +52,7 @@ import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), Con
 import Log
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), Game(..), Message(..))
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
 import MyUi
 import NonemptyDict
 import NonemptySet
