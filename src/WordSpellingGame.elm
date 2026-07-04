@@ -538,10 +538,7 @@ updateAction setup action shared =
                     shared
 
         JoinGame ->
-            if shared.turnCount > List.Nonempty.length shared.players then
-                shared
-
-            else
+            if canJoin shared then
                 { shared
                     | players =
                         List.Nonempty.append
@@ -551,6 +548,13 @@ updateAction setup action shared =
                                 []
                             )
                 }
+
+            else
+                shared
+
+
+canJoin shared =
+    shared.turnCount <= List.Nonempty.length shared.players
 
 
 initPlayer : Id UserId -> SeqDict ( Int, Int ) LetterOrWildcard -> ValidatedSetup -> List Player -> Player
@@ -2740,7 +2744,11 @@ statusView windowSize localUser setup actions shared =
                             Ui.none
 
                         NotJoined ->
-                            MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+                            if canJoin shared then
+                                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+
+                            else
+                                Ui.none
             in
             if isMobile then
                 Ui.row
@@ -2799,7 +2807,8 @@ statusView windowSize localUser setup actions shared =
                                 )
                                 (List.Nonempty.toList shared.players)
                         )
-                    , Ui.column [] [ Ui.Lazy.lazy3 recentActionsView localUser setup actions, contextButton ]
+                    , Ui.Lazy.lazy3 recentActionsView localUser setup actions
+                    , contextButton
                     ]
 
 
@@ -2837,7 +2846,7 @@ recentActionsView localUser setup actions =
                             , Ui.text (" " ++ entry.description)
                             ]
                     )
-                    recent
+                    (List.reverse recent)
                 |> Ui.column [ Ui.spacing 4 ]
 
 
