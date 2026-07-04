@@ -19,11 +19,12 @@ module Game exposing
     , hasPendingTurn
     , initMatchData
     , initModel
+    , insideBoard
+    , isAnimating
     , pressedKey
     , routeRequest
     , update
     , view
-    , wordSpellingMatchData
     )
 
 import Array exposing (Array)
@@ -127,6 +128,34 @@ audio popSound currentUserId matchId (MatchData matchData) model =
                     Audio.silence
 
 
+isAnimating : Time.Posix -> Coord CssPixels -> Id ChannelMessageId -> MatchData -> Model -> Bool
+isAnimating time windowSize matchId (MatchData matchData) model =
+    case matchData.data of
+        FrontendGameData_Go _ _ _ ->
+            False
+
+        FrontendGameData_WordSpellingGame _ _ shared ->
+            WordSpellingGame.isAnimating time shared
+                || (case SeqDict.get matchId model.startedGames of
+                        Just (WordSpellingGame_Game game) ->
+                            WordSpellingGame.anyTileAnimating time game
+                                || WordSpellingGame.isZoomAnimating time windowSize game
+
+                        _ ->
+                            False
+                   )
+
+
+insideBoard : Coord CssPixels -> Coord CssPixels -> MatchData -> Bool
+insideBoard windowSize coord (MatchData matchData) =
+    case matchData.data of
+        FrontendGameData_Go _ _ _ ->
+            False
+
+        FrontendGameData_WordSpellingGame setup _ _ ->
+            WordSpellingGame.insideBoard setup windowSize coord
+
+
 initModel : Model
 initModel =
     { setup = GameSelect
@@ -146,18 +175,6 @@ initMatchData gameData publicLink =
     , publicLink = publicLink
     }
         |> MatchData
-
-
-{-| Extract the word spelling setup and current game state from a match, if it is one.
--}
-wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared )
-wordSpellingMatchData (MatchData match) =
-    case match.data of
-        FrontendGameData_WordSpellingGame setup _ state ->
-            Just ( setup, state )
-
-        FrontendGameData_Go _ _ _ ->
-            Nothing
 
 
 addGoAction : Go.ActionWithTime -> MatchData -> MatchData

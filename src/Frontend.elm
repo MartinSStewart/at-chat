@@ -88,7 +88,6 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import WordSpellingGame
 
 
 app :
@@ -196,12 +195,15 @@ subscriptions _ model =
 
                                   else
                                     Effect.Browser.Events.onAnimationFrame GotTime
-                                , case FrontendExtra.getWordSpellingGameModel (Local.model loggedIn.localState) loggedIn loaded of
-                                    Just data ->
+                                , case FrontendExtra.currentGame (Local.model loggedIn.localState) loaded of
+                                    Just { otherUserId, matchId, match } ->
                                         if
-                                            WordSpellingGame.isAnimating loaded.time data.shared
-                                                || WordSpellingGame.anyTileAnimating loaded.time data.model
-                                                || WordSpellingGame.isZoomAnimating loaded.time loaded.windowSize data.model
+                                            Game.isAnimating
+                                                loaded.time
+                                                loaded.windowSize
+                                                matchId
+                                                match
+                                                (SeqDict.get otherUserId loggedIn.games |> Maybe.withDefault Game.initModel)
                                         then
                                             Effect.Browser.Events.onAnimationFrame GotTime
 
@@ -5872,15 +5874,15 @@ dragTarget startTouches model =
 
                 insideBoard : Bool
                 insideBoard =
-                    case FrontendExtra.getWordSpellingGameModel local loggedIn model of
-                        Just data ->
+                    case FrontendExtra.currentGame local model of
+                        Just { match } ->
                             -- The board is laid out below the safe-area inset, so undo it before the
                             -- hit-test (the call thumbnail above is positioned including the inset, so
                             -- its check keeps the raw centroid).
-                            WordSpellingGame.insideBoard
-                                data.setup
+                            Game.insideBoard
                                 model.windowSize
                                 (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
+                                match
 
                         Nothing ->
                             False

@@ -1,14 +1,13 @@
 module FrontendExtra exposing
-    ( WordSpellingGameData
-    , audio
+    ( audio
     , canDropFiles
     , changeUpdate
+    , currentGame
     , drawingRedo
     , drawingUndo
     , editMessage_gotFiles
     , externalLinkWarning
     , fileDragOverlayOpacity
-    , getWordSpellingGameModel
     , gotFiles
     , handleEscapeKey
     , handleLocalChange
@@ -1605,16 +1604,10 @@ updateLoggedIn updateFunc model =
             ( model, Command.none )
 
 
-type alias WordSpellingGameData =
-    { matchId : Id ChannelMessageId
-    , setup : WordSpellingGame.ValidatedSetup
-    , shared : WordSpellingGame.Shared
-    , model : WordSpellingGame.GameData
-    }
-
-
-getWordSpellingGameModel : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe WordSpellingGameData
-getWordSpellingGameModel local loggedIn model =
+{-| The match currently being viewed, if the user is looking at the games tab of a DM channel.
+-}
+currentGame : LocalState -> LoadedFrontend -> Maybe { otherUserId : Id UserId, matchId : Id ChannelMessageId, match : Game.MatchData }
+currentGame local model =
     case model.route of
         DmRoute dmRoute ->
             case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
@@ -1623,28 +1616,7 @@ getWordSpellingGameModel local loggedIn model =
                         Just dmChannel ->
                             case SeqDict.get messageId dmChannel.games of
                                 Just matchData ->
-                                    case Game.wordSpellingMatchData matchData of
-                                        Just ( setup, shared ) ->
-                                            { matchId = messageId
-                                            , setup = setup
-                                            , shared = shared
-                                            , model =
-                                                case SeqDict.get otherUserId loggedIn.games of
-                                                    Just gameModel ->
-                                                        case SeqDict.get messageId gameModel.startedGames of
-                                                            Just (Game.WordSpellingGame_Game game2) ->
-                                                                game2
-
-                                                            _ ->
-                                                                WordSpellingGame.initGame model.time setup
-
-                                                    _ ->
-                                                        WordSpellingGame.initGame model.time setup
-                                            }
-                                                |> Just
-
-                                        Nothing ->
-                                            Nothing
+                                    Just { otherUserId = otherUserId, matchId = messageId, match = matchData }
 
                                 Nothing ->
                                     Nothing
