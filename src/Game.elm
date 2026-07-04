@@ -507,6 +507,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                         currentTime
                                         windowSize
                                         maybeDragging
+                                        (localUser.session.userId == otherUserId)
                                         localUser
                                         setup
                                         actions

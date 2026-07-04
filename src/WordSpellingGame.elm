@@ -2577,13 +2577,14 @@ gameView :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
+    -> Bool
     -> LocalUser
     -> ValidatedSetup
     -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging localUser setup actions shared model =
+gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared model =
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
@@ -2602,7 +2603,7 @@ gameView currentTime windowSize maybeDragging localUser setup actions shared mod
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize localUser setup actions shared
+        , statusView windowSize isPersonalDm localUser setup actions shared
         ]
 
 
@@ -2700,8 +2701,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-statusView windowSize localUser setup actions shared =
+statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+statusView windowSize isPersonalDm localUser setup actions shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2716,6 +2717,27 @@ statusView windowSize localUser setup actions shared =
 
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        -- A solo game (nobody else has joined) stops accepting new players once its creator plays a
+        -- second move, because `canJoin` only holds while `turnCount <= playerCount`. Warn the lone
+        -- player before that second move so they know they're about to lock everyone else out. There's
+        -- no one to lock out in a personal DM (the player is talking to themselves), so skip it there.
+        soloJoinWarning : Bool
+        soloJoinWarning =
+            not isPersonalDm
+                && (playerCount == 1)
+                && (shared.turnCount == 1)
+                && (isPlayerTurn localUser.session.userId shared == JoinedAndItsTheirTurn)
+
+        joinWarning : Element GameMsg
+        joinWarning =
+            if soloJoinWarning then
+                Ui.el
+                    [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14, MyUi.prewrap ]
+                    (Ui.text "No one else has joined yet — no one can join once you make another move.")
+
+            else
+                Ui.none
     in
     case getWinner shared of
         Just winners ->
@@ -2775,6 +2797,7 @@ statusView windowSize localUser setup actions shared =
 
                             Nothing ->
                                 Ui.none
+                        , joinWarning
                         ]
                     , contextButton
                     ]
@@ -2808,6 +2831,7 @@ statusView windowSize localUser setup actions shared =
                                 (List.Nonempty.toList shared.players)
                         )
                     , Ui.Lazy.lazy3 recentActionsView localUser setup actions
+                    , joinWarning
                     , contextButton
                     ]
 
