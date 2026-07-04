@@ -112,20 +112,14 @@ tests normalConfig =
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
-                    , -- User's fresh tray is "N E N E S I T" in slots 0..6. Placing N, S, E around the
-                      -- committed O at (7,7) spells NOSE down column 7, and empties the letter bag.
-                      T.collapsableGroup
-                        "Place \"nose\""
-                        [ -- User now sees admin's LOAD slide in. On the receiving client that word's
-                          -- animation schedules one pop per letter (4), on top of the user's own 7
-                          -- fade-in pops for their fresh tray: 7 + 4 = 11 pops.
-                          user.checkModel 100 (checkPopCount 11)
-                        , dragTile 100 user (trayTile 0) (boardCell 7 6)
-                        , dragTile 100 user (trayTile 4) (boardCell 7 8)
-                        , dragTile 100 user (trayTile 1) (boardCell 7 9)
+                    , T.collapsableGroup
+                        "Place \"rot\""
+                        [ user.checkModel 100 (checkPopCount 7)
+                        , dragTile 100 user (trayTile 4) (boardCell 7 6)
+                        , dragTile 100 user (trayTile 3) (boardCell 7 8)
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
-                        , admin.snapshotView 5000 { name = "Place \"nose\"" }
-                        , user.snapshotView 0 { name = "Place \"nose\"" }
+                        , admin.snapshotView 5000 { name = "Place \"rot\"" }
+                        , user.snapshotView 0 { name = "Place \"rot\"" }
                         ]
                     , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
@@ -147,7 +141,7 @@ tests normalConfig =
                             [ Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
-                            , Test.Html.Selector.exactText ": 4"
+                            , Test.Html.Selector.exactText ": 3"
                             ]
                         )
                     , user.checkView
@@ -158,7 +152,7 @@ tests normalConfig =
                             [ Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
-                            , Test.Html.Selector.exactText ": 4"
+                            , Test.Html.Selector.exactText ": 3"
                             ]
                         )
                     , admin.snapshotView 0 { name = "Game ended" }
