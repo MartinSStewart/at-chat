@@ -187,8 +187,8 @@ type alias ValidatedSetup =
     , handicap : Int
     , komiHalfPoints : KomiHalfPoints
     , timeControl : Maybe TimeControl
-    , blackPlayer : Id UserId
-    , whitePlayer : Id UserId
+    , createdBy : Id UserId
+    , gameCreatorPlayingAs : Stone
     }
 
 
@@ -1023,8 +1023,8 @@ stepForward model =
     }
 
 
-validateSetup : Id UserId -> Id UserId -> SetupModel -> Result String ValidatedSetup
-validateSetup creatorId otherPlayerId model =
+validateSetup : Id UserId -> SetupModel -> Result String ValidatedSetup
+validateSetup creatorId model =
     case selectedDimensions model of
         Ok ( width, height ) ->
             case parseHandicap model.handicapInput of
@@ -1042,22 +1042,13 @@ validateSetup creatorId otherPlayerId model =
                                     Err err
 
                                 Ok timeControl ->
-                                    let
-                                        ( blackPlayer, whitePlayer ) =
-                                            case model.gameCreatorPlayingAs of
-                                                Black ->
-                                                    ( creatorId, otherPlayerId )
-
-                                                White ->
-                                                    ( otherPlayerId, creatorId )
-                                    in
                                     { width = width
                                     , height = height
                                     , handicap = handicap
                                     , komiHalfPoints = komiHalfPoints
                                     , timeControl = timeControl
-                                    , blackPlayer = blackPlayer
-                                    , whitePlayer = whitePlayer
+                                    , createdBy = creatorId
+                                    , gameCreatorPlayingAs = model.gameCreatorPlayingAs
                                     }
                                         |> Ok
 
@@ -1103,7 +1094,7 @@ updateSetup creatorId otherPlayerId msg model =
             ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Nothing )
 
         PressedStartGame ->
-            case validateSetup creatorId otherPlayerId model of
+            case validateSetup creatorId model of
                 Ok setup ->
                     ( Game initGame, Just setup )
 

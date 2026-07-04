@@ -359,42 +359,36 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                     ( model, [] )
 
         GoSetupMsg goMsg ->
-            case guildOrDmId of
-                GuildOrDmId_Dm otherUserId ->
-                    let
-                        ( goModel, maybeStartMatch ) =
-                            Go.updateSetup
-                                currentUserId
-                                otherUserId
-                                goMsg
-                                (case model.setup of
-                                    GoModel_Setup setup ->
-                                        setup
+            let
+                ( goModel, maybeStartMatch ) =
+                    Go.updateSetup
+                        currentUserId
+                        otherUserId
+                        goMsg
+                        (case model.setup of
+                            GoModel_Setup setup ->
+                                setup
 
-                                    _ ->
-                                        Go.initSetup
-                                )
-                    in
-                    ( case goModel of
-                        Go.Setup setup ->
-                            { model | setup = GoModel_Setup setup }
+                            _ ->
+                                Go.initSetup
+                        )
+            in
+            ( case goModel of
+                Go.Setup setup ->
+                    { model | setup = GoModel_Setup setup }
 
-                        Go.Game gameModel ->
-                            { model | startedGames = SeqDict.insert newMatchId (GoModel_Game gameModel) model.startedGames }
-                    , case maybeStartMatch of
-                        Just setup ->
-                            -- A brand new match takes the next message id, then we navigate to it.
-                            [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
-                            , OutSelectMatch (Just newMatchId)
-                            ]
+                Go.Game gameModel ->
+                    { model | startedGames = SeqDict.insert newMatchId (GoModel_Game gameModel) model.startedGames }
+            , case maybeStartMatch of
+                Just setup ->
+                    -- A brand new match takes the next message id, then we navigate to it.
+                    [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
+                    , OutSelectMatch (Just newMatchId)
+                    ]
 
-                        Nothing ->
-                            []
-                    )
-
-                -- Go matches need a fixed opponent so they are DM-only for now
-                GuildOrDmId_Guild _ _ ->
-                    ( model, [] )
+                Nothing ->
+                    []
+            )
 
         WordSpellingGameMsg wordSpellingGameMsg ->
             case maybeMatch of
@@ -461,12 +455,7 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
         PressedSelectGame game ->
             case game of
                 GameType_Go ->
-                    case guildOrDmId of
-                        GuildOrDmId_Dm _ ->
-                            ( { model | setup = GoModel_Setup Go.initSetup }, [] )
-
-                        GuildOrDmId_Guild _ _ ->
-                            ( model, [] )
+                    ( { model | setup = GoModel_Setup Go.initSetup }, [] )
 
                 GameType_WordSpellingGame ->
                     ( { model | setup = WordSpellingGame_Setup WordSpellingGame.initSetup }, [] )
