@@ -2955,10 +2955,10 @@ describeAction setup shared action =
                                 ++ " (+"
                                 ++ String.fromInt (result.score + bonus)
                                 ++ (if bonus == 0 then
-                                        ", bingo!"
+                                        ""
 
                                     else
-                                        ""
+                                        ", bingo!"
                                    )
                                 ++ ")"
 
