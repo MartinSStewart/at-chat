@@ -580,6 +580,7 @@ updateAction setup action shared =
                 shared
 
 
+canJoin : Shared -> Bool
 canJoin shared =
     shared.turnCount <= List.Nonempty.length shared.players
 
