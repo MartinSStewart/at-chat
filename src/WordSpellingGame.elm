@@ -391,24 +391,37 @@ shuffle list =
         Random.independentSeed
 
 
+{-| The game is over either when every player has passed in turn, or as soon as any player has no
+letters left. An empty tray means the bag is empty too: trays are refilled from the bag after every
+placement, so a tray can only end up empty once there was nothing left to draw.
+-}
 getWinner : Shared -> Maybe (Nonempty (Id UserId))
 getWinner shared =
-    case shared.passingStartedAt of
-        Just passingStartedAt ->
-            if List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt then
-                let
-                    player =
-                        NonemptyExtra.maximumBy .score shared.players
-                in
-                List.Nonempty.filter (\a -> a.score == player.score) player shared.players
-                    |> List.Nonempty.map .userId
-                    |> Just
+    let
+        everyonePassed : Bool
+        everyonePassed =
+            case shared.passingStartedAt of
+                Just passingStartedAt ->
+                    List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt
 
-            else
-                Nothing
+                Nothing ->
+                    False
 
-        Nothing ->
-            Nothing
+        someoneOutOfLetters : Bool
+        someoneOutOfLetters =
+            List.Nonempty.any (\player -> IdArray.isEmpty player.tray) shared.players
+    in
+    if everyonePassed || someoneOutOfLetters then
+        let
+            player =
+                NonemptyExtra.maximumBy .score shared.players
+        in
+        List.Nonempty.filter (\a -> a.score == player.score) player shared.players
+            |> List.Nonempty.map .userId
+            |> Just
+
+    else
+        Nothing
 
 
 {-| The extra points awarded for placing a word that empties a full tray in one move (a "bingo").

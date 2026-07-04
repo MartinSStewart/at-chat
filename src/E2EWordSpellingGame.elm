@@ -240,6 +240,100 @@ tests normalConfig =
                 )
             ]
         , E2EHelper.startTest
+            "Game ends when a player runs out of letters"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
+                        -- cells (see WordSpellingGame.boardX / boardY / cellSize), and the tray
+                        -- is directly below it. Tray tiles cap at 50px however small the tray, so
+                        -- these positions match the other desktop tests despite the 2-tile tray.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- Admin creates a match with a 2-tile tray and a bag of exactly four A tiles:
+                      -- admin draws two, the joining user draws the other two, and the bag is empty.
+                      -- (The bingo bonus is zeroed so the final score stays easy to read.)
+                      admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
+                    , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "aaaa"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the same match and joins before the first move,
+                    -- emptying the bag.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                    -- Admin plays both tiles as "AA" through the centre square: (1+1)*2 = 4. Their
+                    -- tray is now empty with nothing left in the bag, so the game must end right
+                    -- away — the other user still holds two tiles and nobody has passed.
+                    , T.collapsableGroup
+                        "Place \"aa\""
+                        [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                        , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+                        ]
+                    , admin.checkView
+                        100
+                        -- The leaderboard renders each player's name and score suffix as separate
+                        -- elements (see WordSpellingGame.playerRow), so they're matched separately.
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText "Game over"
+                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText ": 4 (winner)"
+                            , Test.Html.Selector.exactText "Stevie Steve"
+                            , Test.Html.Selector.exactText ": 0"
+                            ]
+                        )
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText "Game over"
+                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText ": 4 (winner)"
+                            , Test.Html.Selector.exactText "Stevie Steve"
+                            , Test.Html.Selector.exactText ": 0"
+                            ]
+                        )
+                    , admin.snapshotView 0 { name = "Game ended out of letters" }
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
             "Word spelling game match (mobile)"
             E2EHelper.startTime
             normalConfig
