@@ -76,12 +76,6 @@ tests normalConfig =
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
                     , admin.click 100 (Dom.id "wsg_start")
-
-                    -- The other user opens the same match and joins it.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
-                    , user.click 100 (Dom.id "guild_openGamesTab")
-                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
-                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , T.collapsableGroup
                         "Clear placed tiles"
                         [ -- Admin drags one tile onto the board: 7 fade-in pops for the held tiles plus
@@ -112,20 +106,20 @@ tests normalConfig =
                         , admin.snapshotView 5000 { name = "Place \"load\"" }
                         , user.snapshotView 0 { name = "Place \"load\"" }
                         ]
-                    , -- User's fresh tray is "N E N E S I T" in slots 0..6. Placing N, S, E around the
-                      -- committed O at (7,7) spells NOSE down column 7, and empties the letter bag.
-                      T.collapsableGroup
-                        "Place \"nose\""
-                        [ -- User now sees admin's LOAD slide in. On the receiving client that word's
-                          -- animation schedules one pop per letter (4), on top of the user's own 7
-                          -- fade-in pops for their fresh tray: 7 + 4 = 11 pops.
-                          user.checkModel 100 (checkPopCount 11)
-                        , dragTile 100 user (trayTile 0) (boardCell 7 6)
-                        , dragTile 100 user (trayTile 4) (boardCell 7 8)
-                        , dragTile 100 user (trayTile 1) (boardCell 7 9)
+
+                    -- The other user opens the same match and joins it.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                    , T.collapsableGroup
+                        "Place \"rot\""
+                        [ user.checkModel 100 (checkPopCount 7)
+                        , dragTile 100 user (trayTile 4) (boardCell 7 6)
+                        , dragTile 100 user (trayTile 3) (boardCell 7 8)
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
-                        , admin.snapshotView 5000 { name = "Place \"nose\"" }
-                        , user.snapshotView 0 { name = "Place \"nose\"" }
+                        , admin.snapshotView 5000 { name = "Place \"rot\"" }
+                        , user.snapshotView 0 { name = "Place \"rot\"" }
                         ]
                     , T.collapsableGroup
                         "Drop a tray tile one slot to the right"
@@ -147,7 +141,7 @@ tests normalConfig =
                             [ Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
-                            , Test.Html.Selector.exactText ": 4"
+                            , Test.Html.Selector.exactText ": 3"
                             ]
                         )
                     , user.checkView
@@ -158,10 +152,90 @@ tests normalConfig =
                             [ Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 10 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
-                            , Test.Html.Selector.exactText ": 4"
+                            , Test.Html.Selector.exactText ": 3"
                             ]
                         )
                     , admin.snapshotView 0 { name = "Game ended" }
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Check user can't join after first round"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
+                        -- cells (see WordSpellingGame.boardX / boardY / cellSize), and the tray
+                        -- is directly below it.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                      -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
+                      -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
+                      admin.portEvent 0 "audioPortFromJs" popLoadedEvent
+                    , user.portEvent 0 "audioPortFromJs" popLoadedEvent
+
+                    -- Admin creates a Word Spelling Game match in the DM with the other user.
+                    , admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the same match and joins it.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
+                    , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
+                    , T.collapsableGroup
+                        "Place \"load\""
+                        [ dragTile 100 admin (trayTile 3) (boardCell 6 7)
+                        , dragTile 100 admin (trayTile 1) (boardCell 7 7)
+                        , dragTile 100 admin (trayTile 0) (boardCell 8 7)
+                        , dragTile 100 admin (trayTile 4) (boardCell 9 7)
+                        , -- Admin is holding all 7 tray tiles (each schedules a fade-in pop) with 4 of
+                          -- them placed on the board (each schedules a placement pop): 7 + 4 = 11 pops.
+                          admin.checkModel 100 (checkPopCount 11)
+                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                        , -- After committing LOAD, admin's board is clear and the tray is refilled back to
+                          -- 7 tiles, so only the 7 fade-in pops remain (a mover doesn't animate its own word).
+                          admin.checkModel 100 (checkPopCount 7)
+                        , admin.snapshotView 5000 { name = "Place \"load\"" }
+                        , user.snapshotView 0 { name = "Place \"load\"" }
+                        ]
+                    , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
                     ]
                 )
             ]

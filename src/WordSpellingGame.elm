@@ -32,6 +32,7 @@ module WordSpellingGame exposing
     , boardY
     , dragEnd
     , dragStart
+    , fullTrayBonusScore
     , gameView
     , initGame
     , initSetup
@@ -49,6 +50,7 @@ module WordSpellingGame exposing
     , updateGame
     , updateSetup
     , validatePlacement
+    , validateSetup
     )
 
 {-| Were calling it this to avoid the Scrabble trademark
@@ -152,6 +154,7 @@ type SetupMsg
     = ChangedMainTimeInput String
     | ChangedIncrementInput String
     | ChangedTraySizeInput String
+    | ChangedFullTrayBonusInput String
     | ChangedLettersInput String
     | PressedResetLetters
     | PressedStartGame
@@ -170,6 +173,7 @@ type alias SetupModel =
     { mainTimeInput : String
     , incrementInput : String
     , traySize : Int
+    , fullTrayBonus : Int
     , error : Maybe String
     , letters : String
     }
@@ -178,6 +182,7 @@ type alias SetupModel =
 type alias ValidatedSetup =
     { timeControls : TimeControl
     , traySize : OneOrGreater
+    , fullTrayBonus : Int
     , createdBy : Id UserId
     , seed : Int
     , letters : NonemptyDict LetterOrWildcard OneOrGreater
@@ -189,9 +194,18 @@ initSetup =
     { mainTimeInput = "10"
     , incrementInput = "5"
     , traySize = 7
+    , fullTrayBonus = defaultFullTrayBonus
     , error = Nothing
     , letters = defaultLetters
     }
+
+
+{-| The default points awarded for placing a word that uses every tile in a full tray (the
+"bingo" bonus). Configurable per game in the setup view.
+-}
+defaultFullTrayBonus : number
+defaultFullTrayBonus =
+    50
 
 
 initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
@@ -397,6 +411,19 @@ getWinner shared =
             Nothing
 
 
+{-| The extra points awarded for placing a word that empties a full tray in one move (a "bingo").
+A placement can only draw from the player's tray, which never holds more than `traySize` tiles, so
+placing exactly `traySize` letters means every tile of a full tray was used. Returns 0 otherwise.
+-}
+fullTrayBonusScore : ValidatedSetup -> PlacedWord -> Int
+fullTrayBonusScore setup placedWord =
+    if List.Nonempty.length placedWord.letters == OneOrGreater.toInt setup.traySize then
+        setup.fullTrayBonus
+
+    else
+        0
+
+
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
     case action.change of
@@ -469,7 +496,7 @@ updateAction setup action shared =
                                                         player.score
 
                                                     _ ->
-                                                        player.score + result.score
+                                                        player.score + result.score + fullTrayBonusScore setup placedWord
                                         }
                                         shared.players
                                 , turnCount = shared.turnCount + 1
@@ -538,10 +565,7 @@ updateAction setup action shared =
                     shared
 
         JoinGame ->
-            if shared.turnCount > List.Nonempty.length shared.players then
-                shared
-
-            else
+            if canJoin shared then
                 { shared
                     | players =
                         List.Nonempty.append
@@ -551,6 +575,14 @@ updateAction setup action shared =
                                 []
                             )
                 }
+
+            else
+                shared
+
+
+canJoin : Shared -> Bool
+canJoin shared =
+    shared.turnCount <= List.Nonempty.length shared.players
 
 
 initPlayer : Id UserId -> SeqDict ( Int, Int ) LetterOrWildcard -> ValidatedSetup -> List Player -> Player
@@ -962,6 +994,15 @@ updateSetup time currentUserId msg setup =
         ChangedTraySizeInput input ->
             ( { setup
                 | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
+                , error = Nothing
+              }
+                |> Setup
+            , []
+            )
+
+        ChangedFullTrayBonusInput input ->
+            ( { setup
+                | fullTrayBonus = String.toInt (String.trim input) |> Maybe.withDefault setup.fullTrayBonus
                 , error = Nothing
               }
                 |> Setup
@@ -1464,6 +1505,7 @@ validateSetup createdBy time setup =
                             { createdBy = createdBy
                             , timeControls = timeControls
                             , traySize = traySize
+                            , fullTrayBonus = setup.fullTrayBonus
                             , seed =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
@@ -2573,13 +2615,14 @@ gameView :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
+    -> Bool
     -> LocalUser
     -> ValidatedSetup
     -> Array ActionWithTime
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging localUser setup actions shared model =
+gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared model =
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
@@ -2598,7 +2641,7 @@ gameView currentTime windowSize maybeDragging localUser setup actions shared mod
         , MyUi.htmlStyle "user-select" "none"
         ]
         [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize localUser setup actions shared
+        , statusView windowSize isPersonalDm localUser setup actions shared
         ]
 
 
@@ -2696,8 +2739,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-statusView windowSize localUser setup actions shared =
+statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+statusView windowSize isPersonalDm localUser setup actions shared =
     let
         currentPlayer : Player
         currentPlayer =
@@ -2712,6 +2755,27 @@ statusView windowSize localUser setup actions shared =
 
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        -- A solo game (nobody else has joined) stops accepting new players once its creator plays a
+        -- second move, because `canJoin` only holds while `turnCount <= playerCount`. Warn the lone
+        -- player before that second move so they know they're about to lock everyone else out. There's
+        -- no one to lock out in a personal DM (the player is talking to themselves), so skip it there.
+        soloJoinWarning : Bool
+        soloJoinWarning =
+            not isPersonalDm
+                && (playerCount == 1)
+                && (shared.turnCount == 1)
+                && (isPlayerTurn localUser.session.userId shared == JoinedAndItsTheirTurn)
+
+        joinWarning : Element GameMsg
+        joinWarning =
+            if soloJoinWarning then
+                Ui.el
+                    [ Ui.Font.color MyUi.errorColor, MyUi.prewrap ]
+                    (Ui.text "No one else has joined yet.\nOnce you make a second move no one can join.")
+
+            else
+                Ui.none
     in
     case getWinner shared of
         Just winners ->
@@ -2740,7 +2804,11 @@ statusView windowSize localUser setup actions shared =
                             Ui.none
 
                         NotJoined ->
-                            MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+                            if canJoin shared then
+                                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
+
+                            else
+                                Ui.none
             in
             if isMobile then
                 Ui.row
@@ -2767,6 +2835,7 @@ statusView windowSize localUser setup actions shared =
 
                             Nothing ->
                                 Ui.none
+                        , joinWarning
                         ]
                     , contextButton
                     ]
@@ -2799,7 +2868,9 @@ statusView windowSize localUser setup actions shared =
                                 )
                                 (List.Nonempty.toList shared.players)
                         )
-                    , Ui.column [] [ Ui.Lazy.lazy3 recentActionsView localUser setup actions, contextButton ]
+                    , Ui.Lazy.lazy3 recentActionsView localUser setup actions
+                    , joinWarning
+                    , contextButton
                     ]
 
 
@@ -2837,7 +2908,7 @@ recentActionsView localUser setup actions =
                             , Ui.text (" " ++ entry.description)
                             ]
                     )
-                    recent
+                    (List.reverse recent)
                 |> Ui.column [ Ui.spacing 4 ]
 
 
@@ -2874,10 +2945,21 @@ describeAction setup shared action =
                 _ ->
                     case placeWord shared.board placedWord of
                         Just result ->
+                            let
+                                bonus : Int
+                                bonus =
+                                    fullTrayBonusScore setup placedWord
+                            in
                             "played "
                                 ++ headlineWord result.words
                                 ++ " (+"
-                                ++ String.fromInt result.score
+                                ++ String.fromInt (result.score + bonus)
+                                ++ (if bonus == 0 then
+                                        ", bingo!"
+
+                                    else
+                                        ""
+                                   )
                                 ++ ")"
 
                         Nothing ->
@@ -3837,9 +3919,17 @@ setupView windowSize setup =
                 24
             )
         , Ui.background MyUi.tabBackground
+        , Ui.height (Ui.px (tabBodyHeight windowSize OneOrGreater.seven))
+        , Ui.heightMin 0
+        , Ui.scrollable
         ]
         [ setupSection
-            "Tray size (letters each player holds)"
+            (Ui.row
+                []
+                [ Ui.text "Tray size"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
+                ]
+            )
             (numberInput
                 { htmlId = "wsg_traySizeInput"
                 , minValue = 1
@@ -3849,14 +3939,34 @@ setupView windowSize setup =
                 }
             )
         , setupSection
-            "Time control"
+            (Ui.row
+                []
+                [ Ui.text "Bingo bonus"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
+                ]
+            )
+            (numberInput
+                { htmlId = "wsg_fullTrayBonusInput"
+                , minValue = -999
+                , maxValue = 999
+                , value = String.fromInt setup.fullTrayBonus
+                , onChange = ChangedFullTrayBonusInput
+                }
+            )
+        , setupSection
+            (Ui.text "Time control")
             (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
                 [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
                 , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                 ]
             )
         , setupSection
-            "Letter distribution (spaces are wildcards)"
+            (Ui.row
+                []
+                [ Ui.text "Letter distribution"
+                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
+                ]
+            )
             (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
                 [ lettersInput setup.letters
                 , if setup.letters == defaultLetters then
@@ -3876,11 +3986,11 @@ setupView windowSize setup =
         ]
 
 
-setupSection : String -> Element SetupMsg -> Element SetupMsg
+setupSection : Element SetupMsg -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
-        [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text title)
+        [ Ui.spacing 8, MyUi.prewrap ]
+        [ Ui.el [ Ui.Font.weight 600 ] title
         , content
         ]
 
