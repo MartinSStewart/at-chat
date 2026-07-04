@@ -37,7 +37,7 @@ import Go
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
+import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId, Id, UserId)
 import List.Nonempty
 import Message exposing (GameType(..))
 import MyUi
@@ -193,16 +193,16 @@ addGoAction action (MatchData match) =
 
 routeRequest :
     Time.Posix
-    -> Id UserId
+    -> GuildOrDmId
     -> Id ChannelMessageId
     -> SeqDict (Id ChannelMessageId) MatchData
-    -> SeqDict (Id UserId) Model
-    -> SeqDict (Id UserId) Model
-routeRequest time otherUserId matchId matchData models =
+    -> SeqDict GuildOrDmId Model
+    -> SeqDict GuildOrDmId Model
+routeRequest time guildOrDmId matchId matchData models =
     case SeqDict.get matchId matchData of
         Just (MatchData matchData2) ->
             SeqDict.update
-                otherUserId
+                guildOrDmId
                 (\maybeModel ->
                     let
                         model =
@@ -564,12 +564,12 @@ view :
     -> Maybe (NonemptyDict Int Touch)
     -> Maybe MyUi.LastCopy
     -> LocalUser
-    -> Id UserId
+    -> Bool
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybeMatchId matches model =
+view currentTime windowSize maybeDragging lastCopied localUser isPersonalDm maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -613,7 +613,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                                         currentTime
                                         windowSize
                                         maybeDragging
-                                        (localUser.session.userId == otherUserId)
+                                        isPersonalDm
                                         localUser
                                         setup
                                         actions
@@ -639,7 +639,7 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                 [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
                 , case model.setup of
                     GoModel_Setup setup ->
-                        Go.setupView (localUser.session.userId == otherUserId) windowSize setup |> Ui.map GoSetupMsg
+                        Go.setupView isPersonalDm windowSize setup |> Ui.map GoSetupMsg
 
                     WordSpellingGame_Setup setup ->
                         WordSpellingGame.setupView windowSize setup |> Ui.map WordSpellingSetupMsg

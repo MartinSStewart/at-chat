@@ -114,7 +114,7 @@ tests normalConfig =
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , T.collapsableGroup
                         "Place \"rot\""
-                        [ user.checkModel 100 (checkPopCount 7)
+                        [ user.checkModel 100 (checkPopCount 11)
                         , dragTile 100 user (trayTile 4) (boardCell 7 6)
                         , dragTile 100 user (trayTile 3) (boardCell 7 8)
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")

@@ -138,6 +138,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
                         , dateDividerDrawings = SeqDict.empty
+                        , games = SeqDict.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -150,6 +151,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , threads = SeqDict.empty
                         , dateDividerDrawings = SeqDict.empty
+                        , games = SeqDict.empty
                         }
                       )
                     ]

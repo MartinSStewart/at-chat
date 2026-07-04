@@ -501,7 +501,7 @@ disableTextSelect isMobile model =
     if isMobile then
         True
 
-    else if Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw then
+    else if Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw then
         True
 
     else
@@ -1231,29 +1231,30 @@ enterSidebarRoute sameGuild previousRoute viewCmd model =
 
 
 enterChannelRoute :
-    ThreadRouteWithFriends
+    AnyGuildOrDmId
+    -> ThreadRouteWithFriends
     -> Bool
     -> Bool
     -> Maybe Route
     -> Command FrontendOnly ToBackend FrontendMsg_
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-enterChannelRoute threadRoute sameGuild sameChannel previousRoute viewCmd model =
-    let
-        showMembers : ShowMembersTab
-        showMembers =
-            case threadRoute of
-                ViewThreadWithFriends _ _ showMembers2 ->
-                    showMembers2
-
-                NoThreadWithFriends _ showMembers2 ->
-                    showMembers2
-    in
+enterChannelRoute guildOrDmId threadRoute sameGuild sameChannel previousRoute viewCmd model =
     updateLoggedIn
         (\loggedIn ->
+            let
+                showMembers : ShowMembersTab
+                showMembers =
+                    case threadRoute of
+                        ViewThreadWithFriends _ _ showMembers2 ->
+                            showMembers2
+
+                        NoThreadWithFriends _ showMembers2 ->
+                            showMembers2
+            in
             routeRequestChannelHelper
                 sameChannel
-                Nothing
+                guildOrDmId
                 Nothing
                 threadRoute
                 (Local.model loggedIn.localState)
@@ -1300,7 +1301,7 @@ routeRequest previousRoute newRoute model =
                             | drawingMode =
                                 -- Closing the draw tab (or navigating elsewhere) also
                                 -- deselects the drawing anchor
-                                if Route.toChannelHeaderTab newRoute == Just Route.DmChannelHeaderTab_Draw then
+                                if Route.toChannelHeaderTab newRoute == Just Route.ChannelHeaderTab_Draw then
                                     loggedIn.drawingMode
 
                                 else
@@ -1371,6 +1372,7 @@ routeRequest previousRoute newRoute model =
             case channelRoute of
                 ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
+                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
                         threadRoute
                         sameGuild
                         (if sameGuild then
@@ -1456,6 +1458,7 @@ routeRequest previousRoute newRoute model =
             case channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     enterChannelRoute
+                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId))
                         threadRoute
                         sameGuild
                         (if sameGuild then
@@ -1518,14 +1521,19 @@ routeRequest previousRoute newRoute model =
                         local =
                             Local.model loggedIn.localState
                     in
-                    routeRequestChannelHelper
-                        sameDmRoute
-                        (DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId)
-                        dmRoute.tab
-                        dmRoute.threadRoute
-                        local
-                        (startOpeningChannelSidebar loggedIn)
-                        model3
+                    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+                        Just otherUserId ->
+                            routeRequestChannelHelper
+                                sameDmRoute
+                                (GuildOrDmId_Dm otherUserId |> GuildOrDmId)
+                                dmRoute.tab
+                                dmRoute.threadRoute
+                                local
+                                (startOpeningChannelSidebar loggedIn)
+                                model3
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model3
 
@@ -1551,7 +1559,13 @@ routeRequest previousRoute newRoute model =
                 (\loggedIn ->
                     routeRequestChannelHelper
                         sameDmRoute
-                        Nothing
+                        (DiscordGuildOrDmId
+                            (DiscordGuildOrDmId_Dm
+                                { currentUserId = routeData.currentDiscordUserId
+                                , channelId = routeData.channelId
+                                }
+                            )
+                        )
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
@@ -1611,7 +1625,7 @@ currentGame local model =
     case model.route of
         DmRoute dmRoute ->
             case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                ( Just (Route.ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case SeqDict.get messageId dmChannel.games of
@@ -1633,31 +1647,55 @@ currentGame local model =
 
 routeRequestChannelHelper :
     Bool
-    -> Maybe (Id UserId)
+    -> AnyGuildOrDmId
     -> Maybe Route.ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> LocalState
     -> LoggedIn2
     -> LoadedFrontend
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-routeRequestChannelHelper sameChannel maybeOtherUserId tab threadRoute local loggedIn model3 =
-    ( case maybeOtherUserId of
-        Just otherUserId ->
+routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn model3 =
+    ( case guildOrDmId of
+        GuildOrDmId guildOrDmId2 ->
             case tab of
-                Just (Route.DmChannelHeaderTab_Games (Just messageId)) ->
-                    case SeqDict.get otherUserId local.dmChannels of
-                        Just dmChannel ->
-                            { loggedIn
-                                | games = Game.routeRequest model3.time otherUserId messageId dmChannel.games loggedIn.games
-                            }
+                Just (Route.ChannelHeaderTab_Games (Just messageId)) ->
+                    case guildOrDmId2 of
+                        GuildOrDmId_Dm otherUserId ->
+                            case SeqDict.get otherUserId local.dmChannels of
+                                Just dmChannel ->
+                                    { loggedIn
+                                        | games =
+                                            Game.routeRequest
+                                                model3.time
+                                                guildOrDmId2
+                                                messageId
+                                                dmChannel.games
+                                                loggedIn.games
+                                    }
 
-                        Nothing ->
-                            loggedIn
+                                Nothing ->
+                                    loggedIn
+
+                        GuildOrDmId_Guild guildId channelId ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel ) ->
+                                    { loggedIn
+                                        | games =
+                                            Game.routeRequest
+                                                model3.time
+                                                guildOrDmId2
+                                                messageId
+                                                channel.games
+                                                loggedIn.games
+                                    }
+
+                                Nothing ->
+                                    loggedIn
 
                 _ ->
                     loggedIn
 
-        Nothing ->
+        DiscordGuildOrDmId _ ->
             loggedIn
     , if sameChannel then
         Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5145,7 +5183,7 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw then
+            if Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw then
                 -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
                 routePush model (Route.setChannelHeaderTab Nothing model.route)
 
@@ -5467,7 +5505,7 @@ audio _ model =
                                     local.localUser.session.userId
                             in
                             case ( dmRoute.tab, DmChannel.otherUserId currentUserId dmRoute.channelId ) of
-                                ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                ( Just (Route.ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
                                             case ( SeqDict.get messageId dmChannel.games, loaded.popSound ) of

@@ -65,10 +65,10 @@ routeFuzzer =
 tabFuzzer : Fuzzer ChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
-        [ DmChannelHeaderTab_VoiceChat
-        , DmChannelHeaderTab_Games Nothing
-        , DmChannelHeaderTab_Games (Just (Id.fromInt 123))
-        , DmChannelHeaderTab_Draw
+        [ ChannelHeaderTab_VoiceChat
+        , ChannelHeaderTab_Games Nothing
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123))
+        , ChannelHeaderTab_Draw
         ]
 
 

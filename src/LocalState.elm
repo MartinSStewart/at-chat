@@ -134,6 +134,7 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
+import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -309,6 +310,7 @@ type alias BackendChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , games : SeqDict (Id ChannelMessageId) Game.MatchData
     }
 
 
@@ -335,6 +337,7 @@ type alias FrontendChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , games : SeqDict (Id ChannelMessageId) Game.MatchData
     }
 
 
@@ -469,6 +472,7 @@ channelToFrontend threadRoute channel =
                     (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
             , dateDividerDrawings = channel.dateDividerDrawings
+            , games = channel.games
             }
                 |> Just
 
@@ -1128,6 +1132,7 @@ createGuild time userId guildName =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
               )
             ]
@@ -1161,6 +1166,7 @@ createChannel time userId channelName channelDescription guild =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
                 guild.channels
     }
@@ -1195,6 +1201,7 @@ createChannelFrontend time userId channelName channelDescription guild =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
                 guild.channels
     }

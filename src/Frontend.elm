@@ -1202,7 +1202,7 @@ updateLoaded msg model =
                     case model.route of
                         DmRoute dmRoute ->
                             case dmRoute.tab of
-                                Just (DmChannelHeaderTab_Games maybeMatchId) ->
+                                Just (ChannelHeaderTab_Games maybeMatchId) ->
                                     FrontendExtra.updateLoggedIn
                                         (\loggedIn ->
                                             case loggedIn.textInputFocus of
@@ -1624,7 +1624,7 @@ updateLoaded msg model =
                                             case model.route of
                                                 DmRoute dmRoute ->
                                                     case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                                                        ( Just (Route.DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                                        ( Just (Route.ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                                                             case SeqDict.get otherUserId local.dmChannels of
                                                                 Just dmChannel ->
                                                                     { loggedIn
@@ -2004,7 +2004,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
                     in
                     case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                        ( Just (DmChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
+                        ( Just (ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
                             let
                                 dmChannel =
                                     SeqDict.get otherUserId local.dmChannels
@@ -2639,7 +2639,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedImage { imageId, fileUrl, imageSize, position, displayWidth } ->
                     case Route.toChannelHeaderTab model.route of
-                        Just DmChannelHeaderTab_Draw ->
+                        Just ChannelHeaderTab_Draw ->
                             let
                                 displayHeight : Float
                                 displayHeight =
@@ -2688,7 +2688,7 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     case model.route of
                         DmRoute dmRoute ->
-                            FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just DmChannelHeaderTab_VoiceChat })
+                            FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just ChannelHeaderTab_VoiceChat })
 
                         HomePageRoute ->
                             ( model, Command.none )
@@ -2727,7 +2727,7 @@ updateLoaded msg model =
                                 DmRoute dmRoute ->
                                     FrontendExtra.routePush
                                         model
-                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games (Just messageId)) })
+                                        (DmRoute { dmRoute | tab = Just (ChannelHeaderTab_Games (Just messageId)) })
 
                                 HomePageRoute ->
                                     ( model, Command.none )
@@ -2764,7 +2764,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedUserIcon elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
-                        Just DmChannelHeaderTab_Draw ->
+                        Just ChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.UserIconAnchor)
@@ -2778,7 +2778,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedTimestamp elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
-                        Just DmChannelHeaderTab_Draw ->
+                        Just ChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.MessageAnchor threadRoute Drawing.TimestampAnchor)
@@ -2792,7 +2792,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedDateDivider date elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
-                        Just DmChannelHeaderTab_Draw ->
+                        Just ChannelHeaderTab_Draw ->
                             selectDrawingAnchor
                                 guildOrDmId
                                 (Drawing.DateDividerAnchor (Id.threadRouteWithoutMessage threadRoute) date)
@@ -4261,7 +4261,7 @@ updateLoaded msg model =
                                             { channelId =
                                                 DmChannel.channelIdFromUserIds local.localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
-                                            , tab = Just DmChannelHeaderTab_VoiceChat
+                                            , tab = Just ChannelHeaderTab_VoiceChat
                                             }
                                         )
 
@@ -5818,7 +5818,7 @@ finalizeWordSpellingDrag time model loggedIn =
                     case model.route of
                         DmRoute dmRoute ->
                             ( case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                                ( Just (DmChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
+                                ( Just (ChannelHeaderTab_Games (Just messageId)), Just otherUserId ) ->
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
                                             { loggedIn
@@ -7162,7 +7162,7 @@ handleWordSpellingGameOutMsgs outMsgs dmRoute model =
                         ( pushModel, pushCmd ) =
                             FrontendExtra.routePush
                                 model2
-                                (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Games newSelected) })
+                                (DmRoute { dmRoute | tab = Just (ChannelHeaderTab_Games newSelected) })
                     in
                     ( pushModel, pushCmd :: cmds )
 

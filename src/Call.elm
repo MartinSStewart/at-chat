@@ -380,7 +380,7 @@ displayMode currentUserId route local =
                             DmRoomId otherUserId
 
                         isTabExpanded =
-                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+                            dmRoute.tab == Just ChannelHeaderTab_VoiceChat
                     in
                     if Just roomId == local.currentRoom && isTabExpanded then
                         case SeqDict.get roomId local.voiceChats of

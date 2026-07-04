@@ -69,10 +69,10 @@ type alias DmRouteData =
 
 
 type ChannelHeaderTab
-    = DmChannelHeaderTab_VoiceChat
-    | DmChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
-    | DmChannelHeaderTab_ChannelDescription
-    | DmChannelHeaderTab_Draw
+    = ChannelHeaderTab_VoiceChat
+    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
+    | ChannelHeaderTab_ChannelDescription
+    | ChannelHeaderTab_Draw
 
 
 type alias DiscordGuildRouteData =
@@ -371,16 +371,16 @@ decodeChannelHeaderTab url2 =
         Just [ tab2 ] ->
             case tab2 of
                 "description" ->
-                    DmChannelHeaderTab_ChannelDescription |> Just
+                    ChannelHeaderTab_ChannelDescription |> Just
 
                 "game" ->
-                    DmChannelHeaderTab_Games goMatchId |> Just
+                    ChannelHeaderTab_Games goMatchId |> Just
 
                 "call" ->
-                    DmChannelHeaderTab_VoiceChat |> Just
+                    ChannelHeaderTab_VoiceChat |> Just
 
                 "draw" ->
-                    DmChannelHeaderTab_Draw |> Just
+                    ChannelHeaderTab_Draw |> Just
 
                 _ ->
                     Nothing
@@ -481,22 +481,22 @@ setChannelHeaderTab tab route =
 sameChannelHeaderTab : ChannelHeaderTab -> ChannelHeaderTab -> Bool
 sameChannelHeaderTab tabA tabB =
     case tabA of
-        DmChannelHeaderTab_VoiceChat ->
-            tabB == DmChannelHeaderTab_VoiceChat
+        ChannelHeaderTab_VoiceChat ->
+            tabB == ChannelHeaderTab_VoiceChat
 
-        DmChannelHeaderTab_Games _ ->
+        ChannelHeaderTab_Games _ ->
             case tabB of
-                DmChannelHeaderTab_Games _ ->
+                ChannelHeaderTab_Games _ ->
                     True
 
                 _ ->
                     False
 
-        DmChannelHeaderTab_ChannelDescription ->
-            tabB == DmChannelHeaderTab_ChannelDescription
+        ChannelHeaderTab_ChannelDescription ->
+            tabB == ChannelHeaderTab_ChannelDescription
 
-        DmChannelHeaderTab_Draw ->
-            tabB == DmChannelHeaderTab_Draw
+        ChannelHeaderTab_Draw ->
+            tabB == ChannelHeaderTab_Draw
 
 
 goMatchParam : String
@@ -685,10 +685,10 @@ encodeShowMembers showMembers =
 encodeChannelHeaderTab : Maybe ChannelHeaderTab -> List Url.Builder.QueryParameter
 encodeChannelHeaderTab tab =
     case tab of
-        Just DmChannelHeaderTab_VoiceChat ->
+        Just ChannelHeaderTab_VoiceChat ->
             [ Url.Builder.string tabParam "call" ]
 
-        Just (DmChannelHeaderTab_Games maybeMatchId) ->
+        Just (ChannelHeaderTab_Games maybeMatchId) ->
             Url.Builder.string tabParam "game"
                 :: (case maybeMatchId of
                         Just matchId ->
@@ -698,10 +698,10 @@ encodeChannelHeaderTab tab =
                             []
                    )
 
-        Just DmChannelHeaderTab_ChannelDescription ->
+        Just ChannelHeaderTab_ChannelDescription ->
             [ Url.Builder.string tabParam "description" ]
 
-        Just DmChannelHeaderTab_Draw ->
+        Just ChannelHeaderTab_Draw ->
             [ Url.Builder.string tabParam "draw" ]
 
         Nothing ->
