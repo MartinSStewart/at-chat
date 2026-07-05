@@ -640,8 +640,15 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
                     GameSelect ->
                         Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
-                            (List.map gameSelectButton (availableGames guildOrDmId))
+                            (List.map gameSelectButton allGames)
                 ]
+
+
+allGames : List GameType
+allGames =
+    [ GameType_Go
+    , GameType_WordSpellingGame
+    ]
 
 
 matchNotFound : Element msg
@@ -674,21 +681,6 @@ goShareView lastCopied matchId maybePublicLink =
                     (Ui.text "Share")
                 ]
         )
-
-
-{-| Go matches need a fixed opponent chosen at setup time, so they are only available in DMs.
-Word spelling games have open joining and work anywhere.
--}
-availableGames : GuildOrDmId -> List GameType
-availableGames guildOrDmId =
-    case guildOrDmId of
-        GuildOrDmId_Dm _ ->
-            [ GameType_Go
-            , GameType_WordSpellingGame
-            ]
-
-        GuildOrDmId_Guild _ _ ->
-            [ GameType_WordSpellingGame ]
 
 
 gameToString : GameType -> String
