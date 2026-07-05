@@ -33,7 +33,6 @@ module Broadcast exposing
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
-import DmChannel
 import DmChannelId
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)

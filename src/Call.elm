@@ -50,7 +50,6 @@ import Cloudflare
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel
 import DmChannelId
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)

@@ -28,7 +28,6 @@ module Go exposing
     , dragStart
     , foldActions
     , gameView
-    , getPlayers
     , initGame
     , initSetup
     , isLocalUsersTurn
@@ -1741,7 +1740,7 @@ currentPlayersTurn actions =
                 RejectTerritory ->
                     otherStone stone
 
-                Joined id ->
+                Joined _ ->
                     stone
         )
         Black

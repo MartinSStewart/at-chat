@@ -20,7 +20,7 @@ import Discord
 import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
 import Game exposing (BackendGameData)
-import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import IdArray exposing (IdArray)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)

@@ -209,14 +209,14 @@ routeRequest time guildOrDmId matchId matchData models =
                             Maybe.withDefault initModel maybeModel
                     in
                     (case matchData2.data of
-                        FrontendGameData_Go setup _ state ->
+                        FrontendGameData_Go _ _ _ ->
                             { model
                                 | startedGames =
                                     SeqDict.update
                                         matchId
                                         (\maybeGame ->
                                             case maybeGame of
-                                                Just game ->
+                                                Just _ ->
                                                     maybeGame
 
                                                 Nothing ->
@@ -232,7 +232,7 @@ routeRequest time guildOrDmId matchId matchData models =
                                         matchId
                                         (\maybeGame ->
                                             case maybeGame of
-                                                Just game ->
+                                                Just _ ->
                                                     maybeGame
 
                                                 Nothing ->
@@ -427,7 +427,7 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
 
         WordSpellingSetupMsg wordSpellingGameMsg ->
             let
-                ( model2, maybeSetup ) =
+                ( gameOrSetup, maybeSetup ) =
                     WordSpellingGame.updateSetup
                         time
                         currentUserId
@@ -440,7 +440,7 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                                 WordSpellingGame.initSetup
                         )
             in
-            ( case model2 of
+            ( case gameOrSetup of
                 WordSpellingGame.Setup setup ->
                     { model | setup = WordSpellingGame_Setup setup }
 
@@ -490,7 +490,7 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
                 matchId
                 (\game ->
                     case matchData.data of
-                        FrontendGameData_Go setup _ shared ->
+                        FrontendGameData_Go _ _ _ ->
                             case game of
                                 GoModel_Game game2 ->
                                     Go.dragStart game2 |> GoModel_Game
@@ -498,7 +498,7 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
                                 _ ->
                                     game
 
-                        FrontendGameData_WordSpellingGame setup _ shared ->
+                        FrontendGameData_WordSpellingGame setup _ _ ->
                             case game of
                                 WordSpellingGame_Game game2 ->
                                     WordSpellingGame.dragStart time windowSize touches setup game2
@@ -526,7 +526,7 @@ dragEnd time windowSize touches matchId (MatchData matchData) model =
                 matchId
                 (\game ->
                     case matchData.data of
-                        FrontendGameData_Go setup _ shared ->
+                        FrontendGameData_Go _ _ _ ->
                             case game of
                                 GoModel_Game game2 ->
                                     Go.dragEnd game2 |> GoModel_Game
@@ -834,7 +834,7 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
                 matchId
                 (\game ->
                     case matchData.data of
-                        FrontendGameData_Go setup _ shared ->
+                        FrontendGameData_Go _ _ shared ->
                             case game of
                                 GoModel_Game game2 ->
                                     Go.pressedKey key shared game2
@@ -843,7 +843,7 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
                                 _ ->
                                     game
 
-                        FrontendGameData_WordSpellingGame _ _ shared ->
+                        FrontendGameData_WordSpellingGame _ _ _ ->
                             case game of
                                 WordSpellingGame_Game game2 ->
                                     WordSpellingGame.pressedKey game2
@@ -893,7 +893,7 @@ gameChangeFromServer time gameChange maybeModel =
                                 Go.RejectTerritory ->
                                     True
 
-                                Go.Joined id ->
+                                Go.Joined _ ->
                                     True
                     in
                     if playPop then

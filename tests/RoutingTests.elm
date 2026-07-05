@@ -1,6 +1,5 @@
 module RoutingTests exposing (roundtrip)
 
-import DmChannel
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
