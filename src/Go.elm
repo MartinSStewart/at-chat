@@ -370,8 +370,8 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing, lastPlacedStone = Nothing }
 
 
-initGameState : ValidatedSetup -> Shared
-initGameState setup =
+initShared : ValidatedSetup -> Shared
+initShared setup =
     let
         positions : List ( Int, Int )
         positions =
@@ -1147,7 +1147,7 @@ selectedDimensions model =
 
 foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions setup actions =
-    Array.foldl (updateAction setup) (initGameState setup) actions
+    Array.foldl (updateAction setup) (initShared setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared

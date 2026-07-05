@@ -381,9 +381,15 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
             , case maybeStartMatch of
                 Just setup ->
                     -- A brand new match takes the next message id, then we navigate to it.
-                    [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
-                    , OutSelectMatch (Just newMatchId)
-                    ]
+                    (if GuildOrDmId_Dm currentUserId == guildOrDmId then
+                        [ OutLocalChange (LocalChange_Go newMatchId (Go.Action { time = time, change = Go.Joined currentUserId })) ]
+
+                     else
+                        []
+                    )
+                        ++ [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
+                           , OutSelectMatch (Just newMatchId)
+                           ]
 
                 Nothing ->
                     []
