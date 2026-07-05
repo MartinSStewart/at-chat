@@ -131,6 +131,10 @@ type alias Shared =
     , timeLeft : Maybe { white : Duration, black : Duration }
     , history : List Snapshot
     , joinedUserId : Maybe (Id UserId)
+
+    -- How many turn-consuming actions (stone placements and passes) have happened. The clocks
+    -- only start counting down once both players have moved, i.e. turnCount reaches 2.
+    , turnCount : Int
     }
 
 
@@ -407,6 +411,7 @@ initShared setup =
     , phase = Playing { previousPlayerPassed = False }
     , territoryMarks = Dict.empty
     , joinedUserId = Nothing
+    , turnCount = 0
     }
 
 
@@ -442,6 +447,7 @@ type GameMsg
     | PressedDoneMarking
     | PressedAgree
     | PressedDisagree
+    | PressedJoinGame
     | SpectatorMsg SpectatorMsg
 
 
@@ -609,7 +615,9 @@ actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> Shared -> Duration
 actualTimeLeft currentTime player currentPlayer timeLeft model =
     case model.phase of
         Playing _ ->
-            if player == currentPlayer then
+            -- The clocks only start once both players have made a move, so that the creator's
+            -- opening move doesn't start the countdown for an opponent who hasn't joined yet.
+            if player == currentPlayer && model.turnCount >= 2 then
                 let
                     elapsedTime =
                         Duration.from (Maybe.withDefault currentTime model.lastAction) currentTime
@@ -642,6 +650,7 @@ applyIncrement currentTime setup mover model =
                             }
                                 |> Just
                         , lastAction = Just currentTime
+                        , turnCount = model.turnCount + 1
                     }
 
                 White ->
@@ -652,10 +661,11 @@ applyIncrement currentTime setup mover model =
                             }
                                 |> Just
                         , lastAction = Just currentTime
+                        , turnCount = model.turnCount + 1
                     }
 
         _ ->
-            { model | lastAction = Just currentTime }
+            { model | lastAction = Just currentTime, turnCount = model.turnCount + 1 }
 
 
 performPass : Time.Posix -> ValidatedSetup -> Shared -> Shared
@@ -1337,6 +1347,15 @@ updateGame currentTime currentUserId msg setup state model =
                 _ ->
                     ( model, Nothing )
 
+        PressedJoinGame ->
+            if state.joinedUserId == Nothing then
+                ( model
+                , Just { time = currentTime, change = Joined currentUserId }
+                )
+
+            else
+                ( model, Nothing )
+
         SpectatorMsg spectatorMsg ->
             ( updateSpectator spectatorMsg state model, Nothing )
 
@@ -1934,7 +1953,12 @@ gameView currentTime windowSize localUser setup shared model =
         [ Ui.column
             []
             [ statusView currentTime shared
-            , (if isLocalUsersTurn localUser.session.userId setup shared && hasTimeToDoAction currentTime shared then
+            , (if shared.joinedUserId == Nothing && setup.createdBy /= localUser.session.userId then
+                Ui.el
+                    [ Ui.paddingXY 16 0 ]
+                    (MyUi.simpleButton (Dom.id "go_joinGame") PressedJoinGame (Ui.text "Join game"))
+
+               else if isLocalUsersTurn localUser.session.userId setup shared && hasTimeToDoAction currentTime shared then
                 case shared.phase of
                     Playing { previousPlayerPassed } ->
                         Ui.el

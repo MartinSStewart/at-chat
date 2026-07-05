@@ -1,15 +1,21 @@
 module E2EGo exposing
-    ( goMatchTest
+    ( goGuildMatchTest
+    , goMatchTest
     , goTimeoutTest
     , goTurnNotificationDotTest
     , publicGoMatchViewTest
     )
 
+import Array exposing (Array)
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Env
+import Game
+import Go
+import Id exposing (ChannelMessageId, Id)
 import Json.Decode
+import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -39,6 +45,7 @@ goMatchTest normalConfig =
                         , admin.click 100 (Dom.id "game_select_Go")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
+                        , user.click 100 (Dom.id "go_joinGame")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
 
@@ -84,6 +91,7 @@ goMatchTest normalConfig =
                                 , admin.click 100 (Dom.id "guild_openGamesTab")
                                 , admin.click 100 (Dom.id "go_start")
                                 , user2.click 100 (Dom.id "guild_gameStartedCard_1")
+                                , user2.click 100 (Dom.id "go_joinGame")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , admin.click 2000 (Dom.id "go_cell_3_3")
@@ -131,9 +139,11 @@ goTimeoutTest normalConfig =
                         , admin.input 100 (Dom.id "go_incrementInput") "0"
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
+                        , user.click 100 (Dom.id "go_joinGame")
 
-                        -- Admin is Black (creator default) and moves first. This starts
-                        -- White's clock ticking, and both players see it's White's turn.
+                        -- Admin is Black (creator default) and moves first. Both players see
+                        -- it's White's turn, but White's clock isn't ticking yet: the clocks
+                        -- only start once both players have made a move.
                         , admin.click 100 (Dom.id "go_cell_4_4")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
@@ -142,17 +152,23 @@ goTimeoutTest normalConfig =
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
 
-                        -- Let 70 seconds pass (more than White's 60 second clock) and then
-                        -- have White (the user) try to place a stone. The move must be rejected
-                        -- because White has run out of time.
+                        -- White takes 70 seconds (more than the 60 second main time) over their
+                        -- first move and it still counts, since the clocks haven't started.
                         , user.click 70000 (Dom.id "go_cell_5_4")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2 / 2" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2 / 2" ])
+
+                        -- Both players have moved now, so the clocks are live. Black replies
+                        -- quickly, and then White lets their clock run out.
+                        , admin.click 100 (Dom.id "go_cell_4_5")
+                        , user.click 70000 (Dom.id "go_cell_5_5")
 
                         -- The rejected move means no new stone was added: both players still
-                        -- only see a single move in the history.
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1 / 1" ])
-                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "2 / 2" ])
-                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "2 / 2" ])
+                        -- only see three moves in the history.
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "3 / 3" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "3 / 3" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "4 / 4" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "4 / 4" ])
 
                         -- Both players see the same loss-on-time result.
                         , admin.checkView
@@ -196,6 +212,7 @@ goTurnNotificationDotTest normalConfig =
                         , admin.click 100 (Dom.id "game_select_Go")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
+                        , user.click 100 (Dom.id "go_joinGame")
 
                         -- No dot for either user yet: admin is viewing the match,
                         -- and even though it's admin's turn, the user has no move pending
@@ -251,6 +268,98 @@ goTurnNotificationDotTest normalConfig =
                 ]
             )
         ]
+
+
+goGuildMatchTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+goGuildMatchTest normalConfig =
+    E2EHelper.startTest
+        "Two guild members play a Go match in a guild channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin user ->
+                [ -- Both users start out viewing the guild's first channel.
+                  admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "go_start")
+                , T.checkState
+                    100
+                    (\state ->
+                        case guildChannelGoGames state.backend of
+                            [ ( _, _, actions ) ] ->
+                                if Go.joinedUser actions == Nothing then
+                                    Ok ()
+
+                                else
+                                    Err "No one should have joined the match yet"
+
+                            _ ->
+                                Err "Expected one Go match in the guild channel"
+                    )
+                , T.andThen
+                    100
+                    (\state ->
+                        case guildChannelGoGames state.backend of
+                            [ ( matchId, setup, _ ) ] ->
+                                [ -- The other guild member opens the match from its message card and joins.
+                                  user.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                , user.click 100 (Dom.id "go_joinGame")
+                                , T.checkState
+                                    100
+                                    (\state2 ->
+                                        case guildChannelGoGames state2.backend of
+                                            [ ( _, _, actions ) ] ->
+                                                case Go.joinedUser actions of
+                                                    Just joinedUserId ->
+                                                        if joinedUserId == setup.createdBy then
+                                                            Err "The creator should not have joined their own match"
+
+                                                        else
+                                                            Ok ()
+
+                                                    Nothing ->
+                                                        Err "Expected the other member to have joined the match"
+
+                                            _ ->
+                                                Err "Expected one Go match in the guild channel"
+                                    )
+
+                                -- Play an opening move each: admin is Black (creator default), user is White.
+                                , admin.click 100 (Dom.id "go_cell_4_4")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
+                                , user.click 100 (Dom.id "go_cell_5_4")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Black to move" ])
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Black to move" ])
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "Expected one Go match in the guild channel") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| All Go matches stored in guild channels (as opposed to DM channels) on the backend.
+-}
+guildChannelGoGames : BackendModel -> List ( Id ChannelMessageId, Go.ValidatedSetup, Array Go.ActionWithTime )
+guildChannelGoGames backend =
+    SeqDict.values backend.guilds
+        |> List.concatMap (\guild -> SeqDict.values guild.channels)
+        |> List.concatMap (\channel -> SeqDict.toList channel.games)
+        |> List.filterMap
+            (\( matchId, gameData ) ->
+                case gameData of
+                    Game.GameData_Go setup actions ->
+                        Just ( matchId, setup, actions )
+
+                    Game.GameData_WordSpellingGame _ _ _ ->
+                        Nothing
+            )
 
 
 publicGoMatchViewTest :

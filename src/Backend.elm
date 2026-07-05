@@ -5504,6 +5504,35 @@ type CreatedGameLink
     | GameLinkAlreadyExists (Command BackendOnly ToFrontend BackendMsg)
 
 
+{-| Whether a Go action sent by a user is one they are allowed to make. Joining is valid for
+anyone as long as the open seat hasn't been taken; everything else requires it to be the
+sender's turn.
+-}
+isValidGoAction : Id UserId -> Go.ValidatedSetup -> Array Go.ActionWithTime -> Go.ActionWithTime -> Bool
+isValidGoAction userId goSetup actions actionWithTime =
+    case actionWithTime.change of
+        Go.Joined joinedUserId ->
+            (joinedUserId == userId) && (Go.joinedUser actions == Nothing)
+
+        _ ->
+            let
+                players : { black : Maybe (Id UserId), white : Maybe (Id UserId) }
+                players =
+                    case goSetup.gameCreatorPlayingAs of
+                        Go.White ->
+                            { white = Just goSetup.createdBy, black = Go.joinedUser actions }
+
+                        Go.Black ->
+                            { black = Just goSetup.createdBy, white = Go.joinedUser actions }
+            in
+            case Go.currentPlayersTurn actions of
+                Go.Black ->
+                    players.black == Just userId
+
+                Go.White ->
+                    players.white == Just userId
+
+
 handleGuildGoGame :
     Time.Posix
     -> UserSession
@@ -5575,28 +5604,11 @@ handleGuildGoGame time session clientId changeId guildId channelId matchId goCha
             case SeqDict.get matchId channel.games of
                 Just (Game.GameData_Go goSetup actions) ->
                     let
-                        players =
-                            case goSetup.gameCreatorPlayingAs of
-                                Go.White ->
-                                    { white = Just goSetup.createdBy, black = Go.joinedUser actions }
-
-                                Go.Black ->
-                                    { black = Just goSetup.createdBy, white = Go.joinedUser actions }
-
-                        isCurrentPlayer : Bool
-                        isCurrentPlayer =
-                            case Go.currentPlayersTurn actions of
-                                Go.Black ->
-                                    players.black == Just session.userId
-
-                                Go.White ->
-                                    players.white == Just session.userId
-
                         localMsg2 : Game.LocalChange
                         localMsg2 =
                             Game.LocalChange_Go matchId (Go.Action { actionWithTime | time = time })
                     in
-                    if isCurrentPlayer then
+                    if isValidGoAction session.userId goSetup actions actionWithTime then
                         ( { model
                             | guilds =
                                 SeqDict.insert
@@ -5698,28 +5710,11 @@ handleDmGoGame time session clientId changeId otherUserId matchId goChange dmCha
             case SeqDict.get matchId dmChannel.games of
                 Just (Game.GameData_Go goSetup actions) ->
                     let
-                        players =
-                            case goSetup.gameCreatorPlayingAs of
-                                Go.White ->
-                                    { white = Just goSetup.createdBy, black = Go.joinedUser actions }
-
-                                Go.Black ->
-                                    { black = Just goSetup.createdBy, white = Go.joinedUser actions }
-
-                        isCurrentPlayer : Bool
-                        isCurrentPlayer =
-                            case Go.currentPlayersTurn actions of
-                                Go.Black ->
-                                    players.black == Just session.userId
-
-                                Go.White ->
-                                    players.white == Just session.userId
-
                         localMsg2 : Game.LocalChange
                         localMsg2 =
                             Game.LocalChange_Go matchId (Go.Action { actionWithTime | time = time })
                     in
-                    if isCurrentPlayer then
+                    if isValidGoAction session.userId goSetup actions actionWithTime then
                         ( { model
                             | dmChannels =
                                 SeqDict.insert

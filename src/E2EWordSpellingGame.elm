@@ -474,14 +474,8 @@ tests normalConfig =
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
                 E2EHelper.tallDesktopWindow
                 (\admin user ->
-                    [ -- Both users start out viewing the guild's first channel. Go needs a fixed
-                      -- opponent chosen at setup time, so guild channels only offer word spelling.
+                    [ -- Both users start out viewing the guild's first channel.
                       admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.checkView
-                        100
-                        (Test.Html.Query.hasNot
-                            [ Test.Html.Selector.id ("game_select_" ++ Game.gameToString Message.GameType_Go) ]
-                        )
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.checkState

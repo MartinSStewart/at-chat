@@ -2383,6 +2383,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , T.testGroup
         "Go matches"
         [ E2EGo.goMatchTest normalConfig
+        , E2EGo.goGuildMatchTest normalConfig
         , E2EGo.goTimeoutTest normalConfig
         , E2EGo.goTurnNotificationDotTest normalConfig
         , E2EGo.publicGoMatchViewTest normalConfig
