@@ -13,6 +13,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
+import DmChannelId
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Game
@@ -586,7 +587,7 @@ tabBodyView local loggedIn model =
                     Nothing
 
         DmRoute dmRoute ->
-            case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+            case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
                         Just (ChannelHeaderTab_Games maybeMatchId) ->

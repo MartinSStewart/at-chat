@@ -24,7 +24,7 @@ import AppUrl exposing (AppUrl)
 import Codec
 import Dict
 import Discord
-import DmChannel exposing (DmChannelId)
+import DmChannelId exposing (DmChannelId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import Pagination
 import SecretId exposing (SecretId)
@@ -275,7 +275,7 @@ decode url =
                     HomePageRoute
 
         "d" :: channelId :: rest ->
-            case DmChannel.channelIdFromString channelId of
+            case DmChannelId.channelIdFromString channelId of
                 Ok channelId2 ->
                     (case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
@@ -626,13 +626,13 @@ encode route =
                 DmRoute { channelId, threadRoute, tab } ->
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
-                            ( [ "d", DmChannel.channelIdToString channelId, "t", Id.toString threadMessageIndex ]
+                            ( [ "d", DmChannelId.channelIdToString channelId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
-                            ( [ "d", DmChannel.channelIdToString channelId ] ++ maybeMessageIdToString maybeMessageId
+                            ( [ "d", DmChannelId.channelIdToString channelId ] ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
@@ -770,7 +770,7 @@ toGuildOrDmId userId route =
                 |> Just
 
         DmRoute { channelId, threadRoute } ->
-            case DmChannel.otherUserId userId channelId of
+            case DmChannelId.otherUserId userId channelId of
                 Just otherUserId ->
                     ( GuildOrDmId_Dm otherUserId |> GuildOrDmId
                     , case threadRoute of

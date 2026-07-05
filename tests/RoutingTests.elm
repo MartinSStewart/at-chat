@@ -49,7 +49,7 @@ routeFuzzer =
         , Fuzz.map4
             (\userId otherUserId threadRoute tab ->
                 DmRoute
-                    { channelId = DmChannel.channelIdFromUserIds userId otherUserId
+                    { channelId = DmChannelId.channelIdFromUserIds userId otherUserId
                     , threadRoute = threadRoute
                     , tab = tab
                     }

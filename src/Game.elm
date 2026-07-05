@@ -363,7 +363,6 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                 ( goModel, maybeStartMatch ) =
                     Go.updateSetup
                         currentUserId
-                        otherUserId
                         goMsg
                         (case model.setup of
                             GoModel_Setup setup ->
@@ -894,6 +893,9 @@ gameChangeFromServer time gameChange maybeModel =
                                     True
 
                                 Go.RejectTerritory ->
+                                    True
+
+                                Go.Joined id ->
                                     True
                     in
                     if playPop then

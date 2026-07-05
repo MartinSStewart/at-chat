@@ -61,7 +61,8 @@ import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId)
 import Drawing
 import Duration exposing (Duration)
 import Editable
@@ -382,7 +383,7 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
-    , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
+    , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
     }
 
 

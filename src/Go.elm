@@ -28,9 +28,11 @@ module Go exposing
     , dragStart
     , foldActions
     , gameView
+    , getPlayers
     , initGame
     , initSetup
     , isLocalUsersTurn
+    , joinedUser
     , pressedKey
     , publicGoMatchUrl
     , setupView
@@ -56,6 +58,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (GamePublicId, Id, UserId)
+import List.Extra
 import MyUi
 import Quantity
 import SecretId exposing (SecretId)
@@ -76,16 +79,16 @@ type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
     , cache : Shared
-    , blackPlayer : FrontendUser
-    , whitePlayer : FrontendUser
+    , creatorUser : FrontendUser
+    , joinedUser : Maybe FrontendUser
     }
 
 
 type alias PublicGoMatchResponse =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
-    , blackPlayer : FrontendUser
-    , whitePlayer : FrontendUser
+    , creatorUser : FrontendUser
+    , joinedUser : Maybe FrontendUser
     }
 
 
@@ -128,6 +131,7 @@ type alias Shared =
     , lastAction : Maybe Time.Posix
     , timeLeft : Maybe { white : Duration, black : Duration }
     , history : List Snapshot
+    , joinedUserId : Maybe (Id UserId)
     }
 
 
@@ -403,6 +407,7 @@ initGameState setup =
     , whiteCaptures = 0
     , phase = Playing { previousPlayerPassed = False }
     , territoryMarks = Dict.empty
+    , joinedUserId = Nothing
     }
 
 
@@ -455,6 +460,7 @@ type Action
     | FinishedMarking
     | AcceptTerritory
     | RejectTerritory
+    | Joined (Id UserId)
 
 
 type alias ActionWithTime =
@@ -1061,13 +1067,26 @@ type SetupOrGame
     | Game GameModel
 
 
+joinedUser : Array ActionWithTime -> Maybe (Id UserId)
+joinedUser array =
+    List.Extra.findMap
+        (\action ->
+            case action.change of
+                Joined userId ->
+                    Just userId
+
+                _ ->
+                    Nothing
+        )
+        (Array.toList array)
+
+
 updateSetup :
     Id UserId
-    -> Id UserId
     -> SetupMsg
     -> SetupModel
     -> ( SetupOrGame, Maybe ValidatedSetup )
-updateSetup creatorId otherPlayerId msg model =
+updateSetup creatorId msg model =
     case msg of
         ChangedWidthInput input ->
             ( Setup { model | widthInput = input, error = Nothing }, Nothing )
@@ -1196,6 +1215,9 @@ updateAction setup action model =
 
                     _ ->
                         model
+
+            Joined userId ->
+                { model | joinedUserId = Just userId }
 
     else
         model
@@ -1602,7 +1624,31 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> Shared -> ValidatedSetup -> Element msg
+getPlayers : ValidatedSetup -> Shared -> { black : Maybe (Id UserId), white : Maybe (Id UserId) }
+getPlayers setup shared =
+    case setup.gameCreatorPlayingAs of
+        White ->
+            { white = Just setup.createdBy, black = shared.joinedUserId }
+
+        Black ->
+            { black = Just setup.createdBy, white = shared.joinedUserId }
+
+
+getPlayersWithUser : PublicGoMatchData -> { black : Maybe ( Id UserId, FrontendUser ), white : Maybe ( Id UserId, FrontendUser ) }
+getPlayersWithUser data =
+    case data.setup.gameCreatorPlayingAs of
+        White ->
+            { white = Just ( data.setup.createdBy, data.creatorUser )
+            , black = Maybe.map2 Tuple.pair data.cache.joinedUserId data.joinedUser
+            }
+
+        Black ->
+            { black = Just ( data.setup.createdBy, data.creatorUser )
+            , white = Maybe.map2 Tuple.pair data.cache.joinedUserId data.joinedUser
+            }
+
+
+clockView : Time.Posix -> Maybe ( Id UserId, FrontendUser ) -> Maybe ( Id UserId, FrontendUser ) -> Shared -> ValidatedSetup -> Element msg
 clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
@@ -1626,7 +1672,6 @@ clockView currentTime blackUser whiteUser state setup =
         , Ui.contentCenterX
         ]
         [ clockChip
-            setup.blackPlayer
             blackUser
             (case state.timeLeft of
                 Just timeLeft ->
@@ -1639,7 +1684,6 @@ clockView currentTime blackUser whiteUser state setup =
             Black
             (currentScore setup state Black)
         , clockChip
-            setup.whitePlayer
             whiteUser
             (case state.timeLeft of
                 Just timeLeft ->
@@ -1696,13 +1740,16 @@ currentPlayersTurn actions =
 
                 RejectTerritory ->
                     otherStone stone
+
+                Joined id ->
+                    stone
         )
         Black
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
-clockChip userId maybeUser maybeTimeLeft isActive stone score =
+clockChip : Maybe ( Id UserId, FrontendUser ) -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
+clockChip maybeUser maybeTimeLeft isActive stone score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -1742,11 +1789,15 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
             Ui.noAttr
         ]
         [ (case maybeUser of
-            Just user ->
+            Just ( userId, user ) ->
                 User.profileImageNoRounding userId user.icon
 
             Nothing ->
-                User.profileImageNoRounding userId Nothing
+                Ui.el
+                    [ Ui.width (Ui.px User.profileImageSize)
+                    , Ui.height (Ui.px User.profileImageSize)
+                    ]
+                    Ui.none
           )
             |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
@@ -1779,18 +1830,22 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
 
 
 isLocalUsersTurn : Id UserId -> ValidatedSetup -> Shared -> Bool
-isLocalUsersTurn currentUserId setup state =
-    case state.phase of
+isLocalUsersTurn currentUserId setup shared =
+    case shared.phase of
         Scored _ ->
             False
 
         _ ->
-            case state.currentPlayer of
+            let
+                players =
+                    getPlayers setup shared
+            in
+            case shared.currentPlayer of
                 Black ->
-                    setup.blackPlayer == currentUserId
+                    players.black == Just currentUserId
 
                 White ->
-                    setup.whitePlayer == currentUserId
+                    players.white == Just currentUserId
 
 
 spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
@@ -1803,6 +1858,9 @@ spectatorView currentTime windowSize data model =
         state : Shared
         state =
             data.cache
+
+        players =
+            getPlayersWithUser data
     in
     Ui.column
         [ Ui.spacing
@@ -1828,7 +1886,7 @@ spectatorView currentTime windowSize data model =
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView currentTime (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
+            [ clockView currentTime players.black players.white state data.setup
             , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map Spectator_PressedCell
             ]
         , if isMobile then
@@ -1847,11 +1905,14 @@ gameView :
     -> Shared
     -> GameModel
     -> Element GameMsg
-gameView currentTime windowSize localUser setup state model =
+gameView currentTime windowSize localUser setup shared model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        players =
+            getPlayers setup shared
     in
     Ui.column
         [ Ui.spacing
@@ -1873,9 +1934,9 @@ gameView currentTime windowSize localUser setup state model =
         ]
         [ Ui.column
             []
-            [ statusView currentTime state
-            , (if isLocalUsersTurn localUser.session.userId setup state && hasTimeToDoAction currentTime state then
-                case state.phase of
+            [ statusView currentTime shared
+            , (if isLocalUsersTurn localUser.session.userId setup shared && hasTimeToDoAction currentTime shared then
+                case shared.phase of
                     Playing { previousPlayerPassed } ->
                         Ui.el
                             [ Ui.paddingXY 16 0 ]
@@ -1919,17 +1980,29 @@ gameView currentTime windowSize localUser setup state model =
             ]
             [ clockView
                 currentTime
-                (User.getUser setup.blackPlayer localUser)
-                (User.getUser setup.whitePlayer localUser)
-                state
+                (case players.black of
+                    Just userId ->
+                        User.getUser userId localUser |> Maybe.map (Tuple.pair userId)
+
+                    Nothing ->
+                        Nothing
+                )
+                (case players.white of
+                    Just userId ->
+                        User.getUser userId localUser |> Maybe.map (Tuple.pair userId)
+
+                    Nothing ->
+                        Nothing
+                )
+                shared
                 setup
-            , Ui.Lazy.lazy4 boardView windowSize setup state model |> Ui.map PressedCell
+            , Ui.Lazy.lazy4 boardView windowSize setup shared model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none
 
           else
-            Ui.Lazy.lazy2 historyView state model |> Ui.map SpectatorMsg
+            Ui.Lazy.lazy2 historyView shared model |> Ui.map SpectatorMsg
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)

@@ -40,6 +40,7 @@ import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannelId
 import Drawing
 import Duration
 import Editable
@@ -591,7 +592,7 @@ canDropFiles currentUserId route =
                     Nothing
 
         DmRoute routeData ->
-            case DmChannel.otherUserId currentUserId routeData.channelId of
+            case DmChannelId.otherUserId currentUserId routeData.channelId of
                 Just otherUserId ->
                     let
                         threadRoute2 : ThreadRoute
@@ -1525,7 +1526,7 @@ routeRequest previousRoute newRoute model =
                         local =
                             Local.model loggedIn.localState
                     in
-                    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+                    case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                         Just otherUserId ->
                             routeRequestChannelHelper
                                 sameDmRoute
@@ -1638,7 +1639,7 @@ currentGamesTab :
 currentGamesTab local route =
     case route of
         DmRoute dmRoute ->
-            case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+            case ( dmRoute.tab, DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId ) of
                 ( Just (Route.ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
                     let
                         dmChannel : FrontendDmChannel

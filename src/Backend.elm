@@ -23,7 +23,8 @@ import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..))
-import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -1350,7 +1351,7 @@ update msg model =
                 Just channel ->
                     let
                         ( userIdA, userIdB ) =
-                            DmChannel.userIdsFromChannelId channelId
+                            DmChannelId.userIdsFromChannelId channelId
                     in
                     ( { model
                         | dmChannels =
@@ -2072,7 +2073,7 @@ disconnectClient time sessionId clientId model =
                 helper otherUserId =
                     let
                         dmChannelId =
-                            DmChannel.channelIdFromUserIds session.userId otherUserId
+                            DmChannelId.channelIdFromUserIds session.userId otherUserId
                     in
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
@@ -5093,50 +5094,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model
 
                                         Game.CreatePublicLink matchId _ ->
-                                            case SeqDict.get matchId dmChannel.games of
-                                                Just _ ->
-                                                    case OneToOne.first ( dmChannelId, matchId ) model.goMatchPublicIds of
-                                                        Just publicId ->
-                                                            ( model
-                                                            , Game.CreatePublicLink matchId (FilledInByBackend publicId)
-                                                                |> Local_Game guildOrDmId
-                                                                |> LocalChangeResponse changeId
-                                                                |> Lamdera.sendToFrontend clientId
-                                                            )
-
-                                                        Nothing ->
-                                                            let
-                                                                ( model3, publicId ) =
-                                                                    SecretId.getShortUniqueId time model
-
-                                                                localMsg2 : Game.LocalChange
-                                                                localMsg2 =
-                                                                    Game.CreatePublicLink matchId (FilledInByBackend publicId)
-                                                            in
-                                                            ( { model3
-                                                                | goMatchPublicIds =
-                                                                    OneToOne.insert
-                                                                        publicId
-                                                                        ( dmChannelId, matchId )
-                                                                        model3.goMatchPublicIds
-                                                              }
-                                                            , Command.batch
-                                                                [ Local_Game guildOrDmId localMsg2
-                                                                    |> LocalChangeResponse changeId
-                                                                    |> Lamdera.sendToFrontend clientId
-                                                                , Broadcast.toDmChannelExcludingOne
-                                                                    clientId
-                                                                    session.userId
-                                                                    otherUserId
-                                                                    (\otherUserId2 ->
-                                                                        Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
-                                                                    )
-                                                                    model3
-                                                                ]
-                                                            )
-
-                                                Nothing ->
-                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                            createGamePublicLink
+                                                time
+                                                clientId
+                                                changeId
+                                                session
+                                                guildOrDmId
+                                                otherUserId
+                                                dmChannelId
+                                                dmChannel
+                                                matchId
+                                                model
 
                                         Game.LocalChange_WordSpellingGame matchId wsChange ->
                                             handleWordSpellingGame
@@ -5201,14 +5169,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         wsChange
                                                         model
 
-                                                -- Go matches need a fixed opponent so they are DM-only for now
                                                 Game.LocalChange_Go _ _ ->
-                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                                    Debug.todo ""
 
-                                                -- Public links only exist for Go matches, which are DM-only
+                                                --handleGoGame
+                                                --    time
+                                                --    session
+                                                --    clientId
+                                                --    changeId
+                                                --    otherUserId
+                                                --    matchId
+                                                --    goChange
+                                                --    dmChannelId
+                                                --    dmChannel
+                                                --    model
                                                 Game.CreatePublicLink _ _ ->
-                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                                    Debug.todo ""
 
+                                        --createGamePublicLink time clientId changeId session guildOrDmId otherUserId dmChannelId dmChannel matchId model
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                                 )
@@ -5359,20 +5337,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
         GetPublicGoMatchRequest publicGoMatchId ->
             case OneToOne.second publicGoMatchId model.goMatchPublicIds of
-                Just ( channelId, messageId ) ->
-                    let
-                        response : Result () Go.PublicGoMatchResponse
-                        response =
-                            case SeqDict.get channelId model.dmChannels of
+                Just ( guildOrDmId, messageId ) ->
+                    ( model
+                    , case guildOrDmId of
+                        GuildOrFullDmId_Dm channelId ->
+                            (case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
                                     case SeqDict.get messageId dmChannel.games of
                                         Just (Game.GameData_Go setup actions) ->
                                             let
                                                 lookupUser : Id UserId -> User.FrontendUser
-                                                lookupUser uid =
-                                                    case NonemptyDict.get uid model.users of
-                                                        Just u ->
-                                                            User.backendToFrontendForUser u
+                                                lookupUser userId =
+                                                    case NonemptyDict.get userId model.users of
+                                                        Just user ->
+                                                            User.backendToFrontendForUser user
 
                                                         Nothing ->
                                                             { name = PersonName.fromStringLossy "<missing>"
@@ -5383,8 +5361,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             in
                                             { setup = setup
                                             , actions = actions
-                                            , blackPlayer = lookupUser setup.blackPlayer
-                                            , whitePlayer = lookupUser setup.whitePlayer
+                                            , creatorUser = lookupUser setup.createdBy
+                                            , joinedUser =
+                                                case Go.joinedUser actions of
+                                                    Just userId ->
+                                                        lookupUser userId |> Just
+
+                                                    Nothing ->
+                                                        Nothing
                                             }
                                                 |> Ok
 
@@ -5393,11 +5377,75 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Nothing ->
                                     Err ()
-                    in
-                    ( model, GetPublicGoMatchResponse response |> Lamdera.sendToFrontend clientId )
+                            )
+                                |> GetPublicGoMatchResponse
+                                |> Lamdera.sendToFrontend clientId
+
+                        GuildOrFullDmId_Guild guildId channelId ->
+                            Debug.todo ""
+                    )
 
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
+
+
+createGamePublicLink :
+    Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> UserSession
+    -> GuildOrDmId
+    -> Id UserId
+    -> DmChannelId
+    -> DmChannel
+    -> Id ChannelMessageId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+createGamePublicLink time clientId changeId session guildOrDmId otherUserId dmChannelId dmChannel matchId model =
+    case SeqDict.get matchId dmChannel.games of
+        Just _ ->
+            case OneToOne.first ( GuildOrFullDmId_Dm dmChannelId, matchId ) model.goMatchPublicIds of
+                Just publicId ->
+                    ( model
+                    , Game.CreatePublicLink matchId (FilledInByBackend publicId)
+                        |> Local_Game guildOrDmId
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
+                Nothing ->
+                    let
+                        ( model3, publicId ) =
+                            SecretId.getShortUniqueId time model
+
+                        localMsg2 : Game.LocalChange
+                        localMsg2 =
+                            Game.CreatePublicLink matchId (FilledInByBackend publicId)
+                    in
+                    ( { model3
+                        | goMatchPublicIds =
+                            OneToOne.insert
+                                publicId
+                                ( GuildOrFullDmId_Dm dmChannelId, matchId )
+                                model3.goMatchPublicIds
+                      }
+                    , Command.batch
+                        [ Local_Game guildOrDmId localMsg2
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toDmChannelExcludingOne
+                            clientId
+                            session.userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                            )
+                            model3
+                        ]
+                    )
+
+        Nothing ->
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 handleGoGame :
@@ -5463,14 +5511,22 @@ handleGoGame time session clientId changeId otherUserId matchId goChange dmChann
             case SeqDict.get matchId dmChannel.games of
                 Just (Game.GameData_Go goSetup actions) ->
                     let
+                        players =
+                            case goSetup.gameCreatorPlayingAs of
+                                Go.White ->
+                                    { white = Just goSetup.createdBy, black = Go.joinedUser actions }
+
+                                Go.Black ->
+                                    { black = Just goSetup.createdBy, white = Go.joinedUser actions }
+
                         isCurrentPlayer : Bool
                         isCurrentPlayer =
                             case Go.currentPlayersTurn actions of
                                 Go.Black ->
-                                    goSetup.blackPlayer == session.userId
+                                    players.black == Just session.userId
 
                                 Go.White ->
-                                    goSetup.whitePlayer == session.userId
+                                    players.white == Just session.userId
 
                         localMsg2 : Game.LocalChange
                         localMsg2 =
@@ -5853,7 +5909,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                 Call.DmRoomId otherUserId ->
                     let
                         dmChannelId =
-                            DmChannel.channelIdFromUserIds session.userId otherUserId
+                            DmChannelId.channelIdFromUserIds session.userId otherUserId
                     in
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
@@ -6100,7 +6156,7 @@ isPeerInSameCall myRoomId myUserId peerUserId peerCall =
         (Call.DmRoomId peerOther) =
             peerCall
     in
-    DmChannel.channelIdFromUserIds myUserId myOther == DmChannel.channelIdFromUserIds peerUserId peerOther
+    DmChannelId.channelIdFromUserIds myUserId myOther == DmChannelId.channelIdFromUserIds peerUserId peerOther
 
 
 handlePublishTracks :
@@ -6459,11 +6515,11 @@ voiceChatRoomHasOtherMembers dmChannelId clientId model =
                         (\otherClientId connection ->
                             case connection.call of
                                 ConnectedToCall (Call.DmRoomId otherUserId2) _ ->
-                                    (DmChannel.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
+                                    (DmChannelId.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
                                 ConnectingToCall (Call.DmRoomId otherUserId2) ->
-                                    (DmChannel.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
+                                    (DmChannelId.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
                                 NotInCall ->

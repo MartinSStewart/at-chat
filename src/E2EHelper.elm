@@ -2776,8 +2776,8 @@ allAttackerLocalChanges =
                 , handicap = 0
                 , komiHalfPoints = Go.KomiHalfPoints 2
                 , timeControl = Nothing
-                , blackPlayer = normalUserId
-                , whitePlayer = Broadcast.adminUserId
+                , createdBy = normalUserId
+                , gameCreatorPlayingAs = Go.Black
                 }
             )
         )

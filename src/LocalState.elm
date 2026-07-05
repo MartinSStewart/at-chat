@@ -125,7 +125,8 @@ import Cloudflare
 import Date exposing (Date)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannelId, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannelId exposing (DmChannelId)
 import Drawing exposing (Drawing)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
@@ -2499,7 +2500,7 @@ routeToViewing route local =
                 StopViewingChannel
 
         DmRoute { channelId, threadRoute } ->
-            case DmChannel.otherUserId local.localUser.session.userId channelId of
+            case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
                     if SeqDict.member otherUserId local.dmChannels then
                         case threadRoute of

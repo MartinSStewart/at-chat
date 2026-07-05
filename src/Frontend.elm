@@ -13,6 +13,7 @@ import CssPixels exposing (CssPixels)
 import CustomEmoji
 import Discord
 import DmChannel exposing (FrontendDmChannel)
+import DmChannelId
 import Drawing
 import Duration exposing (Duration, Seconds)
 import Editable
@@ -2397,7 +2398,7 @@ updateLoaded msg model =
                                                         model
                                                         (DmRoute
                                                             { channelId =
-                                                                DmChannel.channelIdFromUserIds
+                                                                DmChannelId.channelIdFromUserIds
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
@@ -2411,7 +2412,7 @@ updateLoaded msg model =
                                                         model
                                                         (DmRoute
                                                             { channelId =
-                                                                DmChannel.channelIdFromUserIds
+                                                                DmChannelId.channelIdFromUserIds
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
@@ -2538,7 +2539,7 @@ updateLoaded msg model =
                             case model.loginStatus of
                                 LoggedIn loggedIn ->
                                     { channelId =
-                                        DmChannel.channelIdFromUserIds
+                                        DmChannelId.channelIdFromUserIds
                                             (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                             otherUserId
                                     , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
@@ -4187,7 +4188,7 @@ updateLoaded msg model =
                                         model
                                         (DmRoute
                                             { channelId =
-                                                DmChannel.channelIdFromUserIds local.localUser.session.userId otherUserId
+                                                DmChannelId.channelIdFromUserIds local.localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Just ChannelHeaderTab_VoiceChat
                                             }
@@ -5918,8 +5919,8 @@ updateFromBackend _ msg model =
                                             { setup = ok.setup
                                             , actions = ok.actions
                                             , cache = Go.foldActions ok.setup ok.actions
-                                            , blackPlayer = ok.blackPlayer
-                                            , whitePlayer = ok.whitePlayer
+                                            , creatorUser = ok.creatorUser
+                                            , joinedUser = ok.joinedUser
                                             }
                                             Go.initGame
 
@@ -6641,8 +6642,8 @@ updateLoadedFromBackend msg model =
                                 { setup = ok.setup
                                 , actions = ok.actions
                                 , cache = Go.foldActions ok.setup ok.actions
-                                , blackPlayer = ok.blackPlayer
-                                , whitePlayer = ok.whitePlayer
+                                , creatorUser = ok.creatorUser
+                                , joinedUser = ok.joinedUser
                                 }
                                 Go.initGame
 

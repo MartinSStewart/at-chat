@@ -2,27 +2,22 @@ module DmChannel exposing
     ( DiscordDmChannel
     , DiscordFrontendDmChannel
     , DmChannel
-    , DmChannelId(..)
     , FrontendDmChannel
     , backendInit
-    , channelIdFromString
-    , channelIdFromUserIds
-    , channelIdToString
     , frontendInit
     , latestMessageId
     , latestThreadMessageId
     , loadMessages
     , loadOlderMessages
-    , otherUserId
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
     , updateArray
-    , userIdsFromChannelId
     )
 
 import Date exposing (Date)
 import Discord
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId(..))
 import Drawing exposing (Drawing)
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
@@ -74,12 +69,6 @@ type alias FrontendDmChannel =
     }
 
 
-{-| OpaqueVariants
--}
-type DmChannelId
-    = DmChannelId (Id UserId) (Id UserId)
-
-
 backendInit : DmChannel
 backendInit =
     { messages = IdArray.empty
@@ -104,7 +93,7 @@ frontendInit =
 toFrontend :
     Maybe ThreadRoute
     -> DmChannelId
-    -> OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
+    -> OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
     -> DmChannel
     -> FrontendDmChannel
 toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
@@ -122,7 +111,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     , games =
         SeqDict.map
             (\matchId gameData ->
-                Game.initMatchData gameData (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
+                Game.initMatchData gameData (OneToOne.first ( GuildOrFullDmId_Dm dmChannelId, matchId ) goMatchPublicIds)
             )
             dmChannel.games
     , dateDividerDrawings = dmChannel.dateDividerDrawings
@@ -191,48 +180,6 @@ toDiscordFrontendHelper preloadMessages channel =
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
-
-
-channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
-channelIdFromUserIds (Id userIdA) (Id userIdB) =
-    DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
-
-
-userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
-userIdsFromChannelId (DmChannelId userIdA userIdB) =
-    ( userIdA, userIdB )
-
-
-channelIdToString : DmChannelId -> String
-channelIdToString (DmChannelId userIdA userIdB) =
-    Id.toString userIdA ++ "-" ++ Id.toString userIdB
-
-
-channelIdFromString : String -> Result () DmChannelId
-channelIdFromString text =
-    case String.split "-" text of
-        [ idA, idB ] ->
-            case ( Id.fromString idA, Id.fromString idB ) of
-                ( Just idA2, Just idB2 ) ->
-                    channelIdFromUserIds idA2 idB2 |> Ok
-
-                _ ->
-                    Err ()
-
-        _ ->
-            Err ()
-
-
-otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)
-otherUserId userId (DmChannelId userIdA userIdB) =
-    if userId == userIdA then
-        Just userIdB
-
-    else if userId == userIdB then
-        Just userIdA
-
-    else
-        Nothing
 
 
 loadOlderMessages :

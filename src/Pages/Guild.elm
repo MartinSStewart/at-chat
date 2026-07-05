@@ -27,6 +27,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -336,7 +337,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                                         (DmRoute
-                                            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
+                                            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Nothing
                                             }
@@ -356,7 +357,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                     in
                     case route of
                         DmRoute dmRoute ->
-                            if Just otherUserId == DmChannel.otherUserId localUser.session.userId dmRoute.channelId then
+                            if Just otherUserId == DmChannelId.otherUserId localUser.session.userId dmRoute.channelId then
                                 Nothing
 
                             else
@@ -759,7 +760,7 @@ guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels gu
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 dmChannelView dmRoute loggedIn local model =
-    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+    case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
         Nothing ->
             Ui.el
                 [ Ui.centerY
@@ -1484,7 +1485,7 @@ memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute
-            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId userId
+            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId userId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }
@@ -7814,7 +7815,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
                             currentTime
                             (case openedOtherUserId of
                                 SelectedDmChannel dmRoute ->
-                                    DmChannel.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+                                    DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
 
                                 _ ->
                                     False
@@ -7980,7 +7981,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute
-            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
+            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }

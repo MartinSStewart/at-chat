@@ -39,7 +39,7 @@ import Cloudflare
 import Codec
 import CustomEmoji
 import Discord
-import DmChannel exposing (DmChannelId)
+import DmChannelId exposing (DmChannelId)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -2815,7 +2815,7 @@ exportSubsetSelector adminData selection =
                             label : { element : Element msg, id : Ui.Input.Label }
                             label =
                                 Ui.Input.label
-                                    ("admin_exportSubsetDmToggle_" ++ DmChannel.channelIdToString channelId)
+                                    ("admin_exportSubsetDmToggle_" ++ DmChannelId.channelIdToString channelId)
                                     [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
                                     (dmChannelParticipants adminData channelId)
                         in
@@ -3538,7 +3538,7 @@ dmChannelParticipants : AdminData -> DmChannelId -> Element msg
 dmChannelParticipants adminData channelId =
     let
         ( userIdA, userIdB ) =
-            DmChannel.userIdsFromChannelId channelId
+            DmChannelId.userIdsFromChannelId channelId
     in
     [ userIdA, userIdB ]
         |> List.map

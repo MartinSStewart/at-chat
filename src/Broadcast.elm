@@ -34,6 +34,7 @@ import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
 import DmChannel
+import DmChannelId
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -1151,7 +1152,7 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
                             (String.Nonempty.toString text)
                             (UserTextMessage message)
                             (DmRoute
-                                { channelId = DmChannel.channelIdFromUserIds userId otherUserId
+                                { channelId = DmChannelId.channelIdFromUserIds userId otherUserId
                                 , threadRoute =
                                     case threadRouteWithReplyTo of
                                         NoThreadWithMaybeMessage _ ->

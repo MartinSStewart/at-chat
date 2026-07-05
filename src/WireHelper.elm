@@ -15,6 +15,7 @@ import Bytes.Decode exposing (Decoder)
 import Bytes.Encode exposing (Encoder)
 import Discord
 import DmChannel
+import DmChannelId exposing (DmChannelId)
 import Id exposing (GuildId, Id)
 import Lamdera.Wire3
 import LocalState
@@ -47,18 +48,18 @@ decodeGuild =
         LocalState.w3_decode_BackendGuild
 
 
-encodeDmChannel : ( DmChannel.DmChannelId, DmChannel.DmChannel ) -> Encoder
+encodeDmChannel : ( DmChannelId, DmChannel.DmChannel ) -> Encoder
 encodeDmChannel ( key, value ) =
     Bytes.Encode.sequence
-        [ DmChannel.w3_encode_DmChannelId key
+        [ DmChannelId.w3_encode_DmChannelId key
         , DmChannel.w3_encode_DmChannel value
         ]
 
 
-decodeDmChannel : Decoder ( DmChannel.DmChannelId, DmChannel.DmChannel )
+decodeDmChannel : Decoder ( DmChannelId, DmChannel.DmChannel )
 decodeDmChannel =
     Bytes.Decode.map2 Tuple.pair
-        DmChannel.w3_decode_DmChannelId
+        DmChannelId.w3_decode_DmChannelId
         DmChannel.w3_decode_DmChannel
 
 

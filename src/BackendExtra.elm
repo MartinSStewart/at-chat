@@ -43,7 +43,8 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel)
+import DmChannelId exposing (DmChannelId)
 import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -276,7 +277,7 @@ requestedForToGuildOrDmId userId requestMessagesFor =
             Just ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadRoute )
 
         InitialLoadRequested_Dm dmChannelId threadRoute ->
-            case DmChannel.otherUserId userId dmChannelId of
+            case DmChannelId.otherUserId userId dmChannelId of
                 Just otherUserId ->
                     Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadRoute )
 
@@ -550,7 +551,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
-                case DmChannel.otherUserId session.userId dmChannelId of
+                case DmChannelId.otherUserId session.userId dmChannelId of
                     Just otherUserId ->
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
@@ -636,9 +637,9 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
             let
                 dmChannelId : DmChannelId
                 dmChannelId =
-                    DmChannel.channelIdFromUserIds otherSession.userId dmingWith
+                    DmChannelId.channelIdFromUserIds otherSession.userId dmingWith
             in
-            case DmChannel.otherUserId session.userId dmChannelId of
+            case DmChannelId.otherUserId session.userId dmChannelId of
                 Just otherUserId ->
                     SeqDict.update
                         (DmRoomId otherUserId)
@@ -1994,7 +1995,7 @@ asDmUser model sessionId { otherUserId } func =
         Just session ->
             let
                 dmChannelId =
-                    DmChannel.channelIdFromUserIds session.userId otherUserId
+                    DmChannelId.channelIdFromUserIds session.userId otherUserId
             in
             case
                 ( NonemptyDict.get session.userId model.users
