@@ -50,7 +50,8 @@ module WordSpellingGame exposing
     , updateAction
     , updateGame
     , updateSetup
-    , validatePlacement
+    , validatePlacementEnglish
+    , validatePlacementSwedish
     , validateSetup
     )
 
@@ -93,7 +94,7 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
-import WordSpellingGameSwedish exposing (Dictionary)
+import WordSpellingGameEnglish exposing (Dictionary)
 
 
 {-| OpaqueVariants
@@ -844,17 +845,55 @@ wordScore setup board placedSet cells =
     letterSum * wordMultiplier
 
 
-{-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
-exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
--}
-validatePlacement : Dictionary -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacement dictionary setup board placedWord =
+validatePlacementEnglish : Dictionary -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacementEnglish dictionary setup board placedWord =
     case placeWord setup board placedWord of
         Just result ->
             if List.isEmpty result.words then
                 Err ()
 
-            else if List.all (wordIsValid dictionary setup) result.words then
+            else if
+                List.all
+                    (\word ->
+                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary.all word
+
+                        else
+                            scanForMatch dictionary.byLength word
+                    )
+                    result.words
+            then
+                Ok result
+
+            else
+                Err ()
+
+        Nothing ->
+            Err ()
+
+
+{-| Swedish has a lot of words so we don't want to spend the extra RAM for storing copies of the dict in array form
+for each word length or the CPU cycles to scan over them.
+Instead we just restrict the letter distribution for having more than 2 wildcards
+-}
+validatePlacementSwedish : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacementSwedish dictionary setup board placedWord =
+    case placeWord setup board placedWord of
+        Just result ->
+            if List.isEmpty result.words then
+                Err ()
+
+            else if
+                List.all
+                    (\word ->
+                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary word
+
+                        else
+                            False
+                    )
+                    result.words
+            then
                 Ok result
 
             else
@@ -871,30 +910,6 @@ instead, which keeps the work bounded no matter how many wildcards a word has.
 maxBruteForceWildcards : Int
 maxBruteForceWildcards =
     2
-
-
-{-| Whether a formed word is in the dictionary. A wildcard tile can stand for any letter, but the
-board doesn't record which letter the player meant, so a word containing wildcards is valid if
-_some_ assignment of letters to its wildcards spells a word in the dictionary.
-
-There are two ways to check this, and we pick whichever is bounded by the smaller amount of work:
-
-  - With few wildcards, try every letter in the game's distribution for them (`bruteForceMatch`):
-    at most n^k lookups for n distinct letters.
-  - With many wildcards, n^k explodes (e.g. 26 letters and 4 wildcards is ~457k), so instead scan
-    the dictionary words of this length and keep any that agree with the fixed letters
-    (`scanForMatch`). That's one pass over a single length bucket — at most ~30k words for this
-    dictionary — regardless of how many wildcards there are. This is what stops a word like
-    "3 letters + 4 wildcards" locking up the server.
-
--}
-wordIsValid : Dictionary -> ValidatedSetup -> List LetterOrWildcard -> Bool
-wordIsValid dictionary setup word =
-    if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
-        bruteForceMatch (distributionLetters setup) dictionary.all word
-
-    else
-        scanForMatch dictionary.byLength word
 
 
 {-| The distinct letters present in the game's letter distribution: the only letters a wildcard
@@ -1566,7 +1581,7 @@ validateSetup createdBy time setup =
         Ok timeControls ->
             case OneOrGreater.fromInt setup.traySize of
                 Just traySize ->
-                    case parseLetters setup.letters |> Result.andThen (withLetterValues setup) of
+                    case parseLettersAndValues setup of
                         Ok letters ->
                             { createdBy = createdBy
                             , timeControls = timeControls
@@ -1622,46 +1637,90 @@ validatedToSetupModel setup =
     }
 
 
-{-| Pair each tile in the distribution with the value the user chose for it in the setup view
-(wildcards are always worth 0 points).
--}
-withLetterValues :
-    SetupModel
-    -> NonemptyDict LetterOrWildcard OneOrGreater
-    -> Result String (NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int })
-withLetterValues setup counts =
-    NonemptyDict.toNonemptyList counts
-        |> List.Nonempty.foldl
-            (\( letterOrWildcard, count ) result ->
-                case result of
-                    Ok list ->
-                        case letterOrWildcard of
-                            Letter (LetterChar char) ->
-                                case String.toInt (String.trim (letterValueInputFor char setup)) of
-                                    Just value ->
-                                        Ok (( letterOrWildcard, { count = count, value = value } ) :: list)
+parseLettersAndValues : SetupModel -> Result String (NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int })
+parseLettersAndValues setup =
+    let
+        parsedLetters : Result String (NonemptyDict LetterOrWildcard OneOrGreater)
+        parsedLetters =
+            let
+                distributionChars : List Char
+                distributionChars =
+                    String.toUpper setup.letters
+                        |> String.toList
+                        |> List.filter (\char -> not (List.member char [ '\n', '\u{000D}', '\t' ]))
 
-                                    Nothing ->
-                                        Err ("Letter values: enter a whole number for " ++ String.fromChar char)
+                counts : SeqDict LetterOrWildcard OneOrGreater
+                counts =
+                    List.foldl
+                        (\char acc ->
+                            if char == ' ' then
+                                SeqDictHelper.increment Wildcard acc
 
-                            Wildcard ->
-                                Ok (( letterOrWildcard, { count = count, value = 0 } ) :: list)
+                            else
+                                SeqDictHelper.increment (Letter (LetterChar char)) acc
+                        )
+                        SeqDict.empty
+                        distributionChars
+            in
+            case NonemptyDict.fromSeqDict counts of
+                Just nonempty ->
+                    case ( setup.language, NonemptyDict.get Wildcard nonempty ) of
+                        ( Swedish, Just value ) ->
+                            if OneOrGreater.toInt value > 2 then
+                                Err "No more than 2 wildcards (spaces) are allowed for Swedish"
 
-                    Err error ->
-                        Err error
-            )
-            (Ok [])
-        |> Result.andThen
-            (\list ->
-                -- The fold prepends, so reverse to keep the distribution's original tile order
-                -- (the bag is built and shuffled in this order, so it affects the drawn trays).
-                case NonemptyDict.fromList (List.reverse list) of
-                    Just nonempty ->
-                        Ok nonempty
+                            else
+                                Ok nonempty
 
-                    Nothing ->
-                        Err "Letters: enter at least one letter"
-            )
+                        _ ->
+                            Ok nonempty
+
+                Nothing ->
+                    Err "Letters: enter at least one letter"
+    in
+    case parsedLetters of
+        Ok counts ->
+            let
+                result : Result String (List ( LetterOrWildcard, { count : OneOrGreater, value : Int } ))
+                result =
+                    List.Nonempty.foldl
+                        (\( letterOrWildcard, count ) result2 ->
+                            case result2 of
+                                Ok list ->
+                                    case letterOrWildcard of
+                                        Letter (LetterChar char) ->
+                                            case String.toInt (String.trim (letterValueInputFor char setup)) of
+                                                Just value ->
+                                                    Ok (( letterOrWildcard, { count = count, value = value } ) :: list)
+
+                                                Nothing ->
+                                                    Err ("Letter values: enter a whole number for " ++ String.fromChar char)
+
+                                        Wildcard ->
+                                            Ok (( letterOrWildcard, { count = count, value = 0 } ) :: list)
+
+                                Err error ->
+                                    Err error
+                        )
+                        (Ok [])
+                        (NonemptyDict.toNonemptyList counts)
+            in
+            case result of
+                Ok list ->
+                    -- The fold prepends, so reverse to keep the distribution's original tile order
+                    -- (the bag is built and shuffled in this order, so it affects the drawn trays).
+                    case NonemptyDict.fromList (List.reverse list) of
+                        Just nonempty ->
+                            Ok nonempty
+
+                        Nothing ->
+                            Err "Letters: enter at least one letter"
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 {-| The current text of a letter's value input, falling back to the letter's default value if the
@@ -4111,6 +4170,16 @@ setupView windowSize readonly setup =
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        padding =
+            Ui.paddingXY
+                (if isMobile then
+                    8
+
+                 else
+                    16
+                )
+                0
     in
     Ui.column
         [ Ui.spacing
@@ -4128,14 +4197,7 @@ setupView windowSize readonly setup =
         ]
         [ Ui.column
             [ Ui.spacing 8
-            , Ui.paddingXY
-                (if isMobile then
-                    8
-
-                 else
-                    16
-                )
-                0
+            , padding
             ]
             [ setupSection
                 (Ui.text "Time control")
@@ -4223,7 +4285,7 @@ setupView windowSize readonly setup =
             ]
         , case setup.error of
             Just error ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text error)
+                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50), padding ] (Ui.text error)
 
             Nothing ->
                 Ui.none
@@ -4328,7 +4390,7 @@ defaultLetters language =
             "  AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ"
 
         Swedish ->
-            " AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
+            "  AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
 
 
 {-| How many points a letter tile scores, as configured in the game setup.
@@ -4520,49 +4582,6 @@ defaultSwedishLetterValue char =
 
         _ ->
             1
-
-
-{-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and
-every other printable character is a letter tile, so any alphabet works (Swedish ÅÄÖ, digits,
-whatever). Letters must be upper case since that's how they appear on tiles and in the word list.
-Fails if there isn't at least one (non-wildcard) letter, since words can't be formed out of
-wildcards alone.
--}
-parseLetters : String -> Result String (NonemptyDict LetterOrWildcard OneOrGreater)
-parseLetters string =
-    let
-        distributionChars : List Char
-        distributionChars =
-            String.toList string |> List.filter (\char -> not (List.member char [ '\n', '\u{000D}', '\t' ]))
-    in
-    if List.any (\char -> char /= ' ' && Char.toUpper char /= char) distributionChars then
-        Err "Letters: all letters must be upper case"
-
-    else
-        let
-            counts : SeqDict LetterOrWildcard OneOrGreater
-            counts =
-                List.foldl
-                    (\char acc ->
-                        if char == ' ' then
-                            SeqDictHelper.increment Wildcard acc
-
-                        else
-                            SeqDictHelper.increment (Letter (LetterChar char)) acc
-                    )
-                    SeqDict.empty
-                    distributionChars
-        in
-        case NonemptyDict.fromSeqDict counts of
-            Just nonempty ->
-                if List.any isLetter (SeqDict.keys counts) then
-                    Ok nonempty
-
-                else
-                    Err "Letters: enter at least one letter"
-
-            Nothing ->
-                Err "Letters: enter at least one letter"
 
 
 isLetter : LetterOrWildcard -> Bool

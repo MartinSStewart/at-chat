@@ -577,7 +577,9 @@ update _ msg model =
                     ( model, Command.none, Audio.cmdNone )
 
         Loaded loaded ->
-            case ( FrontendExtra.isPressMsg msg, loaded.dragPrevious ) of
+            -- We only care about the user accidentally triggering button presses while dragging on mobile.
+            -- On desktop it's less of an issue and it's kind of annoying when clicking a button and nothing happens because you slightly moved the cursor and it counted as a drag
+            case ( MyUi.isMobile loaded && FrontendExtra.isPressMsg msg, loaded.dragPrevious ) of
                 ( True, Dragging _ ) ->
                     ( model, Command.none, Audio.cmdNone )
 

@@ -70,6 +70,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Set
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -78,7 +79,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..), WordSpellingGameSwedish(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -87,7 +88,6 @@ import VisibleMessages
 import WireHelper
 import WordSpellingGame exposing (Language(..))
 import WordSpellingGameEnglish
-import WordSpellingGameSwedish
 
 
 app :
@@ -254,6 +254,7 @@ init =
       , serverSecretRegeneratedAt = Nothing
       , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
+      , wordSpellingGameSwedish = WordSpellingGameSwedish_NotLoaded
       }
     , Command.none
     )
@@ -1870,6 +1871,24 @@ update msg model =
                         fileHash
                         { fileSize = fileSize2, imageSize = maybeImageSize }
                         model.files
+              }
+            , Command.none
+            )
+
+        GotSwedishWordList result ->
+            ( { model
+                | wordSpellingGameSwedish =
+                    case model.wordSpellingGameSwedish of
+                        WordSpellingGameSwedish_Loading ->
+                            case result of
+                                Ok text ->
+                                    String.split "\n" text |> Set.fromList |> WordSpellingGameSwedish_Loaded
+
+                                Err error ->
+                                    WordSpellingGameSwedish_Error error
+
+                        _ ->
+                            model.wordSpellingGameSwedish
               }
             , Command.none
             )
@@ -5781,6 +5800,9 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
     case wsChange of
         WordSpellingGame.StartMatch _ setup ->
             let
+                loadSwedishWordList =
+                    model.wordSpellingGameSwedish == WordSpellingGameSwedish_NotLoaded && setup.language == Swedish
+
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
@@ -5808,12 +5830,22 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                             )
                             channel2.games
                 }
-                model
+                (if loadSwedishWordList then
+                    { model | wordSpellingGameSwedish = WordSpellingGameSwedish_Loading }
+
+                 else
+                    model
+                )
             , Command.batch
                 [ Local_Game guildOrDmId localMsg2
                     |> LocalChangeResponse changeId
                     |> Lamdera.sendToFrontend clientId
                 , broadcast localMsg2 model
+                , if loadSwedishWordList then
+                    Http.get { url = "/swedish-word-list.txt", expect = Http.expectString GotSwedishWordList }
+
+                  else
+                    Command.none
                 ]
             )
 
@@ -5827,21 +5859,31 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                 , change =
                                     case action.change of
                                         WordSpellingGame.PlaceWord placed _ ->
+                                            let
+                                                result =
+                                                    case setup.language of
+                                                        English ->
+                                                            WordSpellingGame.validatePlacementEnglish
+                                                                WordSpellingGameEnglish.dictionary
+                                                                setup
+                                                                shared.board
+                                                                placed
+
+                                                        Swedish ->
+                                                            case model.wordSpellingGameSwedish of
+                                                                WordSpellingGameSwedish_Loaded words ->
+                                                                    WordSpellingGame.validatePlacementSwedish
+                                                                        words
+                                                                        setup
+                                                                        shared.board
+                                                                        placed
+
+                                                                _ ->
+                                                                    Err ()
+                                            in
                                             WordSpellingGame.PlaceWord
                                                 placed
-                                                (case
-                                                    WordSpellingGame.validatePlacement
-                                                        (case setup.language of
-                                                            English ->
-                                                                WordSpellingGameEnglish.dictionary
-
-                                                            Swedish ->
-                                                                WordSpellingGameSwedish.dictionary
-                                                        )
-                                                        setup
-                                                        shared.board
-                                                        placed
-                                                 of
+                                                (case result of
                                                     Ok _ ->
                                                         FilledInByBackend WordSpellingGame.IsValid
 
