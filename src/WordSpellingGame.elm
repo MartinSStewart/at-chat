@@ -3989,7 +3989,8 @@ setupView windowSize setup =
              else
                 16
             )
-        , Ui.padding
+        , Ui.paddingXY
+            0
             (if isMobile then
                 12
 
@@ -4002,74 +4003,79 @@ setupView windowSize setup =
         , Ui.scrollable
         ]
         [ setupSection
-            (Ui.row
-                []
-                [ Ui.text "Tray size"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
-                ]
-            )
-            (numberInput
-                { htmlId = "wsg_traySizeInput"
-                , minValue = 1
-                , maxValue = 20
-                , value = String.fromInt setup.traySize
-                , onChange = ChangedTraySizeInput
-                }
-            )
-        , setupSection
-            (Ui.row
-                []
-                [ Ui.text "Bingo bonus"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
-                ]
-            )
-            (numberInput
-                { htmlId = "wsg_fullTrayBonusInput"
-                , minValue = -999
-                , maxValue = 999
-                , value = String.fromInt setup.fullTrayBonus
-                , onChange = ChangedFullTrayBonusInput
-                }
-            )
-        , setupSection
             (Ui.text "Time control")
             (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
                 [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
                 , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                 ]
             )
-        , setupSection
-            (Ui.row
-                []
-                [ Ui.text "Letter distribution"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
-                ]
-            )
-            (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
-                [ lettersInput setup.letters
-                , if setup.letters == defaultLetters && SeqDict.isEmpty setup.letterValues then
+        , MyUi.container
+            MyUi.background1
+            isMobile
+            "Advanced settings"
+            [ setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Bingo bonus"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
+                    ]
+                )
+                (numberInput
+                    { htmlId = "wsg_fullTrayBonusInput"
+                    , minValue = -999
+                    , maxValue = 999
+                    , value = String.fromInt setup.fullTrayBonus
+                    , onChange = ChangedFullTrayBonusInput
+                    }
+                )
+            , setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Tray size"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
+                    ]
+                )
+                (numberInput
+                    { htmlId = "wsg_traySizeInput"
+                    , minValue = 1
+                    , maxValue = 20
+                    , value = String.fromInt setup.traySize
+                    , onChange = ChangedTraySizeInput
+                    }
+                )
+            , setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Letter distribution"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
+                    ]
+                )
+                (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
+                    [ lettersInput setup.letters
+                    , if setup.letters == defaultLetters && SeqDict.isEmpty setup.letterValues then
+                        Ui.none
+
+                      else
+                        MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
+                    ]
+                )
+            , case distributionInputLetters setup.letters of
+                [] ->
                     Ui.none
 
-                  else
-                    MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
-                ]
-            )
-        , case distributionInputLetters setup.letters of
-            [] ->
-                Ui.none
-
-            distributionChars ->
-                setupSection
-                    (Ui.row
-                        []
-                        [ Ui.text "Letter values"
-                        , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for each letter)")
-                        ]
-                    )
-                    (Ui.row
-                        [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
-                        (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
-                    )
+                distributionChars ->
+                    setupSection
+                        (Ui.row
+                            []
+                            [ Ui.text "Letter values"
+                            , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for each letter)")
+                            ]
+                        )
+                        (Ui.row
+                            [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
+                            (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
+                        )
+            ]
         , case setup.error of
             Just error ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text error)
