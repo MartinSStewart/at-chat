@@ -185,8 +185,12 @@ type alias ValidatedSetup =
     , fullTrayBonus : Int
     , createdBy : Id UserId
     , seed : Int
-    , letters : NonemptyDict LetterOrWildcard OneOrGreater
+    , letters : NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int }
     }
+
+
+type Letter
+    = LetterChar Char
 
 
 initSetup : SetupModel
@@ -338,7 +342,7 @@ remainingLettersInBag setup board players =
         remainingLetters =
             SeqDict.foldl
                 (\_ letter startingLetters2 -> SeqDictHelper.decrement letter startingLetters2)
-                (NonemptyDict.toSeqDict setup.letters)
+                (NonemptyDict.toSeqDict setup.letters |> SeqDict.map (\_ a -> a.count))
                 board
     in
     List.foldl
@@ -442,7 +446,7 @@ updateAction setup action shared =
         PlaceWord placedWord isValid ->
             case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case placeWord shared.board placedWord of
+                    case placeWord setup shared.board placedWord of
                         Just result ->
                             let
                                 animatedPlacement : Maybe AnimatedPlacement
@@ -624,8 +628,8 @@ The returned `words` are lowercased so they can be looked up directly in the wor
 apply to the squares the new tiles land on; wildcards score zero).
 
 -}
-placeWord : SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
-placeWord board placedWord =
+placeWord : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
+placeWord setup board placedWord =
     let
         ( dx, dy ) =
             if placedWord.isVertical then
@@ -712,7 +716,7 @@ placeWord board placedWord =
             Just
                 { board = newBoard
                 , words = List.map (wordString newBoard) allWords
-                , score = List.sum (List.map (wordScore newBoard placedSet) allWords)
+                , score = List.sum (List.map (wordScore setup newBoard placedSet) allWords)
                 , placedCells = placedCells
                 }
 
@@ -761,8 +765,8 @@ wordString board cells =
 {-| The Scrabble score of a single word. Letter and word multipliers only apply to the squares
 that the newly-placed tiles (`placedSet`) land on; wildcards always score zero.
 -}
-wordScore : SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
-wordScore board placedSet cells =
+wordScore : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
+wordScore setup board placedSet cells =
     let
         letterSum : Int
         letterSum =
@@ -771,10 +775,10 @@ wordScore board placedSet cells =
                     case SeqDict.get cell board of
                         Just (Letter letter) ->
                             if Set.member cell placedSet then
-                                (letterData letter).score * letterScoreMultiplier cell
+                                (letterData setup letter).score * letterScoreMultiplier cell
 
                             else
-                                (letterData letter).score
+                                (letterData setup letter).score
 
                         Just Wildcard ->
                             0
@@ -804,9 +808,9 @@ wordScore board placedSet cells =
 {-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
 exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
 -}
-validatePlacement : Dictionary -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacement dictionary board placedWord =
-    case placeWord board placedWord of
+validatePlacement : Dictionary -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacement dictionary setup board placedWord =
+    case placeWord setup board placedWord of
         Just result ->
             if List.isEmpty result.words then
                 Err ()
@@ -867,11 +871,11 @@ bruteForceMatch wordList word =
                 [] ->
                     Set.member prefix wordList
 
-                (Letter letter) :: rest ->
-                    search rest (prefix ++ letterText letter)
+                (Letter (LetterChar letter)) :: rest ->
+                    search rest (prefix ++ String.fromChar letter)
 
                 Wildcard :: rest ->
-                    List.any (\letter -> search rest (prefix ++ letterText letter)) allLetters
+                    List.any (\(LetterChar letter) -> search rest (prefix ++ String.fromChar letter)) allLetters
     in
     search word ""
 
@@ -888,8 +892,8 @@ scanForMatch byLength word =
             List.map
                 (\cell ->
                     case cell of
-                        Letter letter ->
-                            Just (letterChar letter)
+                        Letter (LetterChar letter) ->
+                            Just letter
 
                         Wildcard ->
                             Nothing
@@ -922,25 +926,6 @@ matchesPattern pattern candidate =
         pattern
         (String.toList candidate)
         |> List.all identity
-
-
-{-| A letter's lowercase text, as it appears in the word list.
--}
-letterText : Letter -> String
-letterText letter =
-    String.toLower (letterData letter).text
-
-
-{-| A letter's lowercase character, as it appears in the word list.
--}
-letterChar : Letter -> Char
-letterChar letter =
-    case String.uncons (letterText letter) of
-        Just ( char, _ ) ->
-            char
-
-        Nothing ->
-            ' '
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -1040,7 +1025,7 @@ updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> G
 updateGame time currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
-            case placeWord shared.board placement of
+            case placeWord setup shared.board placement of
                 Just result ->
                     let
                         -- The board cells this line actually consumes (its newly placed tiles).
@@ -3005,8 +2990,8 @@ letterOrWildcardsToString letters =
     List.map
         (\letterOrWildcard ->
             case letterOrWildcard of
-                Letter letter ->
-                    String.toUpper (letterText letter)
+                Letter (LetterChar letter) ->
+                    String.fromChar letter
 
                 Wildcard ->
                     "_"
@@ -4074,32 +4059,14 @@ timeInput htmlId label value onChange =
         ]
 
 
-allLetters : List Letter
-allLetters =
-    [ A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z ]
-
-
-{-| How many wildcards (blank tiles) the standard Scrabble distribution has.
--}
-defaultWildcardCount : Int
-defaultWildcardCount =
-    2
-
-
-{-| The standard Scrabble letter distribution, written as a single long string. Each wildcard is a
-space and each letter appears in lowercase as many times as it occurs in the bag, e.g.
-`"  aaaaaaaaabbccdddd..."` (two wildcards followed by nine a's, two b's and so on).
--}
 defaultLetters : String
 defaultLetters =
-    String.repeat defaultWildcardCount " "
-        ++ (List.map
-                (\letter ->
-                    String.repeat (OneOrGreater.toInt (letterData letter).total) (String.toLower (letterData letter).text)
-                )
-                allLetters
-                |> String.concat
-           )
+    "  aaaaaaaaabbccddddeeeeeeeeeeeeffggghhiiiiiiiiijkllllmmnnnnnnooooooooppqrrrrrrssssttttttuuuuvvwwxyyz"
+
+
+letterData : ValidatedSetup -> Letter -> { score : Int }
+letterData setup letter =
+    setup
 
 
 {-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and any
@@ -4164,117 +4131,6 @@ type alias LetterData =
     -- distribution in the game setup.
     , total : OneOrGreater
     }
-
-
-letterData : Letter -> LetterData
-letterData letter =
-    case letter of
-        A ->
-            { score = 1, text = "A", total = OneOrGreater.nine }
-
-        B ->
-            { score = 3, text = "B", total = OneOrGreater.two }
-
-        C ->
-            { score = 3, text = "C", total = OneOrGreater.two }
-
-        D ->
-            { score = 2, text = "D", total = OneOrGreater.four }
-
-        E ->
-            { score = 1, text = "E", total = OneOrGreater.twelve }
-
-        F ->
-            { score = 4, text = "F", total = OneOrGreater.two }
-
-        G ->
-            { score = 2, text = "G", total = OneOrGreater.three }
-
-        H ->
-            { score = 4, text = "H", total = OneOrGreater.two }
-
-        I ->
-            { score = 1, text = "I", total = OneOrGreater.nine }
-
-        J ->
-            { score = 8, text = "J", total = OneOrGreater.one }
-
-        K ->
-            { score = 5, text = "K", total = OneOrGreater.one }
-
-        L ->
-            { score = 1, text = "L", total = OneOrGreater.four }
-
-        M ->
-            { score = 3, text = "M", total = OneOrGreater.two }
-
-        N ->
-            { score = 1, text = "N", total = OneOrGreater.six }
-
-        O ->
-            { score = 1, text = "O", total = OneOrGreater.eight }
-
-        P ->
-            { score = 3, text = "P", total = OneOrGreater.two }
-
-        Q ->
-            { score = 10, text = "Q", total = OneOrGreater.one }
-
-        R ->
-            { score = 1, text = "R", total = OneOrGreater.six }
-
-        S ->
-            { score = 1, text = "S", total = OneOrGreater.four }
-
-        T ->
-            { score = 1, text = "T", total = OneOrGreater.six }
-
-        U ->
-            { score = 1, text = "U", total = OneOrGreater.four }
-
-        V ->
-            { score = 4, text = "V", total = OneOrGreater.two }
-
-        W ->
-            { score = 4, text = "W", total = OneOrGreater.two }
-
-        X ->
-            { score = 8, text = "X", total = OneOrGreater.one }
-
-        Y ->
-            { score = 4, text = "Y", total = OneOrGreater.two }
-
-        Z ->
-            { score = 10, text = "Z", total = OneOrGreater.one }
-
-
-type Letter
-    = A
-    | B
-    | C
-    | D
-    | E
-    | F
-    | G
-    | H
-    | I
-    | J
-    | K
-    | L
-    | M
-    | N
-    | O
-    | P
-    | Q
-    | R
-    | S
-    | T
-    | U
-    | V
-    | W
-    | X
-    | Y
-    | Z
 
 
 audio : Audio.Source -> Id UserId -> Shared -> GameData -> Audio
