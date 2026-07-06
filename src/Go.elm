@@ -1226,7 +1226,12 @@ updateAction setup action model =
                         model
 
             Joined userId ->
-                { model | joinedUserId = Just userId }
+                case model.joinedUserId of
+                    Just _ ->
+                        model
+
+                    Nothing ->
+                        { model | joinedUserId = Just userId }
 
     else
         model

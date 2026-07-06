@@ -609,7 +609,8 @@ tests normalConfig =
                                             , Test.Html.Selector.text "played AA"
                                             ]
                                         )
-                                    , watcher.snapshotView 100 { name = "Watching a guild word spelling match" }
+                                    , user3.snapshotView 100 { name = "User3's perspective" }
+                                    , watcher.snapshotView 100 { name = "Spectator's perspective" }
                                     ]
 
                                 _ ->
