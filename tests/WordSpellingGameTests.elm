@@ -11,7 +11,7 @@ import SeqDict exposing (SeqDict)
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
-import WordSpellingGameList
+import WordSpellingGameEnglish
 
 
 {-| Build a board from a list of plain (non-wildcard) tiles.
@@ -68,6 +68,7 @@ testSetup =
             , letters =
                 NonemptyDict.fromNonemptyList
                     (Nonempty ( Letter a, { count = OneOrGreater.seven, value = 1 } ) [])
+            , language = WordSpellingGame.English
             }
 
 
@@ -170,7 +171,7 @@ tests =
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -179,7 +180,7 @@ tests =
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "DOG" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "DOG" ])
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -192,7 +193,7 @@ tests =
                             board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "CAT", "CA", "AA", "TA" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "CAT", "CA", "AA", "TA" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -207,7 +208,7 @@ tests =
                     in
                     WordSpellingGame.validatePlacement
                         -- "AA" is missing, so the placement is rejected.
-                        (WordSpellingGameList.buildDictionary [ "CAT", "CA", "TA" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "CAT", "CA", "TA" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -222,7 +223,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -237,7 +238,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "DOG" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "DOG" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -252,7 +253,7 @@ tests =
                             SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 8, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
@@ -273,7 +274,7 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "KOALA" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "KOALA" ])
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
@@ -295,7 +296,7 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "ABCDE" ])
+                        (WordSpellingGameEnglish.buildDictionary [ "ABCDE" ])
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])

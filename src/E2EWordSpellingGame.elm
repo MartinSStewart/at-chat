@@ -114,6 +114,21 @@ tests normalConfig =
                         , admin.snapshotView 5000 { name = "Place \"load\"" }
                         , user.snapshotView 0 { name = "Place \"load\"" }
                         ]
+                    , T.collapsableGroup
+                        "Game settings gear toggles the read-only settings view"
+                        [ -- The board is showing, so the setup's letter distribution input isn't present.
+                          admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        , admin.click 100 (Dom.id "wsg_settings")
+
+                        -- Now the read-only settings show the distribution, but no start/cancel buttons.
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
+                        , admin.snapshotView 100 { name = "Word spelling game settings" }
+
+                        -- Clicking the gear again returns to the board.
+                        , admin.click 100 (Dom.id "wsg_settings")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        ]
 
                     -- The other user opens the same match and joins it.
                     , user.click 2000 (Dom.id "guild_openDm_0")

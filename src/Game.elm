@@ -647,7 +647,7 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
                         Go.setupView isPersonalDm windowSize setup |> Ui.map GoSetupMsg
 
                     WordSpellingGame_Setup setup ->
-                        WordSpellingGame.setupView windowSize setup |> Ui.map WordSpellingSetupMsg
+                        WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
                     GameSelect ->
                         Ui.row

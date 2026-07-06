@@ -113,6 +113,9 @@ type alias GameData =
       -- word's slide-in animation (see `audio`); the local player's own moves pop via the tile
       -- times instead.
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
+    , -- Whether the game's settings (a read-only version of the setup view) are shown instead of
+      -- the board, toggled with the gear button.
+      showSettings : Bool
     }
 
 
@@ -193,6 +196,7 @@ type GameMsg
     | PressedJoinGame
     | PressedReplaceTrayOrPass
     | PressedClearBoard
+    | PressedToggleSettings
 
 
 type alias SetupModel =
@@ -270,6 +274,7 @@ initGame time setup =
     , dragging = NotDragging
     , zoomAnimation = { start = time, from = zoomedOutState }
     , lastWordPlaced = Nothing
+    , showSettings = False
     }
 
 
@@ -1219,6 +1224,9 @@ updateGame time currentUserId setup shared msg model =
             , Nothing
             )
 
+        PressedToggleSettings ->
+            ( { model | showSettings = not model.showSettings }, Nothing )
+
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
 holds (their tray is index-aligned with `GameData.tiles`; see `boardView`).
@@ -1577,6 +1585,41 @@ validateSetup createdBy time setup =
 
                 Nothing ->
                     Err "Tray size must be at least 1"
+
+
+{-| Turn a running game's setup back into the setup form's fields, so the read-only settings view
+(the gear button on an active game) can reuse `setupView` to display them.
+-}
+validatedToSetupModel : ValidatedSetup -> SetupModel
+validatedToSetupModel setup =
+    { mainTimeInput = Duration.inMinutes setup.timeControls.mainTime |> String.fromFloat
+    , incrementInput = Duration.inSeconds setup.timeControls.increment |> String.fromFloat
+    , traySize = OneOrGreater.toInt setup.traySize
+    , fullTrayBonus = setup.fullTrayBonus
+    , error = Nothing
+    , letters =
+        NonemptyDict.toList setup.letters
+            |> List.map
+                (\( letterOrWildcard, data ) ->
+                    String.repeat
+                        (OneOrGreater.toInt data.count)
+                        (letterOrWildcardText letterOrWildcard)
+                )
+            |> String.concat
+    , letterValues =
+        NonemptyDict.toList setup.letters
+            |> List.filterMap
+                (\( letterOrWildcard, data ) ->
+                    case letterOrWildcard of
+                        Letter (LetterChar char) ->
+                            Just ( char, String.fromInt data.value )
+
+                        Wildcard ->
+                            Nothing
+                )
+            |> SeqDict.fromList
+    , language = setup.language
+    }
 
 
 {-| Pair each tile in the distribution with the value the user chose for it in the setup view
@@ -2118,6 +2161,17 @@ getPlayer userId gameState =
 
 dragStart : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
 dragStart time windowSize touches setup gameModel =
+    if gameModel.showSettings then
+        -- The settings view covers the board, so a drag over where the board would be shouldn't
+        -- move any tiles.
+        gameModel
+
+    else
+        dragStartHelper time windowSize touches setup gameModel
+
+
+dragStartHelper : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
+dragStartHelper time windowSize touches setup gameModel =
     let
         touchPosition : Coord CssPixels
         touchPosition =
@@ -2747,23 +2801,50 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
-    in
-    (if isMobile then
-        Ui.column
 
-     else
-        Ui.row
-    )
-        [ Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
-        , Ui.background MyUi.tabBackground
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , MyUi.noShrinking
-        , MyUi.htmlStyle "user-select" "none"
-        ]
-        [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize isPersonalDm localUser setup actions shared
-        ]
+        -- A gear in the top right corner that toggles between the game and its (read-only)
+        -- settings, so players can check what was configured for the match.
+        settingsButton : Ui.Attribute GameMsg
+        settingsButton =
+            MyUi.elButton
+                (Dom.id "wsg_settings")
+                PressedToggleSettings
+                [ Ui.width (Ui.px 24)
+                , Ui.alignRight
+                , Ui.move { x = -8, y = 8, z = 0 }
+                , Ui.Font.color MyUi.font1
+                , Html.Attributes.attribute "aria-label" "Game settings" |> Ui.htmlAttribute
+                ]
+                (Ui.html Icons.gear)
+                |> Ui.inFront
+    in
+    if model.showSettings then
+        Ui.el
+            [ settingsButton ]
+            (setupView windowSize True (validatedToSetupModel setup)
+                -- Every control is disabled in the read-only settings view, so no setup message
+                -- can actually fire; this mapping only exists to satisfy the types.
+                |> Ui.map (\_ -> PressedToggleSettings)
+            )
+
+    else
+        (if isMobile then
+            Ui.column
+
+         else
+            Ui.row
+        )
+            [ Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
+            , Ui.background MyUi.tabBackground
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , MyUi.noShrinking
+            , MyUi.htmlStyle "user-select" "none"
+            , settingsButton
+            ]
+            [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
+            , statusView windowSize isPersonalDm localUser setup actions shared
+            ]
 
 
 playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
@@ -4021,8 +4102,11 @@ doubleLetterCells =
     ]
 
 
-setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
-setupView windowSize setup =
+{-| The game setup form. With `readonly` set, every input is disabled and the buttons are hidden;
+this doubles as the settings view of an active game (see the gear button in `gameView`).
+-}
+setupView : Coord CssPixels -> Bool -> SetupModel -> Element SetupMsg
+setupView windowSize readonly setup =
     let
         isMobile : Bool
         isMobile =
@@ -4056,16 +4140,20 @@ setupView windowSize setup =
             [ setupSection
                 (Ui.text "Time control")
                 (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                    [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
-                    , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
+                    [ timeInput readonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
+                    , timeInput readonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                     ]
                 )
-            , MyUi.radioColumn
-                (Dom.id "ws_language")
-                PressedLanguage
-                (Just setup.language)
-                "Dictionary"
-                (List.map (\language -> ( language, languageToString language )) allLanguages)
+            , if readonly then
+                setupSection (Ui.text "Dictionary") (Ui.text (languageToString setup.language))
+
+              else
+                MyUi.radioColumn
+                    (Dom.id "ws_language")
+                    PressedLanguage
+                    (Just setup.language)
+                    "Dictionary"
+                    (List.map (\language -> ( language, languageToString language )) allLanguages)
             ]
         , MyUi.container
             MyUi.background1
@@ -4084,6 +4172,7 @@ setupView windowSize setup =
                     , minValue = -999
                     , maxValue = 999
                     , value = String.fromInt setup.fullTrayBonus
+                    , readonly = readonly
                     , onChange = ChangedFullTrayBonusInput
                     }
                 )
@@ -4100,6 +4189,7 @@ setupView windowSize setup =
                     , minValue = 1
                     , maxValue = 10
                     , value = String.fromInt setup.traySize
+                    , readonly = readonly
                     , onChange = ChangedTraySizeInput
                     }
                 )
@@ -4110,7 +4200,7 @@ setupView windowSize setup =
                     , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
                     ]
                 )
-                (lettersInput setup.letters)
+                (lettersInput readonly setup.letters)
             , case distributionInputLetters setup.letters of
                 [] ->
                     Ui.none
@@ -4120,9 +4210,12 @@ setupView windowSize setup =
                         (Ui.text "Letter values")
                         (Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
-                            (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
+                            (List.map
+                                (\char -> letterValueInput readonly char (letterValueInputFor char setup))
+                                distributionChars
+                            )
                         )
-            , if setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues then
+            , if readonly || (setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues) then
                 Ui.none
 
               else
@@ -4134,7 +4227,11 @@ setupView windowSize setup =
 
             Nothing ->
                 Ui.none
-        , Go.startOrCancel "wsg" isMobile PressedCancel PressedStartGame
+        , if readonly then
+            Ui.none
+
+          else
+            Go.startOrCancel "wsg" isMobile PressedCancel PressedStartGame
         ]
 
 
@@ -4160,8 +4257,8 @@ distributionInputLetters string =
         |> List.sort
 
 
-letterValueInput : Char -> String -> Element SetupMsg
-letterValueInput char value =
+letterValueInput : Bool -> Char -> String -> Element SetupMsg
+letterValueInput readonly char value =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
@@ -4171,16 +4268,18 @@ letterValueInput char value =
             , minValue = 0
             , maxValue = 999
             , value = value
+            , readonly = readonly
             , onChange = ChangedLetterValue char
             }
         ]
 
 
-lettersInput : String -> Element SetupMsg
-lettersInput value =
+lettersInput : Bool -> String -> Element SetupMsg
+lettersInput readonly value =
     Html.textarea
         [ Html.Attributes.id "wsg_lettersInput"
         , Html.Attributes.value value
+        , Html.Attributes.disabled readonly
         , Html.Attributes.style "font-size" "inherit"
         , Html.Attributes.style "font-family" "monospace"
         , Html.Attributes.style "width" "100%"
@@ -4199,8 +4298,8 @@ lettersInput value =
         |> Ui.html
 
 
-timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
-timeInput htmlId label value onChange =
+timeInput : Bool -> String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
+timeInput readonly htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
         , Html.input
@@ -4209,6 +4308,7 @@ timeInput htmlId label value onChange =
             , Html.Attributes.min "0"
             , Html.Attributes.step "1"
             , Html.Attributes.value value
+            , Html.Attributes.disabled readonly
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "width" "70px"
             , Html.Attributes.style "padding" "8px"
