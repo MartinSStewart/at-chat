@@ -38,9 +38,12 @@ type alias Dictionary =
     }
 
 
+{-| The word list with every word upper case, matching how letters appear on tiles and in the
+game's letter distributions.
+-}
 dictionary : Dictionary
 dictionary =
-    buildDictionary (String.split "\n" raw)
+    buildDictionary (String.split "\n" (String.toUpper raw))
 
 
 raw : String

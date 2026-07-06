@@ -5831,6 +5831,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                                 (case
                                                     WordSpellingGame.validatePlacement
                                                         WordSpellingGameList.dictionary
+                                                        setup
                                                         shared.board
                                                         placed
                                                  of

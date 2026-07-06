@@ -1,9 +1,12 @@
 module WordSpellingGameTests exposing (tests)
 
+import Duration
 import Effect.Time as Time
 import Expect
 import Id
 import List.Nonempty exposing (Nonempty(..))
+import NonemptyDict
+import OneOrGreater
 import SeqDict exposing (SeqDict)
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -47,6 +50,67 @@ validatedSetup traySize bonus =
         { base | traySize = traySize, fullTrayBonus = bonus }
 
 
+{-| The default setup, used by tests that need the standard letter values. The fallback branch is
+unreachable since the default setup always validates; it just keeps this definition total.
+-}
+testSetup : WordSpellingGame.ValidatedSetup
+testSetup =
+    case validatedSetup 7 0 of
+        Ok validated ->
+            validated
+
+        Err _ ->
+            { timeControls = { mainTime = Duration.minutes 10, increment = Duration.seconds 5 }
+            , traySize = OneOrGreater.seven
+            , fullTrayBonus = 0
+            , createdBy = Id.fromInt 0
+            , seed = 0
+            , letters =
+                NonemptyDict.fromNonemptyList
+                    (Nonempty ( Letter a, { count = OneOrGreater.seven, value = 1 } ) [])
+            }
+
+
+a : Letter
+a =
+    LetterChar 'A'
+
+
+b : Letter
+b =
+    LetterChar 'B'
+
+
+c : Letter
+c =
+    LetterChar 'C'
+
+
+e : Letter
+e =
+    LetterChar 'E'
+
+
+h : Letter
+h =
+    LetterChar 'H'
+
+
+l : Letter
+l =
+    LetterChar 'L'
+
+
+o : Letter
+o =
+    LetterChar 'O'
+
+
+t : Letter
+t =
+    LetterChar 'T'
+
+
 tests : Test
 tests =
     Test.describe
@@ -55,142 +119,149 @@ tests =
             [ Test.test "a single horizontal word on plain cells" <|
                 \_ ->
                     -- C(3) A(1) T(1) on plain cells, no multipliers.
-                    WordSpellingGame.placeWord SeqDict.empty (placedWord ( 6, 4 ) False C [ A, T ])
+                    WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Maybe.map (\result -> ( result.words, result.score ))
-                        |> Expect.equal (Just ( [ word [ C, A, T ] ], 5 ))
+                        |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "the main word plus every perpendicular cross word" <|
                 \_ ->
                     -- Existing A A A along row 5, place C A T along row 4 above them. This forms
-                    -- the main word "cat" and three cross words "ca", "aa", "ta".
+                    -- the main word "CAT" and three cross words "CA", "AA", "TA".
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
-                            board [ ( ( 6, 5 ), A ), ( ( 7, 5 ), A ), ( ( 8, 5 ), A ) ]
+                            board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
-                    WordSpellingGame.placeWord existing (placedWord ( 6, 4 ) False C [ A, T ])
+                    WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Maybe.map (\result -> ( result.words, result.score ))
-                        -- main "cat" = 3+1+1 = 5, "ca" = 3+1 = 4, "aa" = 1+1 = 2, "ta" = 1+1 = 2
-                        |> Expect.equal (Just ( [ word [ C, A, T ], word [ C, A ], word [ A, A ], word [ T, A ] ], 13 ))
+                        -- main "CAT" = 3+1+1 = 5, "CA" = 3+1 = 4, "AA" = 1+1 = 2, "TA" = 1+1 = 2
+                        |> Expect.equal (Just ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "double-letter squares multiply only the placed letter" <|
                 \_ ->
                     -- (6,2) and (8,2) are double-letter squares, (7,2) is plain.
-                    WordSpellingGame.placeWord SeqDict.empty (placedWord ( 6, 2 ) False C [ A, T ])
+                    WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 2 ) False c [ a, t ])
                         |> Maybe.map (\result -> ( result.words, result.score ))
                         -- C 3*2 + A 1 + T 1*2 = 9
-                        |> Expect.equal (Just ( [ word [ C, A, T ] ], 9 ))
+                        |> Expect.equal (Just ( [ word [ c, a, t ] ], 9 ))
             , Test.test "the centre square doubles the whole word" <|
                 \_ ->
                     -- (7,7) is the centre square (double word).
-                    WordSpellingGame.placeWord SeqDict.empty (placedWord ( 7, 7 ) False C [ A, T ])
+                    WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 7, 7 ) False c [ a, t ])
                         |> Maybe.map (\result -> ( result.words, result.score ))
                         -- (3+1+1) * 2 = 10
-                        |> Expect.equal (Just ( [ word [ C, A, T ] ], 10 ))
+                        |> Expect.equal (Just ( [ word [ c, a, t ] ], 10 ))
             , Test.test "letters laid out skip over existing tiles" <|
                 \_ ->
-                    -- An existing A sits at (7,4); placing C and T around it forms "cat".
+                    -- An existing A sits at (7,4); placing C and T around it forms "CAT".
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
-                            board [ ( ( 7, 4 ), A ) ]
+                            board [ ( ( 7, 4 ), a ) ]
                     in
-                    WordSpellingGame.placeWord existing (placedWord ( 6, 4 ) False C [ T ])
+                    WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ t ])
                         |> Maybe.map (\result -> ( result.words, result.score ))
                         -- C 3 (placed) + A 1 (existing) + T 1 (placed) = 5
-                        |> Expect.equal (Just ( [ word [ C, A, T ] ], 5 ))
+                        |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "running off the edge of the board is rejected" <|
                 \_ ->
-                    WordSpellingGame.placeWord SeqDict.empty (placedWord ( 14, 7 ) False A [ B ])
+                    WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 14, 7 ) False a [ b ])
                         |> Expect.equal Nothing
             ]
         , Test.describe "validatePlacement checks formed words against the word list"
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        testSetup
                         SeqDict.empty
-                        (placedWord ( 6, 4 ) False C [ A, T ])
+                        (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Result.map (\result -> ( result.words, result.score ))
-                        |> Expect.equal (Ok ( [ word [ C, A, T ] ], 5 ))
+                        |> Expect.equal (Ok ( [ word [ c, a, t ] ], 5 ))
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "dog" ])
+                        (WordSpellingGameList.buildDictionary [ "DOG" ])
+                        testSetup
                         SeqDict.empty
-                        (placedWord ( 6, 4 ) False C [ A, T ])
+                        (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Expect.equal (Err ())
             , Test.test "accepts only when every cross word also exists" <|
                 \_ ->
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
-                            board [ ( ( 6, 5 ), A ), ( ( 7, 5 ), A ), ( ( 8, 5 ), A ) ]
+                            board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "cat", "ca", "aa", "ta" ])
+                        (WordSpellingGameList.buildDictionary [ "CAT", "CA", "AA", "TA" ])
+                        testSetup
                         existing
-                        (placedWord ( 6, 4 ) False C [ A, T ])
+                        (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Result.map (\result -> ( result.words, result.score ))
-                        |> Expect.equal (Ok ( [ word [ C, A, T ], word [ C, A ], word [ A, A ], word [ T, A ] ], 13 ))
+                        |> Expect.equal (Ok ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "rejects when a cross word does not exist even if the main word does" <|
                 \_ ->
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
-                            board [ ( ( 6, 5 ), A ), ( ( 7, 5 ), A ), ( ( 8, 5 ), A ) ]
+                            board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        -- "aa" is missing, so the placement is rejected.
-                        (WordSpellingGameList.buildDictionary [ "cat", "ca", "ta" ])
+                        -- "AA" is missing, so the placement is rejected.
+                        (WordSpellingGameList.buildDictionary [ "CAT", "CA", "TA" ])
+                        testSetup
                         existing
-                        (placedWord ( 6, 4 ) False C [ A, T ])
+                        (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Expect.equal (Err ())
             , Test.test "a wildcard can stand for the letter that completes a word" <|
                 \_ ->
                     -- A wildcard sits at (7,4); placing C and T around it forms "c_t", which is
-                    -- valid because the wildcard can be an A to spell "cat".
+                    -- valid because the wildcard can be an A to spell "CAT".
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        testSetup
                         existing
-                        (placedWord ( 6, 4 ) False C [ T ])
+                        (placedWord ( 6, 4 ) False c [ t ])
                         |> Result.map (\result -> result.words)
-                        |> Expect.equal (Ok [ [ Letter C, Wildcard, Letter T ] ])
+                        |> Expect.equal (Ok [ [ Letter c, Wildcard, Letter t ] ])
             , Test.test "a wildcard is rejected when no letter completes a word" <|
                 \_ ->
-                    -- "c_t" has no completion in a word list that only contains "dog".
+                    -- "c_t" has no completion in a word list that only contains "DOG".
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "dog" ])
+                        (WordSpellingGameList.buildDictionary [ "DOG" ])
+                        testSetup
                         existing
-                        (placedWord ( 6, 4 ) False C [ T ])
+                        (placedWord ( 6, 4 ) False c [ t ])
                         |> Expect.equal (Err ())
             , Test.test "two wildcards in one word are each tried independently" <|
                 \_ ->
                     -- Wildcards at (6,4) and (8,4) with a fixed A between them form "_a_", which the
-                    -- word list accepts as "cat" (first wildcard C, second wildcard T).
+                    -- word list accepts as "CAT" (first wildcard C, second wildcard T).
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
                             SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 8, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "cat" ])
+                        (WordSpellingGameList.buildDictionary [ "CAT" ])
+                        testSetup
                         existing
-                        (placedWord ( 7, 4 ) False A [])
+                        (placedWord ( 7, 4 ) False a [])
                         |> Result.map (\result -> result.words)
-                        |> Expect.equal (Ok [ [ Wildcard, Letter A, Wildcard ] ])
+                        |> Expect.equal (Ok [ [ Wildcard, Letter a, Wildcard ] ])
             , Test.test "a word with many wildcards is matched by scanning the dictionary" <|
                 \_ ->
                     -- Four wildcards around a fixed A form "__a__" (too many to brute force), which
-                    -- the dictionary accepts as "koala".
+                    -- the dictionary accepts as "KOALA".
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
                         existing =
@@ -202,15 +273,16 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "koala" ])
+                        (WordSpellingGameList.buildDictionary [ "KOALA" ])
+                        testSetup
                         existing
-                        (placedWord ( 7, 4 ) False A [])
+                        (placedWord ( 7, 4 ) False a [])
                         |> Result.map (\result -> result.words)
                         |> Expect.equal
-                            (Ok [ [ Wildcard, Wildcard, Letter A, Wildcard, Wildcard ] ])
+                            (Ok [ [ Wildcard, Wildcard, Letter a, Wildcard, Wildcard ] ])
             , Test.test "a word with many wildcards is rejected when nothing of that length fits" <|
                 \_ ->
-                    -- "__a__" has no completion among the only same-length word "abcde" (whose third
+                    -- "__a__" has no completion among the only same-length word "ABCDE" (whose third
                     -- letter is 'c', not 'a'), so the placement is rejected.
                     let
                         existing : SeqDict ( Int, Int ) LetterOrWildcard
@@ -223,10 +295,64 @@ tests =
                                 ]
                     in
                     WordSpellingGame.validatePlacement
-                        (WordSpellingGameList.buildDictionary [ "abcde" ])
+                        (WordSpellingGameList.buildDictionary [ "ABCDE" ])
+                        testSetup
                         existing
-                        (placedWord ( 7, 4 ) False A [])
+                        (placedWord ( 7, 4 ) False a [])
                         |> Expect.equal (Err ())
+            ]
+        , Test.describe "validateSetup reads the letter distribution and values"
+            [ Test.test "lower case letters are rejected" <|
+                \_ ->
+                    let
+                        base : WordSpellingGame.SetupModel
+                        base =
+                            WordSpellingGame.initSetup
+                    in
+                    WordSpellingGame.validateSetup
+                        (Id.fromInt 0)
+                        (Time.millisToPosix 0)
+                        { base | letters = "abc" }
+                        |> Expect.err
+            , Test.test "letters score the value chosen in the setup, whatever the alphabet" <|
+                \_ ->
+                    let
+                        base : WordSpellingGame.SetupModel
+                        base =
+                            WordSpellingGame.initSetup
+                    in
+                    case
+                        WordSpellingGame.validateSetup
+                            (Id.fromInt 0)
+                            (Time.millisToPosix 0)
+                            { base
+                                | letters = "ÅÅÅ"
+                                , letterValues = SeqDict.fromList [ ( 'Å', "7" ) ]
+                            }
+                    of
+                        Ok validated ->
+                            -- Two 7-point letters on plain cells.
+                            WordSpellingGame.placeWord
+                                validated
+                                SeqDict.empty
+                                (placedWord ( 6, 4 ) False (LetterChar 'Å') [ LetterChar 'Å' ])
+                                |> Maybe.map .score
+                                |> Expect.equal (Just 14)
+
+                        Err error ->
+                            Expect.fail error
+            , Test.test "a letter value that isn't a whole number is rejected" <|
+                \_ ->
+                    let
+                        base : WordSpellingGame.SetupModel
+                        base =
+                            WordSpellingGame.initSetup
+                    in
+                    WordSpellingGame.validateSetup
+                        (Id.fromInt 0)
+                        (Time.millisToPosix 0)
+                        { base | letterValues = SeqDict.fromList [ ( 'A', "not a number" ) ] }
+                        |> Expect.err
             ]
         , Test.describe "the full-tray bonus rewards emptying a full tray in one move"
             [ Test.test "placing a word that uses every tile of the tray earns the configured bonus" <|
@@ -234,7 +360,7 @@ tests =
                     case validatedSetup 5 40 of
                         Ok setup ->
                             -- Five placed letters with a tray size of five: the whole tray was used.
-                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 5, 7 ) False H [ E, L, L, O ])
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 5, 7 ) False h [ e, l, l, o ])
                                 |> Expect.equal 40
 
                         Err error ->
@@ -243,7 +369,7 @@ tests =
                 \_ ->
                     case validatedSetup 5 40 of
                         Ok setup ->
-                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False C [ A, T ])
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False c [ a, t ])
                                 |> Expect.equal 0
 
                         Err error ->
@@ -252,7 +378,7 @@ tests =
                 \_ ->
                     case validatedSetup 3 0 of
                         Ok setup ->
-                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False C [ A, T ])
+                            WordSpellingGame.fullTrayBonusScore setup (placedWord ( 6, 7 ) False c [ a, t ])
                                 |> Expect.equal 0
 
                         Err error ->
@@ -271,13 +397,13 @@ tests =
                 \_ ->
                     -- An existing tile at (7,7); a word placed orthogonally next to it connects.
                     WordSpellingGame.placementConnects
-                        (board [ ( ( 7, 7 ), A ) ])
+                        (board [ ( ( 7, 7 ), a ) ])
                         [ ( 7, 8 ), ( 7, 9 ) ]
                         |> Expect.equal True
             , Test.test "a later word floating away from every existing tile is rejected" <|
                 \_ ->
                     WordSpellingGame.placementConnects
-                        (board [ ( ( 7, 7 ), A ) ])
+                        (board [ ( ( 7, 7 ), a ) ])
                         [ ( 0, 0 ), ( 1, 0 ) ]
                         |> Expect.equal False
             ]

@@ -77,7 +77,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.collapsableGroup
                         "Clear placed tiles"
@@ -212,7 +212,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
 
                     -- The other user opens the same match and joins it.
@@ -291,7 +291,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
                     , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aaaa"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AAAA"
                     , admin.click 100 (Dom.id "wsg_start")
 
                     -- The other user opens the same match and joins before the first move,
@@ -414,7 +414,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , user.click 2000 (Dom.id "guild_showMembers")
                     , user.click 100 (Dom.id "guild_openDm_0")
@@ -508,10 +508,12 @@ tests normalConfig =
                     in
                     [ -- Everyone starts out viewing the guild's first channel. The admin creates a
                       -- match whose bag contains only "a" tiles, so every tray is predictable no
-                      -- matter the draw order (and AA is a valid word).
+                      -- matter the draw order (and AA is a valid word). A is bumped from its
+                      -- default 1 point to 2 via the per-letter value input.
                       admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "a")
+                    , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "A")
+                    , admin.input 100 (Dom.id "wsg_letterValue_A") "2"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.checkState
                         100
@@ -598,7 +600,8 @@ tests normalConfig =
                                         )
 
                                     -- The watcher (who never joined) sees all three players and the
-                                    -- moves as they happen.
+                                    -- moves as they happen. The admin's opening AA scores the custom
+                                    -- letter value: (2+2) doubled by the centre square = 8.
                                     , watcher.checkView
                                         100
                                         (Test.Html.Query.has
@@ -606,7 +609,7 @@ tests normalConfig =
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
                                             , Test.Html.Selector.text "Recent moves"
-                                            , Test.Html.Selector.text "played AA"
+                                            , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )
                                     , user3.snapshotView 100 { name = "User3's perspective" }
