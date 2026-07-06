@@ -381,17 +381,15 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
             , case maybeStartMatch of
                 Just setup ->
                     -- A brand new match takes the next message id, then we navigate to it.
-                    OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
-                        :: (if GuildOrDmId_Dm currentUserId == guildOrDmId then
-                                -- When playing against yourself there is no opponent to wait for,
-                                -- so join your own match right away. This has to come after
-                                -- StartMatch since the match must exist before it can be joined.
-                                [ OutLocalChange (LocalChange_Go newMatchId (Go.Action { time = time, change = Go.Joined currentUserId })) ]
+                    (if GuildOrDmId_Dm currentUserId == guildOrDmId then
+                        [ OutLocalChange (LocalChange_Go newMatchId (Go.Action { time = time, change = Go.Joined currentUserId })) ]
 
-                            else
-                                []
-                           )
-                        ++ [ OutSelectMatch (Just newMatchId) ]
+                     else
+                        []
+                    )
+                        ++ [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
+                           , OutSelectMatch (Just newMatchId)
+                           ]
 
                 Nothing ->
                     []

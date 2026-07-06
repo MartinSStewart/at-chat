@@ -4,6 +4,7 @@ module E2EGo exposing
     , goTimeoutTest
     , goTurnNotificationDotTest
     , publicGoMatchViewTest
+    , tests
     )
 
 import Array exposing (Array)
@@ -19,6 +20,42 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+
+
+tests :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+tests normalConfig =
+    T.testGroup
+        "Go matches"
+        [ goMatchTest normalConfig
+        , goGuildMatchTest normalConfig
+        , goTimeoutTest normalConfig
+        , goTurnNotificationDotTest normalConfig
+        , publicGoMatchViewTest normalConfig
+        , E2EHelper.startTest
+            "Single player go"
+            E2EHelper.startTime
+            normalConfig
+            [ T.connectFrontend
+                100
+                E2EHelper.sessionId0
+                "/"
+                E2EHelper.tallDesktopWindow
+                (\admin ->
+                    [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                    , admin.click 1000 (Dom.id "guild_friendLabel_0")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id "game_select_Go")
+                    , admin.click 100 (Dom.id "go_start")
+                    , admin.click 100 (Dom.id "go_cell_4_4")
+                    , admin.click 100 (Dom.id "go_cell_5_4")
+                    , admin.snapshotView 10000 { name = "Single player go" }
+                    , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.exactText "9:55", Test.Html.Selector.exactText "10:05" ])
+                    ]
+                )
+            ]
+        ]
 
 
 goMatchTest :
