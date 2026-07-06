@@ -13,6 +13,7 @@ import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
+import DmChannelId
 import Drawing exposing (Model(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Game
@@ -64,20 +65,24 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , drawButton isMobile currentChannelHeaderTab
                     ]
 
-            GuildOrDmId_Guild _ _ ->
+            GuildOrDmId_Guild guildId channelId ->
                 Ui.row
                     [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
                         isMobile
                         (Dom.id "guild_openChannelDescription")
-                        DmChannelHeaderTab_ChannelDescription
+                        ChannelHeaderTab_ChannelDescription
                         currentChannelHeaderTab
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile currentChannelHeaderTab
+                        [ LocalState.getGuildAndChannel guildId channelId local
+                            |> Maybe.map (\( _, channel2 ) -> channel2.games)
+                            |> Maybe.withDefault SeqDict.empty
+                            |> Ui.Lazy.lazy4 gameButton isMobile currentChannelHeaderTab local.localUser.session.userId
+                        , drawButton isMobile currentChannelHeaderTab
                         , showFilesButton
                         ]
                     ]
@@ -144,7 +149,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                     [ channelHeaderTabRow
                         isMobile
                         (Dom.id "guild_openChannelDescription")
-                        DmChannelHeaderTab_ChannelDescription
+                        ChannelHeaderTab_ChannelDescription
                         currentChannelHeaderTab
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
@@ -211,7 +216,7 @@ drawButton isMobile currentTab =
         channelHeaderTab
             isMobile
             (Dom.id "channelHeader_drawOnMessages")
-            DmChannelHeaderTab_Draw
+            ChannelHeaderTab_Draw
             currentTab
             (Ui.el
                 [ Ui.width (Ui.px 24), Ui.Accessibility.description "Draw on top of messages" ]
@@ -371,7 +376,7 @@ privateChatWithYourself isMobile currentTab local =
         [ channelHeaderTab
             isMobile
             (Dom.id "guild_openDescription")
-            DmChannelHeaderTab_ChannelDescription
+            ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text "Chat with yourself")
         , Ui.row
@@ -389,7 +394,7 @@ privateChatWith isMobile currentTab otherUserId local name =
         [ channelHeaderTab
             isMobile
             (Dom.id "guild_openDescription")
-            DmChannelHeaderTab_ChannelDescription
+            ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
         , Ui.row
@@ -414,7 +419,7 @@ gameButton isMobile currentTab userId goMatches =
         viewingGo : Bool
         viewingGo =
             case currentTab of
-                Just (DmChannelHeaderTab_Games _) ->
+                Just (ChannelHeaderTab_Games _) ->
                     True
 
                 _ ->
@@ -426,7 +431,7 @@ gameButton isMobile currentTab userId goMatches =
     channelHeaderTab
         isMobile
         (Dom.id "guild_openGamesTab")
-        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Games)
+        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> ChannelHeaderTab_Games)
         currentTab
         (Ui.el
             [ Ui.width Ui.shrink
@@ -512,7 +517,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         , channelHeaderTab
             isMobile
             (Dom.id "guild_voiceChat")
-            DmChannelHeaderTab_VoiceChat
+            ChannelHeaderTab_VoiceChat
             currentTab
             (Ui.html Icons.phone)
         ]
@@ -525,7 +530,7 @@ discordPrivateChatWith isMobile currentTab name =
         [ channelHeaderTab
             isMobile
             (Dom.id "guild_openDescription")
-            DmChannelHeaderTab_ChannelDescription
+            ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
         ]
@@ -538,7 +543,7 @@ tabBodyView local loggedIn model =
             case channelRoute of
                 ChannelRoute channelId _ (Just tab) ->
                     case tab of
-                        DmChannelHeaderTab_ChannelDescription ->
+                        ChannelHeaderTab_ChannelDescription ->
                             case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( _, channel2 ) ->
                                     Just (channelDescriptionView (Just channel2.name) (ChannelDescription.toString channel2.description))
@@ -546,13 +551,24 @@ tabBodyView local loggedIn model =
                                 Nothing ->
                                     Nothing
 
-                        DmChannelHeaderTab_VoiceChat ->
+                        ChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Games _ ->
-                            Nothing
+                        ChannelHeaderTab_Games maybeMatchId ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel2 ) ->
+                                    gameTabBody
+                                        (GuildOrDmId_Guild guildId channelId)
+                                        maybeMatchId
+                                        local
+                                        loggedIn
+                                        channel2.games
+                                        model
 
-                        DmChannelHeaderTab_Draw ->
+                                Nothing ->
+                                    Nothing
+
+                        ChannelHeaderTab_Draw ->
                             drawingTabView loggedIn.drawingMode local |> Just
 
                 ChannelRoute _ _ _ ->
@@ -571,42 +587,24 @@ tabBodyView local loggedIn model =
                     Nothing
 
         DmRoute dmRoute ->
-            case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+            case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                 Just otherUserId ->
                     case dmRoute.tab of
-                        Just (DmChannelHeaderTab_Games maybeMatchId) ->
-                            Game.view
-                                model.time
-                                model.windowSize
-                                -- Touches are reported from the viewport top (behind the safe-area
-                                -- inset); shift them to match the board laid out below the inset.
-                                ((case model.drag of
-                                    NoDrag ->
-                                        Nothing
-
-                                    DragStart _ dragging ->
-                                        Just dragging
-
-                                    Dragging dragging ->
-                                        Just dragging.touches
-                                 )
-                                    |> Maybe.map (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop)
-                                )
-                                model.lastCopied
-                                local.localUser
-                                otherUserId
+                        Just (ChannelHeaderTab_Games maybeMatchId) ->
+                            gameTabBody
+                                (GuildOrDmId_Dm otherUserId)
                                 maybeMatchId
+                                local
+                                loggedIn
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .games)
-                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGame)
-                                |> Ui.map GameMsg
-                                |> Just
+                                model
 
-                        Just DmChannelHeaderTab_VoiceChat ->
+                        Just ChannelHeaderTab_VoiceChat ->
                             Call.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 
-                        Just DmChannelHeaderTab_ChannelDescription ->
+                        Just ChannelHeaderTab_ChannelDescription ->
                             channelDescriptionView
                                 Nothing
                                 (if otherUserId == local.localUser.session.userId then
@@ -618,7 +616,7 @@ tabBodyView local loggedIn model =
                                 )
                                 |> Just
 
-                        Just DmChannelHeaderTab_Draw ->
+                        Just ChannelHeaderTab_Draw ->
                             drawingTabView loggedIn.drawingMode local |> Just
 
                         Nothing ->
@@ -637,7 +635,7 @@ tabBodyView local loggedIn model =
             case routeData.channelRoute of
                 DiscordChannel_ChannelRoute channelId _ (Just tab) ->
                     case tab of
-                        DmChannelHeaderTab_ChannelDescription ->
+                        ChannelHeaderTab_ChannelDescription ->
                             case LocalState.getDiscordGuildAndChannel routeData.guildId channelId local of
                                 Just ( _, channel2 ) ->
                                     Just (channelDescriptionView (Just channel2.name) (ChannelDescription.toString channel2.description))
@@ -645,13 +643,13 @@ tabBodyView local loggedIn model =
                                 Nothing ->
                                     Nothing
 
-                        DmChannelHeaderTab_VoiceChat ->
+                        ChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Games _ ->
+                        ChannelHeaderTab_Games _ ->
                             Nothing
 
-                        DmChannelHeaderTab_Draw ->
+                        ChannelHeaderTab_Draw ->
                             drawingTabView loggedIn.drawingMode local |> Just
 
                 DiscordChannel_ChannelRoute _ _ _ ->
@@ -668,7 +666,7 @@ tabBodyView local loggedIn model =
 
         DiscordDmRoute routeData ->
             case routeData.tab of
-                Just DmChannelHeaderTab_ChannelDescription ->
+                Just ChannelHeaderTab_ChannelDescription ->
                     channelDescriptionView
                         Nothing
                         (if
@@ -717,7 +715,7 @@ tabBodyView local loggedIn model =
                         )
                         |> Just
 
-                Just DmChannelHeaderTab_Draw ->
+                Just ChannelHeaderTab_Draw ->
                     drawingTabView loggedIn.drawingMode local |> Just
 
                 _ ->
@@ -737,6 +735,42 @@ tabBodyView local loggedIn model =
 
         PublicGoMatchRoute _ ->
             Nothing
+
+
+gameTabBody :
+    GuildOrDmId
+    -> Maybe (Id ChannelMessageId)
+    -> LocalState
+    -> LoggedIn2
+    -> SeqDict (Id ChannelMessageId) Game.MatchData
+    -> LoadedFrontend
+    -> Maybe (Element FrontendMsg_)
+gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
+    Game.view
+        model.time
+        model.windowSize
+        -- Touches are reported from the viewport top (behind the safe-area
+        -- inset); shift them to match the board laid out below the inset.
+        ((case model.drag of
+            NoDrag ->
+                Nothing
+
+            DragStart _ dragging ->
+                Just dragging
+
+            Dragging dragging ->
+                Just dragging.touches
+         )
+            |> Maybe.map (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop)
+        )
+        model.lastCopied
+        local.localUser
+        guildOrDmId
+        maybeMatchId
+        matchData
+        (SeqDict.get guildOrDmId loggedIn.games |> Maybe.withDefault Game.initModel)
+        |> Ui.map GameMsg
+        |> Just
 
 
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )

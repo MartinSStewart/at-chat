@@ -1,22 +1,30 @@
 module Game exposing
     ( BackendGameData(..)
     , FrontendGameData(..)
+    , Game(..)
     , LocalChange(..)
     , MatchData(..)
-    , Model(..)
+    , Model
     , Msg(..)
     , OutMsg(..)
+    , Setup(..)
     , addGoAction
     , addPublicLink
     , addWordSpellingGameAction
     , audio
+    , dragEnd
+    , dragStart
+    , gameChangeFromServer
     , gameToString
-    , goMatchData
     , hasPendingTurn
     , initMatchData
+    , initModel
+    , insideBoard
+    , isAnimating
+    , pressedKey
+    , routeRequest
     , update
     , view
-    , wordSpellingMatchData
     )
 
 import Array exposing (Array)
@@ -29,8 +37,9 @@ import Go
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelMessageId, GamePublicId, Id, UserId)
-import Message exposing (Game(..))
+import Id exposing (ChannelMessageId, GamePublicId, GuildOrDmId(..), Id, UserId)
+import List.Nonempty
+import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import SecretId exposing (SecretId)
@@ -45,11 +54,19 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
 
 
-type Model
-    = GoModel_Setup Go.SetupModel
-    | GoModel_Game Go.GameModel
-    | WordSpellingGame_Setup WordSpellingGame.SetupModel
+type alias Model =
+    { startedGames : SeqDict (Id ChannelMessageId) Game, setup : Setup }
+
+
+type Game
+    = GoModel_Game Go.GameModel
     | WordSpellingGame_Game WordSpellingGame.GameData
+
+
+type Setup
+    = GameSelect
+    | GoModel_Setup Go.SetupModel
+    | WordSpellingGame_Setup WordSpellingGame.SetupModel
 
 
 type BackendGameData
@@ -73,7 +90,7 @@ type Msg
     | PressedCopyLink String
     | SelectedMatch (Id ChannelMessageId)
     | PressedReset
-    | PressedSelectGame Game
+    | PressedSelectGame GameType
     | NoOpMsg
 
 
@@ -91,24 +108,59 @@ addPublicLink publicLink (MatchData match) =
     { match | publicLink = Just publicLink } |> MatchData
 
 
-audio : Audio.Source -> Id UserId -> MatchData -> Model -> Audio
-audio popSound currentUserId (MatchData matchData) model =
+audio : Audio.Source -> Id UserId -> Id ChannelMessageId -> MatchData -> Model -> Audio
+audio popSound currentUserId matchId (MatchData matchData) model =
     case matchData.data of
         FrontendGameData_Go _ _ _ ->
-            case model of
-                GoModel_Game model2 ->
+            case SeqDict.get matchId model.startedGames of
+                Just (GoModel_Game model2) ->
                     Go.audio popSound model2
 
                 _ ->
                     Audio.silence
 
         FrontendGameData_WordSpellingGame _ _ shared ->
-            case model of
-                WordSpellingGame_Game model2 ->
+            case SeqDict.get matchId model.startedGames of
+                Just (WordSpellingGame_Game model2) ->
                     WordSpellingGame.audio popSound currentUserId shared model2
 
                 _ ->
                     Audio.silence
+
+
+isAnimating : Time.Posix -> Coord CssPixels -> Id ChannelMessageId -> MatchData -> Model -> Bool
+isAnimating time windowSize matchId (MatchData matchData) model =
+    case matchData.data of
+        FrontendGameData_Go _ _ _ ->
+            False
+
+        FrontendGameData_WordSpellingGame _ _ shared ->
+            WordSpellingGame.isAnimating time shared
+                || (case SeqDict.get matchId model.startedGames of
+                        Just (WordSpellingGame_Game game) ->
+                            WordSpellingGame.anyTileAnimating time game
+                                || WordSpellingGame.isZoomAnimating time windowSize game
+
+                        _ ->
+                            False
+                   )
+
+
+insideBoard : Coord CssPixels -> Coord CssPixels -> MatchData -> Bool
+insideBoard windowSize coord (MatchData matchData) =
+    case matchData.data of
+        FrontendGameData_Go _ _ _ ->
+            False
+
+        FrontendGameData_WordSpellingGame setup _ _ ->
+            WordSpellingGame.insideBoard setup windowSize coord
+
+
+initModel : Model
+initModel =
+    { setup = GameSelect
+    , startedGames = SeqDict.empty
+    }
 
 
 initMatchData : BackendGameData -> Maybe (SecretId GamePublicId) -> MatchData
@@ -125,30 +177,6 @@ initMatchData gameData publicLink =
         |> MatchData
 
 
-{-| Extract the Go setup and current game state from a match, if it is a Go match.
--}
-goMatchData : MatchData -> Maybe ( Go.ValidatedSetup, Go.Shared )
-goMatchData (MatchData match) =
-    case match.data of
-        FrontendGameData_Go setup _ state ->
-            Just ( setup, state )
-
-        FrontendGameData_WordSpellingGame _ _ _ ->
-            Nothing
-
-
-{-| Extract the word spelling setup and current game state from a match, if it is one.
--}
-wordSpellingMatchData : MatchData -> Maybe ( WordSpellingGame.ValidatedSetup, WordSpellingGame.Shared )
-wordSpellingMatchData (MatchData match) =
-    case match.data of
-        FrontendGameData_WordSpellingGame setup _ state ->
-            Just ( setup, state )
-
-        FrontendGameData_Go _ _ _ ->
-            Nothing
-
-
 addGoAction : Go.ActionWithTime -> MatchData -> MatchData
 addGoAction action (MatchData match) =
     { match
@@ -161,6 +189,64 @@ addGoAction action (MatchData match) =
                     match.data
     }
         |> MatchData
+
+
+routeRequest :
+    Time.Posix
+    -> GuildOrDmId
+    -> Id ChannelMessageId
+    -> SeqDict (Id ChannelMessageId) MatchData
+    -> SeqDict GuildOrDmId Model
+    -> SeqDict GuildOrDmId Model
+routeRequest time guildOrDmId matchId matchData models =
+    case SeqDict.get matchId matchData of
+        Just (MatchData matchData2) ->
+            SeqDict.update
+                guildOrDmId
+                (\maybeModel ->
+                    let
+                        model =
+                            Maybe.withDefault initModel maybeModel
+                    in
+                    (case matchData2.data of
+                        FrontendGameData_Go _ _ _ ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just _ ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    GoModel_Game Go.initGame |> Just
+                                        )
+                                        model.startedGames
+                            }
+
+                        FrontendGameData_WordSpellingGame setup _ _ ->
+                            { model
+                                | startedGames =
+                                    SeqDict.update
+                                        matchId
+                                        (\maybeGame ->
+                                            case maybeGame of
+                                                Just _ ->
+                                                    maybeGame
+
+                                                Nothing ->
+                                                    WordSpellingGame.initGame time setup |> WordSpellingGame_Game |> Just
+                                        )
+                                        model.startedGames
+                            }
+                    )
+                        |> Just
+                )
+                models
+
+        Nothing ->
+            models
 
 
 addWordSpellingGameAction : WordSpellingGame.ActionWithTime -> MatchData -> MatchData
@@ -222,13 +308,13 @@ type OutMsg
 update :
     Time.Posix
     -> Id UserId
-    -> Id UserId
+    -> GuildOrDmId
     -> Msg
     -> Id ChannelMessageId
     -> Maybe ( Id ChannelMessageId, MatchData )
-    -> Maybe Model
-    -> ( Maybe Model, List OutMsg )
-update time currentUserId otherUserId msg newMatchId maybeMatch model =
+    -> Model
+    -> ( Model, List OutMsg )
+update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
     case msg of
         PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -238,50 +324,32 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         GoGameMsg goMsg ->
             case maybeMatch of
-                Just ( _, MatchData matchData ) ->
+                Just ( matchId, MatchData matchData ) ->
                     case matchData.data of
                         FrontendGameData_Go setup _ cache ->
                             let
-                                ( goModel, outMsgs ) =
+                                ( goModel, maybeLocalChange ) =
                                     Go.updateGame
                                         time
                                         currentUserId
                                         goMsg
                                         setup
                                         cache
-                                        (case model of
+                                        (case SeqDict.get matchId model.startedGames of
                                             Just (GoModel_Game goModel2) ->
                                                 goModel2
 
                                             _ ->
                                                 Go.initGame
                                         )
-
-                                matchId : Id ChannelMessageId
-                                matchId =
-                                    case maybeMatch of
-                                        Just ( id, _ ) ->
-                                            id
-
-                                        Nothing ->
-                                            newMatchId
                             in
-                            ( GoModel_Game goModel |> Just
-                            , List.concatMap
-                                (\outMsg ->
-                                    case outMsg of
-                                        Go.OutLocalChange localChange ->
-                                            case localChange of
-                                                Go.StartMatch _ _ ->
-                                                    -- A brand new match takes the next message id, then we navigate to it.
-                                                    [ OutLocalChange (LocalChange_Go matchId localChange)
-                                                    , OutSelectMatch (Just matchId)
-                                                    ]
+                            ( { model | startedGames = SeqDict.insert matchId (GoModel_Game goModel) model.startedGames }
+                            , case maybeLocalChange of
+                                Just localChange ->
+                                    [ OutLocalChange (LocalChange_Go matchId (Go.Action localChange)) ]
 
-                                                _ ->
-                                                    [ OutLocalChange (LocalChange_Go matchId localChange) ]
-                                )
-                                outMsgs
+                                Nothing ->
+                                    []
                             )
 
                         _ ->
@@ -292,92 +360,66 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         GoSetupMsg goMsg ->
             let
-                ( goModel, outMsgs ) =
+                ( goModel, maybeStartMatch ) =
                     Go.updateSetup
-                        time
                         currentUserId
-                        otherUserId
                         goMsg
-                        (case model of
-                            Just (GoModel_Setup setup) ->
+                        (case model.setup of
+                            GoModel_Setup setup ->
                                 setup
 
                             _ ->
                                 Go.initSetup
                         )
-
-                matchId : Id ChannelMessageId
-                matchId =
-                    case maybeMatch of
-                        Just ( id, _ ) ->
-                            id
-
-                        Nothing ->
-                            newMatchId
             in
             ( case goModel of
                 Go.Setup setup ->
-                    GoModel_Setup setup |> Just
+                    { model | setup = GoModel_Setup setup }
 
                 Go.Game gameModel ->
-                    GoModel_Game gameModel |> Just
-            , List.concatMap
-                (\outMsg ->
-                    case outMsg of
-                        Go.OutLocalChange localChange ->
-                            case localChange of
-                                Go.StartMatch _ _ ->
-                                    -- A brand new match takes the next message id, then we navigate to it.
-                                    [ OutLocalChange (LocalChange_Go matchId localChange)
-                                    , OutSelectMatch (Just matchId)
-                                    ]
+                    { model | startedGames = SeqDict.insert newMatchId (GoModel_Game gameModel) model.startedGames }
 
-                                _ ->
-                                    [ OutLocalChange (LocalChange_Go matchId localChange) ]
-                )
-                outMsgs
+                Go.CancelSetup ->
+                    { model | setup = GameSelect }
+            , case maybeStartMatch of
+                Just setup ->
+                    -- A brand new match takes the next message id, then we navigate to it.
+                    (if GuildOrDmId_Dm currentUserId == guildOrDmId then
+                        [ OutLocalChange (LocalChange_Go newMatchId (Go.Action { time = time, change = Go.Joined currentUserId })) ]
+
+                     else
+                        []
+                    )
+                        ++ [ OutLocalChange (LocalChange_Go newMatchId (Go.StartMatch time setup))
+                           , OutSelectMatch (Just newMatchId)
+                           ]
+
+                Nothing ->
+                    []
             )
 
         WordSpellingGameMsg wordSpellingGameMsg ->
             case maybeMatch of
-                Just ( _, MatchData matchData ) ->
-                    case ( matchData.data, model ) of
-                        ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game gameModel) ) ->
+                Just ( matchId, MatchData matchData ) ->
+                    case ( matchData.data, SeqDict.get matchId model.startedGames ) of
+                        ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game game) ) ->
                             let
-                                ( notSharedModel, outMsgs ) =
+                                ( game2, maybeAction ) =
                                     WordSpellingGame.updateGame
                                         time
                                         currentUserId
                                         setup
                                         cache
                                         wordSpellingGameMsg
-                                        gameModel
-
-                                matchId : Id ChannelMessageId
-                                matchId =
-                                    case maybeMatch of
-                                        Just ( id, _ ) ->
-                                            id
-
-                                        Nothing ->
-                                            newMatchId
+                                        game
                             in
-                            ( WordSpellingGame_Game notSharedModel |> Just
-                            , List.concatMap
-                                (\outMsg ->
-                                    case outMsg of
-                                        WordSpellingGame.OutLocalChange localChange ->
-                                            case localChange of
-                                                WordSpellingGame.StartMatch _ _ ->
-                                                    -- A brand new match takes the next message id, then we navigate to it.
-                                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange)
-                                                    , OutSelectMatch (Just matchId)
-                                                    ]
+                            ( { model | startedGames = SeqDict.insert matchId (WordSpellingGame_Game game2) model.startedGames }
+                            , case maybeAction of
+                                Just action ->
+                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId (WordSpellingGame.Action action)) ]
 
-                                                WordSpellingGame.Action _ ->
-                                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
-                                )
-                                outMsgs
+                                Nothing ->
+                                    []
                             )
 
                         _ ->
@@ -388,61 +430,49 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
 
         WordSpellingSetupMsg wordSpellingGameMsg ->
             let
-                ( model2, outMsgs ) =
+                ( gameOrSetup, maybeSetup ) =
                     WordSpellingGame.updateSetup
                         time
                         currentUserId
                         wordSpellingGameMsg
-                        (case model of
-                            Just (WordSpellingGame_Setup setup) ->
+                        (case model.setup of
+                            WordSpellingGame_Setup setup ->
                                 setup
 
                             _ ->
                                 WordSpellingGame.initSetup
                         )
-
-                matchId : Id ChannelMessageId
-                matchId =
-                    case maybeMatch of
-                        Just ( id, _ ) ->
-                            id
-
-                        Nothing ->
-                            newMatchId
             in
-            ( case model2 of
+            ( case gameOrSetup of
                 WordSpellingGame.Setup setup ->
-                    WordSpellingGame_Setup setup |> Just
+                    { model | setup = WordSpellingGame_Setup setup }
 
                 WordSpellingGame.Game game ->
-                    WordSpellingGame_Game game |> Just
-            , List.concatMap
-                (\outMsg ->
-                    case outMsg of
-                        WordSpellingGame.OutLocalChange localChange ->
-                            case localChange of
-                                WordSpellingGame.StartMatch _ _ ->
-                                    -- A brand new match takes the next message id, then we navigate to it.
-                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange)
-                                    , OutSelectMatch (Just matchId)
-                                    ]
+                    { model | startedGames = SeqDict.insert newMatchId (WordSpellingGame_Game game) model.startedGames }
 
-                                WordSpellingGame.Action _ ->
-                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId localChange) ]
-                )
-                outMsgs
+                WordSpellingGame.CancelSetup ->
+                    { model | setup = GameSelect }
+            , case maybeSetup of
+                Just setup ->
+                    -- A brand new match takes the next message id, then we navigate to it.
+                    [ OutLocalChange (LocalChange_WordSpellingGame newMatchId (WordSpellingGame.StartMatch time setup))
+                    , OutSelectMatch (Just newMatchId)
+                    ]
+
+                Nothing ->
+                    []
             )
 
         PressedSelectGame game ->
             case game of
-                Game_Go ->
-                    ( Just (GoModel_Setup Go.initSetup), [] )
+                GameType_Go ->
+                    ( { model | setup = GoModel_Setup Go.initSetup }, [] )
 
-                Game_WordSpellingGame ->
-                    ( Just (WordSpellingGame_Setup WordSpellingGame.initSetup), [] )
+                GameType_WordSpellingGame ->
+                    ( { model | setup = WordSpellingGame_Setup WordSpellingGame.initSetup }, [] )
 
         PressedReset ->
-            ( Nothing, [ OutSelectMatch Nothing ] )
+            ( { model | setup = GameSelect }, [ OutSelectMatch Nothing ] )
 
         SelectedMatch selectedMatchId ->
             ( model, [ OutSelectMatch (Just selectedMatchId) ] )
@@ -451,74 +481,155 @@ update time currentUserId otherUserId msg newMatchId maybeMatch model =
             ( model, [] )
 
 
+dragStart :
+    Time.Posix
+    -> Coord CssPixels
+    -> NonemptyDict Int Touch
+    -> Id ChannelMessageId
+    -> MatchData
+    -> Model
+    -> Model
+dragStart time windowSize touches matchId (MatchData matchData) model =
+    { model
+        | startedGames =
+            SeqDict.updateIfExists
+                matchId
+                (\game ->
+                    case matchData.data of
+                        FrontendGameData_Go _ _ _ ->
+                            case game of
+                                GoModel_Game game2 ->
+                                    Go.dragStart game2 |> GoModel_Game
+
+                                _ ->
+                                    game
+
+                        FrontendGameData_WordSpellingGame setup _ _ ->
+                            case game of
+                                WordSpellingGame_Game game2 ->
+                                    WordSpellingGame.dragStart time windowSize touches setup game2
+                                        |> WordSpellingGame_Game
+
+                                _ ->
+                                    game
+                )
+                model.startedGames
+    }
+
+
+dragEnd :
+    Time.Posix
+    -> Coord CssPixels
+    -> NonemptyDict Int Touch
+    -> Id ChannelMessageId
+    -> MatchData
+    -> Model
+    -> Model
+dragEnd time windowSize touches matchId (MatchData matchData) model =
+    { model
+        | startedGames =
+            SeqDict.updateIfExists
+                matchId
+                (\game ->
+                    case matchData.data of
+                        FrontendGameData_Go _ _ _ ->
+                            case game of
+                                GoModel_Game game2 ->
+                                    Go.dragEnd game2 |> GoModel_Game
+
+                                _ ->
+                                    game
+
+                        FrontendGameData_WordSpellingGame setup _ shared ->
+                            case game of
+                                WordSpellingGame_Game game2 ->
+                                    WordSpellingGame.dragEnd
+                                        time
+                                        windowSize
+                                        touches
+                                        setup
+                                        shared
+                                        game2
+                                        |> WordSpellingGame_Game
+
+                                _ ->
+                                    game
+                )
+                model.startedGames
+    }
+
+
 view :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
     -> Maybe MyUi.LastCopy
     -> LocalUser
-    -> Id UserId
+    -> GuildOrDmId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
-    -> Maybe Model
+    -> Model
     -> Element Msg
-view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybeMatchId matches model =
+view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        isPersonalDm : Bool
+        isPersonalDm =
+            guildOrDmId == GuildOrDmId_Dm localUser.session.userId
     in
     case maybeMatchId of
         Just matchId ->
-            case SeqDict.get matchId matches of
-                Just (MatchData match) ->
+            case ( SeqDict.get matchId matches, SeqDict.get matchId model.startedGames ) of
+                ( Just (MatchData match), Just game ) ->
                     case match.data of
                         FrontendGameData_Go setup _ cache ->
-                            Ui.column
-                                [ Ui.height (Ui.px (Go.viewHeight windowSize))
-                                , Ui.scrollable
-                                , Ui.background MyUi.tabBackground
-                                , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-                                , Ui.borderColor MyUi.border2
-                                , MyUi.noShrinking
-                                , Ui.spacing 8
-                                ]
-                                [ Ui.el [ Ui.padding 8 ] (goShareView lastCopied matchId match.publicLink)
-                                , Go.gameView
-                                    currentTime
-                                    windowSize
-                                    localUser
-                                    setup
-                                    cache
-                                    (case model of
-                                        Just (GoModel_Game game) ->
-                                            game
+                            case game of
+                                GoModel_Game game2 ->
+                                    Ui.column
+                                        [ Ui.height (Ui.px (Go.viewHeight windowSize))
+                                        , Ui.scrollable
+                                        , Ui.background MyUi.tabBackground
+                                        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                                        , Ui.borderColor MyUi.border2
+                                        , MyUi.noShrinking
+                                        , Ui.spacing 8
+                                        ]
+                                        [ Ui.el [ Ui.padding 8 ] (goShareView lastCopied matchId match.publicLink)
+                                        , Go.gameView
+                                            currentTime
+                                            windowSize
+                                            localUser
+                                            setup
+                                            cache
+                                            game2
+                                            |> Ui.map GoGameMsg
+                                        ]
 
-                                        _ ->
-                                            Go.initGame
-                                    )
-                                    |> Ui.map GoGameMsg
-                                ]
+                                _ ->
+                                    matchNotFound
 
                         FrontendGameData_WordSpellingGame setup actions cache ->
-                            case model of
-                                Just (WordSpellingGame_Game game) ->
+                            case game of
+                                WordSpellingGame_Game game2 ->
                                     WordSpellingGame.gameView
                                         currentTime
                                         windowSize
                                         maybeDragging
-                                        (localUser.session.userId == otherUserId)
+                                        isPersonalDm
                                         localUser
                                         setup
                                         actions
                                         cache
-                                        game
+                                        game2
                                         |> Ui.map WordSpellingGameMsg
 
                                 _ ->
                                     matchNotFound
 
-                Nothing ->
+                _ ->
                     matchNotFound
 
         Nothing ->
@@ -531,24 +642,25 @@ view currentTime windowSize maybeDragging lastCopied localUser otherUserId maybe
                 , MyUi.noShrinking
                 ]
                 [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
-                , case model of
-                    Just (GoModel_Game _) ->
-                        Go.setupView (localUser.session.userId == otherUserId) windowSize Go.initSetup |> Ui.map GoSetupMsg
+                , case model.setup of
+                    GoModel_Setup setup ->
+                        Go.setupView isPersonalDm windowSize setup |> Ui.map GoSetupMsg
 
-                    Just (GoModel_Setup setup) ->
-                        Go.setupView (localUser.session.userId == otherUserId) windowSize setup |> Ui.map GoSetupMsg
+                    WordSpellingGame_Setup setup ->
+                        WordSpellingGame.setupView windowSize False setup |> Ui.map WordSpellingSetupMsg
 
-                    Just (WordSpellingGame_Game _) ->
-                        WordSpellingGame.setupView windowSize WordSpellingGame.initSetup |> Ui.map WordSpellingSetupMsg
-
-                    Just (WordSpellingGame_Setup setup) ->
-                        WordSpellingGame.setupView windowSize setup |> Ui.map WordSpellingSetupMsg
-
-                    Nothing ->
+                    GameSelect ->
                         Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
                             (List.map gameSelectButton allGames)
                 ]
+
+
+allGames : List GameType
+allGames =
+    [ GameType_Go
+    , GameType_WordSpellingGame
+    ]
 
 
 matchNotFound : Element msg
@@ -583,24 +695,17 @@ goShareView lastCopied matchId maybePublicLink =
         )
 
 
-allGames : List Game
-allGames =
-    [ Game_Go
-    , Game_WordSpellingGame
-    ]
-
-
-gameToString : Game -> String
+gameToString : GameType -> String
 gameToString game =
     case game of
-        Game_Go ->
+        GameType_Go ->
             "Go"
 
-        Game_WordSpellingGame ->
-            "Word Spelling Game (WIP)"
+        GameType_WordSpellingGame ->
+            "Word Spelling Game"
 
 
-gameSelectButton : Game -> Element Msg
+gameSelectButton : GameType -> Element Msg
 gameSelectButton game =
     MyUi.elButton
         (Dom.id ("game_select_" ++ gameToString game))
@@ -720,3 +825,142 @@ matchSwitcherView isMobile maybeMatchId matches =
                 ]
             , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
             ]
+
+
+pressedKey : Id ChannelMessageId -> String -> MatchData -> Maybe Model -> Maybe Model
+pressedKey matchId key (MatchData matchData) maybeGameModel =
+    let
+        model : Model
+        model =
+            Maybe.withDefault initModel maybeGameModel
+    in
+    { model
+        | startedGames =
+            SeqDict.updateIfExists
+                matchId
+                (\game ->
+                    case matchData.data of
+                        FrontendGameData_Go _ _ shared ->
+                            case game of
+                                GoModel_Game game2 ->
+                                    Go.pressedKey key shared game2
+                                        |> GoModel_Game
+
+                                _ ->
+                                    game
+
+                        FrontendGameData_WordSpellingGame _ _ _ ->
+                            case game of
+                                WordSpellingGame_Game game2 ->
+                                    WordSpellingGame.pressedKey game2
+                                        |> WordSpellingGame_Game
+
+                                _ ->
+                                    game
+                )
+                model.startedGames
+    }
+        |> Just
+
+
+gameChangeFromServer : Time.Posix -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time gameChange maybeModel =
+    let
+        model : Model
+        model =
+            Maybe.withDefault initModel maybeModel
+    in
+    (case gameChange of
+        LocalChange_Go matchId goChange ->
+            case goChange of
+                Go.StartMatch _ _ ->
+                    { model | startedGames = SeqDict.insert matchId (GoModel_Game Go.initGame) model.startedGames }
+
+                Go.Action actionWithTime ->
+                    let
+                        playPop : Bool
+                        playPop =
+                            case actionWithTime.change of
+                                Go.PlaceStone _ _ ->
+                                    True
+
+                                Go.PassTurn ->
+                                    True
+
+                                Go.MarkTerritory _ _ ->
+                                    False
+
+                                Go.FinishedMarking ->
+                                    True
+
+                                Go.AcceptTerritory ->
+                                    True
+
+                                Go.RejectTerritory ->
+                                    True
+
+                                Go.Joined _ ->
+                                    True
+                    in
+                    if playPop then
+                        { model
+                            | startedGames =
+                                SeqDict.updateIfExists
+                                    matchId
+                                    (\game ->
+                                        case game of
+                                            GoModel_Game goModel ->
+                                                GoModel_Game { goModel | lastPlacedStone = Just time }
+
+                                            _ ->
+                                                game
+                                    )
+                                    model.startedGames
+                        }
+
+                    else
+                        model
+
+        CreatePublicLink _ _ ->
+            model
+
+        LocalChange_WordSpellingGame matchId wordSpellinGameChange ->
+            case wordSpellinGameChange of
+                WordSpellingGame.StartMatch serverTime setup ->
+                    { model
+                        | startedGames =
+                            SeqDict.insert
+                                matchId
+                                (WordSpellingGame_Game (WordSpellingGame.initGame serverTime setup))
+                                model.startedGames
+                    }
+
+                WordSpellingGame.Action action ->
+                    case action.change of
+                        WordSpellingGame.PlaceWord placedWord _ ->
+                            { model
+                                | startedGames =
+                                    SeqDict.updateIfExists
+                                        matchId
+                                        (\game ->
+                                            case game of
+                                                WordSpellingGame_Game gameData ->
+                                                    WordSpellingGame_Game
+                                                        { gameData
+                                                            | lastWordPlaced =
+                                                                { time = time
+                                                                , letterCount = List.Nonempty.length placedWord.letters
+                                                                }
+                                                                    |> Just
+                                                        }
+
+                                                _ ->
+                                                    game
+                                        )
+                                        model.startedGames
+                            }
+
+                        _ ->
+                            model
+    )
+        |> Just

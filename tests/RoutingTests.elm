@@ -1,6 +1,6 @@
 module RoutingTests exposing (roundtrip)
 
-import DmChannel
+import DmChannelId
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
@@ -49,7 +49,7 @@ routeFuzzer =
         , Fuzz.map4
             (\userId otherUserId threadRoute tab ->
                 DmRoute
-                    { channelId = DmChannel.channelIdFromUserIds userId otherUserId
+                    { channelId = DmChannelId.channelIdFromUserIds userId otherUserId
                     , threadRoute = threadRoute
                     , tab = tab
                     }
@@ -65,10 +65,10 @@ routeFuzzer =
 tabFuzzer : Fuzzer ChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
-        [ DmChannelHeaderTab_VoiceChat
-        , DmChannelHeaderTab_Games Nothing
-        , DmChannelHeaderTab_Games (Just (Id.fromInt 123))
-        , DmChannelHeaderTab_Draw
+        [ ChannelHeaderTab_VoiceChat
+        , ChannelHeaderTab_Games Nothing
+        , ChannelHeaderTab_Games (Just (Id.fromInt 123))
+        , ChannelHeaderTab_Draw
         ]
 
 

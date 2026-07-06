@@ -16,6 +16,7 @@ module E2EHelper exposing
     , checkNotification
     , chromeDesktop
     , clickSpoiler
+    , connectFourUsersAndJoinNewGuild
     , connectTwoUsersAndJoinNewGuild
     , createThread
     , currentDiscordUserId
@@ -153,6 +154,7 @@ import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import WordSpellingGame
 
 
 domain : Url
@@ -472,6 +474,11 @@ userEmail =
 joeEmail : EmailAddress
 joeEmail =
     Unsafe.emailAddress "joe@hotmail.com"
+
+
+wandaEmail : EmailAddress
+wandaEmail =
+    Unsafe.emailAddress "wanda@mail.com"
 
 
 attackerEmail : EmailAddress
@@ -1279,6 +1286,117 @@ dropPrefix prefix text =
 
     else
         text
+
+
+{-| Like `connectTwoUsersAndJoinNewGuild` but two more people join the guild: a third user who
+can also join games, and a fourth who can watch them.
+-}
+connectFourUsersAndJoinNewGuild :
+    { width : Int, height : Int }
+    ->
+        (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+        )
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+connectFourUsersAndJoinNewGuild windowSize continueFunc =
+    T.connectFrontend
+        100
+        sessionId0
+        "/"
+        windowSize
+        (\admin ->
+            [ handleLogin firefoxDesktop adminEmail admin
+            , admin.click 100 (Dom.id "guild_createGuild")
+            , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+            , admin.click 100 (Dom.id "guild_createGuildSubmit")
+            , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+            , admin.click 100 (Dom.id "guild_createInviteLink")
+            , admin.click 100 (Dom.id "guild_copyText")
+            , T.andThen
+                100
+                (\data ->
+                    case
+                        List.Extra.findMap
+                            (\request ->
+                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
+                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                else
+                                    Nothing
+                            )
+                            data.portRequests
+                    of
+                        Just inviteUrl ->
+                            [ joinGuildFromInvite
+                                inviteUrl
+                                windowSize
+                                sessionId1
+                                userEmail
+                                "Stevie Steve"
+                                (\userA ->
+                                    [ joinGuildFromInvite
+                                        inviteUrl
+                                        windowSize
+                                        sessionId2
+                                        joeEmail
+                                        "Joe"
+                                        (\userB ->
+                                            [ joinGuildFromInvite
+                                                inviteUrl
+                                                windowSize
+                                                sessionId4
+                                                wandaEmail
+                                                "Wanda"
+                                                (\userC ->
+                                                    [ admin.click 100 (Dom.id "guild_openChannel_0")
+                                                    , T.group (continueFunc admin userA userB userC)
+                                                    ]
+                                                )
+                                            ]
+                                        )
+                                    ]
+                                )
+                            ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Clipboard text not found") ]
+                )
+            ]
+        )
+
+
+{-| Connect a brand new user and have them join an existing guild via an invite link, ending up
+viewing the guild's first channel.
+-}
+joinGuildFromInvite :
+    String
+    -> { width : Int, height : Int }
+    -> SessionId
+    -> EmailAddress
+    -> String
+    ->
+        (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+        )
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+joinGuildFromInvite inviteUrl windowSize sessionId email name continueFunc =
+    T.connectFrontend
+        100
+        sessionId
+        (dropPrefix Env.domain inviteUrl)
+        windowSize
+        (\user ->
+            [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+            , handleLoginFromLoginPage email user
+            , user.input 100 (Dom.id "loginForm_name") name
+            , user.click 100 (Dom.id "loginForm_submit")
+            , user.click 100 (Dom.id "guild_openChannel_0")
+            , T.group (continueFunc user)
+            ]
+        )
 
 
 connectTwoUsersAndJoinNewGuild :
@@ -2765,7 +2883,7 @@ allAttackerLocalChanges =
     , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
     , Local_VoiceChatChange Call.Local_PublishConnected
     , Local_Game
-        { otherUserId = Broadcast.adminUserId }
+        (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.LocalChange_Go
             (Id.fromInt 0)
             (Go.StartMatch
@@ -2775,14 +2893,22 @@ allAttackerLocalChanges =
                 , handicap = 0
                 , komiHalfPoints = Go.KomiHalfPoints 2
                 , timeControl = Nothing
-                , blackPlayer = normalUserId
-                , whitePlayer = Broadcast.adminUserId
+                , createdBy = normalUserId
+                , gameCreatorPlayingAs = Go.Black
                 }
             )
         )
     , Local_Game
-        { otherUserId = Broadcast.adminUserId }
+        (GuildOrDmId_Dm Broadcast.adminUserId)
         (Game.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
+    , Local_Game
+        (GuildOrDmId_Guild legitGuildId channelId)
+        (Game.LocalChange_WordSpellingGame
+            (Id.fromInt 0)
+            (WordSpellingGame.Action
+                { userId = normalUserId, time = messageTime, change = WordSpellingGame.JoinGame }
+            )
+        )
     , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     , Local_Drawing
         guildOrDmId_guild

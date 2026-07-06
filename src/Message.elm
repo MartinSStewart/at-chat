@@ -1,6 +1,6 @@
 module Message exposing
     ( ChangeAttachments(..)
-    , Game(..)
+    , GameType(..)
     , Message(..)
     , MessageNoReply(..)
     , MessageState(..)
@@ -46,12 +46,12 @@ type Message messageId userId
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
     | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
-    | GameStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId) Game
+    | GameStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId) GameType
 
 
-type Game
-    = Game_Go
-    | Game_WordSpellingGame
+type GameType
+    = GameType_Go
+    | GameType_WordSpellingGame
 
 
 maxEmbeds : number

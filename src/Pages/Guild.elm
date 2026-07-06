@@ -27,6 +27,7 @@ import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -49,7 +50,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
-import Message exposing (Game(..), Message(..), MessageState(..), UserTextMessageData)
+import Message exposing (GameType(..), Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
@@ -336,7 +337,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                                         (DmRoute
-                                            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
+                                            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Nothing
                                             }
@@ -356,7 +357,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                     in
                     case route of
                         DmRoute dmRoute ->
-                            if Just otherUserId == DmChannel.otherUserId localUser.session.userId dmRoute.channelId then
+                            if Just otherUserId == DmChannelId.otherUserId localUser.session.userId dmRoute.channelId then
                                 Nothing
 
                             else
@@ -759,7 +760,7 @@ guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels gu
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
 dmChannelView dmRoute loggedIn local model =
-    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+    case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
         Nothing ->
             Ui.el
                 [ Ui.centerY
@@ -1484,7 +1485,7 @@ memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute
-            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId userId
+            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId userId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }
@@ -2403,7 +2404,7 @@ maybeRepliedTo message channel =
 
 drawingIsSelectingAnchor : LoggedIn2 -> LoadedFrontend -> Bool
 drawingIsSelectingAnchor loggedIn model =
-    loggedIn.drawingMode == Drawing.NoSelectedAnchor && Route.toChannelHeaderTab model.route == Just Route.DmChannelHeaderTab_Draw
+    loggedIn.drawingMode == Drawing.NoSelectedAnchor && Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw
 
 
 discordConversationViewHelper :
@@ -3554,7 +3555,7 @@ drawing.
 -}
 drawingModeAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingModeAttributes route drawingMode =
-    if Route.toChannelHeaderTab route == Just Route.DmChannelHeaderTab_Draw then
+    if Route.toChannelHeaderTab route == Just Route.ChannelHeaderTab_Draw then
         case drawingMode of
             Drawing.NoSelectedAnchor ->
                 []
@@ -3580,7 +3581,7 @@ selected anchor is magnified for more precise drawing.
 drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
-        ( Just Route.DmChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
+        ( Just Route.ChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
             case ( selected.zoom /= 1, Drawing.zoomCssOrigin selected ) of
                 ( True, Just ( originX, originY ) ) ->
                     [ MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat selected.zoom ++ ")")
@@ -6417,10 +6418,10 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Game -> Element MessageViewMsg
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> GameType -> Element MessageViewMsg
 goMatchStartedCard messageId userId allUsers game =
     case game of
-        Game_Go ->
+        GameType_Go ->
             eventCard
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
@@ -6428,7 +6429,7 @@ goMatchStartedCard messageId userId allUsers game =
                 (User.toString userId allUsers)
                 "started a Go match"
 
-        Game_WordSpellingGame ->
+        GameType_WordSpellingGame ->
             eventCard
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
@@ -7814,7 +7815,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
                             currentTime
                             (case openedOtherUserId of
                                 SelectedDmChannel dmRoute ->
-                                    DmChannel.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+                                    DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
 
                                 _ ->
                                     False
@@ -7980,7 +7981,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute
-            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
+            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }

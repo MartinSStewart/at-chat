@@ -6,11 +6,11 @@ module WordSpellingGame exposing
     , GameData
     , GameMsg(..)
     , IsValid(..)
+    , Language(..)
     , Letter(..)
     , LetterId
     , LetterOrWildcard(..)
     , LocalChange(..)
-    , OutMsg(..)
     , PlacedWord
     , PlacementResult
     , Player
@@ -43,13 +43,15 @@ module WordSpellingGame exposing
     , isZoomAnimating
     , placeWord
     , placementConnects
+    , pressedKey
     , setupView
     , trayDropSlot
     , trayTouchCoord
     , updateAction
     , updateGame
     , updateSetup
-    , validatePlacement
+    , validatePlacementEnglish
+    , validatePlacementSwedish
     , validateSetup
     )
 
@@ -92,7 +94,7 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
-import WordSpellingGameList exposing (Dictionary)
+import WordSpellingGameEnglish exposing (Dictionary)
 
 
 {-| OpaqueVariants
@@ -112,11 +114,36 @@ type alias GameData =
       -- word's slide-in animation (see `audio`); the local player's own moves pop via the tile
       -- times instead.
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
+    , -- Whether the game's settings (a read-only version of the setup view) are shown instead of
+      -- the board, toggled with the gear button.
+      showSettings : Bool
     }
 
 
 type alias ZoomAnimation =
     { start : Time.Posix, from : ZoomState }
+
+
+type Language
+    = English
+    | Swedish
+
+
+allLanguages : List Language
+allLanguages =
+    [ English
+    , Swedish
+    ]
+
+
+languageToString : Language -> String
+languageToString language =
+    case language of
+        English ->
+            "English (TWL06)"
+
+        Swedish ->
+            "Swedish (SAOl13)"
 
 
 {-| A resolution-independent description of the board zoom: `amount` runs 0 (no zoom, whole board
@@ -156,8 +183,11 @@ type SetupMsg
     | ChangedTraySizeInput String
     | ChangedFullTrayBonusInput String
     | ChangedLettersInput String
+    | ChangedLetterValue Char String
     | PressedResetLetters
     | PressedStartGame
+    | PressedCancel
+    | PressedLanguage Language
 
 
 {-| OpaqueVariants
@@ -167,6 +197,7 @@ type GameMsg
     | PressedJoinGame
     | PressedReplaceTrayOrPass
     | PressedClearBoard
+    | PressedToggleSettings
 
 
 type alias SetupModel =
@@ -176,6 +207,11 @@ type alias SetupModel =
     , fullTrayBonus : Int
     , error : Maybe String
     , letters : String
+
+    -- The value input for each letter in the distribution, keyed by the letter's character.
+    -- Letters without an entry fall back to `defaultLetterValue`.
+    , letterValues : SeqDict Char String
+    , language : Language
     }
 
 
@@ -185,8 +221,13 @@ type alias ValidatedSetup =
     , fullTrayBonus : Int
     , createdBy : Id UserId
     , seed : Int
-    , letters : NonemptyDict LetterOrWildcard OneOrGreater
+    , letters : NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int }
+    , language : Language
     }
+
+
+type Letter
+    = LetterChar Char
 
 
 initSetup : SetupModel
@@ -196,7 +237,9 @@ initSetup =
     , traySize = 7
     , fullTrayBonus = defaultFullTrayBonus
     , error = Nothing
-    , letters = defaultLetters
+    , letters = defaultLetters English
+    , letterValues = SeqDict.empty
+    , language = English
     }
 
 
@@ -208,32 +251,32 @@ defaultFullTrayBonus =
     50
 
 
-initGame : Time.Posix -> ValidatedSetup -> ( GameData, List OutMsg )
+pressedKey : GameData -> GameData
+pressedKey model =
+    model
+
+
+initGame : Time.Posix -> ValidatedSetup -> GameData
 initGame time setup =
     let
         list =
             List.range 0 (OneOrGreater.toInt setup.traySize - 1)
     in
-    ( { selectedCell = Nothing
-      , tiles =
-            List.map
-                (\index ->
-                    { position = TileInTray (TrayIndex index) Nothing
-                    , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
-                    }
-                )
-                list
-                |> Array.fromList
-      , dragging = NotDragging
-      , zoomAnimation = { start = time, from = zoomedOutState }
-      , lastWordPlaced = Nothing
-      }
-    , []
-    )
-
-
-type OutMsg
-    = OutLocalChange LocalChange
+    { selectedCell = Nothing
+    , tiles =
+        List.map
+            (\index ->
+                { position = TileInTray (TrayIndex index) Nothing
+                , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                }
+            )
+            list
+            |> Array.fromList
+    , dragging = NotDragging
+    , zoomAnimation = { start = time, from = zoomedOutState }
+    , lastWordPlaced = Nothing
+    , showSettings = False
+    }
 
 
 type LocalChange
@@ -339,7 +382,7 @@ remainingLettersInBag setup board players =
         remainingLetters =
             SeqDict.foldl
                 (\_ letter startingLetters2 -> SeqDictHelper.decrement letter startingLetters2)
-                (NonemptyDict.toSeqDict setup.letters)
+                (NonemptyDict.toSeqDict setup.letters |> SeqDict.map (\_ a -> a.count))
                 board
     in
     List.foldl
@@ -391,24 +434,37 @@ shuffle list =
         Random.independentSeed
 
 
+{-| The game is over either when every player has passed in turn, or as soon as any player has no
+letters left. An empty tray means the bag is empty too: trays are refilled from the bag after every
+placement, so a tray can only end up empty once there was nothing left to draw.
+-}
 getWinner : Shared -> Maybe (Nonempty (Id UserId))
 getWinner shared =
-    case shared.passingStartedAt of
-        Just passingStartedAt ->
-            if List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt then
-                let
-                    player =
-                        NonemptyExtra.maximumBy .score shared.players
-                in
-                List.Nonempty.filter (\a -> a.score == player.score) player shared.players
-                    |> List.Nonempty.map .userId
-                    |> Just
+    let
+        everyonePassed : Bool
+        everyonePassed =
+            case shared.passingStartedAt of
+                Just passingStartedAt ->
+                    List.Nonempty.length shared.players <= shared.turnCount - passingStartedAt
 
-            else
-                Nothing
+                Nothing ->
+                    False
 
-        Nothing ->
-            Nothing
+        someoneOutOfLetters : Bool
+        someoneOutOfLetters =
+            List.Nonempty.any (\player -> IdArray.isEmpty player.tray) shared.players
+    in
+    if everyonePassed || someoneOutOfLetters then
+        let
+            player =
+                NonemptyExtra.maximumBy .score shared.players
+        in
+        List.Nonempty.filter (\a -> a.score == player.score) player shared.players
+            |> List.Nonempty.map .userId
+            |> Just
+
+    else
+        Nothing
 
 
 {-| The extra points awarded for placing a word that empties a full tray in one move (a "bingo").
@@ -430,7 +486,7 @@ updateAction setup action shared =
         PlaceWord placedWord isValid ->
             case ( getWinner shared, getPlayer action.userId shared ) of
                 ( Nothing, Just player ) ->
-                    case placeWord shared.board placedWord of
+                    case placeWord setup shared.board placedWord of
                         Just result ->
                             let
                                 animatedPlacement : Maybe AnimatedPlacement
@@ -607,13 +663,13 @@ the placement forms: the main word along the placement direction, plus any perpe
 cross-word that runs through a newly-placed tile. Returns `Nothing` if the letters run off the
 edge of the board.
 
-The returned `words` are lowercased so they can be looked up directly in the word list, and
+The returned `words` are the formed words' tiles in order (upper case, like the word list), and
 `score` is the combined Scrabble score of all the formed words (letter and word multipliers only
 apply to the squares the new tiles land on; wildcards score zero).
 
 -}
-placeWord : SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
-placeWord board placedWord =
+placeWord : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
+placeWord setup board placedWord =
     let
         ( dx, dy ) =
             if placedWord.isVertical then
@@ -700,7 +756,7 @@ placeWord board placedWord =
             Just
                 { board = newBoard
                 , words = List.map (wordString newBoard) allWords
-                , score = List.sum (List.map (wordScore newBoard placedSet) allWords)
+                , score = List.sum (List.map (wordScore setup newBoard placedSet) allWords)
                 , placedCells = placedCells
                 }
 
@@ -749,8 +805,8 @@ wordString board cells =
 {-| The Scrabble score of a single word. Letter and word multipliers only apply to the squares
 that the newly-placed tiles (`placedSet`) land on; wildcards always score zero.
 -}
-wordScore : SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
-wordScore board placedSet cells =
+wordScore : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> List ( Int, Int ) -> Int
+wordScore setup board placedSet cells =
     let
         letterSum : Int
         letterSum =
@@ -759,10 +815,10 @@ wordScore board placedSet cells =
                     case SeqDict.get cell board of
                         Just (Letter letter) ->
                             if Set.member cell placedSet then
-                                (letterData letter).score * letterScoreMultiplier cell
+                                letterValue setup letter * letterScoreMultiplier cell
 
                             else
-                                (letterData letter).score
+                                letterValue setup letter
 
                         Just Wildcard ->
                             0
@@ -789,17 +845,55 @@ wordScore board placedSet cells =
     letterSum * wordMultiplier
 
 
-{-| Like `placeWord`, but only succeeds if at least one word is formed and every formed word
-exists in the dictionary (see `wordIsValid` for how words containing wildcards are handled).
--}
-validatePlacement : Dictionary -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacement dictionary board placedWord =
-    case placeWord board placedWord of
+validatePlacementEnglish : Dictionary -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacementEnglish dictionary setup board placedWord =
+    case placeWord setup board placedWord of
         Just result ->
             if List.isEmpty result.words then
                 Err ()
 
-            else if List.all (wordIsValid dictionary) result.words then
+            else if
+                List.all
+                    (\word ->
+                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary.all word
+
+                        else
+                            scanForMatch dictionary.byLength word
+                    )
+                    result.words
+            then
+                Ok result
+
+            else
+                Err ()
+
+        Nothing ->
+            Err ()
+
+
+{-| Swedish has a lot of words so we don't want to spend the extra RAM for storing copies of the dict in array form
+for each word length or the CPU cycles to scan over them.
+Instead we just restrict the letter distribution for having more than 2 wildcards
+-}
+validatePlacementSwedish : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacementSwedish dictionary setup board placedWord =
+    case placeWord setup board placedWord of
+        Just result ->
+            if List.isEmpty result.words then
+                Err ()
+
+            else if
+                List.all
+                    (\word ->
+                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary word
+
+                        else
+                            False
+                    )
+                    result.words
+            then
                 Ok result
 
             else
@@ -818,36 +912,30 @@ maxBruteForceWildcards =
     2
 
 
-{-| Whether a formed word is in the dictionary. A wildcard tile can stand for any letter, but the
-board doesn't record which letter the player meant, so a word containing wildcards is valid if
-_some_ assignment of letters to its wildcards spells a word in the dictionary.
-
-There are two ways to check this, and we pick whichever is bounded by the smaller amount of work:
-
-  - With few wildcards, try every letter for them (`bruteForceMatch`): at most 26^k lookups.
-  - With many wildcards, 26^k explodes (e.g. 4 wildcards is ~457k), so instead scan the dictionary
-    words of this length and keep any that agree with the fixed letters (`scanForMatch`). That's one
-    pass over a single length bucket — at most ~30k words for this dictionary — regardless of how
-    many wildcards there are. This is what stops a word like "3 letters + 4 wildcards" locking up
-    the server.
-
+{-| The distinct letters present in the game's letter distribution: the only letters a wildcard
+can stand for.
 -}
-wordIsValid : Dictionary -> List LetterOrWildcard -> Bool
-wordIsValid dictionary word =
-    if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
-        bruteForceMatch dictionary.all word
+distributionLetters : ValidatedSetup -> List Letter
+distributionLetters setup =
+    List.filterMap
+        (\letterOrWildcard ->
+            case letterOrWildcard of
+                Letter letter ->
+                    Just letter
 
-    else
-        scanForMatch dictionary.byLength word
+                Wildcard ->
+                    Nothing
+        )
+        (NonemptyDict.keys setup.letters |> List.Nonempty.toList)
 
 
 {-| Try every letter for each wildcard, building the candidate string from left to right and
 stopping as soon as one is in the word list. With no wildcards this is a single `Set.member` lookup.
-Only used when there are few wildcards (see `maxBruteForceWildcards`), so this does at most 26^k
+Only used when there are few wildcards (see `maxBruteForceWildcards`), so this does at most n^k
 lookups for small `k`.
 -}
-bruteForceMatch : Set String -> List LetterOrWildcard -> Bool
-bruteForceMatch wordList word =
+bruteForceMatch : List Letter -> Set String -> List LetterOrWildcard -> Bool
+bruteForceMatch candidateLetters wordList word =
     let
         search : List LetterOrWildcard -> String -> Bool
         search remaining prefix =
@@ -855,11 +943,11 @@ bruteForceMatch wordList word =
                 [] ->
                     Set.member prefix wordList
 
-                (Letter letter) :: rest ->
-                    search rest (prefix ++ letterText letter)
+                (Letter (LetterChar letter)) :: rest ->
+                    search rest (prefix ++ String.fromChar letter)
 
                 Wildcard :: rest ->
-                    List.any (\letter -> search rest (prefix ++ letterText letter)) allLetters
+                    List.any (\(LetterChar letter) -> search rest (prefix ++ String.fromChar letter)) candidateLetters
     in
     search word ""
 
@@ -876,8 +964,8 @@ scanForMatch byLength word =
             List.map
                 (\cell ->
                     case cell of
-                        Letter letter ->
-                            Just (letterChar letter)
+                        Letter (LetterChar letter) ->
+                            Just letter
 
                         Wildcard ->
                             Nothing
@@ -910,25 +998,6 @@ matchesPattern pattern candidate =
         pattern
         (String.toList candidate)
         |> List.all identity
-
-
-{-| A letter's lowercase text, as it appears in the word list.
--}
-letterText : Letter -> String
-letterText letter =
-    String.toLower (letterData letter).text
-
-
-{-| A letter's lowercase character, as it appears in the word list.
--}
-letterChar : Letter -> Char
-letterChar letter =
-    case String.uncons (letterText letter) of
-        Just ( char, _ ) ->
-            char
-
-        Nothing ->
-            ' '
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -975,6 +1044,7 @@ removeFromTray letterOrWildcard tray =
 type SetupOrGame
     = Setup SetupModel
     | Game GameData
+    | CancelSetup
 
 
 updateSetup :
@@ -982,14 +1052,14 @@ updateSetup :
     -> Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( SetupOrGame, List OutMsg )
+    -> ( SetupOrGame, Maybe ValidatedSetup )
 updateSetup time currentUserId msg setup =
     case msg of
         ChangedMainTimeInput input ->
-            ( Setup { setup | mainTimeInput = input, error = Nothing }, [] )
+            ( Setup { setup | mainTimeInput = input, error = Nothing }, Nothing )
 
         ChangedIncrementInput input ->
-            ( Setup { setup | incrementInput = input, error = Nothing }, [] )
+            ( Setup { setup | incrementInput = input, error = Nothing }, Nothing )
 
         ChangedTraySizeInput input ->
             ( { setup
@@ -997,7 +1067,7 @@ updateSetup time currentUserId msg setup =
                 , error = Nothing
               }
                 |> Setup
-            , []
+            , Nothing
             )
 
         ChangedFullTrayBonusInput input ->
@@ -1006,33 +1076,44 @@ updateSetup time currentUserId msg setup =
                 , error = Nothing
               }
                 |> Setup
-            , []
+            , Nothing
             )
 
         ChangedLettersInput input ->
-            ( Setup { setup | letters = input, error = Nothing }, [] )
+            ( Setup { setup | letters = input, error = Nothing }, Nothing )
+
+        ChangedLetterValue char input ->
+            ( Setup { setup | letterValues = SeqDict.insert char input setup.letterValues, error = Nothing }
+            , Nothing
+            )
 
         PressedResetLetters ->
-            ( Setup { setup | letters = defaultLetters, error = Nothing }, [] )
+            ( Setup { setup | letters = defaultLetters setup.language, letterValues = SeqDict.empty, error = Nothing }
+            , Nothing
+            )
 
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
-                    let
-                        ( model, outMsgs ) =
-                            initGame time validated
-                    in
-                    ( Game model, OutLocalChange (StartMatch time validated) :: outMsgs )
+                    ( initGame time validated |> Game, Just validated )
 
                 Err error ->
-                    ( Setup { setup | error = Just error }, [] )
+                    ( Setup { setup | error = Just error }, Nothing )
+
+        PressedCancel ->
+            ( CancelSetup, Nothing )
+
+        PressedLanguage language ->
+            ( Setup { setup | language = language, letters = defaultLetters language }
+            , Nothing
+            )
 
 
-updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, List OutMsg )
+updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, Maybe ActionWithTime )
 updateGame time currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
-            case placeWord shared.board placement of
+            case placeWord setup shared.board placement of
                 Just result ->
                     let
                         -- The board cells this line actually consumes (its newly placed tiles).
@@ -1090,17 +1171,14 @@ updateGame time currentUserId setup shared msg model =
                                     kept
                                     (List.range 0 (newTileCount - 1))
                         }
-                    , [ { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
-                            |> Action
-                            |> OutLocalChange
-                      ]
+                    , Just { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
                     )
 
                 Nothing ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedJoinGame ->
-            ( model, [ OutLocalChange (Action { userId = currentUserId, change = JoinGame, time = time }) ] )
+            ( model, Just { userId = currentUserId, change = JoinGame, time = time } )
 
         PressedReplaceTrayOrPass ->
             let
@@ -1127,7 +1205,7 @@ updateGame time currentUserId setup shared msg model =
                         list
                         |> Array.fromList
               }
-            , [ OutLocalChange (Action { userId = currentUserId, change = ReplaceTrayOrPass, time = time }) ]
+            , Just { userId = currentUserId, change = ReplaceTrayOrPass, time = time }
             )
 
         PressedClearBoard ->
@@ -1158,8 +1236,11 @@ updateGame time currentUserId setup shared msg model =
                         model.tiles
                         |> Tuple.first
               }
-            , []
+            , Nothing
             )
+
+        PressedToggleSettings ->
+            ( { model | showSettings = not model.showSettings }, Nothing )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -1500,8 +1581,8 @@ validateSetup createdBy time setup =
         Ok timeControls ->
             case OneOrGreater.fromInt setup.traySize of
                 Just traySize ->
-                    case parseLetters setup.letters of
-                        Ok nonempty ->
+                    case parseLettersAndValues setup of
+                        Ok letters ->
                             { createdBy = createdBy
                             , timeControls = timeControls
                             , traySize = traySize
@@ -1509,7 +1590,8 @@ validateSetup createdBy time setup =
                             , seed =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
-                            , letters = nonempty
+                            , letters = letters
+                            , language = setup.language
                             }
                                 |> Ok
 
@@ -1518,6 +1600,147 @@ validateSetup createdBy time setup =
 
                 Nothing ->
                     Err "Tray size must be at least 1"
+
+
+{-| Turn a running game's setup back into the setup form's fields, so the read-only settings view
+(the gear button on an active game) can reuse `setupView` to display them.
+-}
+validatedToSetupModel : ValidatedSetup -> SetupModel
+validatedToSetupModel setup =
+    { mainTimeInput = Duration.inMinutes setup.timeControls.mainTime |> String.fromFloat
+    , incrementInput = Duration.inSeconds setup.timeControls.increment |> String.fromFloat
+    , traySize = OneOrGreater.toInt setup.traySize
+    , fullTrayBonus = setup.fullTrayBonus
+    , error = Nothing
+    , letters =
+        NonemptyDict.toList setup.letters
+            |> List.map
+                (\( letterOrWildcard, data ) ->
+                    String.repeat
+                        (OneOrGreater.toInt data.count)
+                        (letterOrWildcardText letterOrWildcard)
+                )
+            |> String.concat
+    , letterValues =
+        NonemptyDict.toList setup.letters
+            |> List.filterMap
+                (\( letterOrWildcard, data ) ->
+                    case letterOrWildcard of
+                        Letter (LetterChar char) ->
+                            Just ( char, String.fromInt data.value )
+
+                        Wildcard ->
+                            Nothing
+                )
+            |> SeqDict.fromList
+    , language = setup.language
+    }
+
+
+parseLettersAndValues : SetupModel -> Result String (NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int })
+parseLettersAndValues setup =
+    let
+        parsedLetters : Result String (NonemptyDict LetterOrWildcard OneOrGreater)
+        parsedLetters =
+            let
+                distributionChars : List Char
+                distributionChars =
+                    String.toUpper setup.letters
+                        |> String.toList
+                        |> List.filter (\char -> not (List.member char [ '\n', '\u{000D}', '\t' ]))
+
+                counts : SeqDict LetterOrWildcard OneOrGreater
+                counts =
+                    List.foldl
+                        (\char acc ->
+                            if char == ' ' then
+                                SeqDictHelper.increment Wildcard acc
+
+                            else
+                                SeqDictHelper.increment (Letter (LetterChar char)) acc
+                        )
+                        SeqDict.empty
+                        distributionChars
+            in
+            case NonemptyDict.fromSeqDict counts of
+                Just nonempty ->
+                    case ( setup.language, NonemptyDict.get Wildcard nonempty ) of
+                        ( Swedish, Just value ) ->
+                            if OneOrGreater.toInt value > 2 then
+                                Err "No more than 2 wildcards (spaces) are allowed for Swedish"
+
+                            else
+                                Ok nonempty
+
+                        _ ->
+                            Ok nonempty
+
+                Nothing ->
+                    Err "Letters: enter at least one letter"
+    in
+    case parsedLetters of
+        Ok counts ->
+            let
+                result : Result String (List ( LetterOrWildcard, { count : OneOrGreater, value : Int } ))
+                result =
+                    List.Nonempty.foldl
+                        (\( letterOrWildcard, count ) result2 ->
+                            case result2 of
+                                Ok list ->
+                                    case letterOrWildcard of
+                                        Letter (LetterChar char) ->
+                                            case String.toInt (String.trim (letterValueInputFor char setup)) of
+                                                Just value ->
+                                                    Ok (( letterOrWildcard, { count = count, value = value } ) :: list)
+
+                                                Nothing ->
+                                                    Err ("Letter values: enter a whole number for " ++ String.fromChar char)
+
+                                        Wildcard ->
+                                            Ok (( letterOrWildcard, { count = count, value = 0 } ) :: list)
+
+                                Err error ->
+                                    Err error
+                        )
+                        (Ok [])
+                        (NonemptyDict.toNonemptyList counts)
+            in
+            case result of
+                Ok list ->
+                    -- The fold prepends, so reverse to keep the distribution's original tile order
+                    -- (the bag is built and shuffled in this order, so it affects the drawn trays).
+                    case NonemptyDict.fromList (List.reverse list) of
+                        Just nonempty ->
+                            Ok nonempty
+
+                        Nothing ->
+                            Err "Letters: enter at least one letter"
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
+
+
+{-| The current text of a letter's value input, falling back to the letter's default value if the
+user hasn't edited it.
+-}
+letterValueInputFor : Char -> SetupModel -> String
+letterValueInputFor char setup =
+    case SeqDict.get char setup.letterValues of
+        Just input ->
+            input
+
+        Nothing ->
+            String.fromInt
+                (case setup.language of
+                    English ->
+                        defaultEnglishLetterValue char
+
+                    Swedish ->
+                        defaultSwedishLetterValue char
+                )
 
 
 parseTimeControl : SetupModel -> Result String TimeControl
@@ -1997,6 +2220,17 @@ getPlayer userId gameState =
 
 dragStart : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
 dragStart time windowSize touches setup gameModel =
+    if gameModel.showSettings then
+        -- The settings view covers the board, so a drag over where the board would be shouldn't
+        -- move any tiles.
+        gameModel
+
+    else
+        dragStartHelper time windowSize touches setup gameModel
+
+
+dragStartHelper : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
+dragStartHelper time windowSize touches setup gameModel =
     let
         touchPosition : Coord CssPixels
         touchPosition =
@@ -2626,23 +2860,55 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
     let
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
-    in
-    (if isMobile then
-        Ui.column
 
-     else
-        Ui.row
-    )
-        [ Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
-        , Ui.background MyUi.tabBackground
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , MyUi.noShrinking
-        , MyUi.htmlStyle "user-select" "none"
-        ]
-        [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-        , statusView windowSize isPersonalDm localUser setup actions shared
-        ]
+        -- A gear in the top right corner that toggles between the game and its (read-only)
+        -- settings, so players can check what was configured for the match.
+        settingsButton : Ui.Attribute GameMsg
+        settingsButton =
+            (if isMobile then
+                Ui.none
+
+             else
+                MyUi.elButton
+                    (Dom.id "wsg_settings")
+                    PressedToggleSettings
+                    [ Ui.width (Ui.px 24)
+                    , Ui.alignRight
+                    , Ui.move { x = -8, y = 8, z = 0 }
+                    , Ui.Font.color MyUi.font1
+                    , Html.Attributes.attribute "aria-label" "Game settings" |> Ui.htmlAttribute
+                    ]
+                    (Ui.html Icons.gear)
+            )
+                |> Ui.inFront
+    in
+    if model.showSettings then
+        Ui.el
+            [ settingsButton ]
+            (setupView windowSize True (validatedToSetupModel setup)
+                -- Every control is disabled in the read-only settings view, so no setup message
+                -- can actually fire; this mapping only exists to satisfy the types.
+                |> Ui.map (\_ -> PressedToggleSettings)
+            )
+
+    else
+        (if isMobile then
+            Ui.column
+
+         else
+            Ui.row
+        )
+            [ Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
+            , Ui.background MyUi.tabBackground
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , MyUi.noShrinking
+            , MyUi.htmlStyle "user-select" "none"
+            , settingsButton
+            ]
+            [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
+            , statusView windowSize isPersonalDm localUser setup actions shared
+            ]
 
 
 playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
@@ -2943,7 +3209,7 @@ describeAction setup shared action =
                     "played an invalid word"
 
                 _ ->
-                    case placeWord shared.board placedWord of
+                    case placeWord setup shared.board placedWord of
                         Just result ->
                             let
                                 bonus : Int
@@ -3000,8 +3266,8 @@ letterOrWildcardsToString letters =
     List.map
         (\letterOrWildcard ->
             case letterOrWildcard of
-                Letter letter ->
-                    String.toUpper (letterText letter)
+                Letter (LetterChar letter) ->
+                    String.fromChar letter
 
                 Wildcard ->
                     "_"
@@ -3085,7 +3351,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                             p =
                                 project x y
                         in
-                        boardTileInFront p.size p.pos letter :: list
+                        boardTileInFront setup p.size p.pos letter :: list
                 )
                 []
                 shared.board
@@ -3142,6 +3408,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                                 Coord.yRaw p.pos
                                         in
                                         animatedTileInFront
+                                            setup
                                             p.size
                                             (Coord.xy
                                                 (round (toFloat startX + progress * toFloat (destX - startX)))
@@ -3188,6 +3455,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                 in
                                 ( boardAcc
                                 , tileInFront
+                                    setup
                                     currentTime
                                     tile.createdAt
                                     zoomedCellSize
@@ -3204,6 +3472,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                     TileInTray trayIndex shiftAnimation ->
                                         ( boardAcc
                                         , tileInFront
+                                            setup
                                             currentTime
                                             tile.createdAt
                                             (trayTileSize setup.traySize windowSize |> round)
@@ -3218,7 +3487,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                                             p =
                                                 project x y
                                         in
-                                        ( tileInFront currentTime tile.createdAt p.size p.pos letter :: boardAcc
+                                        ( tileInFront setup currentTime tile.createdAt p.size p.pos letter :: boardAcc
                                         , trayAcc
                                         )
                     )
@@ -3545,8 +3814,8 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
         boardLayer
 
 
-tileInFront : Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
+tileInFront : ValidatedSetup -> Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront setup currentTime createdAt cellSize2 offset letterOrWildcard =
     let
         fade : { opacity : Float, drift : Float }
         fade =
@@ -3569,14 +3838,14 @@ tileInFront currentTime createdAt cellSize2 offset letterOrWildcard =
             , Ui.Font.color (Ui.rgb 0 0 0)
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
-            , tileScoreView cellSize2 letterOrWildcard
+            , tileScoreView setup cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
 
-boardTileInFront : Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-boardTileInFront cellSize2 offset letterOrWildcard =
+boardTileInFront : ValidatedSetup -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+boardTileInFront setup cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
             [ Ui.background (Ui.rgb 186 171 103)
@@ -3589,18 +3858,18 @@ boardTileInFront cellSize2 offset letterOrWildcard =
             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
             , Ui.Font.color (Ui.rgb 0 0 0)
             , MyUi.noPointerEvents
-            , tileScoreView cellSize2 letterOrWildcard
+            , tileScoreView setup cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
 
-tileScoreView : Int -> LetterOrWildcard -> Ui.Attribute msg
-tileScoreView cellSize2 letterOrWildcard =
+tileScoreView : ValidatedSetup -> Int -> LetterOrWildcard -> Ui.Attribute msg
+tileScoreView setup cellSize2 letterOrWildcard =
     Ui.text
         (case letterOrWildcard of
             Letter letter ->
-                letterData letter |> .score |> String.fromInt
+                letterValue setup letter |> String.fromInt
 
             Wildcard ->
                 ""
@@ -3617,8 +3886,8 @@ tileScoreView cellSize2 letterOrWildcard =
 {-| A tile drawn by the placement animation. It looks like a committed board tile, except a
 rejected tile (on its way back off the board) is shown in red.
 -}
-animatedTileInFront : Int -> Coord CssPixels -> Bool -> LetterOrWildcard -> Ui.Attribute GameMsg
-animatedTileInFront cellSize2 offset red letterOrWildcard =
+animatedTileInFront : ValidatedSetup -> Int -> Coord CssPixels -> Bool -> LetterOrWildcard -> Ui.Attribute GameMsg
+animatedTileInFront setup cellSize2 offset red letterOrWildcard =
     Ui.inFront
         (Ui.el
             [ Ui.background
@@ -3643,7 +3912,7 @@ animatedTileInFront cellSize2 offset red letterOrWildcard =
                     Ui.rgb 0 0 0
                 )
             , MyUi.noPointerEvents
-            , tileScoreView cellSize2 letterOrWildcard
+            , tileScoreView setup cellSize2 letterOrWildcard
             ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
@@ -3652,8 +3921,8 @@ animatedTileInFront cellSize2 offset red letterOrWildcard =
 letterOrWildcardText : LetterOrWildcard -> String
 letterOrWildcardText letterOrWildcard =
     case letterOrWildcard of
-        Letter letter ->
-            (letterData letter).text
+        Letter (LetterChar letter) ->
+            String.fromChar letter
 
         Wildcard ->
             " "
@@ -3897,12 +4166,25 @@ doubleLetterCells =
     ]
 
 
-setupView : Coord CssPixels -> SetupModel -> Element SetupMsg
-setupView windowSize setup =
+{-| The game setup form. With `readonly` set, every input is disabled and the buttons are hidden;
+this doubles as the settings view of an active game (see the gear button in `gameView`).
+-}
+setupView : Coord CssPixels -> Bool -> SetupModel -> Element SetupMsg
+setupView windowSize isReadonly setup =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        padding =
+            Ui.paddingXY
+                (if isMobile then
+                    8
+
+                 else
+                    16
+                )
+                0
     in
     Ui.column
         [ Ui.spacing
@@ -3912,131 +4194,176 @@ setupView windowSize setup =
              else
                 16
             )
-        , Ui.padding
-            (if isMobile then
-                12
-
-             else
-                24
-            )
+        , Ui.paddingXY 0 16
         , Ui.background MyUi.tabBackground
         , Ui.height (Ui.px (tabBodyHeight windowSize OneOrGreater.seven))
         , Ui.heightMin 0
         , Ui.scrollable
         ]
-        [ setupSection
-            (Ui.row
-                []
-                [ Ui.text "Tray size"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
-                ]
-            )
-            (numberInput
-                { htmlId = "wsg_traySizeInput"
-                , minValue = 1
-                , maxValue = 20
-                , value = String.fromInt setup.traySize
-                , onChange = ChangedTraySizeInput
-                }
-            )
-        , setupSection
-            (Ui.row
-                []
-                [ Ui.text "Bingo bonus"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
-                ]
-            )
-            (numberInput
-                { htmlId = "wsg_fullTrayBonusInput"
-                , minValue = -999
-                , maxValue = 999
-                , value = String.fromInt setup.fullTrayBonus
-                , onChange = ChangedFullTrayBonusInput
-                }
-            )
-        , setupSection
-            (Ui.text "Time control")
-            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
-                , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
-                ]
-            )
-        , setupSection
-            (Ui.row
-                []
-                [ Ui.text "Letter distribution"
-                , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
-                ]
-            )
-            (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
-                [ lettersInput setup.letters
-                , if setup.letters == defaultLetters then
+        [ Ui.el [ Ui.Font.size 24, padding ] (Ui.text "Word Spelling Game settings")
+        , Ui.column
+            [ Ui.spacing
+                (if isMobile then
+                    12
+
+                 else
+                    16
+                )
+            , padding
+            ]
+            [ setupSection
+                (Ui.text "Time control")
+                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+                    [ timeInput isReadonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
+                    , timeInput isReadonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
+                    ]
+                )
+            , if isReadonly then
+                setupSection (Ui.text "Dictionary") (Ui.text (languageToString setup.language))
+
+              else
+                MyUi.radioColumn
+                    (Dom.id "ws_language")
+                    PressedLanguage
+                    (Just setup.language)
+                    "Dictionary"
+                    (List.map (\language -> ( language, languageToString language )) allLanguages)
+            ]
+        , MyUi.container
+            MyUi.background1
+            isMobile
+            "Advanced settings"
+            [ setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Bingo bonus"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
+                    ]
+                )
+                (Go.numberInput
+                    { htmlId = "wsg_fullTrayBonusInput"
+                    , width = 60
+                    , minValue = -999
+                    , maxValue = 999
+                    , value = String.fromInt setup.fullTrayBonus
+                    , isReadonly = isReadonly
+                    , onChange = ChangedFullTrayBonusInput
+                    }
+                )
+            , setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Tray size"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters you get)")
+                    ]
+                )
+                (Go.numberInput
+                    { htmlId = "wsg_traySizeInput"
+                    , width = 60
+                    , minValue = 1
+                    , maxValue = 10
+                    , value = String.fromInt setup.traySize
+                    , isReadonly = isReadonly
+                    , onChange = ChangedTraySizeInput
+                    }
+                )
+            , setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Letter distribution"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
+                    ]
+                )
+                (lettersInput isReadonly setup.letters)
+            , case distributionInputLetters setup.letters of
+                [] ->
                     Ui.none
 
-                  else
-                    MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
-                ]
-            )
+                distributionChars ->
+                    setupSection
+                        (Ui.text "Letter values")
+                        (Ui.row
+                            [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
+                            (List.map
+                                (\char -> letterValueInput isReadonly char (letterValueInputFor char setup))
+                                distributionChars
+                            )
+                        )
+            , if isReadonly || (setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues) then
+                Ui.none
+
+              else
+                MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
+            ]
         , case setup.error of
             Just error ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text error)
+                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50), padding ] (Ui.text error)
 
             Nothing ->
                 Ui.none
-        , MyUi.simpleButton (Dom.id "wsg_start") PressedStartGame (Ui.text "Start game")
+        , if isReadonly then
+            Ui.none
+
+          else
+            Go.startOrCancel "wsg" isMobile PressedCancel PressedStartGame
         ]
 
 
 setupSection : Element SetupMsg -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
-        [ Ui.spacing 8, MyUi.prewrap ]
+        [ Ui.spacing 2, MyUi.prewrap ]
         [ Ui.el [ Ui.Font.weight 600 ] title
         , content
         ]
 
 
-numberInput :
-    { htmlId : String
-    , minValue : Int
-    , maxValue : Int
-    , value : String
-    , onChange : String -> SetupMsg
-    }
-    -> Element SetupMsg
-numberInput args =
-    Html.input
-        [ Html.Attributes.id args.htmlId
-        , Html.Attributes.type_ "number"
-        , Html.Attributes.min (String.fromInt args.minValue)
-        , Html.Attributes.max (String.fromInt args.maxValue)
-        , Html.Attributes.value args.value
-        , Html.Attributes.style "font-size" "inherit"
-        , Html.Attributes.style "width" "50px"
-        , Html.Attributes.style "padding" "8px"
-        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Events.onInput args.onChange
+{-| The distinct letters in the distribution input, sorted, one value input each. Uses the same
+reading of the string as `parseLetters` (space is a wildcard, other whitespace is ignored) but
+doesn't care about case so the value inputs don't vanish while the user is fixing a case error.
+-}
+distributionInputLetters : String -> List Char
+distributionInputLetters string =
+    String.toList string
+        |> List.filter (\char -> not (List.member char [ ' ', '\n', '\u{000D}', '\t' ]))
+        |> List.map Char.toUpper
+        |> List.Extra.unique
+        |> List.sort
+
+
+letterValueInput : Bool -> Char -> String -> Element SetupMsg
+letterValueInput isReadonly char value =
+    Ui.row
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
+        , Go.numberInput
+            { htmlId = "wsg_letterValue_" ++ String.fromChar char
+            , width = 44
+            , minValue = 0
+            , maxValue = 999
+            , value = value
+            , isReadonly = isReadonly
+            , onChange = ChangedLetterValue char
+            }
         ]
-        []
-        |> Ui.html
 
 
-lettersInput : String -> Element SetupMsg
-lettersInput value =
+lettersInput : Bool -> String -> Element SetupMsg
+lettersInput isReadonly value =
     Html.textarea
         [ Html.Attributes.id "wsg_lettersInput"
         , Html.Attributes.value value
+        , Html.Attributes.disabled isReadonly
+        , Go.inputBackgroundColor isReadonly
         , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "color" "black"
         , Html.Attributes.style "font-family" "monospace"
         , Html.Attributes.style "width" "100%"
-        , Html.Attributes.style "min-width" "260px"
-        , Html.Attributes.style "height" "80px"
+        , Html.Attributes.style "height" "100px"
 
         -- Wrap at any character (letter wrap) rather than only at spaces, since the distribution is
         -- essentially one long word.
         , Html.Attributes.style "word-break" "break-all"
-        , Html.Attributes.style "white-space" "pre-wrap"
         , Html.Attributes.style "padding" "8px"
         , Html.Attributes.style "box-sizing" "border-box"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
@@ -4047,8 +4374,8 @@ lettersInput value =
         |> Ui.html
 
 
-timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
-timeInput htmlId label value onChange =
+timeInput : Bool -> String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
+timeInput isReadonly htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
         , Html.input
@@ -4057,6 +4384,9 @@ timeInput htmlId label value onChange =
             , Html.Attributes.min "0"
             , Html.Attributes.step "1"
             , Html.Attributes.value value
+            , Html.Attributes.disabled isReadonly
+            , Go.inputBackgroundColor isReadonly
+            , Html.Attributes.style "color" "black"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "width" "70px"
             , Html.Attributes.style "padding" "8px"
@@ -4069,207 +4399,205 @@ timeInput htmlId label value onChange =
         ]
 
 
-allLetters : List Letter
-allLetters =
-    [ A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z ]
+defaultLetters : Language -> String
+defaultLetters language =
+    case language of
+        English ->
+            "  AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ"
+
+        Swedish ->
+            "  AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
 
 
-{-| How many wildcards (blank tiles) the standard Scrabble distribution has.
+{-| How many points a letter tile scores, as configured in the game setup.
 -}
-defaultWildcardCount : Int
-defaultWildcardCount =
-    2
-
-
-{-| The standard Scrabble letter distribution, written as a single long string. Each wildcard is a
-space and each letter appears in lowercase as many times as it occurs in the bag, e.g.
-`"  aaaaaaaaabbccdddd..."` (two wildcards followed by nine a's, two b's and so on).
--}
-defaultLetters : String
-defaultLetters =
-    String.repeat defaultWildcardCount " "
-        ++ (List.map
-                (\letter ->
-                    String.repeat (OneOrGreater.toInt (letterData letter).total) (String.toLower (letterData letter).text)
-                )
-                allLetters
-                |> String.concat
-           )
-
-
-{-| Read a letter distribution string back into a count of each tile. Spaces are wildcards and any
-letter (in either case) is counted; any other character is ignored. Fails if there isn't at least
-one (non-wildcard) letter, since words can't be formed out of wildcards alone.
--}
-parseLetters : String -> Result String (NonemptyDict LetterOrWildcard OneOrGreater)
-parseLetters string =
-    let
-        counts : SeqDict LetterOrWildcard OneOrGreater
-        counts =
-            String.foldl
-                (\char acc ->
-                    if char == ' ' then
-                        SeqDictHelper.increment Wildcard acc
-
-                    else
-                        case charToLetter char of
-                            Just letter ->
-                                SeqDictHelper.increment (Letter letter) acc
-
-                            Nothing ->
-                                acc
-                )
-                SeqDict.empty
-                string
-    in
-    case NonemptyDict.fromSeqDict counts of
-        Just nonempty ->
-            if List.any isLetter (SeqDict.keys counts) then
-                Ok nonempty
-
-            else
-                Err "Letters: enter at least one letter (A-Z)"
+letterValue : ValidatedSetup -> Letter -> Int
+letterValue setup letter =
+    case NonemptyDict.get (Letter letter) setup.letters of
+        Just data ->
+            data.value
 
         Nothing ->
-            Err "Letters: enter at least one letter (A-Z)"
+            0
 
 
-charToLetter : Char -> Maybe Letter
-charToLetter char =
-    List.Extra.find
-        (\letter -> (letterData letter).text == String.fromChar (Char.toUpper char))
-        allLetters
+defaultEnglishLetterValue : Char -> Int
+defaultEnglishLetterValue char =
+    case char of
+        'A' ->
+            1
+
+        'B' ->
+            3
+
+        'C' ->
+            3
+
+        'D' ->
+            2
+
+        'E' ->
+            1
+
+        'F' ->
+            4
+
+        'G' ->
+            2
+
+        'H' ->
+            4
+
+        'I' ->
+            1
+
+        'J' ->
+            8
+
+        'K' ->
+            5
+
+        'L' ->
+            1
+
+        'M' ->
+            3
+
+        'N' ->
+            1
+
+        'O' ->
+            1
+
+        'P' ->
+            3
+
+        'Q' ->
+            10
+
+        'R' ->
+            1
+
+        'S' ->
+            1
+
+        'T' ->
+            1
+
+        'U' ->
+            1
+
+        'V' ->
+            4
+
+        'W' ->
+            4
+
+        'X' ->
+            8
+
+        'Y' ->
+            4
+
+        'Z' ->
+            10
+
+        _ ->
+            1
 
 
-isLetter : LetterOrWildcard -> Bool
-isLetter letterOrWildcard =
-    case letterOrWildcard of
-        Letter _ ->
-            True
+defaultSwedishLetterValue : Char -> Int
+defaultSwedishLetterValue char =
+    case char of
+        'A' ->
+            1
 
-        Wildcard ->
-            False
+        'B' ->
+            4
 
+        'C' ->
+            8
 
-type alias LetterData =
-    { score : Int
-    , text : String
+        'D' ->
+            1
 
-    -- The number of this letter in the standard Scrabble distribution, used as the default letter
-    -- distribution in the game setup.
-    , total : OneOrGreater
-    }
+        'E' ->
+            1
 
+        'F' ->
+            4
 
-letterData : Letter -> LetterData
-letterData letter =
-    case letter of
-        A ->
-            { score = 1, text = "A", total = OneOrGreater.nine }
+        'G' ->
+            2
 
-        B ->
-            { score = 3, text = "B", total = OneOrGreater.two }
+        'H' ->
+            3
 
-        C ->
-            { score = 3, text = "C", total = OneOrGreater.two }
+        'I' ->
+            1
 
-        D ->
-            { score = 2, text = "D", total = OneOrGreater.four }
+        'J' ->
+            8
 
-        E ->
-            { score = 1, text = "E", total = OneOrGreater.twelve }
+        'K' ->
+            3
 
-        F ->
-            { score = 4, text = "F", total = OneOrGreater.two }
+        'L' ->
+            1
 
-        G ->
-            { score = 2, text = "G", total = OneOrGreater.three }
+        'M' ->
+            3
 
-        H ->
-            { score = 4, text = "H", total = OneOrGreater.two }
+        'N' ->
+            1
 
-        I ->
-            { score = 1, text = "I", total = OneOrGreater.nine }
+        'O' ->
+            2
 
-        J ->
-            { score = 8, text = "J", total = OneOrGreater.one }
+        'P' ->
+            3
 
-        K ->
-            { score = 5, text = "K", total = OneOrGreater.one }
+        'Q' ->
+            10
 
-        L ->
-            { score = 1, text = "L", total = OneOrGreater.four }
+        'R' ->
+            1
 
-        M ->
-            { score = 3, text = "M", total = OneOrGreater.two }
+        'S' ->
+            1
 
-        N ->
-            { score = 1, text = "N", total = OneOrGreater.six }
+        'T' ->
+            1
 
-        O ->
-            { score = 1, text = "O", total = OneOrGreater.eight }
+        'U' ->
+            3
 
-        P ->
-            { score = 3, text = "P", total = OneOrGreater.two }
+        'V' ->
+            4
 
-        Q ->
-            { score = 10, text = "Q", total = OneOrGreater.one }
+        'W' ->
+            10
 
-        R ->
-            { score = 1, text = "R", total = OneOrGreater.six }
+        'X' ->
+            10
 
-        S ->
-            { score = 1, text = "S", total = OneOrGreater.four }
+        'Y' ->
+            8
 
-        T ->
-            { score = 1, text = "T", total = OneOrGreater.six }
+        'Z' ->
+            10
 
-        U ->
-            { score = 1, text = "U", total = OneOrGreater.four }
+        'Å' ->
+            4
 
-        V ->
-            { score = 4, text = "V", total = OneOrGreater.two }
+        'Ä' ->
+            4
 
-        W ->
-            { score = 4, text = "W", total = OneOrGreater.two }
+        'Ö' ->
+            4
 
-        X ->
-            { score = 8, text = "X", total = OneOrGreater.one }
-
-        Y ->
-            { score = 4, text = "Y", total = OneOrGreater.two }
-
-        Z ->
-            { score = 10, text = "Z", total = OneOrGreater.one }
-
-
-type Letter
-    = A
-    | B
-    | C
-    | D
-    | E
-    | F
-    | G
-    | H
-    | I
-    | J
-    | K
-    | L
-    | M
-    | N
-    | O
-    | P
-    | Q
-    | R
-    | S
-    | T
-    | U
-    | V
-    | W
-    | X
-    | Y
-    | Z
+        _ ->
+            1
 
 
 audio : Audio.Source -> Id UserId -> Shared -> GameData -> Audio

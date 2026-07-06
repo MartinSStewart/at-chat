@@ -50,7 +50,7 @@ import Cloudflare
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel
+import DmChannelId
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -373,14 +373,14 @@ displayMode currentUserId route local =
             thumbnailOrNoVideo
 
         DmRoute dmRoute ->
-            case DmChannel.otherUserId currentUserId dmRoute.channelId of
+            case DmChannelId.otherUserId currentUserId dmRoute.channelId of
                 Just otherUserId ->
                     let
                         roomId =
                             DmRoomId otherUserId
 
                         isTabExpanded =
-                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+                            dmRoute.tab == Just ChannelHeaderTab_VoiceChat
                     in
                     if Just roomId == local.currentRoom && isTabExpanded then
                         case SeqDict.get roomId local.voiceChats of

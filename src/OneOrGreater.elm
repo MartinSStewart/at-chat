@@ -1,20 +1,13 @@
 module OneOrGreater exposing
     ( OneOrGreater(..)
     , decrement
-    , eight
-    , four
     , fromInt
     , increment
-    , nine
     , one
     , plus
     , seven
-    , six
-    , three
     , toInt
     , toString
-    , twelve
-    , two
     )
 
 {-| A integer that's guaranteed to be 1 or a value greater than 1
@@ -32,44 +25,9 @@ one =
     OneOrGreater 1
 
 
-two : OneOrGreater
-two =
-    OneOrGreater 2
-
-
-three : OneOrGreater
-three =
-    OneOrGreater 3
-
-
-four : OneOrGreater
-four =
-    OneOrGreater 4
-
-
-six : OneOrGreater
-six =
-    OneOrGreater 6
-
-
 seven : OneOrGreater
 seven =
     OneOrGreater 7
-
-
-eight : OneOrGreater
-eight =
-    OneOrGreater 8
-
-
-nine : OneOrGreater
-nine =
-    OneOrGreater 9
-
-
-twelve : OneOrGreater
-twelve =
-    OneOrGreater 12
 
 
 increment : OneOrGreater -> OneOrGreater

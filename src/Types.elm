@@ -43,6 +43,7 @@ module Types exposing
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
+    , WordSpellingGameSwedish(..)
     , messageMenuMobileOffset
     )
 
@@ -61,7 +62,8 @@ import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
+import DmChannelId exposing (DmChannelId, GuildOrFullDmId)
 import Drawing
 import Duration exposing (Duration)
 import Editable
@@ -111,6 +113,7 @@ import Route exposing (ChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
+import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -197,7 +200,7 @@ type Drag
 type DragTarget
     = Drag_Channel
     | Drag_CallThumbnail
-    | Drag_WordSpellingGameBoard
+    | Drag_Game
 
 
 type LoginStatus
@@ -246,7 +249,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : Call.Model
-    , currentDmGame : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Game.Model
+    , games : SeqDict GuildOrDmId Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
@@ -382,8 +385,16 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
-    , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( DmChannelId, Id ChannelMessageId )
+    , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
+    , wordSpellingGameSwedish : WordSpellingGameSwedish
     }
+
+
+type WordSpellingGameSwedish
+    = WordSpellingGameSwedish_NotLoaded
+    | WordSpellingGameSwedish_Loading
+    | WordSpellingGameSwedish_Error Http.Error
+    | WordSpellingGameSwedish_Loaded (Set String)
 
 
 type alias DiscordAttachmentData =
@@ -727,6 +738,7 @@ type BackendMsg
     | GotCloudflareUsage Time.Posix (Result Http.Error Int)
     | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
     | GotRustServerFileUpload FileHash Int (Maybe (Coord CssPixels))
+    | GotSwedishWordList (Result Http.Error String)
 
 
 type MessageFromGuildOrDm
@@ -887,7 +899,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange Call.ServerChange
-    | Server_Game (Id UserId) { otherUserId : Id UserId } Game.LocalChange
+    | Server_Game (Id UserId) GuildOrDmId Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
 
 
@@ -932,5 +944,5 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
-    | Local_Game { otherUserId : Id UserId } Game.LocalChange
+    | Local_Game GuildOrDmId Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange

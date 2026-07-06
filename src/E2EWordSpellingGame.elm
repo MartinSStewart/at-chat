@@ -9,9 +9,12 @@ import Effect.Test as T
 import Effect.Time as Time
 import FrontendExtra
 import Game
+import Id exposing (ChannelMessageId, Id)
 import Json.Encode
+import List.Nonempty
 import Message
 import OneOrGreater
+import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -73,8 +76,13 @@ tests normalConfig =
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+
+                    -- Cancel from the setup screen returns to the game select view.
+                    , admin.click 100 (Dom.id "wsg_cancel")
+                    , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.collapsableGroup
                         "Clear placed tiles"
@@ -106,6 +114,21 @@ tests normalConfig =
                         , admin.snapshotView 5000 { name = "Place \"load\"" }
                         , user.snapshotView 0 { name = "Place \"load\"" }
                         ]
+                    , T.collapsableGroup
+                        "Game settings gear toggles the read-only settings view"
+                        [ -- The board is showing, so the setup's letter distribution input isn't present.
+                          admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        , admin.click 100 (Dom.id "wsg_settings")
+
+                        -- Now the read-only settings show the distribution, but no start/cancel buttons.
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
+                        , admin.snapshotView 100 { name = "Word spelling game settings" }
+
+                        -- Clicking the gear again returns to the board.
+                        , admin.click 100 (Dom.id "wsg_settings")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_lettersInput" ])
+                        ]
 
                     -- The other user opens the same match and joins it.
                     , user.click 2000 (Dom.id "guild_openDm_0")
@@ -114,7 +137,7 @@ tests normalConfig =
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
                     , T.collapsableGroup
                         "Place \"rot\""
-                        [ user.checkModel 100 (checkPopCount 7)
+                        [ user.checkModel 100 (checkPopCount 11)
                         , dragTile 100 user (trayTile 4) (boardCell 7 6)
                         , dragTile 100 user (trayTile 3) (boardCell 7 8)
                         , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
@@ -208,8 +231,8 @@ tests normalConfig =
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
 
                     -- The other user opens the same match and joins it.
@@ -236,6 +259,100 @@ tests normalConfig =
                         , user.snapshotView 0 { name = "Place \"load\"" }
                         ]
                     , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Game ends when a player runs out of letters"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
+                        -- cells (see WordSpellingGame.boardX / boardY / cellSize), and the tray
+                        -- is directly below it. Tray tiles cap at 50px however small the tray, so
+                        -- these positions match the other desktop tests despite the 2-tile tray.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- Admin creates a match with a 2-tile tray and a bag of exactly four A tiles:
+                      -- admin draws two, the joining user draws the other two, and the bag is empty.
+                      -- (The bingo bonus is zeroed so the final score stays easy to read.)
+                      admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
+                    , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AAAA"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the same match and joins before the first move,
+                    -- emptying the bag.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                    -- Admin plays both tiles as "AA" through the centre square: (1+1)*2 = 4. Their
+                    -- tray is now empty with nothing left in the bag, so the game must end right
+                    -- away — the other user still holds two tiles and nobody has passed.
+                    , T.collapsableGroup
+                        "Place \"aa\""
+                        [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                        , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+                        ]
+                    , admin.checkView
+                        100
+                        -- The leaderboard renders each player's name and score suffix as separate
+                        -- elements (see WordSpellingGame.playerRow), so they're matched separately.
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText "Game over"
+                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText ": 4 (winner)"
+                            , Test.Html.Selector.exactText "Stevie Steve"
+                            , Test.Html.Selector.exactText ": 0"
+                            ]
+                        )
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText "Game over"
+                            , Test.Html.Selector.exactText "AT"
+                            , Test.Html.Selector.exactText ": 4 (winner)"
+                            , Test.Html.Selector.exactText "Stevie Steve"
+                            , Test.Html.Selector.exactText ": 0"
+                            ]
+                        )
+                    , admin.snapshotView 0 { name = "Game ended out of letters" }
                     ]
                 )
             ]
@@ -316,8 +433,8 @@ tests normalConfig =
                     , admin.click 0 (Dom.id "guild_showMembers")
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.Game_WordSpellingGame))
-                    , admin.input 100 (Dom.id "wsg_lettersInput") "aadeeiilmnnoorrsstt"
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , user.click 2000 (Dom.id "guild_showMembers")
                     , user.click 100 (Dom.id "guild_openDm_0")
@@ -370,7 +487,171 @@ tests normalConfig =
                     ]
                 )
             ]
+        , E2EHelper.startTest
+            "Word spelling game in a guild channel"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectFourUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin userA userB watcher ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- Same board geometry as the desktop DM test above: the games tab is laid
+                        -- out identically in guild channels.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- Everyone starts out viewing the guild's first channel. The admin creates a
+                      -- match whose bag contains only "a" tiles, so every tray is predictable no
+                      -- matter the draw order (and AA is a valid word). A is bumped from its
+                      -- default 1 point to 2 via the per-letter value input.
+                      admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "A")
+                    , admin.input 100 (Dom.id "wsg_letterValue_A") "2"
+                    , admin.click 100 (Dom.id "wsg_start")
+                    , T.checkState
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                    if List.Nonempty.length shared.players == 1 then
+                                        Ok ()
+
+                                    else
+                                        Err "Expected only the match creator to have joined"
+
+                                _ ->
+                                    Err "Expected one word spelling game in the guild channel"
+                        )
+                    , T.andThen
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( matchId, _ ) ] ->
+                                    [ -- The second and third members open the match from its message
+                                      -- card and join it. The fourth member only watches.
+                                      userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , watcher.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , T.checkState
+                                        100
+                                        (\state2 ->
+                                            case guildChannelGames state2.backend of
+                                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                                    if List.Nonempty.length shared.players == 3 then
+                                                        Ok ()
+
+                                                    else
+                                                        Err "Expected three players to have joined the match"
+
+                                                _ ->
+                                                    Err "Expected one word spelling game in the guild channel"
+                                        )
+
+                                    -- One move per player, in join order. Every tile is an "a", so
+                                    -- each move spells AA. The words staircase down-right, each new
+                                    -- domino touching the previous one at a corner, so every main
+                                    -- and cross word is exactly AA and no invalid AAA run appears.
+                                    , T.collapsableGroup
+                                        "Admin places AA across the centre"
+                                        [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                                        , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+                                        ]
+                                    , T.collapsableGroup
+                                        "Second player places AA one step down-right"
+                                        [ dragTile 100 userA (trayTile 0) (boardCell 8 8)
+                                        , dragTile 100 userA (trayTile 1) (boardCell 9 8)
+                                        , userA.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_8")
+                                        ]
+                                    , T.collapsableGroup
+                                        "Third player places AA another step down-right"
+                                        [ dragTile 100 userB (trayTile 0) (boardCell 9 9)
+                                        , dragTile 100 userB (trayTile 1) (boardCell 10 9)
+                                        , userB.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_9")
+                                        ]
+                                    , T.checkState
+                                        100
+                                        (\state2 ->
+                                            case guildChannelGames state2.backend of
+                                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                                    if SeqDict.size shared.board /= 6 then
+                                                        Err
+                                                            ("Expected 6 tiles on the board but got "
+                                                                ++ String.fromInt (SeqDict.size shared.board)
+                                                            )
+
+                                                    else if shared.turnCount /= 3 then
+                                                        Err "Expected it to be the creator's turn again after three moves"
+
+                                                    else
+                                                        Ok ()
+
+                                                _ ->
+                                                    Err "Expected one word spelling game in the guild channel"
+                                        )
+
+                                    -- The watcher (who never joined) sees all three players and the
+                                    -- moves as they happen. The admin's opening AA scores the custom
+                                    -- letter value: (2+2) doubled by the centre square = 8.
+                                    , watcher.checkView
+                                        100
+                                        (Test.Html.Query.has
+                                            [ Test.Html.Selector.exactText "AT"
+                                            , Test.Html.Selector.exactText "Stevie Steve"
+                                            , Test.Html.Selector.exactText "Joe"
+                                            , Test.Html.Selector.text "Recent moves"
+                                            , Test.Html.Selector.text "played AA (+8)"
+                                            ]
+                                        )
+                                    , userB.snapshotView 100 { name = "userB's perspective" }
+                                    , watcher.snapshotView 100 { name = "Spectator's perspective" }
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Expected one word spelling game in the guild channel") ]
+                        )
+                    ]
+                )
+            ]
         ]
+
+
+{-| All games stored in guild channels (as opposed to DM channels) on the backend.
+-}
+guildChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameData )
+guildChannelGames backend =
+    SeqDict.values backend.guilds
+        |> List.concatMap (\guild -> SeqDict.values guild.channels)
+        |> List.concatMap (\channel -> SeqDict.toList channel.games)
 
 
 {-| The message the audio port's JS side sends back after successfully loading a sound (see

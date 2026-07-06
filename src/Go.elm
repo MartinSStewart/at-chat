@@ -7,7 +7,6 @@ module Go exposing
     , GameMsg(..)
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , OutMsg(..)
     , Phase(..)
     , PublicGoMatchData
     , PublicGoMatchResponse
@@ -25,15 +24,21 @@ module Go exposing
     , boardSize9
     , currentPlayersTurn
     , deadStones
+    , dragEnd
+    , dragStart
     , foldActions
     , gameView
     , initGame
     , initSetup
+    , inputBackgroundColor
     , isLocalUsersTurn
+    , joinedUser
+    , numberInput
     , pressedKey
     , publicGoMatchUrl
     , setupView
     , spectatorView
+    , startOrCancel
     , updateAction
     , updateGame
     , updateSetup
@@ -55,6 +60,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (GamePublicId, Id, UserId)
+import List.Extra
 import MyUi
 import Quantity
 import SecretId exposing (SecretId)
@@ -75,16 +81,16 @@ type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
     , cache : Shared
-    , blackPlayer : FrontendUser
-    , whitePlayer : FrontendUser
+    , creatorUser : FrontendUser
+    , joinedUser : Maybe FrontendUser
     }
 
 
 type alias PublicGoMatchResponse =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
-    , blackPlayer : FrontendUser
-    , whitePlayer : FrontendUser
+    , creatorUser : FrontendUser
+    , joinedUser : Maybe FrontendUser
     }
 
 
@@ -127,6 +133,11 @@ type alias Shared =
     , lastAction : Maybe Time.Posix
     , timeLeft : Maybe { white : Duration, black : Duration }
     , history : List Snapshot
+    , joinedUserId : Maybe (Id UserId)
+
+    -- How many turn-consuming actions (stone placements and passes) have happened. The clocks
+    -- only start counting down once both players have moved, i.e. turnCount reaches 2.
+    , turnCount : Int
     }
 
 
@@ -186,8 +197,8 @@ type alias ValidatedSetup =
     , handicap : Int
     , komiHalfPoints : KomiHalfPoints
     , timeControl : Maybe TimeControl
-    , blackPlayer : Id UserId
-    , whitePlayer : Id UserId
+    , createdBy : Id UserId
+    , gameCreatorPlayingAs : Stone
     }
 
 
@@ -365,8 +376,8 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing, lastPlacedStone = Nothing }
 
 
-initGameState : ValidatedSetup -> Shared
-initGameState setup =
+initShared : ValidatedSetup -> Shared
+initShared setup =
     let
         positions : List ( Int, Int )
         positions =
@@ -402,6 +413,8 @@ initGameState setup =
     , whiteCaptures = 0
     , phase = Playing { previousPlayerPassed = False }
     , territoryMarks = Dict.empty
+    , joinedUserId = Nothing
+    , turnCount = 0
     }
 
 
@@ -427,6 +440,7 @@ type SetupMsg
     | SelectedSize SizeSelection
     | SelectedPlayingAs Stone
     | PressedStartGame
+    | PressedCancel
 
 
 {-| OpaqueVariants
@@ -437,6 +451,7 @@ type GameMsg
     | PressedDoneMarking
     | PressedAgree
     | PressedDisagree
+    | PressedJoinGame
     | SpectatorMsg SpectatorMsg
 
 
@@ -454,6 +469,7 @@ type Action
     | FinishedMarking
     | AcceptTerritory
     | RejectTerritory
+    | Joined (Id UserId)
 
 
 type alias ActionWithTime =
@@ -463,10 +479,6 @@ type alias ActionWithTime =
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action ActionWithTime
-
-
-type OutMsg
-    = OutLocalChange LocalChange
 
 
 otherStone : Stone -> Stone
@@ -607,7 +619,9 @@ actualTimeLeft : Time.Posix -> Stone -> Stone -> Duration -> Shared -> Duration
 actualTimeLeft currentTime player currentPlayer timeLeft model =
     case model.phase of
         Playing _ ->
-            if player == currentPlayer then
+            -- The clocks only start once both players have made a move, so that the creator's
+            -- opening move doesn't start the countdown for an opponent who hasn't joined yet.
+            if player == currentPlayer && model.turnCount >= 2 then
                 let
                     elapsedTime =
                         Duration.from (Maybe.withDefault currentTime model.lastAction) currentTime
@@ -640,6 +654,7 @@ applyIncrement currentTime setup mover model =
                             }
                                 |> Just
                         , lastAction = Just currentTime
+                        , turnCount = model.turnCount + 1
                     }
 
                 White ->
@@ -650,10 +665,11 @@ applyIncrement currentTime setup mover model =
                             }
                                 |> Just
                         , lastAction = Just currentTime
+                        , turnCount = model.turnCount + 1
                     }
 
         _ ->
-            { model | lastAction = Just currentTime }
+            { model | lastAction = Just currentTime, turnCount = model.turnCount + 1 }
 
 
 performPass : Time.Posix -> ValidatedSetup -> Shared -> Shared
@@ -1026,8 +1042,8 @@ stepForward model =
     }
 
 
-validateSetup : Id UserId -> Id UserId -> SetupModel -> Result String ValidatedSetup
-validateSetup creatorId otherPlayerId model =
+validateSetup : Id UserId -> SetupModel -> Result String ValidatedSetup
+validateSetup creatorId model =
     case selectedDimensions model of
         Ok ( width, height ) ->
             case parseHandicap model.handicapInput of
@@ -1045,22 +1061,13 @@ validateSetup creatorId otherPlayerId model =
                                     Err err
 
                                 Ok timeControl ->
-                                    let
-                                        ( blackPlayer, whitePlayer ) =
-                                            case model.gameCreatorPlayingAs of
-                                                Black ->
-                                                    ( creatorId, otherPlayerId )
-
-                                                White ->
-                                                    ( otherPlayerId, creatorId )
-                                    in
                                     { width = width
                                     , height = height
                                     , handicap = handicap
                                     , komiHalfPoints = komiHalfPoints
                                     , timeControl = timeControl
-                                    , blackPlayer = blackPlayer
-                                    , whitePlayer = whitePlayer
+                                    , createdBy = creatorId
+                                    , gameCreatorPlayingAs = model.gameCreatorPlayingAs
                                     }
                                         |> Ok
 
@@ -1071,48 +1078,64 @@ validateSetup creatorId otherPlayerId model =
 type SetupOrGame
     = Setup SetupModel
     | Game GameModel
+    | CancelSetup
+
+
+joinedUser : Array ActionWithTime -> Maybe (Id UserId)
+joinedUser array =
+    List.Extra.findMap
+        (\action ->
+            case action.change of
+                Joined userId ->
+                    Just userId
+
+                _ ->
+                    Nothing
+        )
+        (Array.toList array)
 
 
 updateSetup :
-    Time.Posix
-    -> Id UserId
-    -> Id UserId
+    Id UserId
     -> SetupMsg
     -> SetupModel
-    -> ( SetupOrGame, List OutMsg )
-updateSetup time creatorId otherPlayerId msg model =
+    -> ( SetupOrGame, Maybe ValidatedSetup )
+updateSetup creatorId msg model =
     case msg of
         ChangedWidthInput input ->
-            ( Setup { model | widthInput = input, error = Nothing }, [] )
+            ( Setup { model | widthInput = input, error = Nothing }, Nothing )
 
         ChangedHeightInput input ->
-            ( Setup { model | heightInput = input, error = Nothing }, [] )
+            ( Setup { model | heightInput = input, error = Nothing }, Nothing )
 
         ChangedHandicapInput input ->
-            ( Setup { model | handicapInput = input, error = Nothing }, [] )
+            ( Setup { model | handicapInput = input, error = Nothing }, Nothing )
 
         ChangedKomiInput input ->
-            ( Setup { model | komiInput = input, error = Nothing }, [] )
+            ( Setup { model | komiInput = input, error = Nothing }, Nothing )
 
         ChangedMainTimeInput input ->
-            ( Setup { model | mainTimeInput = input, error = Nothing }, [] )
+            ( Setup { model | mainTimeInput = input, error = Nothing }, Nothing )
 
         ChangedIncrementInput input ->
-            ( Setup { model | incrementInput = input, error = Nothing }, [] )
+            ( Setup { model | incrementInput = input, error = Nothing }, Nothing )
 
         SelectedSize selection ->
-            ( Setup { model | sizeSelection = selection, error = Nothing }, [] )
+            ( Setup { model | sizeSelection = selection, error = Nothing }, Nothing )
 
         SelectedPlayingAs stone ->
-            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, [] )
+            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Nothing )
 
         PressedStartGame ->
-            case validateSetup creatorId otherPlayerId model of
+            case validateSetup creatorId model of
                 Ok setup ->
-                    ( Game initGame, [ OutLocalChange (StartMatch time setup) ] )
+                    ( Game initGame, Just setup )
 
                 Err error ->
-                    ( Setup { model | error = Just error }, [] )
+                    ( Setup { model | error = Just error }, Nothing )
+
+        PressedCancel ->
+            ( CancelSetup, Nothing )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1141,7 +1164,7 @@ selectedDimensions model =
 
 foldActions : ValidatedSetup -> Array ActionWithTime -> Shared
 foldActions setup actions =
-    Array.foldl (updateAction setup) (initGameState setup) actions
+    Array.foldl (updateAction setup) (initShared setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
@@ -1210,6 +1233,14 @@ updateAction setup action model =
                     _ ->
                         model
 
+            Joined userId ->
+                case model.joinedUserId of
+                    Just _ ->
+                        model
+
+                    Nothing ->
+                        { model | joinedUserId = Just userId }
+
     else
         model
 
@@ -1243,12 +1274,12 @@ updateGame :
     -> ValidatedSetup
     -> Shared
     -> GameModel
-    -> ( GameModel, List OutMsg )
+    -> ( GameModel, Maybe ActionWithTime )
 updateGame currentTime currentUserId msg setup state model =
     case msg of
         PressedCell ( x, y ) ->
             if isViewingPast model then
-                ( jumpToLatest model, [] )
+                ( jumpToLatest model, Nothing )
 
             else
                 case state.phase of
@@ -1257,81 +1288,89 @@ updateGame currentTime currentUserId msg setup state model =
                             case tryPlace setup x y state of
                                 Ok _ ->
                                     ( { model | lastPlacedStone = Just currentTime }
-                                    , [ Action { time = currentTime, change = PlaceStone x y } |> OutLocalChange
-                                      ]
+                                    , Just { time = currentTime, change = PlaceStone x y }
                                     )
 
                                 Err error ->
-                                    ( { model | lastError = Just error }, [] )
+                                    ( { model | lastError = Just error }, Nothing )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     Marking ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( model
-                            , [ Action { time = currentTime, change = MarkTerritory x y } |> OutLocalChange ]
+                            , Just { time = currentTime, change = MarkTerritory x y }
                             )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     Confirming ->
-                        ( model, [] )
+                        ( model, Nothing )
 
                     Scored _ ->
-                        ( model, [] )
+                        ( model, Nothing )
 
         PressedPass ->
             if isViewingPast model then
-                ( jumpToLatest model, [] )
+                ( jumpToLatest model, Nothing )
 
             else
                 case ( state.phase, hasTimeToDoAction currentTime state ) of
                     ( Playing _, True ) ->
                         if isLocalUsersTurn currentUserId setup state then
                             ( model
-                            , [ Action { time = currentTime, change = PassTurn } |> OutLocalChange ]
+                            , Just { time = currentTime, change = PassTurn }
                             )
 
                         else
-                            ( model, [] )
+                            ( model, Nothing )
 
                     _ ->
-                        ( model, [] )
+                        ( model, Nothing )
 
         PressedDoneMarking ->
             case state.phase of
                 Marking ->
                     ( model
-                    , [ Action { time = currentTime, change = FinishedMarking } |> OutLocalChange ]
+                    , Just { time = currentTime, change = FinishedMarking }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedAgree ->
             case state.phase of
                 Confirming ->
                     ( model
-                    , [ Action { time = currentTime, change = AcceptTerritory } |> OutLocalChange ]
+                    , Just { time = currentTime, change = AcceptTerritory }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
 
         PressedDisagree ->
             case state.phase of
                 Confirming ->
                     ( model
-                    , [ Action { time = currentTime, change = RejectTerritory } |> OutLocalChange ]
+                    , Just { time = currentTime, change = RejectTerritory }
                     )
 
                 _ ->
-                    ( model, [] )
+                    ( model, Nothing )
+
+        PressedJoinGame ->
+            if state.joinedUserId == Nothing then
+                ( model
+                , Just { time = currentTime, change = Joined currentUserId }
+                )
+
+            else
+                ( model, Nothing )
 
         SpectatorMsg spectatorMsg ->
-            ( updateSpectator spectatorMsg state model, [] )
+            ( updateSpectator spectatorMsg state model, Nothing )
 
 
 updateSpectator : SpectatorMsg -> Shared -> GameModel -> GameModel
@@ -1394,83 +1433,155 @@ setupView playingAgainstSelf windowSize model =
              else
                 16
             )
-        , Ui.padding
-            (if isMobile then
-                12
-
-             else
-                24
-            )
+        , Ui.paddingXY 0 16
         , Ui.background MyUi.tabBackground
         ]
-        [ setupSection
-            "Board size"
-            (Ui.Input.chooseOne Ui.row
-                [ Ui.spacing 24, Ui.wrap ]
-                { onChange = SelectedSize
-                , selected = Just model.sizeSelection
-                , label = Ui.Input.labelHidden "go_boardSize"
-                , options =
-                    [ Ui.Input.option Standard9 (Ui.text "9 x 9")
-                    , Ui.Input.option Standard13 (Ui.text "13 x 13")
-                    , Ui.Input.option Standard19 (Ui.text "19 x 19")
-                    , Ui.Input.optionWith CustomSize
-                        (sizeOptionView
-                            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                [ Ui.text "Custom"
-                                , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
-                                , Ui.text "x"
-                                , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
-                                ]
-                            )
-                        )
-                    ]
-                }
-            )
-        , if playingAgainstSelf then
-            Ui.none
+        [ Ui.column
+            [ Ui.paddingXY
+                (if isMobile then
+                    8
 
-          else
-            setupSection
-                "Playing as"
-                (Ui.Input.chooseOne
-                    Ui.row
-                    [ Ui.spacing 24 ]
-                    { onChange = SelectedPlayingAs
-                    , selected = Just model.gameCreatorPlayingAs
+                 else
+                    16
+                )
+                0
+            , Ui.spacing 16
+            ]
+            [ setupSection
+                "Board size"
+                (Ui.Input.chooseOne Ui.row
+                    [ Ui.spacing 24, Ui.wrap ]
+                    { onChange = SelectedSize
+                    , selected = Just model.sizeSelection
                     , label = Ui.Input.labelHidden "go_boardSize"
                     , options =
-                        [ Ui.Input.option Black (Ui.text "Black")
-                        , Ui.Input.option White (Ui.text "White")
+                        [ Ui.Input.option Standard9 (Ui.text "9 x 9")
+                        , Ui.Input.option Standard13 (Ui.text "13 x 13")
+                        , Ui.Input.option Standard19 (Ui.text "19 x 19")
+                        , Ui.Input.optionWith CustomSize
+                            (sizeOptionView
+                                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                    [ Ui.text "Custom"
+                                    , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                                    , Ui.text "x"
+                                    , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                                    ]
+                                )
+                            )
                         ]
                     }
                 )
-        , setupSection
-            "Handicap (Black starts with this many stones; White moves first)"
-            (numberInput
-                { htmlId = "go_handicapInput"
-                , minValue = 0
-                , maxValue = maxHandicap
-                , value = model.handicapInput
-                , onChange = ChangedHandicapInput
-                }
-            )
-        , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
-        , setupSection
-            "Time control (set main time to 0 to disable)"
-            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
-                , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
-                ]
-            )
-        , case model.error of
-            Just err ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
-
-            Nothing ->
+            , if playingAgainstSelf then
                 Ui.none
-        , MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
+
+              else
+                setupSection
+                    "Playing as"
+                    (Ui.Input.chooseOne
+                        Ui.row
+                        [ Ui.spacing 24 ]
+                        { onChange = SelectedPlayingAs
+                        , selected = Just model.gameCreatorPlayingAs
+                        , label = Ui.Input.labelHidden "go_boardSize"
+                        , options =
+                            [ Ui.Input.option Black (Ui.text "Black")
+                            , Ui.Input.option White (Ui.text "White")
+                            ]
+                        }
+                    )
+            , setupSection
+                "Handicap (Black starts with this many stones; White moves first)"
+                (numberInput
+                    { htmlId = "go_handicapInput"
+                    , width = 60
+                    , minValue = 0
+                    , maxValue = maxHandicap
+                    , value = model.handicapInput
+                    , isReadonly = False
+                    , onChange = ChangedHandicapInput
+                    }
+                )
+            , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
+            , setupSection
+                "Time control (set main time to 0 to disable)"
+                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+                    [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
+                    , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
+                    ]
+                )
+            , case model.error of
+                Just err ->
+                    Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
+
+                Nothing ->
+                    Ui.none
+            ]
+        , startOrCancel "go" isMobile PressedCancel PressedStartGame
         ]
+
+
+startOrCancel : String -> Bool -> msg -> msg -> Element msg
+startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
+    let
+        cancel : Element msg
+        cancel =
+            Ui.el
+                [ Ui.Input.button pressedCancel
+                , Ui.id (domIdPrefix ++ "_cancel")
+                , Ui.background MyUi.secondaryGray
+                , MyUi.focusEffect
+                , Ui.border 1
+                , Ui.Font.color (Ui.rgb 0 0 0)
+                , Ui.contentCenterX
+                , Ui.rounded 4
+                , Ui.paddingXY
+                    16
+                    (if isMobile then
+                        16
+
+                     else
+                        8
+                    )
+                , Ui.Font.weight 500
+                ]
+                (Ui.text "Cancel")
+
+        start : Element msg
+        start =
+            Ui.el
+                [ Ui.Input.button pressedStart
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                , Ui.background MyUi.buttonBackground
+                , Ui.rounded 4
+                , Ui.id (domIdPrefix ++ "_start")
+                , Ui.paddingXY
+                    16
+                    (if isMobile then
+                        16
+
+                     else
+                        8
+                    )
+                , Ui.contentCenterX
+                , MyUi.focusEffect
+                , Ui.Font.weight 500
+                ]
+                (Ui.text "Start game")
+    in
+    if isMobile then
+        Ui.column
+            [ Ui.paddingXY 8 0, Ui.spacing 8 ]
+            [ cancel
+            , start
+            ]
+
+    else
+        Ui.row
+            [ Ui.paddingXY 16 0, Ui.spacing 16, Ui.width Ui.shrink ]
+            [ start
+            , cancel
+            ]
 
 
 sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg
@@ -1517,9 +1628,11 @@ dimensionInput : String -> String -> (String -> SetupMsg) -> Element SetupMsg
 dimensionInput htmlId value onChange =
     numberInput
         { htmlId = htmlId
+        , width = 60
         , minValue = minDimension
         , maxValue = maxDimension
         , value = value
+        , isReadonly = False
         , onChange = onChange
         }
 
@@ -1544,12 +1657,14 @@ komiInput value =
 
 numberInput :
     { htmlId : String
+    , width : Int
     , minValue : Int
     , maxValue : Int
     , value : String
-    , onChange : String -> SetupMsg
+    , isReadonly : Bool
+    , onChange : String -> msg
     }
-    -> Element SetupMsg
+    -> Element msg
 numberInput args =
     Html.input
         [ Html.Attributes.id args.htmlId
@@ -1557,15 +1672,31 @@ numberInput args =
         , Html.Attributes.min (String.fromInt args.minValue)
         , Html.Attributes.max (String.fromInt args.maxValue)
         , Html.Attributes.value args.value
+        , Html.Attributes.disabled args.isReadonly
+        , inputBackgroundColor args.isReadonly
         , Html.Attributes.style "font-size" "inherit"
-        , Html.Attributes.style "width" "50px"
-        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "color" "black"
+        , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
+        , Html.Attributes.style "padding" "4px"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
         , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "text-align" "right"
         , Html.Events.onInput args.onChange
         ]
         []
         |> Ui.html
+
+
+inputBackgroundColor : Bool -> Html.Attribute msg
+inputBackgroundColor isReadonly =
+    Html.Attributes.style
+        "background-color"
+        (if isReadonly then
+            "rgb(240,240,240)"
+
+         else
+            "white"
+        )
 
 
 timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
@@ -1616,7 +1747,31 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Time.Posix -> Maybe FrontendUser -> Maybe FrontendUser -> Shared -> ValidatedSetup -> Element msg
+getPlayers : ValidatedSetup -> Shared -> { black : Maybe (Id UserId), white : Maybe (Id UserId) }
+getPlayers setup shared =
+    case setup.gameCreatorPlayingAs of
+        White ->
+            { white = Just setup.createdBy, black = shared.joinedUserId }
+
+        Black ->
+            { black = Just setup.createdBy, white = shared.joinedUserId }
+
+
+getPlayersWithUser : PublicGoMatchData -> { black : Maybe ( Id UserId, FrontendUser ), white : Maybe ( Id UserId, FrontendUser ) }
+getPlayersWithUser data =
+    case data.setup.gameCreatorPlayingAs of
+        White ->
+            { white = Just ( data.setup.createdBy, data.creatorUser )
+            , black = Maybe.map2 Tuple.pair data.cache.joinedUserId data.joinedUser
+            }
+
+        Black ->
+            { black = Just ( data.setup.createdBy, data.creatorUser )
+            , white = Maybe.map2 Tuple.pair data.cache.joinedUserId data.joinedUser
+            }
+
+
+clockView : Time.Posix -> Maybe ( Id UserId, FrontendUser ) -> Maybe ( Id UserId, FrontendUser ) -> Shared -> ValidatedSetup -> Element msg
 clockView currentTime blackUser whiteUser state setup =
     let
         gameActive : Bool
@@ -1640,7 +1795,6 @@ clockView currentTime blackUser whiteUser state setup =
         , Ui.contentCenterX
         ]
         [ clockChip
-            setup.blackPlayer
             blackUser
             (case state.timeLeft of
                 Just timeLeft ->
@@ -1653,7 +1807,6 @@ clockView currentTime blackUser whiteUser state setup =
             Black
             (currentScore setup state Black)
         , clockChip
-            setup.whitePlayer
             whiteUser
             (case state.timeLeft of
                 Just timeLeft ->
@@ -1710,13 +1863,16 @@ currentPlayersTurn actions =
 
                 RejectTerritory ->
                     otherStone stone
+
+                Joined _ ->
+                    stone
         )
         Black
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
-clockChip userId maybeUser maybeTimeLeft isActive stone score =
+clockChip : Maybe ( Id UserId, FrontendUser ) -> Maybe Duration -> Bool -> Stone -> Float -> Element msg
+clockChip maybeUser maybeTimeLeft isActive stone score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -1756,11 +1912,15 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
             Ui.noAttr
         ]
         [ (case maybeUser of
-            Just user ->
+            Just ( userId, user ) ->
                 User.profileImageNoRounding userId user.icon
 
             Nothing ->
-                User.profileImageNoRounding userId Nothing
+                Ui.el
+                    [ Ui.width (Ui.px User.profileImageSize)
+                    , Ui.height (Ui.px User.profileImageSize)
+                    ]
+                    Ui.none
           )
             |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 }, Ui.width Ui.shrink ]
         , Ui.row
@@ -1793,18 +1953,22 @@ clockChip userId maybeUser maybeTimeLeft isActive stone score =
 
 
 isLocalUsersTurn : Id UserId -> ValidatedSetup -> Shared -> Bool
-isLocalUsersTurn currentUserId setup state =
-    case state.phase of
+isLocalUsersTurn currentUserId setup shared =
+    case shared.phase of
         Scored _ ->
             False
 
         _ ->
-            case state.currentPlayer of
+            let
+                players =
+                    getPlayers setup shared
+            in
+            case shared.currentPlayer of
                 Black ->
-                    setup.blackPlayer == currentUserId
+                    players.black == Just currentUserId
 
                 White ->
-                    setup.whitePlayer == currentUserId
+                    players.white == Just currentUserId
 
 
 spectatorView : Time.Posix -> Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
@@ -1817,6 +1981,9 @@ spectatorView currentTime windowSize data model =
         state : Shared
         state =
             data.cache
+
+        players =
+            getPlayersWithUser data
     in
     Ui.column
         [ Ui.spacing
@@ -1842,7 +2009,7 @@ spectatorView currentTime windowSize data model =
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView currentTime (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
+            [ clockView currentTime players.black players.white state data.setup
             , Ui.Lazy.lazy4 boardView windowSize data.setup state model |> Ui.map Spectator_PressedCell
             ]
         , if isMobile then
@@ -1861,11 +2028,14 @@ gameView :
     -> Shared
     -> GameModel
     -> Element GameMsg
-gameView currentTime windowSize localUser setup state model =
+gameView currentTime windowSize localUser setup shared model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        players =
+            getPlayers setup shared
     in
     Ui.column
         [ Ui.spacing
@@ -1887,9 +2057,14 @@ gameView currentTime windowSize localUser setup state model =
         ]
         [ Ui.column
             []
-            [ statusView currentTime state
-            , (if isLocalUsersTurn localUser.session.userId setup state && hasTimeToDoAction currentTime state then
-                case state.phase of
+            [ statusView currentTime shared
+            , (if shared.joinedUserId == Nothing && setup.createdBy /= localUser.session.userId then
+                Ui.el
+                    [ Ui.paddingXY 16 0 ]
+                    (MyUi.simpleButton (Dom.id "go_joinGame") PressedJoinGame (Ui.text "Join game"))
+
+               else if isLocalUsersTurn localUser.session.userId setup shared && hasTimeToDoAction currentTime shared then
+                case shared.phase of
                     Playing { previousPlayerPassed } ->
                         Ui.el
                             [ Ui.paddingXY 16 0 ]
@@ -1933,17 +2108,29 @@ gameView currentTime windowSize localUser setup state model =
             ]
             [ clockView
                 currentTime
-                (User.getUser setup.blackPlayer localUser)
-                (User.getUser setup.whitePlayer localUser)
-                state
+                (case players.black of
+                    Just userId ->
+                        User.getUser userId localUser |> Maybe.map (Tuple.pair userId)
+
+                    Nothing ->
+                        Nothing
+                )
+                (case players.white of
+                    Just userId ->
+                        User.getUser userId localUser |> Maybe.map (Tuple.pair userId)
+
+                    Nothing ->
+                        Nothing
+                )
+                shared
                 setup
-            , Ui.Lazy.lazy4 boardView windowSize setup state model |> Ui.map PressedCell
+            , Ui.Lazy.lazy4 boardView windowSize setup shared model |> Ui.map PressedCell
             ]
         , if isMobile then
             Ui.none
 
           else
-            Ui.Lazy.lazy2 historyView state model |> Ui.map SpectatorMsg
+            Ui.Lazy.lazy2 historyView shared model |> Ui.map SpectatorMsg
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -2373,3 +2560,13 @@ audio popSound model =
 
         Nothing ->
             Audio.silence
+
+
+dragStart : GameModel -> GameModel
+dragStart model =
+    model
+
+
+dragEnd : GameModel -> GameModel
+dragEnd model =
+    model

@@ -125,7 +125,8 @@ import Cloudflare
 import Date exposing (Date)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannelId, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannelId exposing (DmChannelId)
 import Drawing exposing (Drawing)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
@@ -134,6 +135,7 @@ import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
+import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -309,6 +311,7 @@ type alias BackendChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , games : SeqDict (Id ChannelMessageId) Game.BackendGameData
     }
 
 
@@ -335,6 +338,7 @@ type alias FrontendChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+    , games : SeqDict (Id ChannelMessageId) Game.MatchData
     }
 
 
@@ -433,13 +437,13 @@ callStartedText endedAt =
             "Call started"
 
 
-gameStartedText : Message.Game -> String
+gameStartedText : Message.GameType -> String
 gameStartedText game =
     case game of
-        Message.Game_Go ->
+        Message.GameType_Go ->
             "Go match started"
 
-        Message.Game_WordSpellingGame ->
+        Message.GameType_WordSpellingGame ->
             "Word Spelling Game started"
 
 
@@ -469,6 +473,9 @@ channelToFrontend threadRoute channel =
                     (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
             , dateDividerDrawings = channel.dateDividerDrawings
+            , games =
+                -- Guild matches never have public links (those are Go-only, and Go is DM-only)
+                SeqDict.map (\_ gameData -> Game.initMatchData gameData Nothing) channel.games
             }
                 |> Just
 
@@ -1128,6 +1135,7 @@ createGuild time userId guildName =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
               )
             ]
@@ -1161,6 +1169,7 @@ createChannel time userId channelName channelDescription guild =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
                 guild.channels
     }
@@ -1195,6 +1204,7 @@ createChannelFrontend time userId channelName channelDescription guild =
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty
                 , dateDividerDrawings = SeqDict.empty
+                , games = SeqDict.empty
                 }
                 guild.channels
     }
@@ -2490,7 +2500,7 @@ routeToViewing route local =
                 StopViewingChannel
 
         DmRoute { channelId, threadRoute } ->
-            case DmChannel.otherUserId local.localUser.session.userId channelId of
+            case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
                     if SeqDict.member otherUserId local.dmChannels then
                         case threadRoute of
