@@ -30,6 +30,7 @@ module Go exposing
     , gameView
     , initGame
     , initSetup
+    , inputBackgroundColor
     , isLocalUsersTurn
     , joinedUser
     , numberInput
@@ -1496,7 +1497,7 @@ setupView playingAgainstSelf windowSize model =
                     , minValue = 0
                     , maxValue = maxHandicap
                     , value = model.handicapInput
-                    , readonly = False
+                    , isReadonly = False
                     , onChange = ChangedHandicapInput
                     }
                 )
@@ -1631,7 +1632,7 @@ dimensionInput htmlId value onChange =
         , minValue = minDimension
         , maxValue = maxDimension
         , value = value
-        , readonly = False
+        , isReadonly = False
         , onChange = onChange
         }
 
@@ -1660,7 +1661,7 @@ numberInput :
     , minValue : Int
     , maxValue : Int
     , value : String
-    , readonly : Bool
+    , isReadonly : Bool
     , onChange : String -> msg
     }
     -> Element msg
@@ -1671,8 +1672,10 @@ numberInput args =
         , Html.Attributes.min (String.fromInt args.minValue)
         , Html.Attributes.max (String.fromInt args.maxValue)
         , Html.Attributes.value args.value
-        , Html.Attributes.disabled args.readonly
+        , Html.Attributes.disabled args.isReadonly
+        , inputBackgroundColor args.isReadonly
         , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "color" "black"
         , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
         , Html.Attributes.style "padding" "4px"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
@@ -1682,6 +1685,18 @@ numberInput args =
         ]
         []
         |> Ui.html
+
+
+inputBackgroundColor : Bool -> Html.Attribute msg
+inputBackgroundColor isReadonly =
+    Html.Attributes.style
+        "background-color"
+        (if isReadonly then
+            "rgb(240,240,240)"
+
+         else
+            "white"
+        )
 
 
 timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg

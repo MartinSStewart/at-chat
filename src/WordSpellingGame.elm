@@ -2865,16 +2865,21 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
         -- settings, so players can check what was configured for the match.
         settingsButton : Ui.Attribute GameMsg
         settingsButton =
-            MyUi.elButton
-                (Dom.id "wsg_settings")
-                PressedToggleSettings
-                [ Ui.width (Ui.px 24)
-                , Ui.alignRight
-                , Ui.move { x = -8, y = 8, z = 0 }
-                , Ui.Font.color MyUi.font1
-                , Html.Attributes.attribute "aria-label" "Game settings" |> Ui.htmlAttribute
-                ]
-                (Ui.html Icons.gear)
+            (if isMobile then
+                Ui.none
+
+             else
+                MyUi.elButton
+                    (Dom.id "wsg_settings")
+                    PressedToggleSettings
+                    [ Ui.width (Ui.px 24)
+                    , Ui.alignRight
+                    , Ui.move { x = -8, y = 8, z = 0 }
+                    , Ui.Font.color MyUi.font1
+                    , Html.Attributes.attribute "aria-label" "Game settings" |> Ui.htmlAttribute
+                    ]
+                    (Ui.html Icons.gear)
+            )
                 |> Ui.inFront
     in
     if model.showSettings then
@@ -4165,7 +4170,7 @@ doubleLetterCells =
 this doubles as the settings view of an active game (see the gear button in `gameView`).
 -}
 setupView : Coord CssPixels -> Bool -> SetupModel -> Element SetupMsg
-setupView windowSize readonly setup =
+setupView windowSize isReadonly setup =
     let
         isMobile : Bool
         isMobile =
@@ -4195,18 +4200,25 @@ setupView windowSize readonly setup =
         , Ui.heightMin 0
         , Ui.scrollable
         ]
-        [ Ui.column
-            [ Ui.spacing 8
+        [ Ui.el [ Ui.Font.size 24, padding ] (Ui.text "Word Spelling Game settings")
+        , Ui.column
+            [ Ui.spacing
+                (if isMobile then
+                    12
+
+                 else
+                    16
+                )
             , padding
             ]
             [ setupSection
                 (Ui.text "Time control")
                 (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                    [ timeInput readonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
-                    , timeInput readonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
+                    [ timeInput isReadonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
+                    , timeInput isReadonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
                     ]
                 )
-            , if readonly then
+            , if isReadonly then
                 setupSection (Ui.text "Dictionary") (Ui.text (languageToString setup.language))
 
               else
@@ -4234,7 +4246,7 @@ setupView windowSize readonly setup =
                     , minValue = -999
                     , maxValue = 999
                     , value = String.fromInt setup.fullTrayBonus
-                    , readonly = readonly
+                    , isReadonly = isReadonly
                     , onChange = ChangedFullTrayBonusInput
                     }
                 )
@@ -4251,7 +4263,7 @@ setupView windowSize readonly setup =
                     , minValue = 1
                     , maxValue = 10
                     , value = String.fromInt setup.traySize
-                    , readonly = readonly
+                    , isReadonly = isReadonly
                     , onChange = ChangedTraySizeInput
                     }
                 )
@@ -4262,7 +4274,7 @@ setupView windowSize readonly setup =
                     , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
                     ]
                 )
-                (lettersInput readonly setup.letters)
+                (lettersInput isReadonly setup.letters)
             , case distributionInputLetters setup.letters of
                 [] ->
                     Ui.none
@@ -4273,11 +4285,11 @@ setupView windowSize readonly setup =
                         (Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
                             (List.map
-                                (\char -> letterValueInput readonly char (letterValueInputFor char setup))
+                                (\char -> letterValueInput isReadonly char (letterValueInputFor char setup))
                                 distributionChars
                             )
                         )
-            , if readonly || (setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues) then
+            , if isReadonly || (setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues) then
                 Ui.none
 
               else
@@ -4289,7 +4301,7 @@ setupView windowSize readonly setup =
 
             Nothing ->
                 Ui.none
-        , if readonly then
+        , if isReadonly then
             Ui.none
 
           else
@@ -4320,7 +4332,7 @@ distributionInputLetters string =
 
 
 letterValueInput : Bool -> Char -> String -> Element SetupMsg
-letterValueInput readonly char value =
+letterValueInput isReadonly char value =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
@@ -4330,19 +4342,21 @@ letterValueInput readonly char value =
             , minValue = 0
             , maxValue = 999
             , value = value
-            , readonly = readonly
+            , isReadonly = isReadonly
             , onChange = ChangedLetterValue char
             }
         ]
 
 
 lettersInput : Bool -> String -> Element SetupMsg
-lettersInput readonly value =
+lettersInput isReadonly value =
     Html.textarea
         [ Html.Attributes.id "wsg_lettersInput"
         , Html.Attributes.value value
-        , Html.Attributes.disabled readonly
+        , Html.Attributes.disabled isReadonly
+        , Go.inputBackgroundColor isReadonly
         , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "color" "black"
         , Html.Attributes.style "font-family" "monospace"
         , Html.Attributes.style "width" "100%"
         , Html.Attributes.style "height" "100px"
@@ -4361,7 +4375,7 @@ lettersInput readonly value =
 
 
 timeInput : Bool -> String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
-timeInput readonly htmlId label value onChange =
+timeInput isReadonly htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
         , Html.input
@@ -4370,7 +4384,9 @@ timeInput readonly htmlId label value onChange =
             , Html.Attributes.min "0"
             , Html.Attributes.step "1"
             , Html.Attributes.value value
-            , Html.Attributes.disabled readonly
+            , Html.Attributes.disabled isReadonly
+            , Go.inputBackgroundColor isReadonly
+            , Html.Attributes.style "color" "black"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "width" "70px"
             , Html.Attributes.style "padding" "8px"
