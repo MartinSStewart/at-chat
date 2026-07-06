@@ -471,12 +471,47 @@ tests normalConfig =
             "Word spelling game in a guild channel"
             E2EHelper.startTime
             normalConfig
-            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            [ E2EHelper.connectFourUsersAndJoinNewGuild
                 E2EHelper.tallDesktopWindow
-                (\admin user ->
-                    [ -- Both users start out viewing the guild's first channel.
+                (\admin user2 user3 watcher ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- Same board geometry as the desktop DM test above: the games tab is laid
+                        -- out identically in guild channels.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- Everyone starts out viewing the guild's first channel. The admin creates a
+                      -- match whose bag contains only "a" tiles, so every tray is predictable no
+                      -- matter the draw order (and AA is a valid word).
                       admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "a")
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.checkState
                         100
@@ -497,24 +532,84 @@ tests normalConfig =
                         (\state ->
                             case guildChannelGames state.backend of
                                 [ ( matchId, _ ) ] ->
-                                    [ -- The other guild member opens the games tab, selects the match, and joins.
-                                      user.click 100 (Dom.id "guild_openGamesTab")
-                                    , user.input 100 (Dom.id "go_matchSwitcher") (String.fromInt (Id.toInt matchId))
-                                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    [ -- The second and third members open the match from its message
+                                      -- card and join it. The fourth member only watches.
+                                      user2.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , user2.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , user3.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , user3.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , watcher.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
                                     , T.checkState
                                         100
                                         (\state2 ->
                                             case guildChannelGames state2.backend of
                                                 [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
-                                                    if List.Nonempty.length shared.players == 2 then
+                                                    if List.Nonempty.length shared.players == 3 then
                                                         Ok ()
 
                                                     else
-                                                        Err "Expected both guild members to have joined the match"
+                                                        Err "Expected three players to have joined the match"
 
                                                 _ ->
                                                     Err "Expected one word spelling game in the guild channel"
                                         )
+
+                                    -- One move per player, in join order. Every tile is an "a", so
+                                    -- each move spells AA. The words staircase down-right, each new
+                                    -- domino touching the previous one at a corner, so every main
+                                    -- and cross word is exactly AA and no invalid AAA run appears.
+                                    , T.collapsableGroup
+                                        "Admin places AA across the centre"
+                                        [ dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                                        , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+                                        ]
+                                    , T.collapsableGroup
+                                        "Second player places AA one step down-right"
+                                        [ dragTile 100 user2 (trayTile 0) (boardCell 8 8)
+                                        , dragTile 100 user2 (trayTile 1) (boardCell 9 8)
+                                        , user2.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_8")
+                                        ]
+                                    , T.collapsableGroup
+                                        "Third player places AA another step down-right"
+                                        [ dragTile 100 user3 (trayTile 0) (boardCell 9 9)
+                                        , dragTile 100 user3 (trayTile 1) (boardCell 10 9)
+                                        , user3.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_9")
+                                        ]
+                                    , T.checkState
+                                        100
+                                        (\state2 ->
+                                            case guildChannelGames state2.backend of
+                                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                                    if SeqDict.size shared.board /= 6 then
+                                                        Err
+                                                            ("Expected 6 tiles on the board but got "
+                                                                ++ String.fromInt (SeqDict.size shared.board)
+                                                            )
+
+                                                    else if shared.turnCount /= 3 then
+                                                        Err "Expected it to be the creator's turn again after three moves"
+
+                                                    else
+                                                        Ok ()
+
+                                                _ ->
+                                                    Err "Expected one word spelling game in the guild channel"
+                                        )
+
+                                    -- The watcher (who never joined) sees all three players and the
+                                    -- moves as they happen.
+                                    , watcher.checkView
+                                        100
+                                        (Test.Html.Query.has
+                                            [ Test.Html.Selector.exactText "AT"
+                                            , Test.Html.Selector.exactText "Stevie Steve"
+                                            , Test.Html.Selector.exactText "Joe"
+                                            , Test.Html.Selector.text "Recent moves"
+                                            , Test.Html.Selector.text "played AA"
+                                            ]
+                                        )
+                                    , watcher.snapshotView 100 { name = "Watching a guild word spelling match" }
                                     ]
 
                                 _ ->
