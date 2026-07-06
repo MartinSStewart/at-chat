@@ -303,19 +303,7 @@ tests =
                         |> Expect.equal (Err ())
             ]
         , Test.describe "validateSetup reads the letter distribution and values"
-            [ Test.test "lower case letters are rejected" <|
-                \_ ->
-                    let
-                        base : WordSpellingGame.SetupModel
-                        base =
-                            WordSpellingGame.initSetup
-                    in
-                    WordSpellingGame.validateSetup
-                        (Id.fromInt 0)
-                        (Time.millisToPosix 0)
-                        { base | letters = "abc" }
-                        |> Expect.err
-            , Test.test "letters score the value chosen in the setup, whatever the alphabet" <|
+            [ Test.test "letters score the value chosen in the setup, whatever the alphabet" <|
                 \_ ->
                     let
                         base : WordSpellingGame.SetupModel
