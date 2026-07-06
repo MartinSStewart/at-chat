@@ -1,4 +1,4 @@
-module WordSpellingGameSwedish exposing (Dictionary, buildDictionary, dictionary)
+module WordSpellingGameSwedish exposing (Dictionary, dictionary)
 
 {-| Raw TWL06 (Tournament Word List 2006) Scrabble dictionary, one word per line.
 Source: <https://github.com/Torbacka/wordlist/blob/master/SAOL13_117224_Ord.txt>

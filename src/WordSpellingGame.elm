@@ -25,7 +25,6 @@ module WordSpellingGame exposing
     , ValidatedSetup
     , ZoomAnimation
     , ZoomState
-    , allLanguages
     , animatedTilePlacement
     , anyTileAnimating
     , audio

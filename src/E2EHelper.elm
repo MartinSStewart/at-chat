@@ -1336,23 +1336,23 @@ connectFourUsersAndJoinNewGuild windowSize continueFunc =
                                 sessionId1
                                 userEmail
                                 "Stevie Steve"
-                                (\user2 ->
+                                (\userA ->
                                     [ joinGuildFromInvite
                                         inviteUrl
                                         windowSize
                                         sessionId2
                                         joeEmail
                                         "Joe"
-                                        (\user3 ->
+                                        (\userB ->
                                             [ joinGuildFromInvite
                                                 inviteUrl
                                                 windowSize
                                                 sessionId4
                                                 wandaEmail
                                                 "Wanda"
-                                                (\user4 ->
+                                                (\userC ->
                                                     [ admin.click 100 (Dom.id "guild_openChannel_0")
-                                                    , T.group (continueFunc admin user2 user3 user4)
+                                                    , T.group (continueFunc admin userA userB userC)
                                                     ]
                                                 )
                                             ]

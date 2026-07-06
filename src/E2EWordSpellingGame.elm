@@ -478,7 +478,7 @@ tests normalConfig =
             normalConfig
             [ E2EHelper.connectFourUsersAndJoinNewGuild
                 E2EHelper.tallDesktopWindow
-                (\admin user2 user3 watcher ->
+                (\admin userA userB watcher ->
                     let
                         pointerEvent : ( Float, Float ) -> Json.Encode.Value
                         pointerEvent ( x, y ) =
@@ -541,10 +541,10 @@ tests normalConfig =
                                 [ ( matchId, _ ) ] ->
                                     [ -- The second and third members open the match from its message
                                       -- card and join it. The fourth member only watches.
-                                      user2.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
-                                    , user2.click 100 (Dom.id "wordSpellingGame_joinGame")
-                                    , user3.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
-                                    , user3.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                      userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_joinGame")
                                     , watcher.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
                                     , T.checkState
                                         100
@@ -573,15 +573,15 @@ tests normalConfig =
                                         ]
                                     , T.collapsableGroup
                                         "Second player places AA one step down-right"
-                                        [ dragTile 100 user2 (trayTile 0) (boardCell 8 8)
-                                        , dragTile 100 user2 (trayTile 1) (boardCell 9 8)
-                                        , user2.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_8")
+                                        [ dragTile 100 userA (trayTile 0) (boardCell 8 8)
+                                        , dragTile 100 userA (trayTile 1) (boardCell 9 8)
+                                        , userA.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_8")
                                         ]
                                     , T.collapsableGroup
                                         "Third player places AA another step down-right"
-                                        [ dragTile 100 user3 (trayTile 0) (boardCell 9 9)
-                                        , dragTile 100 user3 (trayTile 1) (boardCell 10 9)
-                                        , user3.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_9")
+                                        [ dragTile 100 userB (trayTile 0) (boardCell 9 9)
+                                        , dragTile 100 userB (trayTile 1) (boardCell 10 9)
+                                        , userB.click 100 (Dom.id "wordSpellingGame_submitLine_h_9_9")
                                         ]
                                     , T.checkState
                                         100
@@ -617,7 +617,7 @@ tests normalConfig =
                                             , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )
-                                    , user3.snapshotView 100 { name = "User3's perspective" }
+                                    , userB.snapshotView 100 { name = "userB's perspective" }
                                     , watcher.snapshotView 100 { name = "Spectator's perspective" }
                                     ]
 

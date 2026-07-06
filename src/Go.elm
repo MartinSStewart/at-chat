@@ -51,7 +51,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
-import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Dom as Dom
 import Effect.Time as Time
 import Env
 import Html

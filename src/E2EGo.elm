@@ -1,11 +1,4 @@
-module E2EGo exposing
-    ( goGuildMatchTest
-    , goMatchTest
-    , goTimeoutTest
-    , goTurnNotificationDotTest
-    , publicGoMatchViewTest
-    , tests
-    )
+module E2EGo exposing (tests)
 
 import Array exposing (Array)
 import E2EHelper
