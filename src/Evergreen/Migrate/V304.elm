@@ -8262,9 +8262,121 @@ migrate_WordSpellingGame_ValidatedSetup old =
     , fullTrayBonus = old.fullTrayBonus
     , createdBy = old.createdBy |> migrate_Id_Id
     , seed = old.seed
-    , letters =
-        old.letters
-            |> migrate_NonemptyDict_NonemptyDict migrate_WordSpellingGame_LetterOrWildcard
-                (\rec -> (Unimplemented {- Type changed from `Evergreen.V302.OneOrGreater.OneOrGreater` to `{}`. I need you to write this migration. -}))
+    , letters = old.letters |> migrate_WordSpellingGame_Letters
     , language = Evergreen.V304.WordSpellingGame.English
     }
+
+
+migrate_WordSpellingGame_Letters :
+    Evergreen.V302.NonemptyDict.NonemptyDict Evergreen.V302.WordSpellingGame.LetterOrWildcard Evergreen.V302.OneOrGreater.OneOrGreater
+    -> Evergreen.V304.NonemptyDict.NonemptyDict Evergreen.V304.WordSpellingGame.LetterOrWildcard { count : Evergreen.V304.OneOrGreater.OneOrGreater, value : Int }
+migrate_WordSpellingGame_Letters old =
+    case old of
+        Evergreen.V302.NonemptyDict.NonemptyDict p0 p1 p2 ->
+            Evergreen.V304.NonemptyDict.NonemptyDict
+                (p0 |> migrate_WordSpellingGame_LetterOrWildcard)
+                (migrate_WordSpellingGame_LetterCount p0 p1)
+                (p2
+                    |> SeqDict.toList
+                    |> List.map (\( k, v ) -> ( migrate_WordSpellingGame_LetterOrWildcard k, migrate_WordSpellingGame_LetterCount k v ))
+                    |> SeqDict.fromList
+                )
+
+
+migrate_WordSpellingGame_LetterCount :
+    Evergreen.V302.WordSpellingGame.LetterOrWildcard
+    -> Evergreen.V302.OneOrGreater.OneOrGreater
+    -> { count : Evergreen.V304.OneOrGreater.OneOrGreater, value : Int }
+migrate_WordSpellingGame_LetterCount letterOrWildcard count =
+    { count = count |> migrate_OneOrGreater_OneOrGreater
+    , value = englishScrabbleLetterValue letterOrWildcard
+    }
+
+
+{-| The standard English Scrabble letter scores. Blank tiles (wildcards) are worth 0.
+-}
+englishScrabbleLetterValue : Evergreen.V302.WordSpellingGame.LetterOrWildcard -> Int
+englishScrabbleLetterValue letterOrWildcard =
+    case letterOrWildcard of
+        Evergreen.V302.WordSpellingGame.Wildcard ->
+            0
+
+        Evergreen.V302.WordSpellingGame.Letter letter ->
+            case letter of
+                Evergreen.V302.WordSpellingGame.A ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.B ->
+                    3
+
+                Evergreen.V302.WordSpellingGame.C ->
+                    3
+
+                Evergreen.V302.WordSpellingGame.D ->
+                    2
+
+                Evergreen.V302.WordSpellingGame.E ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.F ->
+                    4
+
+                Evergreen.V302.WordSpellingGame.G ->
+                    2
+
+                Evergreen.V302.WordSpellingGame.H ->
+                    4
+
+                Evergreen.V302.WordSpellingGame.I ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.J ->
+                    8
+
+                Evergreen.V302.WordSpellingGame.K ->
+                    5
+
+                Evergreen.V302.WordSpellingGame.L ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.M ->
+                    3
+
+                Evergreen.V302.WordSpellingGame.N ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.O ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.P ->
+                    3
+
+                Evergreen.V302.WordSpellingGame.Q ->
+                    10
+
+                Evergreen.V302.WordSpellingGame.R ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.S ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.T ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.U ->
+                    1
+
+                Evergreen.V302.WordSpellingGame.V ->
+                    4
+
+                Evergreen.V302.WordSpellingGame.W ->
+                    4
+
+                Evergreen.V302.WordSpellingGame.X ->
+                    8
+
+                Evergreen.V302.WordSpellingGame.Y ->
+                    4
+
+                Evergreen.V302.WordSpellingGame.Z ->
+                    10
