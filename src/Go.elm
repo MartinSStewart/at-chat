@@ -1521,6 +1521,7 @@ setupView playingAgainstSelf windowSize model =
 startOrCancel : String -> Bool -> msg -> msg -> Element msg
 startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
     let
+        cancel : Element msg
         cancel =
             Ui.el
                 [ Ui.Input.button pressedCancel
@@ -1531,11 +1532,19 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                 , Ui.Font.color (Ui.rgb 0 0 0)
                 , Ui.contentCenterX
                 , Ui.rounded 4
-                , Ui.padding 16
+                , Ui.paddingXY
+                    16
+                    (if isMobile then
+                        16
+
+                     else
+                        8
+                    )
                 , Ui.Font.weight 500
                 ]
                 (Ui.text "Cancel")
 
+        start : Element msg
         start =
             Ui.el
                 [ Ui.Input.button pressedStart
@@ -1544,7 +1553,14 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                 , Ui.background MyUi.buttonBackground
                 , Ui.rounded 4
                 , Ui.id (domIdPrefix ++ "_start")
-                , Ui.padding 16
+                , Ui.paddingXY
+                    16
+                    (if isMobile then
+                        16
+
+                     else
+                        8
+                    )
                 , Ui.contentCenterX
                 , MyUi.focusEffect
                 , Ui.Font.weight 500
@@ -1654,7 +1670,7 @@ numberInput args =
         , Html.Attributes.value args.value
         , Html.Attributes.style "font-size" "inherit"
         , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
-        , Html.Attributes.style "padding" "4px 4px 4px 8px"
+        , Html.Attributes.style "padding" "4px"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
         , Html.Attributes.style "border-radius" "4px"
         , Html.Attributes.style "text-align" "right"

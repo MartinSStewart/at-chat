@@ -1640,7 +1640,14 @@ letterValueInputFor char setup =
             input
 
         Nothing ->
-            String.fromInt (defaultEnglishLetterValue char)
+            String.fromInt
+                (case setup.language of
+                    English ->
+                        defaultEnglishLetterValue char
+
+                    Swedish ->
+                        defaultSwedishLetterValue char
+                )
 
 
 parseTimeControl : SetupModel -> Result String TimeControl
@@ -4186,13 +4193,11 @@ lettersInput value =
         , Html.Attributes.style "font-size" "inherit"
         , Html.Attributes.style "font-family" "monospace"
         , Html.Attributes.style "width" "100%"
-        , Html.Attributes.style "min-width" "260px"
-        , Html.Attributes.style "height" "80px"
+        , Html.Attributes.style "height" "100px"
 
         -- Wrap at any character (letter wrap) rather than only at spaces, since the distribution is
         -- essentially one long word.
         , Html.Attributes.style "word-break" "break-all"
-        , Html.Attributes.style "white-space" "pre-wrap"
         , Html.Attributes.style "padding" "8px"
         , Html.Attributes.style "box-sizing" "border-box"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
