@@ -59,7 +59,6 @@ import Cloudflare
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
-import Dict exposing (Dict)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)

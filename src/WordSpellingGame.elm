@@ -4600,16 +4600,6 @@ defaultSwedishLetterValue char =
             1
 
 
-isLetter : LetterOrWildcard -> Bool
-isLetter letterOrWildcard =
-    case letterOrWildcard of
-        Letter _ ->
-            True
-
-        Wildcard ->
-            False
-
-
 audio : Audio.Source -> Id UserId -> Shared -> GameData -> Audio
 audio popSound currentUserId shared model =
     Audio.group
