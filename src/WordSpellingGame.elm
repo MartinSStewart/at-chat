@@ -233,7 +233,7 @@ initSetup =
     , traySize = 7
     , fullTrayBonus = defaultFullTrayBonus
     , error = Nothing
-    , letters = defaultEnglishLetters
+    , letters = defaultLetters English
     , letterValues = SeqDict.empty
     , language = English
     }
@@ -1069,7 +1069,9 @@ updateSetup time currentUserId msg setup =
             )
 
         PressedResetLetters ->
-            ( Setup { setup | letters = defaultEnglishLetters, letterValues = SeqDict.empty, error = Nothing }, Nothing )
+            ( Setup { setup | letters = defaultLetters setup.language, letterValues = SeqDict.empty, error = Nothing }
+            , Nothing
+            )
 
         PressedStartGame ->
             case validateSetup currentUserId time setup of
@@ -1083,17 +1085,7 @@ updateSetup time currentUserId msg setup =
             ( CancelSetup, Nothing )
 
         PressedLanguage language ->
-            ( Setup
-                { setup
-                    | language = language
-                    , letters =
-                        case language of
-                            English ->
-                                defaultEnglishLetters
-
-                            Swedish ->
-                                defaultSwedishLetters
-                }
+            ( Setup { setup | language = language, letters = defaultLetters language }
             , Nothing
             )
 
@@ -4131,7 +4123,7 @@ setupView windowSize setup =
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
                             (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
                         )
-            , if setup.letters == defaultEnglishLetters && SeqDict.isEmpty setup.letterValues then
+            , if setup.letters == defaultLetters setup.language && SeqDict.isEmpty setup.letterValues then
                 Ui.none
 
               else
@@ -4230,17 +4222,14 @@ timeInput htmlId label value onChange =
         ]
 
 
-{-| The standard Scrabble letter distribution: two wildcards (spaces) followed by each letter
-repeated as many times as it occurs in the bag.
--}
-defaultEnglishLetters : String
-defaultEnglishLetters =
-    "  AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ"
+defaultLetters : Language -> String
+defaultLetters language =
+    case language of
+        English ->
+            "  AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ"
 
-
-defaultSwedishLetters : String
-defaultSwedishLetters =
-    " AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
+        Swedish ->
+            " AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
 
 
 {-| How many points a letter tile scores, as configured in the game setup.
