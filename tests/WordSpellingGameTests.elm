@@ -121,7 +121,7 @@ tests =
                 \_ ->
                     -- C(3) A(1) T(1) on plain cells, no multipliers.
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( result.words, result.score ))
+                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "the main word plus every perpendicular cross word" <|
                 \_ ->
@@ -133,21 +133,21 @@ tests =
                             board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
                     WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( result.words, result.score ))
+                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
                         -- main "CAT" = 3+1+1 = 5, "CA" = 3+1 = 4, "AA" = 1+1 = 2, "TA" = 1+1 = 2
                         |> Expect.equal (Just ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "double-letter squares multiply only the placed letter" <|
                 \_ ->
                     -- (6,2) and (8,2) are double-letter squares, (7,2) is plain.
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 2 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( result.words, result.score ))
+                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
                         -- C 3*2 + A 1 + T 1*2 = 9
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 9 ))
             , Test.test "the centre square doubles the whole word" <|
                 \_ ->
                     -- (7,7) is the centre square (double word).
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 7, 7 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( result.words, result.score ))
+                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
                         -- (3+1+1) * 2 = 10
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 10 ))
             , Test.test "letters laid out skip over existing tiles" <|
@@ -159,13 +159,39 @@ tests =
                             board [ ( ( 7, 4 ), a ) ]
                     in
                     WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ t ])
-                        |> Maybe.map (\result -> ( result.words, result.score ))
+                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
                         -- C 3 (placed) + A 1 (existing) + T 1 (placed) = 5
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "running off the edge of the board is rejected" <|
                 \_ ->
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 14, 7 ) False a [ b ])
                         |> Expect.equal Nothing
+            , Test.test "each formed word reports how many of the newly placed tiles it uses" <|
+                \_ ->
+                    -- Existing "HELLO" runs along row 4. Placing T then O vertically at column 10
+                    -- forms the short main word "TO" (both tiles newly placed) and extends the
+                    -- existing row into the long cross word "HELLOO" (only the trailing O is new).
+                    -- The headline word is chosen by newly placed tiles, so "TO" wins over the
+                    -- longer "HELLOO".
+                    let
+                        existing : SeqDict ( Int, Int ) LetterOrWildcard
+                        existing =
+                            board
+                                [ ( ( 5, 4 ), h )
+                                , ( ( 6, 4 ), e )
+                                , ( ( 7, 4 ), l )
+                                , ( ( 8, 4 ), l )
+                                , ( ( 9, 4 ), o )
+                                ]
+                    in
+                    WordSpellingGame.placeWord testSetup existing (placedWord ( 10, 3 ) True t [ o ])
+                        |> Maybe.map .words
+                        |> Expect.equal
+                            (Just
+                                [ { letters = word [ t, o ], placedCount = 2 }
+                                , { letters = word [ h, e, l, l, o, o ], placedCount = 1 }
+                                ]
+                            )
             ]
         , Test.describe "validatePlacement checks formed words against the word list"
             [ Test.test "accepts a placement when the word exists" <|
@@ -175,7 +201,7 @@ tests =
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Result.map (\result -> ( result.words, result.score ))
+                        |> Result.map (\result -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Ok ( [ word [ c, a, t ] ], 5 ))
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
@@ -197,7 +223,7 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Result.map (\result -> ( result.words, result.score ))
+                        |> Result.map (\result -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Ok ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "rejects when a cross word does not exist even if the main word does" <|
                 \_ ->
@@ -227,7 +253,7 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
-                        |> Result.map (\result -> result.words)
+                        |> Result.map (\result -> List.map .letters result.words)
                         |> Expect.equal (Ok [ [ Letter c, Wildcard, Letter t ] ])
             , Test.test "a wildcard is rejected when no letter completes a word" <|
                 \_ ->
@@ -257,7 +283,7 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
-                        |> Result.map (\result -> result.words)
+                        |> Result.map (\result -> List.map .letters result.words)
                         |> Expect.equal (Ok [ [ Wildcard, Letter a, Wildcard ] ])
             , Test.test "a word with many wildcards is matched by scanning the dictionary" <|
                 \_ ->
@@ -278,7 +304,7 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
-                        |> Result.map (\result -> result.words)
+                        |> Result.map (\result -> List.map .letters result.words)
                         |> Expect.equal
                             (Ok [ [ Wildcard, Wildcard, Letter a, Wildcard, Wildcard ] ])
             , Test.test "a word with many wildcards is rejected when nothing of that length fits" <|
