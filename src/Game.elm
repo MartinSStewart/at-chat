@@ -378,6 +378,9 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
 
                 Go.Game gameModel ->
                     { model | startedGames = SeqDict.insert newMatchId (GoModel_Game gameModel) model.startedGames }
+
+                Go.CancelSetup ->
+                    { model | setup = GameSelect }
             , case maybeStartMatch of
                 Just setup ->
                     -- A brand new match takes the next message id, then we navigate to it.
@@ -446,6 +449,9 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
 
                 WordSpellingGame.Game game ->
                     { model | startedGames = SeqDict.insert newMatchId (WordSpellingGame_Game game) model.startedGames }
+
+                WordSpellingGame.CancelSetup ->
+                    { model | setup = GameSelect }
             , case maybeSetup of
                 Just setup ->
                     -- A brand new match takes the next message id, then we navigate to it.

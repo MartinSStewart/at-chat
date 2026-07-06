@@ -159,6 +159,7 @@ type SetupMsg
     | ChangedLetterValue Char String
     | PressedResetLetters
     | PressedStartGame
+    | PressedCancel
 
 
 {-| OpaqueVariants
@@ -996,6 +997,7 @@ removeFromTray letterOrWildcard tray =
 type SetupOrGame
     = Setup SetupModel
     | Game GameData
+    | CancelSetup
 
 
 updateSetup :
@@ -1048,6 +1050,9 @@ updateSetup time currentUserId msg setup =
 
                 Err error ->
                     ( Setup { setup | error = Just error }, Nothing )
+
+        PressedCancel ->
+            ( CancelSetup, Nothing )
 
 
 updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, Maybe ActionWithTime )
@@ -4081,7 +4086,11 @@ setupView windowSize setup =
 
             Nothing ->
                 Ui.none
-        , MyUi.simpleButton (Dom.id "wsg_start") PressedStartGame (Ui.text "Start game")
+        , Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ MyUi.simpleButton (Dom.id "wsg_start") PressedStartGame (Ui.text "Start game")
+            , MyUi.simpleButton (Dom.id "wsg_cancel") PressedCancel (Ui.text "Cancel")
+            ]
         ]
 
 

@@ -437,6 +437,7 @@ type SetupMsg
     | SelectedSize SizeSelection
     | SelectedPlayingAs Stone
     | PressedStartGame
+    | PressedCancel
 
 
 {-| OpaqueVariants
@@ -1074,6 +1075,7 @@ validateSetup creatorId model =
 type SetupOrGame
     = Setup SetupModel
     | Game GameModel
+    | CancelSetup
 
 
 joinedUser : Array ActionWithTime -> Maybe (Id UserId)
@@ -1128,6 +1130,9 @@ updateSetup creatorId msg model =
 
                 Err error ->
                     ( Setup { model | error = Just error }, Nothing )
+
+        PressedCancel ->
+            ( CancelSetup, Nothing )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1500,7 +1505,11 @@ setupView playingAgainstSelf windowSize model =
 
             Nothing ->
                 Ui.none
-        , MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
+        , Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
+            , MyUi.simpleButton (Dom.id "go_cancel") PressedCancel (Ui.text "Cancel")
+            ]
         ]
 
 

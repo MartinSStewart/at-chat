@@ -77,6 +77,11 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+
+                    -- Cancel from the setup screen returns to the game select view.
+                    , admin.click 100 (Dom.id "wsg_cancel")
+                    , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.collapsableGroup

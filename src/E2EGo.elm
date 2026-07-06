@@ -47,6 +47,11 @@ tests normalConfig =
                     , admin.click 1000 (Dom.id "guild_friendLabel_0")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id "game_select_Go")
+
+                    -- Cancel from the setup screen returns to the game select view.
+                    , admin.click 100 (Dom.id "go_cancel")
+                    , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_start" ])
+                    , admin.click 100 (Dom.id "game_select_Go")
                     , admin.click 100 (Dom.id "go_start")
                     , admin.click 100 (Dom.id "go_cell_4_4")
                     , admin.click 100 (Dom.id "go_cell_5_4")
