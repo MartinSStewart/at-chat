@@ -4022,6 +4022,7 @@ setupView windowSize setup =
                 )
                 (numberInput
                     { htmlId = "wsg_fullTrayBonusInput"
+                    , width = 60
                     , minValue = -999
                     , maxValue = 999
                     , value = String.fromInt setup.fullTrayBonus
@@ -4037,8 +4038,9 @@ setupView windowSize setup =
                 )
                 (numberInput
                     { htmlId = "wsg_traySizeInput"
+                    , width = 60
                     , minValue = 1
-                    , maxValue = 20
+                    , maxValue = 10
                     , value = String.fromInt setup.traySize
                     , onChange = ChangedTraySizeInput
                     }
@@ -4050,15 +4052,7 @@ setupView windowSize setup =
                     , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
                     ]
                 )
-                (Ui.column [ Ui.spacing 8, Ui.width Ui.shrink ]
-                    [ lettersInput setup.letters
-                    , if setup.letters == defaultLetters && SeqDict.isEmpty setup.letterValues then
-                        Ui.none
-
-                      else
-                        MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
-                    ]
-                )
+                (lettersInput setup.letters)
             , case distributionInputLetters setup.letters of
                 [] ->
                     Ui.none
@@ -4075,6 +4069,11 @@ setupView windowSize setup =
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
                             (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
                         )
+            , if setup.letters == defaultLetters && SeqDict.isEmpty setup.letterValues then
+                Ui.none
+
+              else
+                MyUi.simpleButton (Dom.id "wsg_resetLetters") PressedResetLetters (Ui.text "Reset to default")
             ]
         , case setup.error of
             Just error ->
@@ -4097,6 +4096,7 @@ setupSection title content =
 
 numberInput :
     { htmlId : String
+    , width : Int
     , minValue : Int
     , maxValue : Int
     , value : String
@@ -4111,10 +4111,11 @@ numberInput args =
         , Html.Attributes.max (String.fromInt args.maxValue)
         , Html.Attributes.value args.value
         , Html.Attributes.style "font-size" "inherit"
-        , Html.Attributes.style "width" "50px"
-        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
+        , Html.Attributes.style "padding" "4px 4px 4px 8px"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
         , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "text-align" "right"
         , Html.Events.onInput args.onChange
         ]
         []
@@ -4141,6 +4142,7 @@ letterValueInput char value =
         [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
         , numberInput
             { htmlId = "wsg_letterValue_" ++ String.fromChar char
+            , width = 44
             , minValue = 0
             , maxValue = 999
             , value = value
