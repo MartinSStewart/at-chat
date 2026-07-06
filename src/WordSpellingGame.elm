@@ -6,6 +6,7 @@ module WordSpellingGame exposing
     , GameData
     , GameMsg(..)
     , IsValid(..)
+    , Language(..)
     , Letter(..)
     , LetterId
     , LetterOrWildcard(..)
@@ -24,6 +25,7 @@ module WordSpellingGame exposing
     , ValidatedSetup
     , ZoomAnimation
     , ZoomState
+    , allLanguages
     , animatedTilePlacement
     , anyTileAnimating
     , audio
@@ -92,7 +94,7 @@ import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
-import WordSpellingGameList exposing (Dictionary)
+import WordSpellingGameSwedish exposing (Dictionary)
 
 
 {-| OpaqueVariants
@@ -117,6 +119,28 @@ type alias GameData =
 
 type alias ZoomAnimation =
     { start : Time.Posix, from : ZoomState }
+
+
+type Language
+    = English
+    | Swedish
+
+
+allLanguages : List Language
+allLanguages =
+    [ English
+    , Swedish
+    ]
+
+
+languageToString : Language -> String
+languageToString language =
+    case language of
+        English ->
+            "English (TWL06)"
+
+        Swedish ->
+            "Swedish (SAOl13)"
 
 
 {-| A resolution-independent description of the board zoom: `amount` runs 0 (no zoom, whole board
@@ -160,6 +184,7 @@ type SetupMsg
     | PressedResetLetters
     | PressedStartGame
     | PressedCancel
+    | PressedLanguage Language
 
 
 {-| OpaqueVariants
@@ -182,6 +207,7 @@ type alias SetupModel =
     -- The value input for each letter in the distribution, keyed by the letter's character.
     -- Letters without an entry fall back to `defaultLetterValue`.
     , letterValues : SeqDict Char String
+    , language : Language
     }
 
 
@@ -192,6 +218,7 @@ type alias ValidatedSetup =
     , createdBy : Id UserId
     , seed : Int
     , letters : NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int }
+    , language : Language
     }
 
 
@@ -206,8 +233,9 @@ initSetup =
     , traySize = 7
     , fullTrayBonus = defaultFullTrayBonus
     , error = Nothing
-    , letters = defaultLetters
+    , letters = defaultEnglishLetters
     , letterValues = SeqDict.empty
+    , language = English
     }
 
 
@@ -1041,7 +1069,7 @@ updateSetup time currentUserId msg setup =
             )
 
         PressedResetLetters ->
-            ( Setup { setup | letters = defaultLetters, letterValues = SeqDict.empty, error = Nothing }, Nothing )
+            ( Setup { setup | letters = defaultEnglishLetters, letterValues = SeqDict.empty, error = Nothing }, Nothing )
 
         PressedStartGame ->
             case validateSetup currentUserId time setup of
@@ -1053,6 +1081,21 @@ updateSetup time currentUserId msg setup =
 
         PressedCancel ->
             ( CancelSetup, Nothing )
+
+        PressedLanguage language ->
+            ( Setup
+                { setup
+                    | language = language
+                    , letters =
+                        case language of
+                            English ->
+                                defaultEnglishLetters
+
+                            Swedish ->
+                                defaultSwedishLetters
+                }
+            , Nothing
+            )
 
 
 updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, Maybe ActionWithTime )
@@ -1534,6 +1577,7 @@ validateSetup createdBy time setup =
                                 -- Round the time to the nearest 10 seconds so that small timing changes don't break an end-to-end test
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
                             , letters = letters
+                            , language = setup.language
                             }
                                 |> Ok
 
@@ -1596,7 +1640,7 @@ letterValueInputFor char setup =
             input
 
         Nothing ->
-            String.fromInt (defaultLetterValue char)
+            String.fromInt (defaultEnglishLetterValue char)
 
 
 parseTimeControl : SetupModel -> Result String TimeControl
@@ -3994,26 +4038,37 @@ setupView windowSize setup =
              else
                 16
             )
-        , Ui.paddingXY
-            0
-            (if isMobile then
-                12
-
-             else
-                24
-            )
+        , Ui.paddingXY 0 16
         , Ui.background MyUi.tabBackground
         , Ui.height (Ui.px (tabBodyHeight windowSize OneOrGreater.seven))
         , Ui.heightMin 0
         , Ui.scrollable
         ]
-        [ setupSection
-            (Ui.text "Time control")
-            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
-                , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
-                ]
-            )
+        [ Ui.column
+            [ Ui.spacing 8
+            , Ui.paddingXY
+                (if isMobile then
+                    8
+
+                 else
+                    16
+                )
+                0
+            ]
+            [ setupSection
+                (Ui.text "Time control")
+                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+                    [ timeInput "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
+                    , timeInput "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
+                    ]
+                )
+            , MyUi.radioColumn
+                (Dom.id "ws_language")
+                PressedLanguage
+                (Just setup.language)
+                "Dictionary"
+                (List.map (\language -> ( language, languageToString language )) allLanguages)
+            ]
         , MyUi.container
             MyUi.background1
             isMobile
@@ -4025,7 +4080,7 @@ setupView windowSize setup =
                     , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
                     ]
                 )
-                (numberInput
+                (Go.numberInput
                     { htmlId = "wsg_fullTrayBonusInput"
                     , width = 60
                     , minValue = -999
@@ -4038,10 +4093,10 @@ setupView windowSize setup =
                 (Ui.row
                     []
                     [ Ui.text "Tray size"
-                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters each player has)")
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters you get)")
                     ]
                 )
-                (numberInput
+                (Go.numberInput
                     { htmlId = "wsg_traySizeInput"
                     , width = 60
                     , minValue = 1
@@ -4064,17 +4119,12 @@ setupView windowSize setup =
 
                 distributionChars ->
                     setupSection
-                        (Ui.row
-                            []
-                            [ Ui.text "Letter values"
-                            , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for each letter)")
-                            ]
-                        )
+                        (Ui.text "Letter values")
                         (Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
                             (List.map (\char -> letterValueInput char (letterValueInputFor char setup)) distributionChars)
                         )
-            , if setup.letters == defaultLetters && SeqDict.isEmpty setup.letterValues then
+            , if setup.letters == defaultEnglishLetters && SeqDict.isEmpty setup.letterValues then
                 Ui.none
 
               else
@@ -4086,49 +4136,17 @@ setupView windowSize setup =
 
             Nothing ->
                 Ui.none
-        , Ui.row
-            [ Ui.spacing 8, Ui.width Ui.shrink ]
-            [ MyUi.simpleButton (Dom.id "wsg_start") PressedStartGame (Ui.text "Start game")
-            , MyUi.simpleButton (Dom.id "wsg_cancel") PressedCancel (Ui.text "Cancel")
-            ]
+        , Go.startOrCancel "wsg" isMobile PressedCancel PressedStartGame
         ]
 
 
 setupSection : Element SetupMsg -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
-        [ Ui.spacing 8, MyUi.prewrap ]
+        [ Ui.spacing 2, MyUi.prewrap ]
         [ Ui.el [ Ui.Font.weight 600 ] title
         , content
         ]
-
-
-numberInput :
-    { htmlId : String
-    , width : Int
-    , minValue : Int
-    , maxValue : Int
-    , value : String
-    , onChange : String -> SetupMsg
-    }
-    -> Element SetupMsg
-numberInput args =
-    Html.input
-        [ Html.Attributes.id args.htmlId
-        , Html.Attributes.type_ "number"
-        , Html.Attributes.min (String.fromInt args.minValue)
-        , Html.Attributes.max (String.fromInt args.maxValue)
-        , Html.Attributes.value args.value
-        , Html.Attributes.style "font-size" "inherit"
-        , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
-        , Html.Attributes.style "padding" "4px 4px 4px 8px"
-        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Attributes.style "text-align" "right"
-        , Html.Events.onInput args.onChange
-        ]
-        []
-        |> Ui.html
 
 
 {-| The distinct letters in the distribution input, sorted, one value input each. Uses the same
@@ -4149,7 +4167,7 @@ letterValueInput char value =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
-        , numberInput
+        , Go.numberInput
             { htmlId = "wsg_letterValue_" ++ String.fromChar char
             , width = 44
             , minValue = 0
@@ -4210,9 +4228,14 @@ timeInput htmlId label value onChange =
 {-| The standard Scrabble letter distribution: two wildcards (spaces) followed by each letter
 repeated as many times as it occurs in the bag.
 -}
-defaultLetters : String
-defaultLetters =
+defaultEnglishLetters : String
+defaultEnglishLetters =
     "  AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ"
+
+
+defaultSwedishLetters : String
+defaultSwedishLetters =
+    " AAAAAAAAABBCCDDDDDDDEEEEEEEEFFGGGGHHHIIIIIIJKKKLLLLLLLMMMNNNNNNNOOOOOPPPQRRRRRRRRRSSSSSSSSTTTTTTTUUUVVXYYZÅÅÄÄÖÖ"
 
 
 {-| How many points a letter tile scores, as configured in the game setup.
@@ -4227,11 +4250,8 @@ letterValue setup letter =
             0
 
 
-{-| The default value for a letter when it first appears in the distribution: the standard
-Scrabble score for A-Z, and 1 for any other character (the setup lets the user adjust it).
--}
-defaultLetterValue : Char -> Int
-defaultLetterValue char =
+defaultEnglishLetterValue : Char -> Int
+defaultEnglishLetterValue char =
     case char of
         'A' ->
             1
@@ -4310,6 +4330,100 @@ defaultLetterValue char =
 
         'Z' ->
             10
+
+        _ ->
+            1
+
+
+defaultSwedishLetterValue : Char -> Int
+defaultSwedishLetterValue char =
+    case char of
+        'A' ->
+            1
+
+        'B' ->
+            4
+
+        'C' ->
+            8
+
+        'D' ->
+            1
+
+        'E' ->
+            1
+
+        'F' ->
+            4
+
+        'G' ->
+            2
+
+        'H' ->
+            3
+
+        'I' ->
+            1
+
+        'J' ->
+            8
+
+        'K' ->
+            3
+
+        'L' ->
+            1
+
+        'M' ->
+            3
+
+        'N' ->
+            1
+
+        'O' ->
+            2
+
+        'P' ->
+            3
+
+        'Q' ->
+            10
+
+        'R' ->
+            1
+
+        'S' ->
+            1
+
+        'T' ->
+            1
+
+        'U' ->
+            3
+
+        'V' ->
+            4
+
+        'W' ->
+            10
+
+        'X' ->
+            10
+
+        'Y' ->
+            8
+
+        'Z' ->
+            10
+
+        'Å' ->
+            4
+
+        'Ä' ->
+            4
+
+        'Ö' ->
+            4
 
         _ ->
             1

@@ -32,10 +32,12 @@ module Go exposing
     , initSetup
     , isLocalUsersTurn
     , joinedUser
+    , numberInput
     , pressedKey
     , publicGoMatchUrl
     , setupView
     , spectatorView
+    , startOrCancel
     , updateAction
     , updateGame
     , updateSetup
@@ -49,7 +51,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Env
 import Html
@@ -1430,87 +1432,138 @@ setupView playingAgainstSelf windowSize model =
              else
                 16
             )
-        , Ui.padding
-            (if isMobile then
-                12
-
-             else
-                24
-            )
+        , Ui.paddingXY 0 16
         , Ui.background MyUi.tabBackground
         ]
-        [ setupSection
-            "Board size"
-            (Ui.Input.chooseOne Ui.row
-                [ Ui.spacing 24, Ui.wrap ]
-                { onChange = SelectedSize
-                , selected = Just model.sizeSelection
-                , label = Ui.Input.labelHidden "go_boardSize"
-                , options =
-                    [ Ui.Input.option Standard9 (Ui.text "9 x 9")
-                    , Ui.Input.option Standard13 (Ui.text "13 x 13")
-                    , Ui.Input.option Standard19 (Ui.text "19 x 19")
-                    , Ui.Input.optionWith CustomSize
-                        (sizeOptionView
-                            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                [ Ui.text "Custom"
-                                , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
-                                , Ui.text "x"
-                                , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
-                                ]
-                            )
-                        )
-                    ]
-                }
-            )
-        , if playingAgainstSelf then
-            Ui.none
+        [ Ui.column
+            [ Ui.paddingXY
+                (if isMobile then
+                    8
 
-          else
-            setupSection
-                "Playing as"
-                (Ui.Input.chooseOne
-                    Ui.row
-                    [ Ui.spacing 24 ]
-                    { onChange = SelectedPlayingAs
-                    , selected = Just model.gameCreatorPlayingAs
+                 else
+                    16
+                )
+                0
+            , Ui.spacing 16
+            ]
+            [ setupSection
+                "Board size"
+                (Ui.Input.chooseOne Ui.row
+                    [ Ui.spacing 24, Ui.wrap ]
+                    { onChange = SelectedSize
+                    , selected = Just model.sizeSelection
                     , label = Ui.Input.labelHidden "go_boardSize"
                     , options =
-                        [ Ui.Input.option Black (Ui.text "Black")
-                        , Ui.Input.option White (Ui.text "White")
+                        [ Ui.Input.option Standard9 (Ui.text "9 x 9")
+                        , Ui.Input.option Standard13 (Ui.text "13 x 13")
+                        , Ui.Input.option Standard19 (Ui.text "19 x 19")
+                        , Ui.Input.optionWith CustomSize
+                            (sizeOptionView
+                                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                    [ Ui.text "Custom"
+                                    , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                                    , Ui.text "x"
+                                    , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                                    ]
+                                )
+                            )
                         ]
                     }
                 )
-        , setupSection
-            "Handicap (Black starts with this many stones; White moves first)"
-            (numberInput
-                { htmlId = "go_handicapInput"
-                , minValue = 0
-                , maxValue = maxHandicap
-                , value = model.handicapInput
-                , onChange = ChangedHandicapInput
-                }
-            )
-        , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
-        , setupSection
-            "Time control (set main time to 0 to disable)"
-            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
-                , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
-                ]
-            )
-        , case model.error of
-            Just err ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
-
-            Nothing ->
+            , if playingAgainstSelf then
                 Ui.none
-        , Ui.row
-            [ Ui.spacing 8, Ui.width Ui.shrink ]
-            [ MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
-            , MyUi.simpleButton (Dom.id "go_cancel") PressedCancel (Ui.text "Cancel")
+
+              else
+                setupSection
+                    "Playing as"
+                    (Ui.Input.chooseOne
+                        Ui.row
+                        [ Ui.spacing 24 ]
+                        { onChange = SelectedPlayingAs
+                        , selected = Just model.gameCreatorPlayingAs
+                        , label = Ui.Input.labelHidden "go_boardSize"
+                        , options =
+                            [ Ui.Input.option Black (Ui.text "Black")
+                            , Ui.Input.option White (Ui.text "White")
+                            ]
+                        }
+                    )
+            , setupSection
+                "Handicap (Black starts with this many stones; White moves first)"
+                (numberInput
+                    { htmlId = "go_handicapInput"
+                    , width = 60
+                    , minValue = 0
+                    , maxValue = maxHandicap
+                    , value = model.handicapInput
+                    , onChange = ChangedHandicapInput
+                    }
+                )
+            , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
+            , setupSection
+                "Time control (set main time to 0 to disable)"
+                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+                    [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
+                    , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
+                    ]
+                )
+            , case model.error of
+                Just err ->
+                    Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
+
+                Nothing ->
+                    Ui.none
             ]
+        , startOrCancel "go" isMobile PressedCancel PressedStartGame
         ]
+
+
+startOrCancel : String -> Bool -> msg -> msg -> Element msg
+startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
+    let
+        cancel =
+            Ui.el
+                [ Ui.Input.button pressedCancel
+                , Ui.id (domIdPrefix ++ "_cancel")
+                , Ui.background MyUi.secondaryGray
+                , MyUi.focusEffect
+                , Ui.border 1
+                , Ui.Font.color (Ui.rgb 0 0 0)
+                , Ui.contentCenterX
+                , Ui.rounded 4
+                , Ui.padding 16
+                , Ui.Font.weight 500
+                ]
+                (Ui.text "Cancel")
+
+        start =
+            Ui.el
+                [ Ui.Input.button pressedStart
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                , Ui.background MyUi.buttonBackground
+                , Ui.rounded 4
+                , Ui.id (domIdPrefix ++ "_start")
+                , Ui.padding 16
+                , Ui.contentCenterX
+                , MyUi.focusEffect
+                , Ui.Font.weight 500
+                ]
+                (Ui.text "Start game")
+    in
+    if isMobile then
+        Ui.column
+            [ Ui.paddingXY 8 0, Ui.spacing 8 ]
+            [ cancel
+            , start
+            ]
+
+    else
+        Ui.row
+            [ Ui.paddingXY 16 0, Ui.spacing 16, Ui.width Ui.shrink ]
+            [ start
+            , cancel
+            ]
 
 
 sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg
@@ -1557,6 +1610,7 @@ dimensionInput : String -> String -> (String -> SetupMsg) -> Element SetupMsg
 dimensionInput htmlId value onChange =
     numberInput
         { htmlId = htmlId
+        , width = 60
         , minValue = minDimension
         , maxValue = maxDimension
         , value = value
@@ -1584,12 +1638,13 @@ komiInput value =
 
 numberInput :
     { htmlId : String
+    , width : Int
     , minValue : Int
     , maxValue : Int
     , value : String
-    , onChange : String -> SetupMsg
+    , onChange : String -> msg
     }
-    -> Element SetupMsg
+    -> Element msg
 numberInput args =
     Html.input
         [ Html.Attributes.id args.htmlId
@@ -1598,10 +1653,11 @@ numberInput args =
         , Html.Attributes.max (String.fromInt args.maxValue)
         , Html.Attributes.value args.value
         , Html.Attributes.style "font-size" "inherit"
-        , Html.Attributes.style "width" "50px"
-        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "width" (String.fromInt args.width ++ "px")
+        , Html.Attributes.style "padding" "4px 4px 4px 8px"
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
         , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "text-align" "right"
         , Html.Events.onInput args.onChange
         ]
         []

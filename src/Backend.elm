@@ -85,8 +85,9 @@ import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WireHelper
-import WordSpellingGame
-import WordSpellingGameList
+import WordSpellingGame exposing (Language(..))
+import WordSpellingGameEnglish
+import WordSpellingGameSwedish
 
 
 app :
@@ -5830,7 +5831,13 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                                 placed
                                                 (case
                                                     WordSpellingGame.validatePlacement
-                                                        WordSpellingGameList.dictionary
+                                                        (case setup.language of
+                                                            English ->
+                                                                WordSpellingGameEnglish.dictionary
+
+                                                            Swedish ->
+                                                                WordSpellingGameSwedish.dictionary
+                                                        )
                                                         setup
                                                         shared.board
                                                         placed

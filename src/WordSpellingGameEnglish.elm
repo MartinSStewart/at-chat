@@ -1,4 +1,4 @@
-module WordSpellingGameList exposing (Dictionary, buildDictionary, dictionary)
+module WordSpellingGameEnglish exposing (Dictionary, buildDictionary, dictionary)
 
 {-| Raw TWL06 (Tournament Word List 2006) Scrabble dictionary, one word per line.
 Source: <https://github.com/kamilmielnik/scrabble-dictionaries/blob/master/english/twl06.txt>
