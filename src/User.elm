@@ -481,6 +481,7 @@ type AdminUiSection
     | VoiceChatSection
     | WebsocketCloseEventsSection
     | SessionsSection
+    | WordSpellingGameSwedishSection
 
 
 sectionToString : AdminUiSection -> String
@@ -536,6 +537,9 @@ sectionToString section2 =
 
         SessionsSection ->
             "Sessions"
+
+        WordSpellingGameSwedishSection ->
+            "Swedish word spelling game"
 
 
 {-| User containing only publicly visible data

@@ -62,7 +62,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameSwedishStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -277,6 +277,7 @@ type alias InitAdminData =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , sessions : SeqDict SessionIdHash UserSession
+    , wordSpellingGameSwedish : WordSpellingGameSwedishStatus
     }
 
 
@@ -1750,6 +1751,7 @@ view isMobile2 version time local adminData user model =
             , sessionsSection local.localUser.timezone user adminData
             , websocketCloseEventsSection time local.localUser.timezone user adminData model
             , voiceChatSection adminData model user
+            , wordSpellingGameSwedishSection user adminData
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
@@ -2301,6 +2303,31 @@ filesSection user adminData =
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+wordSpellingGameSwedishSection : BackendUser -> AdminData -> Element Msg
+wordSpellingGameSwedishSection user adminData =
+    section
+        8
+        user.expandedSections
+        WordSpellingGameSwedishSection
+        [ Ui.text
+            ("Status: "
+                ++ (case adminData.wordSpellingGameSwedish of
+                        WordSpellingGameSwedishStatus_NotLoaded ->
+                            "Not loaded"
+
+                        WordSpellingGameSwedishStatus_Loading ->
+                            "Loading..."
+
+                        WordSpellingGameSwedishStatus_Error error ->
+                            "Failed to load: " ++ Log.httpErrorToString error
+
+                        WordSpellingGameSwedishStatus_Loaded ->
+                            "Loaded"
+                   )
+            )
+        ]
 
 
 voiceChatSection : AdminData -> Model -> BackendUser -> Element Msg

@@ -594,7 +594,13 @@ updateAction setup action shared =
                                                     (NonemptyExtra.set shared.turnCount { player | tray = IdArray.empty } shared.players
                                                         |> List.Nonempty.toList
                                                     )
-                                                    shared.turnCount
+                                                    (if shared.turnCount == 0 then
+                                                        -- Clunky work around in order to not desync old games while fixing a bug where replacing a tray on turn 0 gives you back the same tray
+                                                        9999
+
+                                                     else
+                                                        shared.turnCount
+                                                    )
                                                     |> IdArray.fromList
                                         }
                                         shared.players
@@ -651,7 +657,7 @@ initPlayer userId board setup existingPlayers =
 
 type alias PlacementResult =
     { board : SeqDict ( Int, Int ) LetterOrWildcard
-    , words : List (List LetterOrWildcard)
+    , words : List { letters : List LetterOrWildcard, placedCount : Int }
     , score : Int
     , placedCells : List ( ( Int, Int ), LetterOrWildcard )
     }
@@ -755,7 +761,14 @@ placeWord setup board placedWord =
             in
             Just
                 { board = newBoard
-                , words = List.map (wordString newBoard) allWords
+                , words =
+                    List.map
+                        (\wordCoords ->
+                            { letters = wordString newBoard wordCoords
+                            , placedCount = List.Extra.count (\cell -> Set.member cell placedSet) wordCoords
+                            }
+                        )
+                        allWords
                 , score = List.sum (List.map (wordScore setup newBoard placedSet) allWords)
                 , placedCells = placedCells
                 }
@@ -855,11 +868,11 @@ validatePlacementEnglish dictionary setup board placedWord =
             else if
                 List.all
                     (\word ->
-                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
-                            bruteForceMatch (distributionLetters setup) dictionary.all word
+                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary.all word.letters
 
                         else
-                            scanForMatch dictionary.byLength word
+                            scanForMatch dictionary.byLength word.letters
                     )
                     result.words
             then
@@ -886,8 +899,8 @@ validatePlacementSwedish dictionary setup board placedWord =
             else if
                 List.all
                     (\word ->
-                        if List.Extra.count (\cell -> cell == Wildcard) word <= maxBruteForceWildcards then
-                            bruteForceMatch (distributionLetters setup) dictionary word
+                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= maxBruteForceWildcards then
+                            bruteForceMatch (distributionLetters setup) dictionary word.letters
 
                         else
                             False
@@ -3246,15 +3259,16 @@ describeAction setup shared action =
             "joined the game"
 
 
-{-| The longest of the words a placement formed, rendered as uppercase text, used as the headline
-word in an action description.
+{-| The word a placement formed that uses the most of the newly placed tiles, rendered as uppercase
+text, used as the headline word in an action description. Ties are broken by word length so the
+longer word wins.
 -}
-headlineWord : List (List LetterOrWildcard) -> String
+headlineWord : List { letters : List LetterOrWildcard, placedCount : Int } -> String
 headlineWord words =
     words
-        |> List.sortBy (\word -> negate (List.length word))
+        |> List.sortBy (\word -> ( negate word.placedCount, negate (List.length word.letters) ))
         |> List.head
-        |> Maybe.map letterOrWildcardsToString
+        |> Maybe.map (\a -> a.letters |> letterOrWildcardsToString)
         |> Maybe.withDefault "a word"
 
 
