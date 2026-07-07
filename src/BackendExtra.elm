@@ -80,10 +80,11 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash
+import Set
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..), WordSpellingGameSwedish(..))
 import Unsafe
 import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
@@ -1036,6 +1037,19 @@ adminData model lastLogPageViewed =
         SeqDict.values model.sessions
             |> List.map (\session -> ( session.sessionIdHash, session ))
             |> SeqDict.fromList
+    , wordSpellingGameSwedish =
+        case model.wordSpellingGameSwedish of
+            WordSpellingGameSwedish_NotLoaded ->
+                LocalState.WordSpellingGameSwedishStatus_NotLoaded
+
+            WordSpellingGameSwedish_Loading ->
+                LocalState.WordSpellingGameSwedishStatus_Loading
+
+            WordSpellingGameSwedish_Error error ->
+                LocalState.WordSpellingGameSwedishStatus_Error error
+
+            WordSpellingGameSwedish_Loaded words ->
+                LocalState.WordSpellingGameSwedishStatus_Loaded (Set.size words)
     }
 
 
