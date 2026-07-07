@@ -93,6 +93,7 @@ import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Events
 import Ui.Font
+import Ui.Gradient
 import Ui.Lazy
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -3000,6 +3001,21 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             ]
 
 
+playerRowHeight : number
+playerRowHeight =
+    User.profileImageSize
+
+
+lettersLeftHeight : number
+lettersLeftHeight =
+    40
+
+
+playerRowSpacing : number
+playerRowSpacing =
+    8
+
+
 playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
 playerRow localUser userId highlight isSelected suffix =
     let
@@ -3019,20 +3035,19 @@ playerRow localUser userId highlight isSelected suffix =
 
           else
             Ui.noAttr
-
-        -- A transparent border is always present so selecting a row doesn't shift the layout.
-        , Ui.border 2
-        , Ui.borderColor
+        , MyUi.htmlStyle
+            "outline"
             (if isSelected then
-                Ui.rgb 40 90 220
+                "4px solid rgb(40, 90, 220)"
 
              else
-                Ui.rgba 0 0 0 0
+                "0 solid rgba(0,0,0,0)"
             )
         , Ui.rounded 4
-        , Ui.paddingWith { left = 4, top = 2, bottom = 2, right = 8 }
+        , Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 }
+        , Ui.clip
         ]
-        [ User.profileImage userId (Maybe.andThen .icon maybeUser)
+        [ User.profileImageNoRounding userId (Maybe.andThen .icon maybeUser)
         , Ui.row
             [ MyUi.prewrap ]
             [ Ui.el
@@ -3187,7 +3202,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
         joinWarning =
             if soloJoinWarning then
                 Ui.el
-                    [ Ui.Font.color MyUi.errorColor, MyUi.prewrap ]
+                    [ Ui.Font.color MyUi.errorColor, MyUi.prewrap, Ui.paddingXY 16 0 ]
                     (Ui.text "No one else has joined yet.\nOnce you make a second move no one can join.")
 
             else
@@ -3260,34 +3275,45 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
             else
                 Ui.column
-                    [ Ui.spacing 8, Ui.paddingXY 16 8 ]
-                    [ Ui.column
-                        []
-                        (("Letters remaining: "
-                            ++ String.fromInt (remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players))
-                            |> Ui.text
-                            |> Ui.el [ Ui.paddingXY 0 4 ]
-                         )
-                            :: List.indexedMap
-                                (\index player ->
-                                    playerRow
-                                        localUser
-                                        player.userId
-                                        (index == modBy playerCount shared.turnCount)
-                                        (model.highlightedPlayer == Just player.userId)
-                                        (if index == modBy playerCount shared.turnCount then
-                                            "'s turn (" ++ String.fromInt player.score ++ ")"
+                    []
+                    [ Ui.row
+                        [ Ui.paddingXY 16 0
+                        , Ui.contentCenterY
+                        , Ui.height (Ui.px lettersLeftHeight)
+                        , Ui.Font.color MyUi.font3
+                        , MyUi.prewrap
+                        ]
+                        (case remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players) of
+                            1 ->
+                                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "1"), Ui.text " letter left!" ]
 
-                                         else if index == modBy playerCount (shared.turnCount + 1) then
-                                            " is next (" ++ String.fromInt player.score ++ ")"
-
-                                         else
-                                            " (" ++ String.fromInt player.score ++ ")"
-                                        )
-                                )
-                                (List.Nonempty.toList shared.players)
+                            remaining ->
+                                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (String.fromInt remaining))
+                                , Ui.text " letters left"
+                                ]
                         )
-                    , Ui.Lazy.lazy3 recentActionsView localUser setup actions
+                    , Ui.column
+                        [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 16 }, Ui.spacing playerRowSpacing ]
+                        (List.indexedMap
+                            (\index player ->
+                                playerRow
+                                    localUser
+                                    player.userId
+                                    (index == modBy playerCount shared.turnCount)
+                                    (model.highlightedPlayer == Just player.userId)
+                                    (if index == modBy playerCount shared.turnCount then
+                                        "'s turn (" ++ String.fromInt player.score ++ ")"
+
+                                     else if index == modBy playerCount (shared.turnCount + 1) then
+                                        " is next (" ++ String.fromInt player.score ++ ")"
+
+                                     else
+                                        " (" ++ String.fromInt player.score ++ ")"
+                                    )
+                            )
+                            (List.Nonempty.toList shared.players)
+                        )
+                    , Ui.Lazy.lazy5 recentActionsView windowSize localUser setup actions shared
                     , joinWarning
                     , contextButton
                     ]
@@ -3296,56 +3322,102 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 {-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
 see what just happened (who played which word for how many points, who passed, and so on).
 -}
-recentActionsView : LocalUser -> ValidatedSetup -> Array ActionWithTime -> Element GameMsg
-recentActionsView localUser setup actions =
+recentActionsView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+recentActionsView windowSize localUser setup actions shared =
     let
-        log : List { userId : Id UserId, description : String }
-        log =
-            actionLog setup actions
+        ( _, _, log ) =
+            Array.foldl
+                (\action ( index, shared2, acc ) ->
+                    ( index + 1
+                    , updateAction setup action shared2
+                    , { index = index, userId = action.userId, description = describeAction setup shared2 action } :: acc
+                    )
+                )
+                ( 1, initShared setup, [] )
+                actions
+
+        playerCount =
+            List.Nonempty.length shared.players
     in
-    Ui.column
-        []
-        [ Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ] (Ui.text "Moves")
-        , List.map
-            (\entry ->
-                let
-                    name : String
-                    name =
-                        case User.getUser entry.userId localUser of
-                            Just user ->
-                                PersonName.toString user.name
+    List.map
+        (\entry ->
+            let
+                name : String
+                name =
+                    case User.getUser entry.userId localUser of
+                        Just user ->
+                            PersonName.toString user.name
 
-                            Nothing ->
-                                "Someone"
-                in
-                Ui.row
-                    [ MyUi.prewrap, Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
-                    [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                    , Ui.text (" " ++ entry.description)
-                    ]
-            )
-            log
-            |> Ui.column [ Ui.spacing 4, Ui.scrollable, Ui.height (Ui.px 100) ]
-        ]
-
-
-{-| Replay the whole action list from the start (the same fold `updateAction` builds the live board
-from), pairing each action with a short human-readable description. Word text and score are worked
-out from the board as it stood just before the action, which is why the running `Shared` state is
-carried through the fold.
--}
-actionLog : ValidatedSetup -> Array ActionWithTime -> List { userId : Id UserId, description : String }
-actionLog setup actions =
-    Array.foldl
-        (\action ( shared, acc ) ->
-            ( updateAction setup action shared
-            , { userId = action.userId, description = describeAction setup shared action } :: acc
-            )
+                        Nothing ->
+                            "Someone"
+            in
+            Ui.row
+                [ Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
+                [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text (String.fromInt entry.index ++ ". "))
+                , Ui.el [ Ui.Font.bold ] (Ui.text name)
+                , Ui.text (" " ++ entry.description)
+                ]
         )
-        ( initShared setup, [] )
-        actions
-        |> Tuple.second
-        |> List.reverse
+        (List.reverse log)
+        |> Ui.column
+            [ Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
+            , Ui.spacing 4
+            , MyUi.prewrap
+            , Ui.scrollable
+            , (tabBodyHeight windowSize setup.traySize
+                - (playerRowHeight * playerCount)
+                - (playerRowSpacing * (playerCount - 1))
+                - lettersLeftHeight
+                - 16
+              )
+                |> Ui.px
+                |> Ui.height
+            ]
+        |> Ui.el
+            [ Ui.inFront
+                (Ui.el
+                    [ Ui.Font.color MyUi.font3
+                    , Ui.paddingWith { left = 16, right = 24, bottom = 0, top = 0 }
+                    , Ui.Font.bold
+                    , MyUi.noPointerEvents
+                    ]
+                    (Ui.el
+                        [ Ui.height (Ui.px 32)
+                        , Ui.backgroundGradient
+                            [ Ui.Gradient.linear
+                                (Ui.turns 0.5)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            , Ui.Gradient.linear
+                                (Ui.turns 0.5)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            ]
+                        ]
+                        (Ui.text "Past moves")
+                    )
+                )
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.Font.color MyUi.font3
+                    , Ui.paddingWith { left = 0, right = 24, bottom = 0, top = 0 }
+                    , Ui.Font.bold
+                    , MyUi.noPointerEvents
+                    , Ui.alignBottom
+                    ]
+                    (Ui.el
+                        [ Ui.height (Ui.px 20)
+                        , Ui.backgroundGradient
+                            [ Ui.Gradient.linear
+                                (Ui.turns 0)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            , Ui.Gradient.linear
+                                (Ui.turns 0)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            ]
+                        ]
+                        Ui.none
+                    )
+                )
+            ]
 
 
 {-| Replay the action list to work out which player placed each committed tile on the board. Only
