@@ -50,6 +50,7 @@ module MyUi exposing
     , insetBottom
     , insetTop
     , isMobile
+    , isMobileAlt
     , label
     , matchSwitcherHeight
     , mentionColor
@@ -1074,6 +1075,11 @@ insetBottom =
 isMobile : { a | windowSize : Coord CssPixels } -> Bool
 isMobile model =
     Coord.xRaw model.windowSize < 700
+
+
+isMobileAlt : Coord CssPixels -> Bool
+isMobileAlt windowSize =
+    Coord.xRaw windowSize < 700
 
 
 noShrinking : Ui.Attribute msg

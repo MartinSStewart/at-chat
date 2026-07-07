@@ -90,6 +90,8 @@ import SeqDictHelper
 import Set exposing (Set)
 import Touch exposing (Touch)
 import Ui exposing (Element)
+import Ui.Accessibility
+import Ui.Events
 import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
@@ -114,12 +116,8 @@ type alias GameData =
       -- word's slide-in animation (see `audio`); the local player's own moves pop via the tile
       -- times instead.
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
-    , -- Whether the game's settings (a read-only version of the setup view) are shown instead of
-      -- the board, toggled with the gear button.
-      showSettings : Bool
-    , -- The player whose placed letters are highlighted on the board, set by clicking a name in the
-      -- status/leaderboard view (see `statusView`). Clicking the same player again clears it.
-      highlightedPlayer : Maybe (Id UserId)
+    , showSettings : Bool
+    , highlightedPlayer : Maybe (Id UserId)
     }
 
 
@@ -201,7 +199,9 @@ type GameMsg
     | PressedReplaceTrayOrPass
     | PressedClearBoard
     | PressedToggleSettings
-    | PressedPlayerHighlight (Id UserId)
+    | PressedPlayerRow (Id UserId)
+    | MouseEnterPlayerRow (Id UserId)
+    | MouseExitPlayerRow (Id UserId)
 
 
 type alias SetupModel =
@@ -1127,8 +1127,16 @@ updateSetup time currentUserId msg setup =
             )
 
 
-updateGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameMsg -> GameData -> ( GameData, Maybe ActionWithTime )
-updateGame time currentUserId setup shared msg model =
+updateGame :
+    Time.Posix
+    -> Coord CssPixels
+    -> Id UserId
+    -> ValidatedSetup
+    -> Shared
+    -> GameMsg
+    -> GameData
+    -> ( GameData, Maybe ActionWithTime )
+updateGame time windowSize currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
             case placeWord setup shared.board placement of
@@ -1260,16 +1268,33 @@ updateGame time currentUserId setup shared msg model =
         PressedToggleSettings ->
             ( { model | showSettings = not model.showSettings }, Nothing )
 
-        PressedPlayerHighlight userId ->
-            -- Toggle: clicking the already-highlighted player clears the highlight, otherwise
-            -- highlight the player that was clicked.
+        PressedPlayerRow userId ->
+            ( if MyUi.isMobileAlt windowSize then
+                { model
+                    | highlightedPlayer =
+                        if model.highlightedPlayer == Just userId then
+                            Nothing
+
+                        else
+                            Just userId
+                }
+
+              else
+                model
+            , Nothing
+            )
+
+        MouseEnterPlayerRow userId ->
+            ( { model | highlightedPlayer = Just userId }, Nothing )
+
+        MouseExitPlayerRow userId ->
             ( { model
                 | highlightedPlayer =
                     if model.highlightedPlayer == Just userId then
                         Nothing
 
                     else
-                        Just userId
+                        model.highlightedPlayer
               }
             , Nothing
             )
@@ -1800,7 +1825,7 @@ parseTimeControl setup =
 
 boardX : Coord CssPixels -> Int
 boardX windowSize =
-    if MyUi.isMobile { windowSize = windowSize } then
+    if MyUi.isMobileAlt windowSize then
         0
 
     else
@@ -1832,16 +1857,20 @@ boardHeight traySize windowSize =
     boardWidth traySize windowSize + trayHeight traySize windowSize
 
 
-insideBoard : ValidatedSetup -> Coord CssPixels -> Coord CssPixels -> Bool
-insideBoard setup windowSize coord =
-    let
-        x =
-            boardX windowSize
-    in
-    (Coord.xRaw coord > x)
-        && (Coord.xRaw coord < (x + boardWidth setup.traySize windowSize))
-        && (Coord.yRaw coord > boardY)
-        && (Coord.yRaw coord < boardY + boardHeight setup.traySize windowSize)
+insideBoard : ValidatedSetup -> GameData -> Coord CssPixels -> Coord CssPixels -> Bool
+insideBoard setup model windowSize coord =
+    if model.showSettings then
+        False
+
+    else
+        let
+            x =
+                boardX windowSize
+        in
+        (Coord.xRaw coord > x)
+            && (Coord.xRaw coord < (x + boardWidth setup.traySize windowSize))
+            && (Coord.yRaw coord > boardY)
+            && (Coord.yRaw coord < boardY + boardHeight setup.traySize windowSize)
 
 
 {-| Which board cell (if any) a screen position is over.
@@ -1979,7 +2008,7 @@ withZoomAnimation time before after =
 -}
 isZoomAnimating : Time.Posix -> Coord CssPixels -> GameData -> Bool
 isZoomAnimating time windowSize model =
-    MyUi.isMobile { windowSize = windowSize }
+    MyUi.isMobileAlt windowSize
         && (zoomTarget model /= model.zoomAnimation.from)
         && (elapsedMs time model.zoomAnimation.start < zoomAnimationDuration)
 
@@ -1998,7 +2027,7 @@ terms of these two values, so the drawn board and the touch hit-testing always a
 -}
 boardZoom : Time.Posix -> OneOrGreater -> Coord CssPixels -> GameData -> Maybe { zoomedCellSize : Int, translate : Coord CssPixels }
 boardZoom time traySize windowSize model =
-    if MyUi.isMobile { windowSize = windowSize } then
+    if MyUi.isMobileAlt windowSize then
         resolveZoom traySize windowSize (animatedZoomState time model)
 
     else
@@ -2307,7 +2336,7 @@ dragStartHelper time windowSize touches setup gameModel =
                             trayList
                     of
                         Just tileIndex ->
-                            { gameModel | dragging = Dragging tileIndex }
+                            { gameModel | dragging = Dragging tileIndex, highlightedPlayer = Nothing }
 
                         Nothing ->
                             gameModel
@@ -2891,7 +2920,7 @@ gameView :
 gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared model =
     let
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         -- The board cells placed by the player whose name was clicked in the status view, drawn with
         -- a highlight so their letters stand out. Empty when no player is selected.
@@ -2918,17 +2947,28 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
         settingsButton : Ui.Attribute GameMsg
         settingsButton =
             (if isMobile then
-                Ui.none
+                MyUi.elButton
+                    (Dom.id "wsg_settings")
+                    PressedToggleSettings
+                    [ Ui.width (Ui.px 40)
+                    , Ui.padding 8
+                    , Ui.alignRight
+                    , Ui.alignBottom
+                    , Ui.Font.color MyUi.font1
+                    , Ui.Accessibility.description "Game settings"
+                    , Ui.background MyUi.background1
+                    ]
+                    (Ui.html Icons.gear)
 
              else
                 MyUi.elButton
                     (Dom.id "wsg_settings")
                     PressedToggleSettings
-                    [ Ui.width (Ui.px 24)
+                    [ Ui.width (Ui.px 40)
+                    , Ui.padding 8
                     , Ui.alignRight
-                    , Ui.move { x = -8, y = 8, z = 0 }
                     , Ui.Font.color MyUi.font1
-                    , Html.Attributes.attribute "aria-label" "Game settings" |> Ui.htmlAttribute
+                    , Ui.Accessibility.description "Game settings"
                     ]
                     (Ui.html Icons.gear)
             )
@@ -2937,11 +2977,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
     if model.showSettings then
         Ui.el
             [ settingsButton ]
-            (setupView windowSize True (validatedToSetupModel setup)
-                -- Every control is disabled in the read-only settings view, so no setup message
-                -- can actually fire; this mapping only exists to satisfy the types.
-                |> Ui.map (\_ -> PressedToggleSettings)
-            )
+            (setupView windowSize True (validatedToSetupModel setup) |> Ui.map (\_ -> PressedToggleSettings))
 
     else
         (if isMobile then
@@ -2963,11 +2999,6 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             ]
 
 
-{-| A player's icon and name (with a trailing `suffix` like "'s turn (5)"). Clicking it highlights
-the letters that player has placed on the board (see `PressedPlayerHighlight`); `isSelected` is True
-for the player whose letters are currently highlighted. `highlight` shades the row for the player
-whose turn it is (or the winner in the leaderboard).
--}
 playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
 playerRow localUser userId highlight isSelected suffix =
     let
@@ -2977,9 +3008,11 @@ playerRow localUser userId highlight isSelected suffix =
     in
     MyUi.rowButton
         (Dom.id ("wsg_player_" ++ Id.toString userId))
-        (PressedPlayerHighlight userId)
+        (PressedPlayerRow userId)
         [ Ui.spacing 8
         , Ui.width Ui.shrink
+        , Ui.Events.onMouseEnter (MouseEnterPlayerRow userId)
+        , Ui.Events.onMouseLeave (MouseExitPlayerRow userId)
         , if highlight then
             Ui.background MyUi.mentionColor
 
@@ -2996,7 +3029,6 @@ playerRow localUser userId highlight isSelected suffix =
                 Ui.rgba 0 0 0 0
             )
         , Ui.rounded 4
-        , MyUi.htmlStyle "cursor" "pointer"
         , Ui.paddingWith { left = 4, top = 2, bottom = 2, right = 8 }
         ]
         [ User.profileImage userId (Maybe.andThen .icon maybeUser)
@@ -3010,7 +3042,7 @@ playerRow localUser userId highlight isSelected suffix =
                             PersonName.toString user.name
 
                         Nothing ->
-                            "Unknown"
+                            "<missing>"
                     )
                 )
             , Ui.text suffix
@@ -3037,7 +3069,7 @@ mobilePlayerRow highlightedPlayer userId highlight user suffix =
                 ++ Id.toString userId
             )
         )
-        (PressedPlayerHighlight userId)
+        (PressedPlayerRow userId)
         [ Ui.width Ui.shrink
         , Ui.paddingXY 8 2
         , if highlight then
@@ -3137,7 +3169,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             List.Nonempty.length shared.players
 
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         -- A solo game (nobody else has joined) stops accepting new players once its creator plays a
         -- second move, because `canJoin` only holds while `turnCount <= playerCount`. Warn the lone
@@ -4004,33 +4036,30 @@ boardTileInFront : ValidatedSetup -> Bool -> Int -> Coord CssPixels -> LetterOrW
 boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
-            ([ Ui.background
+            [ Ui.background
                 (if highlight then
-                    Ui.rgb 245 213 92
+                    MyUi.replyToColor
 
                  else
                     Ui.rgb 186 171 103
                 )
-             , Ui.width (Ui.px (cellSize2 - 1))
-             , Ui.height (Ui.px (cellSize2 - 1))
-             , Ui.contentCenterX
-             , Ui.contentCenterY
-             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
-             , Ui.Font.bold
-             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
-             , Ui.Font.color (Ui.rgb 0 0 0)
-             , MyUi.noPointerEvents
-             , tileScoreView setup cellSize2 letterOrWildcard
-             ]
-                ++ (if highlight then
-                        -- A coloured border makes the highlighted letters stand out even where a
-                        -- highlighted player's tiles sit next to each other.
-                        [ Ui.borderColor (Ui.rgb 40 90 220), Ui.border 2 ]
+            , Ui.width (Ui.px (cellSize2 - 1))
+            , Ui.height (Ui.px (cellSize2 - 1))
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+            , Ui.Font.bold
+            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+            , Ui.Font.color
+                (if highlight then
+                    MyUi.white
 
-                    else
-                        []
-                   )
-            )
+                 else
+                    Ui.rgb 0 0 0
+                )
+            , MyUi.noPointerEvents
+            , tileScoreView setup cellSize2 letterOrWildcard
+            ]
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
@@ -4121,7 +4150,7 @@ tabBodyHeight windowSize traySize =
     cellSize traySize windowSize
         * gridSize
         + trayHeight traySize windowSize
-        + (if MyUi.isMobile { windowSize = windowSize } then
+        + (if MyUi.isMobileAlt windowSize then
             statusHeight
 
            else
@@ -4138,7 +4167,7 @@ cellSize traySize windowSize =
             min
                 (round (toFloat (Coord.yRaw windowSize) * 0.7)
                     - trayHeight traySize windowSize
-                    - (if MyUi.isMobile { windowSize = windowSize } then
+                    - (if MyUi.isMobileAlt windowSize then
                         statusHeight
 
                        else
@@ -4345,7 +4374,7 @@ setupView windowSize isReadonly setup =
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         padding =
             Ui.paddingXY

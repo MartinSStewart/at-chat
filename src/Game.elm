@@ -146,14 +146,23 @@ isAnimating time windowSize matchId (MatchData matchData) model =
                    )
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> MatchData -> Bool
-insideBoard windowSize coord (MatchData matchData) =
+insideBoard : Coord CssPixels -> Coord CssPixels -> GuildOrDmId -> Id ChannelMessageId -> MatchData -> SeqDict GuildOrDmId Model -> Bool
+insideBoard windowSize coord guildOrDmId matchId (MatchData matchData) games =
     case matchData.data of
         FrontendGameData_Go _ _ _ ->
             False
 
         FrontendGameData_WordSpellingGame setup _ _ ->
-            WordSpellingGame.insideBoard setup windowSize coord
+            case SeqDict.get guildOrDmId games |> Maybe.withDefault initModel |> .startedGames |> SeqDict.get matchId of
+                Just (WordSpellingGame_Game game) ->
+                    WordSpellingGame.insideBoard
+                        setup
+                        game
+                        windowSize
+                        coord
+
+                _ ->
+                    False
 
 
 initModel : Model
@@ -307,6 +316,7 @@ type OutMsg
 
 update :
     Time.Posix
+    -> Coord CssPixels
     -> Id UserId
     -> GuildOrDmId
     -> Msg
@@ -314,7 +324,7 @@ update :
     -> Maybe ( Id ChannelMessageId, MatchData )
     -> Model
     -> ( Model, List OutMsg )
-update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
+update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model =
     case msg of
         PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -407,6 +417,7 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                                 ( game2, maybeAction ) =
                                     WordSpellingGame.updateGame
                                         time
+                                        windowSize
                                         currentUserId
                                         setup
                                         cache
@@ -574,7 +585,7 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         isPersonalDm : Bool
         isPersonalDm =

@@ -1972,6 +1972,7 @@ updateLoaded msg model =
                                 ( gameModel2, outMsgs ) =
                                     Game.update
                                         model.time
+                                        model.windowSize
                                         local.localUser.session.userId
                                         gamesTab.guildOrDmId
                                         gameMsg
@@ -5791,14 +5792,17 @@ dragTarget startTouches model =
                 insideBoard : Bool
                 insideBoard =
                     case FrontendExtra.currentGame local model of
-                        Just { match } ->
+                        Just { guildOrDmId, match, matchId } ->
                             -- The board is laid out below the safe-area inset, so undo it before the
                             -- hit-test (the call thumbnail above is positioned including the inset, so
                             -- its check keeps the raw centroid).
                             Game.insideBoard
                                 model.windowSize
                                 (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
+                                guildOrDmId
+                                matchId
                                 match
+                                loggedIn.games
 
                         Nothing ->
                             False
