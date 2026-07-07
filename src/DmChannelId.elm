@@ -1,5 +1,5 @@
 module DmChannelId exposing
-    ( DmChannelId
+    ( DmChannelId(..)
     , GuildOrFullDmId(..)
     , channelIdFromString
     , channelIdFromUserIds
