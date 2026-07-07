@@ -8084,13 +8084,6 @@ migrate_WordSpellingGame_GameMsg old =
         Evergreen.V302.WordSpellingGame.PressedClearBoard ->
             Evergreen.V304.WordSpellingGame.PressedClearBoard
 
-        notices ->
-            {- @NOTICE `PressedToggleSettings` was added in V304.
-               This is just a reminder in case migrating some subset of the old data to this new value was important.
-               See https://dashboard.lamdera.app/tips/modified-custom-type for more info.
-            -}
-            (Unimplemented {- New constructors were added. I need you to resolve the above notices and then remove this case. -})
-
 
 migrate_WordSpellingGame_IsValid : Evergreen.V302.WordSpellingGame.IsValid -> Evergreen.V304.WordSpellingGame.IsValid
 migrate_WordSpellingGame_IsValid old =
