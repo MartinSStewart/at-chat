@@ -89,6 +89,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import WordSpellingGame
 
 
 app :
@@ -2017,8 +2018,27 @@ updateLoaded msg model =
                                     handleWordSpellingGameOutMsgs
                                         outMsgs
                                         { model | loginStatus = LoggedIn loggedIn2 }
+
+                                scrollCmd : Command FrontendOnly ToBackend FrontendMsg_
+                                scrollCmd =
+                                    -- A move the local player just made adds a Past moves entry;
+                                    -- keep the list pinned to the bottom if they were already there
+                                    -- (same behaviour as the conversation view).
+                                    if List.any isWordSpellingActionOutMsg outMsgs then
+                                        case gamesTab.maybeMatchId of
+                                            Just matchId ->
+                                                Scroll.toBottomOfChannelIfAtBottom
+                                                    WordSpellingGame.pastWordsContainerId
+                                                    SetScrollToBottom
+                                                    (Game.wordSpellingScrollPosition matchId gameModel2)
+
+                                            Nothing ->
+                                                Command.none
+
+                                    else
+                                        Command.none
                             in
-                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
+                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd), scrollCmd ] )
 
                         Nothing ->
                             ( model, Command.none )
@@ -6548,14 +6568,44 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_Game _ guildOrDmId gameChange ->
+                                    let
+                                        updatedGameModel : Maybe Game.Model
+                                        updatedGameModel =
+                                            Game.gameChangeFromServer
+                                                model.time
+                                                gameChange
+                                                (SeqDict.get guildOrDmId loggedIn2.games)
+                                    in
                                     ( { loggedIn2
-                                        | games =
-                                            SeqDict.update
-                                                guildOrDmId
-                                                (Game.gameChangeFromServer model.time gameChange)
-                                                loggedIn2.games
+                                        | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
                                       }
-                                    , Command.none
+                                    , -- Another player's move adds a Past moves entry; if we're
+                                      -- watching that match, keep the list pinned to the bottom when
+                                      -- it already was (mirrors the conversation view).
+                                      case gameChange of
+                                        Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
+                                            case FrontendExtra.currentGamesTab local model.route of
+                                                Just gamesTab ->
+                                                    if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                        Scroll.toBottomOfChannelIfAtBottom
+                                                            WordSpellingGame.pastWordsContainerId
+                                                            SetScrollToBottom
+                                                            (case updatedGameModel of
+                                                                Just gameModel3 ->
+                                                                    Game.wordSpellingScrollPosition matchId gameModel3
+
+                                                                Nothing ->
+                                                                    ScrolledToBottom
+                                                            )
+
+                                                    else
+                                                        Command.none
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        _ ->
+                                            Command.none
                                     )
 
                                 _ ->
@@ -7060,6 +7110,19 @@ routeToInitialDataRequest route =
 
         _ ->
             InitialLoadRequested_None
+
+
+{-| True when an out message represents a committed word-spelling move (a new Past moves entry),
+which is what should trigger the list to auto-scroll to the bottom.
+-}
+isWordSpellingActionOutMsg : Game.OutMsg -> Bool
+isWordSpellingActionOutMsg outMsg =
+    case outMsg of
+        Game.OutLocalChange (Game.LocalChange_WordSpellingGame _ (WordSpellingGame.Action _)) ->
+            True
+
+        _ ->
+            False
 
 
 handleWordSpellingGameOutMsgs :

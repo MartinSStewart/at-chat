@@ -25,6 +25,7 @@ module Game exposing
     , routeRequest
     , update
     , view
+    , wordSpellingScrollPosition
     )
 
 import Array exposing (Array)
@@ -42,6 +43,7 @@ import List.Nonempty
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -198,6 +200,20 @@ addGoAction action (MatchData match) =
                     match.data
     }
         |> MatchData
+
+
+{-| How far the Past moves list is scrolled for the given word-spelling match. Frontend uses this to
+decide whether a new action should auto-scroll the list to the bottom (see
+`WordSpellingGame.recentActionsView`). Defaults to the bottom when the match hasn't been opened yet.
+-}
+wordSpellingScrollPosition : Id ChannelMessageId -> Model -> Scroll.ScrollPosition
+wordSpellingScrollPosition matchId model =
+    case SeqDict.get matchId model.startedGames of
+        Just (WordSpellingGame_Game gameData) ->
+            gameData.scrollPosition
+
+        _ ->
+            Scroll.ScrolledToBottom
 
 
 routeRequest :

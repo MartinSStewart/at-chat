@@ -206,6 +206,7 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
+    | UserScrolledPastMoves ScrollPosition
 
 
 type alias SetupModel =
@@ -1303,6 +1304,12 @@ updateGame time windowSize currentUserId setup shared msg model =
               }
             , Nothing
             )
+
+        UserScrolledPastMoves position ->
+            -- Track how far the Past moves list is scrolled so new moves only auto-scroll to the
+            -- bottom when the player was already there (mirrors the conversation view; the scroll
+            -- command itself is issued from Frontend).
+            ( { model | scrollPosition = position }, Nothing )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -3321,7 +3328,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             )
                             (List.Nonempty.toList shared.players)
                         )
-                    , Ui.Lazy.lazy6 recentActionsView windowSize isPersonalDm localUser setup actions shared
+                    , recentActionsView model.scrollPosition windowSize isPersonalDm localUser setup actions shared
                     , contextButton
                     ]
 
@@ -3329,8 +3336,78 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 {-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
 see what just happened (who played which word for how many points, who passed, and so on).
 -}
-recentActionsView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-recentActionsView windowSize isPersonalDm localUser setup actions shared =
+recentActionsView : ScrollPosition -> Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+recentActionsView scrollPosition windowSize isPersonalDm localUser setup actions shared =
+    let
+        playerCount : Int
+        playerCount =
+            List.Nonempty.length shared.players
+    in
+    -- The scroll container is kept out of the lazy content so its "scroll" listener always sees the
+    -- current `scrollPosition`; the content (which replays every action) stays lazy. New moves are
+    -- auto-scrolled to the bottom from Frontend using this tracked position (see Scroll.elm), the
+    -- same way the conversation view keeps itself pinned to the bottom.
+    Ui.Lazy.lazy5 recentActionsContent isPersonalDm localUser setup actions shared
+        |> Ui.el
+            [ Ui.scrollable
+            , Ui.id (Dom.idToString pastWordsContainerId)
+            , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
+            , (tabBodyHeight windowSize setup.traySize
+                - (playerRowHeight * playerCount)
+                - (playerRowSpacing * (playerCount - 1))
+                - lettersLeftHeight
+                - 16
+              )
+                |> Ui.px
+                |> Ui.height
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.Font.color MyUi.font3
+                    , Ui.paddingWith { left = 16, right = 24, bottom = 0, top = 0 }
+                    , Ui.Font.bold
+                    , MyUi.noPointerEvents
+                    ]
+                    (Ui.el
+                        [ Ui.height (Ui.px 32)
+                        , Ui.backgroundGradient
+                            [ Ui.Gradient.linear
+                                (Ui.turns 0.5)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            , Ui.Gradient.linear
+                                (Ui.turns 0.5)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            ]
+                        ]
+                        (Ui.text "Past moves")
+                    )
+                )
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.Font.color MyUi.font3
+                    , Ui.paddingWith { left = 0, right = 24, bottom = 0, top = 0 }
+                    , Ui.Font.bold
+                    , MyUi.noPointerEvents
+                    , Ui.alignBottom
+                    ]
+                    (Ui.el
+                        [ Ui.height (Ui.px 20)
+                        , Ui.backgroundGradient
+                            [ Ui.Gradient.linear
+                                (Ui.turns 0)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            , Ui.Gradient.linear
+                                (Ui.turns 0)
+                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                            ]
+                        ]
+                        Ui.none
+                    )
+                )
+            ]
+
+
+recentActionsContent : Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+recentActionsContent isPersonalDm localUser setup actions shared =
     let
         ( _, _, log ) =
             Array.foldr
@@ -3426,61 +3503,6 @@ recentActionsView windowSize isPersonalDm localUser setup actions shared =
             [ Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
             , Ui.spacing 4
             , MyUi.prewrap
-            , Ui.scrollable
-            , Ui.id (Dom.idToString pastWordsContainerId)
-            , (tabBodyHeight windowSize setup.traySize
-                - (playerRowHeight * playerCount)
-                - (playerRowSpacing * (playerCount - 1))
-                - lettersLeftHeight
-                - 16
-              )
-                |> Ui.px
-                |> Ui.height
-            ]
-        |> Ui.el
-            [ Ui.inFront
-                (Ui.el
-                    [ Ui.Font.color MyUi.font3
-                    , Ui.paddingWith { left = 16, right = 24, bottom = 0, top = 0 }
-                    , Ui.Font.bold
-                    , MyUi.noPointerEvents
-                    ]
-                    (Ui.el
-                        [ Ui.height (Ui.px 32)
-                        , Ui.backgroundGradient
-                            [ Ui.Gradient.linear
-                                (Ui.turns 0.5)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
-                            , Ui.Gradient.linear
-                                (Ui.turns 0.5)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
-                            ]
-                        ]
-                        (Ui.text "Past moves")
-                    )
-                )
-            , Ui.inFront
-                (Ui.el
-                    [ Ui.Font.color MyUi.font3
-                    , Ui.paddingWith { left = 0, right = 24, bottom = 0, top = 0 }
-                    , Ui.Font.bold
-                    , MyUi.noPointerEvents
-                    , Ui.alignBottom
-                    ]
-                    (Ui.el
-                        [ Ui.height (Ui.px 20)
-                        , Ui.backgroundGradient
-                            [ Ui.Gradient.linear
-                                (Ui.turns 0)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
-                            , Ui.Gradient.linear
-                                (Ui.turns 0)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
-                            ]
-                        ]
-                        Ui.none
-                    )
-                )
             ]
 
 
