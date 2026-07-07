@@ -1048,8 +1048,8 @@ adminData model lastLogPageViewed =
             WordSpellingGameSwedish_Error error ->
                 LocalState.WordSpellingGameSwedishStatus_Error error
 
-            WordSpellingGameSwedish_Loaded words ->
-                LocalState.WordSpellingGameSwedishStatus_Loaded (Set.size words)
+            WordSpellingGameSwedish_Loaded _ ->
+                LocalState.WordSpellingGameSwedishStatus_Loaded
     }
 
 

@@ -5800,8 +5800,12 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
     case wsChange of
         WordSpellingGame.StartMatch _ setup ->
             let
+                loadSwedishWordList : Bool
                 loadSwedishWordList =
-                    model.wordSpellingGameSwedish == WordSpellingGameSwedish_NotLoaded && setup.language == Swedish
+                    ((model.wordSpellingGameSwedish == WordSpellingGameSwedish_NotLoaded)
+                        || (model.wordSpellingGameSwedish == WordSpellingGameSwedish_NotLoaded)
+                    )
+                        && (setup.language == Swedish)
 
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend

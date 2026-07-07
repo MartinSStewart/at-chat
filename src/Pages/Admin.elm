@@ -2323,8 +2323,8 @@ wordSpellingGameSwedishSection user adminData =
                         WordSpellingGameSwedishStatus_Error error ->
                             "Failed to load: " ++ Log.httpErrorToString error
 
-                        WordSpellingGameSwedishStatus_Loaded wordCount ->
-                            "Loaded (" ++ String.fromInt wordCount ++ " words)"
+                        WordSpellingGameSwedishStatus_Loaded ->
+                            "Loaded"
                    )
             )
         ]

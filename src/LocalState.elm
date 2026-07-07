@@ -575,7 +575,7 @@ type WordSpellingGameSwedishStatus
     = WordSpellingGameSwedishStatus_NotLoaded
     | WordSpellingGameSwedishStatus_Loading
     | WordSpellingGameSwedishStatus_Error Http.Error
-    | WordSpellingGameSwedishStatus_Loaded Int
+    | WordSpellingGameSwedishStatus_Loaded
 
 
 type WebsocketClosedEvent
