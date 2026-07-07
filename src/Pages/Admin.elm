@@ -2842,7 +2842,7 @@ exportSubsetSelector adminData selection =
                             label : { element : Element msg, id : Ui.Input.Label }
                             label =
                                 Ui.Input.label
-                                    ("admin_exportSubsetDmToggle_" ++ DmChannelId.channelIdToString channelId)
+                                    ("admin_exportSubsetDmToggle_" ++ DmChannelId.toString channelId)
                                     [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
                                     (dmChannelParticipants adminData channelId)
                         in
@@ -3565,7 +3565,7 @@ dmChannelParticipants : AdminData -> DmChannelId -> Element msg
 dmChannelParticipants adminData channelId =
     let
         ( userIdA, userIdB ) =
-            DmChannelId.userIdsFromChannelId channelId
+            DmChannelId.toUserIds channelId
     in
     [ userIdA, userIdB ]
         |> List.map

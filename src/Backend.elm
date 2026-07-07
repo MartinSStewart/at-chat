@@ -1353,7 +1353,7 @@ update msg model =
                 Just channel ->
                     let
                         ( userIdA, userIdB ) =
-                            DmChannelId.userIdsFromChannelId channelId
+                            DmChannelId.toUserIds channelId
                     in
                     ( { model
                         | dmChannels =
@@ -2093,7 +2093,7 @@ disconnectClient time sessionId clientId model =
                 helper otherUserId =
                     let
                         dmChannelId =
-                            DmChannelId.channelIdFromUserIds session.userId otherUserId
+                            DmChannelId.fromUserIds session.userId otherUserId
                     in
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
@@ -5496,7 +5496,7 @@ createGamePublicLinkHelper time clientId changeId session guildOrDmId matchId mo
                     GuildOrFullDmId_Guild guildId channelId
 
                 GuildOrDmId_Dm otherUserId ->
-                    GuildOrFullDmId_Dm (DmChannelId.channelIdFromUserIds session.userId otherUserId)
+                    GuildOrFullDmId_Dm (DmChannelId.fromUserIds session.userId otherUserId)
     in
     case OneToOne.first ( guildOrFullDmId, matchId ) model.goMatchPublicIds of
         Just publicId ->
@@ -6156,7 +6156,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                 Call.DmRoomId otherUserId ->
                     let
                         dmChannelId =
-                            DmChannelId.channelIdFromUserIds session.userId otherUserId
+                            DmChannelId.fromUserIds session.userId otherUserId
                     in
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
@@ -6403,7 +6403,7 @@ isPeerInSameCall myRoomId myUserId peerUserId peerCall =
         (Call.DmRoomId peerOther) =
             peerCall
     in
-    DmChannelId.channelIdFromUserIds myUserId myOther == DmChannelId.channelIdFromUserIds peerUserId peerOther
+    DmChannelId.fromUserIds myUserId myOther == DmChannelId.fromUserIds peerUserId peerOther
 
 
 handlePublishTracks :
@@ -6762,11 +6762,11 @@ voiceChatRoomHasOtherMembers dmChannelId clientId model =
                         (\otherClientId connection ->
                             case connection.call of
                                 ConnectedToCall (Call.DmRoomId otherUserId2) _ ->
-                                    (DmChannelId.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
+                                    (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
                                 ConnectingToCall (Call.DmRoomId otherUserId2) ->
-                                    (DmChannelId.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
+                                    (DmChannelId.fromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
                                 NotInCall ->

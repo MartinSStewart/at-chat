@@ -12,7 +12,6 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
-    , scrollCloseToTop
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -64,6 +63,7 @@ import QRCode
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Scroll
 import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -72,7 +72,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -337,7 +337,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                                         (DmRoute
-                                            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
+                                            { channelId = DmChannelId.fromUserIds localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Nothing
                                             }
@@ -1485,7 +1485,7 @@ memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute
-            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId userId
+            { channelId = DmChannelId.fromUserIds localUser.session.userId userId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }
@@ -3336,37 +3336,6 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-scrollCloseToTop : number
-scrollCloseToTop =
-    300
-
-
-decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg_
-decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
-    Json.Decode.map3
-        (\scrollTop scrollHeight clientHeight ->
-            if scrollTop + clientHeight >= scrollHeight - 5 then
-                ScrolledToBottom
-
-            else if scrollTop <= scrollCloseToTop then
-                ScrolledToTop
-
-            else
-                ScrolledToMiddle
-        )
-        (Json.Decode.at [ "target", "scrollTop" ] Json.Decode.float)
-        (Json.Decode.at [ "target", "scrollHeight" ] Json.Decode.float)
-        (Json.Decode.at [ "target", "clientHeight" ] Json.Decode.float)
-        |> Json.Decode.andThen
-            (\scrollPosition ->
-                if scrollPosition == currentScrollPosition then
-                    Json.Decode.fail ""
-
-                else
-                    UserScrolled guildOrDmId threadRoute scrollPosition |> Json.Decode.succeed
-            )
-
-
 emojiSelector :
     Bool
     -> SeqSet (Id CustomEmojiId)
@@ -3673,7 +3642,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
                     "scroll"
-                    (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
+                    (Scroll.decodeScrollToBottom
+                        (UserScrolled (GuildOrDmId guildOrDmIdNoThread) NoThread)
+                        loggedIn.channelScrollPosition
+                    )
                  , Ui.heightMin 0
                  , bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -3848,7 +3820,10 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
                     "scroll"
-                    (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
+                    (Scroll.decodeScrollToBottom
+                        (UserScrolled (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
+                        loggedIn.channelScrollPosition
+                    )
                  , Ui.heightMin 0
                  , bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -4111,7 +4086,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
                     "scroll"
-                    (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
+                    (Scroll.decodeScrollToBottom
+                        (UserScrolled (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
+                        loggedIn.channelScrollPosition
+                    )
                  , Ui.heightMin 0
                  , bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -4294,7 +4272,10 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
                     "scroll"
-                    (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
+                    (Scroll.decodeScrollToBottom
+                        (UserScrolled (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
+                        loggedIn.channelScrollPosition
+                    )
                  , Ui.heightMin 0
                  , bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -7981,7 +7962,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute
-            { channelId = DmChannelId.channelIdFromUserIds localUser.session.userId otherUserId
+            { channelId = DmChannelId.fromUserIds localUser.session.userId otherUserId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }

@@ -1748,7 +1748,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
         DiscordGuildOrDmId _ ->
             loggedIn
     , if sameChannel then
-        Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
       else
         let
@@ -1764,7 +1764,9 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                 ViewThreadWithFriends _ maybeMessageIndex _ ->
                     case maybeMessageIndex of
                         Just messageIndex ->
-                            Scroll.smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                            Scroll.smoothScroll
+                                Pages.Guild.conversationContainerId
+                                (Pages.Guild.threadMessageHtmlId messageIndex)
                                 |> Task.attempt (\_ -> ScrolledToMessage)
 
                         Nothing ->
@@ -1773,7 +1775,9 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                 NoThreadWithFriends maybeMessageIndex _ ->
                     case maybeMessageIndex of
                         Just messageIndex ->
-                            Scroll.smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                            Scroll.smoothScroll
+                                Pages.Guild.conversationContainerId
+                                (Pages.Guild.channelMessageHtmlId messageIndex)
                                 |> Task.attempt (\_ -> ScrolledToMessage)
 
                         Nothing ->

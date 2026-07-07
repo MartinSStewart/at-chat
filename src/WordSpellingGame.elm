@@ -86,6 +86,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
 import Random
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Set exposing (Set)
@@ -120,7 +121,7 @@ type alias GameData =
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
     , showSettings : Bool
     , highlightedPlayer : Maybe (Id UserId)
-    , scrolledToBottom : Bool
+    , scrollPosition : ScrollPosition
     }
 
 
@@ -284,6 +285,7 @@ initGame time setup =
     , lastWordPlaced = Nothing
     , showSettings = False
     , highlightedPlayer = Nothing
+    , scrollPosition = ScrolledToBottom
     }
 
 

@@ -275,7 +275,7 @@ decode url =
                     HomePageRoute
 
         "d" :: channelId :: rest ->
-            case DmChannelId.channelIdFromString channelId of
+            case DmChannelId.fromString channelId of
                 Ok channelId2 ->
                     (case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
@@ -626,13 +626,13 @@ encode route =
                 DmRoute { channelId, threadRoute, tab } ->
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
-                            ( [ "d", DmChannelId.channelIdToString channelId, "t", Id.toString threadMessageIndex ]
+                            ( [ "d", DmChannelId.toString channelId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
-                            ( [ "d", DmChannelId.channelIdToString channelId ] ++ maybeMessageIdToString maybeMessageId
+                            ( [ "d", DmChannelId.toString channelId ] ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
