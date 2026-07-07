@@ -41,6 +41,7 @@ module WordSpellingGame exposing
     , isAnimating
     , isPlayerTurn
     , isZoomAnimating
+    , pastWordsContainerId
     , placeWord
     , placementConnects
     , pressedKey
@@ -119,6 +120,7 @@ type alias GameData =
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
     , showSettings : Bool
     , highlightedPlayer : Maybe (Id UserId)
+    , scrolledToBottom : Bool
     }
 
 
@@ -3329,9 +3331,9 @@ recentActionsView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Ar
 recentActionsView windowSize isPersonalDm localUser setup actions shared =
     let
         ( _, _, log ) =
-            Array.foldl
+            Array.foldr
                 (\action ( index, shared2, acc ) ->
-                    ( index + 1
+                    ( index - 1
                     , updateAction setup action shared2
                     , { index = index
                       , userId = action.userId
@@ -3384,7 +3386,7 @@ recentActionsView windowSize isPersonalDm localUser setup actions shared =
                         :: acc
                     )
                 )
-                ( 1, initShared setup, [] )
+                ( Array.length actions, initShared setup, [] )
                 actions
 
         playerCount =
@@ -3409,7 +3411,7 @@ recentActionsView windowSize isPersonalDm localUser setup actions shared =
                 , Ui.text (" " ++ Tuple.second entry.description)
                 ]
         )
-        (List.reverse log)
+        log
         ++ (case joinWarning isPersonalDm playerCount localUser shared of
                 Just element ->
                     [ element ]
@@ -3423,6 +3425,7 @@ recentActionsView windowSize isPersonalDm localUser setup actions shared =
             , Ui.spacing 4
             , MyUi.prewrap
             , Ui.scrollable
+            , Ui.id (Dom.idToString pastWordsContainerId)
             , (tabBodyHeight windowSize setup.traySize
                 - (playerRowHeight * playerCount)
                 - (playerRowSpacing * (playerCount - 1))
@@ -3477,6 +3480,11 @@ recentActionsView windowSize isPersonalDm localUser setup actions shared =
                     )
                 )
             ]
+
+
+pastWordsContainerId : Dom.HtmlId
+pastWordsContainerId =
+    Dom.id "wsg_pastWords"
 
 
 {-| Replay the action list to work out which player placed each committed tile on the board. Only
