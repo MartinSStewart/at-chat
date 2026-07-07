@@ -3170,6 +3170,26 @@ leaderboardView isMobile highlightedPlayer winners shared localUser =
         )
 
 
+joinWarning : Bool -> Int -> LocalUser -> Shared -> Maybe (Element GameMsg)
+joinWarning isPersonalDm playerCount localUser shared =
+    let
+        soloJoinWarning : Bool
+        soloJoinWarning =
+            not isPersonalDm
+                && (playerCount == 1)
+                && (shared.turnCount == 1)
+                && (isPlayerTurn localUser.session.userId shared == JoinedAndItsTheirTurn)
+    in
+    if soloJoinWarning then
+        Ui.el
+            [ Ui.Font.color MyUi.errorColor, MyUi.prewrap, Ui.paddingXY 16 0 ]
+            (Ui.text "No one else has joined yet.\nOnce you make a second move no one can join.")
+            |> Just
+
+    else
+        Nothing
+
+
 statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
 statusView windowSize isPersonalDm localUser setup actions shared model =
     let
@@ -3186,27 +3206,6 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
         isMobile =
             MyUi.isMobileAlt windowSize
-
-        -- A solo game (nobody else has joined) stops accepting new players once its creator plays a
-        -- second move, because `canJoin` only holds while `turnCount <= playerCount`. Warn the lone
-        -- player before that second move so they know they're about to lock everyone else out. There's
-        -- no one to lock out in a personal DM (the player is talking to themselves), so skip it there.
-        soloJoinWarning : Bool
-        soloJoinWarning =
-            not isPersonalDm
-                && (playerCount == 1)
-                && (shared.turnCount == 1)
-                && (isPlayerTurn localUser.session.userId shared == JoinedAndItsTheirTurn)
-
-        joinWarning : Element GameMsg
-        joinWarning =
-            if soloJoinWarning then
-                Ui.el
-                    [ Ui.Font.color MyUi.errorColor, MyUi.prewrap, Ui.paddingXY 16 0 ]
-                    (Ui.text "No one else has joined yet.\nOnce you make a second move no one can join.")
-
-            else
-                Ui.none
     in
     case getWinner shared of
         Just winners ->
@@ -3268,7 +3267,12 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
                             Nothing ->
                                 Ui.none
-                        , joinWarning
+                        , case joinWarning isPersonalDm playerCount localUser shared of
+                            Just element ->
+                                element
+
+                            Nothing ->
+                                Ui.none
                         ]
                     , contextButton
                     ]
@@ -3313,8 +3317,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             )
                             (List.Nonempty.toList shared.players)
                         )
-                    , Ui.Lazy.lazy5 recentActionsView windowSize localUser setup actions shared
-                    , joinWarning
+                    , Ui.Lazy.lazy6 recentActionsView windowSize isPersonalDm localUser setup actions shared
                     , contextButton
                     ]
 
@@ -3322,15 +3325,63 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 {-| The most recent couple of actions, shown beneath the player list on non-mobile so it's easy to
 see what just happened (who played which word for how many points, who passed, and so on).
 -}
-recentActionsView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-recentActionsView windowSize localUser setup actions shared =
+recentActionsView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
+recentActionsView windowSize isPersonalDm localUser setup actions shared =
     let
         ( _, _, log ) =
             Array.foldl
                 (\action ( index, shared2, acc ) ->
                     ( index + 1
                     , updateAction setup action shared2
-                    , { index = index, userId = action.userId, description = describeAction setup shared2 action } :: acc
+                    , { index = index
+                      , userId = action.userId
+                      , description =
+                            case action.change of
+                                PlaceWord placedWord isValid ->
+                                    case isValid of
+                                        FilledInByBackend IsNotValid ->
+                                            ( [], "played an invalid word" )
+
+                                        _ ->
+                                            case placeWord setup shared2.board placedWord of
+                                                Just result ->
+                                                    let
+                                                        bonus : Int
+                                                        bonus =
+                                                            fullTrayBonusScore setup placedWord
+                                                    in
+                                                    ( []
+                                                    , "played "
+                                                        ++ headlineWord result.words
+                                                        ++ " (+"
+                                                        ++ String.fromInt (result.score + bonus)
+                                                        ++ (if bonus == 0 then
+                                                                ""
+
+                                                            else
+                                                                ", bingo!"
+                                                           )
+                                                        ++ ")"
+                                                    )
+
+                                                Nothing ->
+                                                    ( [], "played a word" )
+
+                                ReplaceTrayOrPass ->
+                                    case passBehavior setup shared of
+                                        ShouldReplaceTray ->
+                                            ( [], "swapped their tiles" )
+
+                                        ShouldPass ->
+                                            ( [], "passed" )
+
+                                        ShouldEndGame ->
+                                            ( [], "ended the game" )
+
+                                JoinGame ->
+                                    ( [], "joined the game" )
+                      }
+                        :: acc
                     )
                 )
                 ( 1, initShared setup, [] )
@@ -3339,7 +3390,7 @@ recentActionsView windowSize localUser setup actions shared =
         playerCount =
             List.Nonempty.length shared.players
     in
-    List.map
+    (List.map
         (\entry ->
             let
                 name : String
@@ -3355,10 +3406,18 @@ recentActionsView windowSize localUser setup actions shared =
                 [ Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
                 [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text (String.fromInt entry.index ++ ". "))
                 , Ui.el [ Ui.Font.bold ] (Ui.text name)
-                , Ui.text (" " ++ entry.description)
+                , Ui.text (" " ++ Tuple.second entry.description)
                 ]
         )
         (List.reverse log)
+        ++ (case joinWarning isPersonalDm playerCount localUser shared of
+                Just element ->
+                    [ element ]
+
+                Nothing ->
+                    []
+           )
+    )
         |> Ui.column
             [ Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
             , Ui.spacing 4
@@ -3452,55 +3511,6 @@ tileOwners setup actions =
         ( initShared setup, SeqDict.empty )
         actions
         |> Tuple.second
-
-
-{-| A short description of a single action, phrased to read after the player's name (e.g.
-"played CAT (+5)"). Uses the board state from just before the action to recover the word and score.
--}
-describeAction : ValidatedSetup -> Shared -> ActionWithTime -> String
-describeAction setup shared action =
-    case action.change of
-        PlaceWord placedWord isValid ->
-            case isValid of
-                FilledInByBackend IsNotValid ->
-                    "played an invalid word"
-
-                _ ->
-                    case placeWord setup shared.board placedWord of
-                        Just result ->
-                            let
-                                bonus : Int
-                                bonus =
-                                    fullTrayBonusScore setup placedWord
-                            in
-                            "played "
-                                ++ headlineWord result.words
-                                ++ " (+"
-                                ++ String.fromInt (result.score + bonus)
-                                ++ (if bonus == 0 then
-                                        ""
-
-                                    else
-                                        ", bingo!"
-                                   )
-                                ++ ")"
-
-                        Nothing ->
-                            "played a word"
-
-        ReplaceTrayOrPass ->
-            case passBehavior setup shared of
-                ShouldReplaceTray ->
-                    "swapped their tiles"
-
-                ShouldPass ->
-                    "passed"
-
-                ShouldEndGame ->
-                    "ended the game"
-
-        JoinGame ->
-            "joined the game"
 
 
 {-| The word a placement formed that uses the most of the newly placed tiles, rendered as uppercase
