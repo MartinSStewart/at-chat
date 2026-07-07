@@ -2993,6 +2993,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , MyUi.noShrinking
             , MyUi.htmlStyle "user-select" "none"
             , settingsButton
+            , Ui.contentTop
             ]
             [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared highlightedCells model
             , statusView windowSize isPersonalDm localUser setup actions shared model
@@ -3259,7 +3260,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
             else
                 Ui.column
-                    [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                    [ Ui.spacing 8, Ui.paddingXY 16 8 ]
                     [ Ui.column
                         []
                         (("Letters remaining: "
@@ -3302,32 +3303,30 @@ recentActionsView localUser setup actions =
         log =
             actionLog setup actions
     in
-    case List.drop (max 0 (List.length log - 4)) log of
-        [] ->
-            Ui.none
+    Ui.column
+        []
+        [ Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ] (Ui.text "Moves")
+        , List.map
+            (\entry ->
+                let
+                    name : String
+                    name =
+                        case User.getUser entry.userId localUser of
+                            Just user ->
+                                PersonName.toString user.name
 
-        recent ->
-            Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.size 14 ] (Ui.text "Recent moves")
-                :: List.map
-                    (\entry ->
-                        let
-                            name : String
-                            name =
-                                case User.getUser entry.userId localUser of
-                                    Just user ->
-                                        PersonName.toString user.name
-
-                                    Nothing ->
-                                        "Someone"
-                        in
-                        Ui.row
-                            [ MyUi.prewrap, Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
-                            [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                            , Ui.text (" " ++ entry.description)
-                            ]
-                    )
-                    (List.reverse recent)
-                |> Ui.column [ Ui.spacing 4 ]
+                            Nothing ->
+                                "Someone"
+                in
+                Ui.row
+                    [ MyUi.prewrap, Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
+                    [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                    , Ui.text (" " ++ entry.description)
+                    ]
+            )
+            log
+            |> Ui.column [ Ui.spacing 4, Ui.scrollable, Ui.height (Ui.px 100) ]
+        ]
 
 
 {-| Replay the whole action list from the start (the same fold `updateAction` builds the live board
