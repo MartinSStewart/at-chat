@@ -5854,7 +5854,10 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                     |> Lamdera.sendToFrontend clientId
                 , broadcast localMsg2 model
                 , if loadSwedishWordList then
-                    Http.get { url = "/swedish-word-list.txt", expect = Http.expectString GotSwedishWordList }
+                    Http.get
+                        { url = Env.domain ++ "/swedish-word-list.txt"
+                        , expect = Http.expectString GotSwedishWordList
+                        }
 
                   else
                     Command.none
