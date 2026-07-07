@@ -117,6 +117,9 @@ type alias GameData =
     , -- Whether the game's settings (a read-only version of the setup view) are shown instead of
       -- the board, toggled with the gear button.
       showSettings : Bool
+    , -- The player whose placed letters are highlighted on the board, set by clicking a name in the
+      -- status/leaderboard view (see `statusView`). Clicking the same player again clears it.
+      highlightedPlayer : Maybe (Id UserId)
     }
 
 
@@ -198,6 +201,7 @@ type GameMsg
     | PressedReplaceTrayOrPass
     | PressedClearBoard
     | PressedToggleSettings
+    | PressedPlayerHighlight (Id UserId)
 
 
 type alias SetupModel =
@@ -276,6 +280,7 @@ initGame time setup =
     , zoomAnimation = { start = time, from = zoomedOutState }
     , lastWordPlaced = Nothing
     , showSettings = False
+    , highlightedPlayer = Nothing
     }
 
 
@@ -1254,6 +1259,20 @@ updateGame time currentUserId setup shared msg model =
 
         PressedToggleSettings ->
             ( { model | showSettings = not model.showSettings }, Nothing )
+
+        PressedPlayerHighlight userId ->
+            -- Toggle: clicking the already-highlighted player clears the highlight, otherwise
+            -- highlight the player that was clicked.
+            ( { model
+                | highlightedPlayer =
+                    if model.highlightedPlayer == Just userId then
+                        Nothing
+
+                    else
+                        Just userId
+              }
+            , Nothing
+            )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -2874,6 +2893,26 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
 
+        -- The board cells placed by the player whose name was clicked in the status view, drawn with
+        -- a highlight so their letters stand out. Empty when no player is selected.
+        highlightedCells : Set ( Int, Int )
+        highlightedCells =
+            case model.highlightedPlayer of
+                Just userId ->
+                    tileOwners setup actions
+                        |> SeqDict.foldl
+                            (\cell owner acc ->
+                                if owner == userId then
+                                    Set.insert cell acc
+
+                                else
+                                    acc
+                            )
+                            Set.empty
+
+                Nothing ->
+                    Set.empty
+
         -- A gear in the top right corner that toggles between the game and its (read-only)
         -- settings, so players can check what was configured for the match.
         settingsButton : Ui.Attribute GameMsg
@@ -2919,19 +2958,26 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , MyUi.htmlStyle "user-select" "none"
             , settingsButton
             ]
-            [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared model
-            , statusView windowSize isPersonalDm localUser setup actions shared
+            [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared highlightedCells model
+            , statusView windowSize isPersonalDm localUser setup actions shared model
             ]
 
 
-playerRow : LocalUser -> Id UserId -> Bool -> String -> Element GameMsg
-playerRow localUser userId highlight suffix =
+{-| A player's icon and name (with a trailing `suffix` like "'s turn (5)"). Clicking it highlights
+the letters that player has placed on the board (see `PressedPlayerHighlight`); `isSelected` is True
+for the player whose letters are currently highlighted. `highlight` shades the row for the player
+whose turn it is (or the winner in the leaderboard).
+-}
+playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
+playerRow localUser userId highlight isSelected suffix =
     let
         maybeUser : Maybe User.FrontendUser
         maybeUser =
             User.getUser userId localUser
     in
-    Ui.row
+    MyUi.rowButton
+        (Dom.id ("wsg_player_" ++ Id.toString userId))
+        (PressedPlayerHighlight userId)
         [ Ui.spacing 8
         , Ui.width Ui.shrink
         , if highlight then
@@ -2939,7 +2985,19 @@ playerRow localUser userId highlight suffix =
 
           else
             Ui.noAttr
-        , Ui.paddingWith { left = 4, top = 4, bottom = 4, right = 8 }
+
+        -- A transparent border is always present so selecting a row doesn't shift the layout.
+        , Ui.border 2
+        , Ui.borderColor
+            (if isSelected then
+                Ui.rgb 40 90 220
+
+             else
+                Ui.rgba 0 0 0 0
+            )
+        , Ui.rounded 4
+        , MyUi.htmlStyle "cursor" "pointer"
+        , Ui.paddingWith { left = 4, top = 2, bottom = 2, right = 8 }
         ]
         [ User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
@@ -2960,8 +3018,53 @@ playerRow localUser userId highlight suffix =
         ]
 
 
-leaderboardView : Bool -> Nonempty (Id UserId) -> Shared -> LocalUser -> Element GameMsg
-leaderboardView isMobile winners shared localUser =
+{-| The mobile status view's compact "X's turn" / "X is next" row. Like `playerRow`, clicking it
+highlights that player's placed letters on the board; `highlight` shades the row whose turn it is.
+-}
+mobilePlayerRow : Maybe (Id UserId) -> Id UserId -> Bool -> User.FrontendUser -> String -> Element GameMsg
+mobilePlayerRow highlightedPlayer userId highlight user suffix =
+    MyUi.rowButton
+        -- `highlight` distinguishes the current-turn row from the "is next" row; they can name the
+        -- same player in a solo game, so it keeps the two button ids from colliding.
+        (Dom.id
+            ("wsg_playerMobile_"
+                ++ (if highlight then
+                        "current_"
+
+                    else
+                        "next_"
+                   )
+                ++ Id.toString userId
+            )
+        )
+        (PressedPlayerHighlight userId)
+        [ Ui.width Ui.shrink
+        , Ui.paddingXY 8 2
+        , if highlight then
+            Ui.background MyUi.mentionColor
+
+          else
+            Ui.noAttr
+
+        -- A transparent border is always present so selecting a row doesn't shift the layout.
+        , Ui.border 2
+        , Ui.borderColor
+            (if highlightedPlayer == Just userId then
+                Ui.rgb 40 90 220
+
+             else
+                Ui.rgba 0 0 0 0
+            )
+        , Ui.rounded 4
+        , MyUi.htmlStyle "cursor" "pointer"
+        ]
+        [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
+        , Ui.text suffix
+        ]
+
+
+leaderboardView : Bool -> Maybe (Id UserId) -> Nonempty (Id UserId) -> Shared -> LocalUser -> Element GameMsg
+leaderboardView isMobile highlightedPlayer winners shared localUser =
     let
         isTie : Bool
         isTie =
@@ -2999,6 +3102,7 @@ leaderboardView isMobile winners shared localUser =
                             localUser
                             player.userId
                             isWinner
+                            (highlightedPlayer == Just player.userId)
                             (": "
                                 ++ String.fromInt player.score
                                 ++ (if isWinner then
@@ -3018,8 +3122,8 @@ leaderboardView isMobile winners shared localUser =
         )
 
 
-statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
-statusView windowSize isPersonalDm localUser setup actions shared =
+statusView : Coord CssPixels -> Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> GameData -> Element GameMsg
+statusView windowSize isPersonalDm localUser setup actions shared model =
     let
         currentPlayer : Player
         currentPlayer =
@@ -3058,7 +3162,7 @@ statusView windowSize isPersonalDm localUser setup actions shared =
     in
     case getWinner shared of
         Just winners ->
-            leaderboardView isMobile winners shared localUser
+            leaderboardView isMobile model.highlightedPlayer winners shared localUser
 
         Nothing ->
             let
@@ -3096,21 +3200,23 @@ statusView windowSize isPersonalDm localUser setup actions shared =
                         [ Ui.centerY ]
                         [ case User.getUser currentPlayer.userId localUser of
                             Just user ->
-                                Ui.row
-                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2, Ui.background MyUi.mentionColor ]
-                                    [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
-                                    , Ui.text ("'s turn (" ++ String.fromInt currentPlayer.score ++ ")")
-                                    ]
+                                mobilePlayerRow
+                                    model.highlightedPlayer
+                                    currentPlayer.userId
+                                    True
+                                    user
+                                    ("'s turn (" ++ String.fromInt currentPlayer.score ++ ")")
 
                             Nothing ->
                                 Ui.none
                         , case User.getUser nextPlayer.userId localUser of
                             Just user ->
-                                Ui.row
-                                    [ Ui.width Ui.shrink, Ui.paddingXY 8 2 ]
-                                    [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
-                                    , Ui.text (" is next (" ++ String.fromInt nextPlayer.score ++ ")")
-                                    ]
+                                mobilePlayerRow
+                                    model.highlightedPlayer
+                                    nextPlayer.userId
+                                    False
+                                    user
+                                    (" is next (" ++ String.fromInt nextPlayer.score ++ ")")
 
                             Nothing ->
                                 Ui.none
@@ -3135,6 +3241,7 @@ statusView windowSize isPersonalDm localUser setup actions shared =
                                         localUser
                                         player.userId
                                         (index == modBy playerCount shared.turnCount)
+                                        (model.highlightedPlayer == Just player.userId)
                                         (if index == modBy playerCount shared.turnCount then
                                             "'s turn (" ++ String.fromInt player.score ++ ")"
 
@@ -3208,6 +3315,40 @@ actionLog setup actions =
         actions
         |> Tuple.second
         |> List.reverse
+
+
+{-| Replay the action list to work out which player placed each committed tile on the board. Only
+the cells a `PlaceWord` action actually adds (`placedCells`) are attributed, and only for placements
+that stuck (a placement rejected by the backend leaves the board unchanged, so it's skipped). Used to
+highlight one player's letters when their name is clicked (see `statusView`).
+-}
+tileOwners : ValidatedSetup -> Array ActionWithTime -> SeqDict ( Int, Int ) (Id UserId)
+tileOwners setup actions =
+    Array.foldl
+        (\action ( shared, owners ) ->
+            ( updateAction setup action shared
+            , case action.change of
+                PlaceWord placedWord isValid ->
+                    case ( ( getWinner shared, getPlayer action.userId shared ), isValid, placeWord setup shared.board placedWord ) of
+                        ( ( Nothing, Just _ ), FilledInByBackend IsNotValid, _ ) ->
+                            owners
+
+                        ( ( Nothing, Just _ ), _, Just result ) ->
+                            List.foldl
+                                (\( cell, _ ) acc -> SeqDict.insert cell action.userId acc)
+                                owners
+                                result.placedCells
+
+                        _ ->
+                            owners
+
+                _ ->
+                    owners
+            )
+        )
+        ( initShared setup, SeqDict.empty )
+        actions
+        |> Tuple.second
 
 
 {-| A short description of a single action, phrased to read after the player's name (e.g.
@@ -3302,9 +3443,10 @@ boardView :
     -> Id UserId
     -> ValidatedSetup
     -> Shared
+    -> Set ( Int, Int )
     -> GameData
     -> Element GameMsg
-boardView currentTime windowSize maybeDragging currentUserId setup shared model =
+boardView currentTime windowSize maybeDragging currentUserId setup shared highlightedCells model =
     let
         cellSize2 : Int
         cellSize2 =
@@ -3365,7 +3507,7 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared model 
                             p =
                                 project x y
                         in
-                        boardTileInFront setup p.size p.pos letter :: list
+                        boardTileInFront setup (Set.member ( x, y ) highlightedCells) p.size p.pos letter :: list
                 )
                 []
                 shared.board
@@ -3858,22 +4000,37 @@ tileInFront setup currentTime createdAt cellSize2 offset letterOrWildcard =
         )
 
 
-boardTileInFront : ValidatedSetup -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-boardTileInFront setup cellSize2 offset letterOrWildcard =
+boardTileInFront : ValidatedSetup -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
     Ui.inFront
         (Ui.el
-            [ Ui.background (Ui.rgb 186 171 103)
-            , Ui.width (Ui.px (cellSize2 - 1))
-            , Ui.height (Ui.px (cellSize2 - 1))
-            , Ui.contentCenterX
-            , Ui.contentCenterY
-            , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
-            , Ui.Font.bold
-            , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
-            , Ui.Font.color (Ui.rgb 0 0 0)
-            , MyUi.noPointerEvents
-            , tileScoreView setup cellSize2 letterOrWildcard
-            ]
+            ([ Ui.background
+                (if highlight then
+                    Ui.rgb 245 213 92
+
+                 else
+                    Ui.rgb 186 171 103
+                )
+             , Ui.width (Ui.px (cellSize2 - 1))
+             , Ui.height (Ui.px (cellSize2 - 1))
+             , Ui.contentCenterX
+             , Ui.contentCenterY
+             , toFloat cellSize2 * 0.7 |> ceiling |> Ui.Font.size
+             , Ui.Font.bold
+             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
+             , Ui.Font.color (Ui.rgb 0 0 0)
+             , MyUi.noPointerEvents
+             , tileScoreView setup cellSize2 letterOrWildcard
+             ]
+                ++ (if highlight then
+                        -- A coloured border makes the highlighted letters stand out even where a
+                        -- highlighted player's tiles sit next to each other.
+                        [ Ui.borderColor (Ui.rgb 40 90 220), Ui.border 2 ]
+
+                    else
+                        []
+                   )
+            )
             (Ui.text (letterOrWildcardText letterOrWildcard))
         )
 
