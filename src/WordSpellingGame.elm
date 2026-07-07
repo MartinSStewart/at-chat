@@ -594,7 +594,13 @@ updateAction setup action shared =
                                                     (NonemptyExtra.set shared.turnCount { player | tray = IdArray.empty } shared.players
                                                         |> List.Nonempty.toList
                                                     )
-                                                    shared.turnCount
+                                                    (if shared.turnCount == 0 then
+                                                        -- Clunky work around in order to not desync old games while fixing a bug where replacing a tray on turn 0 gives you back the same tray
+                                                        9999
+
+                                                     else
+                                                        shared.turnCount
+                                                    )
                                                     |> IdArray.fromList
                                         }
                                         shared.players
