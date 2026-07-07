@@ -3268,7 +3268,7 @@ headlineWord words =
     words
         |> List.sortBy (\word -> ( negate word.placedCount, negate (List.length word.letters) ))
         |> List.head
-        |> Maybe.map (.letters >> letterOrWildcardsToString)
+        |> Maybe.map (\a -> a.letters |> letterOrWildcardsToString)
         |> Maybe.withDefault "a word"
 
 
