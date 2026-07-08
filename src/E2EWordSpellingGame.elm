@@ -371,7 +371,7 @@ tests normalConfig =
                         E2EHelper.iphone14Window
                         (\userReload ->
                             [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.safariIphone)
-                            , admin.snapshotView 100 { name = "Game ended out of letters, mobile" }
+                            , userReload.snapshotView 100 { name = "Game ended out of letters, mobile" }
                             ]
                         )
                     ]
