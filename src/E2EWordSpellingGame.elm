@@ -249,8 +249,8 @@ tests normalConfig =
                         "Place \"date\""
                         [ dragTile 4000 admin (trayTile 3) (boardCell 6 7)
                         , dragTile 100 admin (trayTile 6) (boardCell 7 7)
-                        , dragTile 100 admin (trayTile 2) (boardCell 8 7)
-                        , dragTile 100 admin (trayTile 5) (boardCell 9 7)
+                        , dragTile 100 admin (trayTile 5) (boardCell 8 7)
+                        , dragTile 100 admin (trayTile 2) (boardCell 9 7)
                         , admin.checkModel 100 (checkPopCount 11)
                         , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
                         , admin.checkModel 100 (checkPopCount 7)

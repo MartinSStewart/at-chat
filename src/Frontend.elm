@@ -1639,10 +1639,6 @@ updateLoaded msg model =
             handleTouchEnd (Duration.addTo model.startupData.timeOrigin timeStamp) model
 
         ChannelSidebarAnimated elapsedTime ->
-            let
-                _ =
-                    Debug.log "Animation frame" ()
-            in
             case model.loginStatus of
                 LoggedIn loggedIn ->
                     case loggedIn.sidebarMode of
