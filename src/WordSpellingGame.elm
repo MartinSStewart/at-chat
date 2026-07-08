@@ -3054,11 +3054,15 @@ playerRow localUser userId highlight isSelected suffix =
              else
                 "0 solid rgba(0,0,0,0)"
             )
-        , Ui.rounded 4
+        , Ui.rounded 8
         , Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 }
         , Ui.clip
         ]
-        [ User.profileImageNoRounding userId (Maybe.andThen .icon maybeUser)
+        [ if highlight then
+            User.profileImageNoRounding userId (Maybe.andThen .icon maybeUser)
+
+          else
+            User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
             [ MyUi.prewrap ]
             [ Ui.el
@@ -3250,12 +3254,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
                             Nothing ->
                                 Ui.none
-                        , case joinWarning isPersonalDm playerCount localUser shared of
-                            Just element ->
-                                element
-
-                            Nothing ->
-                                Ui.none
+                        , joinWarning isPersonalDm playerCount localUser shared |> Maybe.withDefault Ui.none
                         ]
                     ]
 
@@ -3263,7 +3262,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                 Ui.column
                     [ case joinWarning isPersonalDm playerCount localUser shared of
                         Just element ->
-                            Ui.inFront (Ui.el [ Ui.alignBottom, Ui.paddingXY 16 8 ] element)
+                            Ui.inFront (Ui.el [ Ui.alignBottom, Ui.paddingXY 0 8 ] element)
 
                         Nothing ->
                             Ui.noAttr
