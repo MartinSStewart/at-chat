@@ -69,6 +69,7 @@ testSetup =
                 NonemptyDict.fromNonemptyList
                     (Nonempty ( Letter a, { count = OneOrGreater.seven, value = 1 } ) [])
             , language = WordSpellingGame.English
+            , placeWordAttempts = OneOrGreater.one
             }
 
 

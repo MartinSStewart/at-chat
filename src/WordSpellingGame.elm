@@ -591,10 +591,15 @@ updateAction setup action shared =
                             case isValid of
                                 FilledInByBackend IsNotValid ->
                                     case OneOrGreater.decrement shared.attemptsLeft of
-                                        Just _ ->
-                                            shared2
+                                        Just attemptsLeft ->
+                                            -- Still had a try to spare: use one up and keep it the
+                                            -- same player's turn.
+                                            { shared2 | attemptsLeft = attemptsLeft }
 
                                         Nothing ->
+                                            -- That was the last attempt, so the turn passes to the
+                                            -- next player (which resets attemptsLeft, see
+                                            -- `incrementTurnCount`).
                                             incrementTurnCount setup shared2
 
                                 FilledInByBackend IsValid ->
