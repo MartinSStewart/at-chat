@@ -3007,7 +3007,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , settingsButton
             , Ui.contentTop
             ]
-            [ boardView currentTime windowSize maybeDragging localUser.session.userId setup shared highlightedCells model
+            [ boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model
             , statusView windowSize isPersonalDm localUser setup actions shared model
             ]
 
@@ -3223,34 +3223,6 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             leaderboardView isMobile model.highlightedPlayer winners shared localUser
 
         Nothing ->
-            let
-                contextButton : Element GameMsg
-                contextButton =
-                    case isPlayerTurn localUser.session.userId shared of
-                        JoinedAndItsTheirTurn ->
-                            -- The player replaces their tray with the delete button next to the
-                            -- tray (see `boardView`). When no letters are left to draw, replacing
-                            -- isn't possible, so instead offer to pass the turn or end the game.
-                            case passBehavior setup shared of
-                                ShouldReplaceTray ->
-                                    Ui.none
-
-                                ShouldPass ->
-                                    MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "Pass turn")
-
-                                ShouldEndGame ->
-                                    MyUi.simpleButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass (Ui.text "End game")
-
-                        Joined ->
-                            Ui.none
-
-                        NotJoined ->
-                            if canJoin shared then
-                                MyUi.simpleButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame (Ui.text "Join game")
-
-                            else
-                                Ui.none
-            in
             if isMobile then
                 Ui.row
                     [ Ui.spacing 8, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
@@ -3285,7 +3257,6 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             Nothing ->
                                 Ui.none
                         ]
-                    , contextButton
                     ]
 
             else
@@ -3329,7 +3300,6 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                             (List.Nonempty.toList shared.players)
                         )
                     , recentActionsView model.scrollPosition windowSize isPersonalDm localUser setup actions shared
-                    , contextButton
                     ]
 
 
@@ -3471,33 +3441,37 @@ recentActionsContent isPersonalDm localUser setup actions shared =
         playerCount =
             List.Nonempty.length shared.players
     in
-    (List.map
-        (\entry ->
-            let
-                name : String
-                name =
-                    case User.getUser entry.userId localUser of
-                        Just user ->
-                            PersonName.toString user.name
+    (if List.isEmpty log then
+        [ Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "No moves made yet...") ]
 
-                        Nothing ->
-                            "Someone"
-            in
-            Ui.row
-                [ Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
-                [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text (String.fromInt entry.index ++ ". "))
-                , Ui.el [ Ui.Font.bold ] (Ui.text name)
-                , Ui.text (" " ++ Tuple.second entry.description)
-                ]
-        )
-        log
-        ++ (case joinWarning isPersonalDm playerCount localUser shared of
-                Just element ->
-                    [ element ]
+     else
+        List.map
+            (\entry ->
+                let
+                    name : String
+                    name =
+                        case User.getUser entry.userId localUser of
+                            Just user ->
+                                PersonName.toString user.name
 
-                Nothing ->
-                    []
-           )
+                            Nothing ->
+                                "Someone"
+                in
+                Ui.row
+                    [ Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
+                    [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text (String.fromInt entry.index ++ ". "))
+                    , Ui.el [ Ui.Font.bold ] (Ui.text name)
+                    , Ui.text (" " ++ Tuple.second entry.description)
+                    ]
+            )
+            log
+            ++ (case joinWarning isPersonalDm playerCount localUser shared of
+                    Just element ->
+                        [ element ]
+
+                    Nothing ->
+                        []
+               )
     )
         |> Ui.column
             [ Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
@@ -3585,13 +3559,13 @@ boardView :
     Time.Posix
     -> Coord CssPixels
     -> Maybe (NonemptyDict Int Touch)
-    -> Id UserId
+    -> LocalUser
     -> ValidatedSetup
     -> Shared
     -> Set ( Int, Int )
     -> GameData
     -> Element GameMsg
-boardView currentTime windowSize maybeDragging currentUserId setup shared highlightedCells model =
+boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model =
     let
         cellSize2 : Int
         cellSize2 =
@@ -3656,6 +3630,9 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared highli
                 )
                 []
                 shared.board
+
+        currentUserId =
+            localUser.session.userId
 
         isPreviousPlayer : Bool
         isPreviousPlayer =
@@ -3927,48 +3904,58 @@ boardView currentTime windowSize maybeDragging currentUserId setup shared highli
         -- to draw); the pass/end button in `statusView` takes over then.
         replaceTrayButton : Ui.Attribute GameMsg
         replaceTrayButton =
-            if getWinner shared == Nothing && isPlayerTurn currentUserId shared == JoinedAndItsTheirTurn then
-                let
-                    pos : Coord CssPixels
-                    pos =
-                        trayTilePos setup.traySize windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))
+            let
+                pos : Coord CssPixels
+                pos =
+                    trayTilePos setup.traySize windowSize (TrayIndex (OneOrGreater.toInt setup.traySize))
 
-                    buttonSize : Int
-                    buttonSize =
-                        round (trayTileSize setup.traySize windowSize)
+                buttonSize : Int
+                buttonSize =
+                    round (trayTileSize setup.traySize windowSize)
 
-                    canReplace : Bool
-                    canReplace =
-                        passBehavior setup shared == ShouldReplaceTray
+                attributes : List (Ui.Attribute GameMsg)
+                attributes =
+                    [ Ui.move { x = Coord.xRaw pos, y = Coord.yRaw pos, z = 0 }
+                    , Ui.width (Ui.px buttonSize)
+                    , Ui.height (Ui.px buttonSize)
+                    , Ui.rounded (buttonSize // 6)
+                    , Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.Font.center
+                    , Ui.Font.bold
+                    ]
+            in
+            Ui.inFront
+                (case isPlayerTurn localUser.session.userId shared of
+                    JoinedAndItsTheirTurn ->
+                        case getWinner shared of
+                            Just _ ->
+                                Ui.none
 
-                    attributes : List (Ui.Attribute GameMsg)
-                    attributes =
-                        [ Ui.move { x = Coord.xRaw pos, y = Coord.yRaw pos, z = 0 }
-                        , Ui.width (Ui.px buttonSize)
-                        , Ui.height (Ui.px buttonSize)
-                        , Ui.rounded (buttonSize // 6)
-                        , Ui.contentCenterX
-                        , Ui.contentCenterY
-                        , Ui.Font.color (Ui.rgb 255 255 255)
-                        , Ui.background
-                            (if canReplace then
-                                MyUi.buttonBackground
+                            Nothing ->
+                                case passBehavior setup shared of
+                                    ShouldReplaceTray ->
+                                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.recycle)
 
-                             else
-                                MyUi.disabledButtonBackground
-                            )
-                        ]
-                in
-                Ui.inFront
-                    (if canReplace then
-                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.recycle)
+                                    ShouldPass ->
+                                        MyUi.elButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass attributes (Ui.text "Pass")
 
-                     else
-                        Ui.el attributes (Ui.html Icons.recycle)
-                    )
+                                    ShouldEndGame ->
+                                        MyUi.elButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass attributes (Ui.text "End game")
 
-            else
-                Ui.noAttr
+                    Joined ->
+                        Ui.none
+
+                    NotJoined ->
+                        if canJoin shared then
+                            MyUi.elButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame attributes (Ui.text "Join")
+
+                        else
+                            Ui.text "sadf"
+                )
+                |> Debug.log "asdf"
 
         boardPx : Int
         boardPx =
