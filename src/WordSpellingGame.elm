@@ -189,6 +189,7 @@ type SetupMsg
     | ChangedFullTrayBonusInput String
     | ChangedLettersInput String
     | ChangedLetterValue Char String
+    | ChangedPlaceWordAttempts OneOrGreater
     | PressedResetLetters
     | PressedStartGame
     | PressedCancel
@@ -221,6 +222,7 @@ type alias SetupModel =
     -- Letters without an entry fall back to `defaultLetterValue`.
     , letterValues : SeqDict Char String
     , language : Language
+    , placeWordAttempts : OneOrGreater
     }
 
 
@@ -232,6 +234,7 @@ type alias ValidatedSetup =
     , seed : Int
     , letters : NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int }
     , language : Language
+    , placeWordAttempts : OneOrGreater
     }
 
 
@@ -249,6 +252,7 @@ initSetup =
     , letters = defaultLetters English
     , letterValues = SeqDict.empty
     , language = English
+    , placeWordAttempts = OneOrGreater.one
     }
 
 
@@ -323,6 +327,7 @@ type alias Shared =
     , turnCount : Int
     , passingStartedAt : Maybe Int
     , lastPlacement : Maybe AnimatedPlacement
+    , attemptsLeft : OneOrGreater
     }
 
 
@@ -371,6 +376,7 @@ initShared setup =
     , turnCount = 0
     , lastPlacement = Nothing
     , passingStartedAt = Nothing
+    , attemptsLeft = setup.placeWordAttempts
     }
 
 
@@ -543,43 +549,59 @@ updateAction setup action shared =
                                                             []
                                             in
                                             remainingTray ++ drawn |> IdArray.fromList
+
+                                shared2 : Shared
+                                shared2 =
+                                    { shared
+                                        | board =
+                                            case isValid of
+                                                FilledInByBackend IsNotValid ->
+                                                    shared.board
+
+                                                _ ->
+                                                    result.board
+                                        , players =
+                                            NonemptyExtra.set
+                                                shared.turnCount
+                                                { player
+                                                    | tray = tray
+                                                    , score =
+                                                        case isValid of
+                                                            FilledInByBackend IsNotValid ->
+                                                                player.score
+
+                                                            _ ->
+                                                                player.score + result.score + fullTrayBonusScore setup placedWord
+                                                }
+                                                shared.players
+                                        , lastPlacement = animatedPlacement
+                                        , passingStartedAt =
+                                            if tray == IdArray.empty then
+                                                case shared.passingStartedAt of
+                                                    Nothing ->
+                                                        Just shared.turnCount
+
+                                                    Just _ ->
+                                                        shared.passingStartedAt
+
+                                            else
+                                                Nothing
+                                    }
                             in
-                            { shared
-                                | board =
-                                    case isValid of
-                                        FilledInByBackend IsNotValid ->
-                                            shared.board
+                            case isValid of
+                                FilledInByBackend IsNotValid ->
+                                    case OneOrGreater.decrement shared.attemptsLeft of
+                                        Just _ ->
+                                            shared2
 
-                                        _ ->
-                                            result.board
-                                , players =
-                                    NonemptyExtra.set
-                                        shared.turnCount
-                                        { player
-                                            | tray = tray
-                                            , score =
-                                                case isValid of
-                                                    FilledInByBackend IsNotValid ->
-                                                        player.score
+                                        Nothing ->
+                                            incrementTurnCount setup shared2
 
-                                                    _ ->
-                                                        player.score + result.score + fullTrayBonusScore setup placedWord
-                                        }
-                                        shared.players
-                                , turnCount = shared.turnCount + 1
-                                , lastPlacement = animatedPlacement
-                                , passingStartedAt =
-                                    if tray == IdArray.empty then
-                                        case shared.passingStartedAt of
-                                            Nothing ->
-                                                Just shared.turnCount
+                                FilledInByBackend IsValid ->
+                                    incrementTurnCount setup shared2
 
-                                            Just _ ->
-                                                shared.passingStartedAt
-
-                                    else
-                                        Nothing
-                            }
+                                EmptyPlaceholder ->
+                                    shared2
 
                         Nothing ->
                             shared
@@ -615,9 +637,9 @@ updateAction setup action shared =
                                                     |> IdArray.fromList
                                         }
                                         shared.players
-                                , turnCount = shared.turnCount + 1
                                 , passingStartedAt = Nothing
                             }
+                                |> incrementTurnCount setup
 
                         ShouldPass ->
                             { shared
@@ -628,11 +650,11 @@ updateAction setup action shared =
 
                                         Just _ ->
                                             shared.passingStartedAt
-                                , turnCount = shared.turnCount + 1
                             }
+                                |> incrementTurnCount setup
 
                         ShouldEndGame ->
-                            { shared | turnCount = shared.turnCount + 1 }
+                            incrementTurnCount setup shared
 
                 _ ->
                     shared
@@ -651,6 +673,11 @@ updateAction setup action shared =
 
             else
                 shared
+
+
+incrementTurnCount : ValidatedSetup -> Shared -> Shared
+incrementTurnCount setup shared =
+    { shared | turnCount = shared.turnCount + 1, attemptsLeft = setup.placeWordAttempts }
 
 
 canJoin : Shared -> Bool
@@ -1110,6 +1137,9 @@ updateSetup time currentUserId msg setup =
             ( Setup { setup | letterValues = SeqDict.insert char input setup.letterValues, error = Nothing }
             , Nothing
             )
+
+        ChangedPlaceWordAttempts attempts ->
+            ( Setup { setup | placeWordAttempts = attempts }, Nothing )
 
         PressedResetLetters ->
             ( Setup { setup | letters = defaultLetters setup.language, letterValues = SeqDict.empty, error = Nothing }
@@ -1661,6 +1691,7 @@ validateSetup createdBy time setup =
                                 Time.posixToMillis time // 10000 |> (*) 10000 |> (+) (Id.toInt createdBy)
                             , letters = letters
                             , language = setup.language
+                            , placeWordAttempts = setup.placeWordAttempts
                             }
                                 |> Ok
 
@@ -1703,6 +1734,7 @@ validatedToSetupModel setup =
                 )
             |> SeqDict.fromList
     , language = setup.language
+    , placeWordAttempts = setup.placeWordAttempts
     }
 
 
@@ -4509,6 +4541,27 @@ setupView windowSize isReadonly setup =
                     (Just setup.language)
                     "Dictionary"
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
+            , setupSection
+                (Ui.row
+                    []
+                    [ Ui.text "Attempts per turn"
+                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (# of tries you get place a valid word)")
+                    ]
+                )
+                (Go.numberInput
+                    { htmlId = "wsg_attemptsPerTurn"
+                    , width = 60
+                    , minValue = 1
+                    , maxValue = 999
+                    , value = OneOrGreater.toString setup.placeWordAttempts
+                    , isReadonly = isReadonly
+                    , onChange =
+                        \value ->
+                            OneOrGreater.fromString value
+                                |> Maybe.withDefault OneOrGreater.one
+                                |> ChangedPlaceWordAttempts
+                    }
+                )
             ]
         , MyUi.container
             MyUi.background1
