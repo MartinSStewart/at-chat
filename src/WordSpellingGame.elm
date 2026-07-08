@@ -97,6 +97,7 @@ import Ui.Events
 import Ui.Font
 import Ui.Gradient
 import Ui.Lazy
+import Ui.Prose
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGameEnglish exposing (Dictionary)
@@ -3442,10 +3443,15 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 "Someone"
                 in
                 Ui.row
-                    [ Ui.width Ui.shrink, Ui.Font.color MyUi.font3 ]
-                    [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text (String.fromInt entry.index ++ ". "))
-                    , Ui.el [ Ui.Font.bold ] (Ui.text name)
-                    , Ui.text (" " ++ Tuple.second entry.description)
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
+                    [ Ui.Prose.paragraph
+                        [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
+                        [ Ui.text (String.fromInt entry.index ++ ". ") ]
+                    , Ui.Prose.paragraph
+                        [ Ui.alignTop ]
+                        [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                        , Ui.text (" " ++ Tuple.second entry.description)
+                        ]
                     ]
             )
             (List.reverse log)
@@ -3454,8 +3460,6 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
             [ Ui.id (Dom.idToString pastWordsContainerId)
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
             , Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
-            , Ui.spacing 4
-            , MyUi.prewrap
             , Ui.scrollable
             ]
         |> Ui.el
