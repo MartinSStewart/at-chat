@@ -24,7 +24,7 @@ loginTests isMobile normalConfig =
         windowSize : { width : number, height : number }
         windowSize =
             if isMobile then
-                E2EHelper.mobileWindow
+                E2EHelper.iphone14Window
 
             else
                 E2EHelper.desktopWindow

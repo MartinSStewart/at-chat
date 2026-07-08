@@ -1,8 +1,10 @@
 module E2EWordSpellingGame exposing (tests)
 
 import Audio
+import Broadcast
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DmChannelId
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
@@ -14,6 +16,7 @@ import Json.Encode
 import List.Nonempty
 import Message
 import OneOrGreater
+import Route exposing (ShowMembersTab(..))
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -353,6 +356,23 @@ tests normalConfig =
                             ]
                         )
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
+                    , T.connectFrontend
+                        100
+                        E2EHelper.sessionId0
+                        (Route.encode
+                            (Route.DmRoute
+                                { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
+                                , threadRoute = Route.NoThreadWithFriends Nothing HideMembersTab
+                                , tab = Just (Route.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
+                                }
+                            )
+                        )
+                        E2EHelper.iphone14Window
+                        (\userReload ->
+                            [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.safariIphone)
+                            , userReload.snapshotView 100 { name = "Game ended out of letters, mobile" }
+                            ]
+                        )
                     ]
                 )
             ]
@@ -462,12 +482,12 @@ tests normalConfig =
             E2EHelper.startTime
             normalConfig
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
-                E2EHelper.mobileWindow
+                E2EHelper.iphone14Window
                 (\admin user ->
                     let
                         windowSize : Coord CssPixels
                         windowSize =
-                            Coord.xy E2EHelper.mobileWindow.width E2EHelper.mobileWindow.height
+                            Coord.xy E2EHelper.iphone14Window.width E2EHelper.iphone14Window.height
 
                         -- A representative phone-notch safe-area inset, in pixels.
                         safeAreaInsetTop : Int

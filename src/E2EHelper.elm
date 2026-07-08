@@ -48,6 +48,7 @@ module E2EHelper exposing
     , httpBasic
     , infoEndpointResponse
     , inviteUser
+    , iphone14Window
     , isLogErrorEmail
     , isLoginEmail
     , isNotificationEmail
@@ -60,7 +61,6 @@ module E2EHelper exposing
     , linkDiscordUrl
     , linkSecondDiscordAccount
     , logoutOtherSessionButtonId
-    , mobileWindow
     , mockCloudflareSfu
     , noMissingMessages
     , regeneratedServerSecretValue
@@ -243,6 +243,9 @@ handlePortToJs requestAndData =
             -- Tests respond manually with startupDataJson so each test can control the user agent
             Nothing
 
+        "audioPortToJs" ->
+            Nothing
+
         _ ->
             let
                 _ =
@@ -261,9 +264,9 @@ tallDesktopWindow =
     { width = 1000, height = 1300 }
 
 
-mobileWindow : { width : number, height : number }
-mobileWindow =
-    { width = 400, height = 800 }
+iphone14Window : { width : number, height : number }
+iphone14Window =
+    { width = 393, height = 852 }
 
 
 parseLoginCode : Parser.Parser Int
@@ -968,7 +971,7 @@ dmCallTest isMobile normalConfig =
         window : { width : Int, height : Int }
         window =
             if isMobile then
-                mobileWindow
+                iphone14Window
 
             else
                 desktopWindow

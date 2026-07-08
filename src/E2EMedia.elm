@@ -154,7 +154,7 @@ imageViewerTests imageUploadConfig =
             E2EHelper.startTime
             imageUploadConfig
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
-                E2EHelper.mobileWindow
+                E2EHelper.iphone14Window
                 (\admin _ ->
                     let
                         touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
@@ -239,7 +239,7 @@ imageViewerTests imageUploadConfig =
             E2EHelper.startTime
             imageUploadConfig
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
-                E2EHelper.mobileWindow
+                E2EHelper.iphone14Window
                 (\admin _ ->
                     let
                         touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
@@ -610,7 +610,7 @@ imageViewerTests imageUploadConfig =
             E2EHelper.startTime
             imageUploadConfig
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
-                E2EHelper.mobileWindow
+                E2EHelper.iphone14Window
                 (\admin _ ->
                     let
                         imageUrl : String
