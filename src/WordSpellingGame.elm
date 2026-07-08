@@ -3171,51 +3171,38 @@ leaderboardView isMobile highlightedPlayer winners shared localUser =
             List.Nonempty.toList shared.players
                 |> List.sortBy (\player -> negate player.score)
     in
-    Ui.el
-        [ Ui.Font.bold
-        , Ui.contentCenterY
-        , Ui.height (Ui.px lettersLeftHeight)
-        ]
-        (Ui.text
-            (if isTie then
-                "Game over — it's a tie!"
+    List.filterMap
+        (\player ->
+            let
+                isWinner : Bool
+                isWinner =
+                    List.Nonempty.member player.userId winners
+            in
+            if isMobile && not isWinner then
+                Nothing
 
-             else
-                "Game over"
-            )
-        )
-        :: List.filterMap
-            (\player ->
-                let
-                    isWinner : Bool
-                    isWinner =
-                        List.Nonempty.member player.userId winners
-                in
-                if isMobile && not isWinner then
-                    Nothing
-
-                else
-                    playerRow
-                        localUser
-                        player.userId
-                        isWinner
-                        (highlightedPlayer == Just player.userId)
-                        (": "
-                            ++ String.fromInt player.score
-                            ++ (if isWinner then
-                                    if isTie then
-                                        " (tied for first)"
-
-                                    else
-                                        " (winner)"
+            else
+                playerRow
+                    localUser
+                    player.userId
+                    isWinner
+                    (highlightedPlayer == Just player.userId)
+                    (": "
+                        ++ String.fromInt player.score
+                        ++ (if isWinner then
+                                if isTie then
+                                    " (tied for first)"
 
                                 else
-                                    ""
-                               )
-                        )
-                        |> Just
-            )
-            sortedPlayers
+                                    " (winner)"
+
+                            else
+                                ""
+                           )
+                    )
+                    |> Just
+        )
+        sortedPlayers
 
 
 joinWarning : Bool -> Int -> LocalUser -> Shared -> Maybe (Element GameMsg)
@@ -3254,15 +3241,18 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
         isMobile =
             MyUi.isMobileAlt windowSize
+
+        winners =
+            getWinner shared
     in
     if isMobile then
         Ui.row
             [ Ui.paddingXY 8 0, Ui.spacing 8, Ui.height (Ui.px statusHeight), MyUi.prewrap ]
             [ Ui.column
                 [ Ui.centerY ]
-                (case getWinner shared of
-                    Just winners ->
-                        leaderboardView isMobile model.highlightedPlayer winners shared localUser
+                (case winners of
+                    Just winners2 ->
+                        leaderboardView isMobile model.highlightedPlayer winners2 shared localUser
 
                     Nothing ->
                         [ case User.getUser currentPlayer.userId localUser of
@@ -3301,27 +3291,38 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
                 Nothing ->
                     Ui.noAttr
             ]
-            [ Ui.row
-                [ Ui.paddingXY 16 0
-                , Ui.contentCenterY
-                , Ui.height (Ui.px lettersLeftHeight)
-                , Ui.Font.color MyUi.font3
-                , MyUi.prewrap
-                ]
-                (case remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players) of
-                    1 ->
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "1"), Ui.text " letter left!" ]
-
-                    remaining ->
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (String.fromInt remaining))
-                        , Ui.text " letters left"
+            [ case winners of
+                Just _ ->
+                    Ui.el
+                        [ Ui.paddingXY 16 0
+                        , Ui.Font.bold
+                        , Ui.contentCenterY
+                        , Ui.height (Ui.px lettersLeftHeight)
                         ]
-                )
+                        (Ui.text "Game over")
+
+                Nothing ->
+                    Ui.row
+                        [ Ui.paddingXY 16 0
+                        , Ui.contentCenterY
+                        , Ui.height (Ui.px lettersLeftHeight)
+                        , Ui.Font.color MyUi.font3
+                        , MyUi.prewrap
+                        ]
+                        (case remainingLettersInBagCount setup shared.board (List.Nonempty.toList shared.players) of
+                            1 ->
+                                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text "1"), Ui.text " letter left!" ]
+
+                            remaining ->
+                                [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (String.fromInt remaining))
+                                , Ui.text " letters left"
+                                ]
+                        )
             , Ui.column
                 [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 16 }, Ui.spacing playerRowSpacing ]
-                (case getWinner shared of
-                    Just winners ->
-                        leaderboardView isMobile model.highlightedPlayer winners shared localUser
+                (case winners of
+                    Just winners2 ->
+                        leaderboardView isMobile model.highlightedPlayer winners2 shared localUser
 
                     Nothing ->
                         List.indexedMap
@@ -3440,7 +3441,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 PersonName.toString user.name
 
                             Nothing ->
-                                "Someone"
+                                "<missing>"
                 in
                 Ui.row
                     [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
