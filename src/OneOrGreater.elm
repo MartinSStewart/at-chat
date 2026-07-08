@@ -7,6 +7,7 @@ module OneOrGreater exposing
     , one
     , plus
     , seven
+    , three
     , toInt
     , toString
     )
@@ -24,6 +25,11 @@ type OneOrGreater
 one : OneOrGreater
 one =
     OneOrGreater 1
+
+
+three : OneOrGreater
+three =
+    OneOrGreater 3
 
 
 seven : OneOrGreater

@@ -252,7 +252,7 @@ initSetup =
     , letters = defaultLetters English
     , letterValues = SeqDict.empty
     , language = English
-    , placeWordAttempts = OneOrGreater.one
+    , placeWordAttempts = OneOrGreater.three
     }
 
 
