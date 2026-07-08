@@ -3482,28 +3482,30 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         (Ui.text "Past moves")
                     )
                 )
-            , Ui.inFront
-                (Ui.el
-                    [ Ui.Font.color MyUi.font3
-                    , Ui.paddingWith { left = 0, right = 24, bottom = 0, top = 0 }
-                    , Ui.Font.bold
-                    , MyUi.noPointerEvents
-                    , Ui.alignBottom
-                    ]
-                    (Ui.el
-                        [ Ui.height (Ui.px 20)
-                        , Ui.backgroundGradient
-                            [ Ui.Gradient.linear
-                                (Ui.turns 0)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
-                            , Ui.Gradient.linear
-                                (Ui.turns 0)
-                                [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+            , case scrollPosition of
+                ScrolledToBottom ->
+                    Ui.noAttr
+
+                _ ->
+                    Ui.inFront
+                        (Ui.el
+                            [ Ui.Font.color MyUi.font3
+                            , Ui.paddingWith { left = 0, right = 24, bottom = 0, top = 0 }
+                            , Ui.Font.bold
+                            , MyUi.noPointerEvents
+                            , Ui.alignBottom
                             ]
-                        ]
-                        Ui.none
-                    )
-                )
+                            (Ui.el
+                                [ Ui.height (Ui.px 40)
+                                , Ui.backgroundGradient
+                                    [ Ui.Gradient.linear
+                                        (Ui.turns 0)
+                                        [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
+                                    ]
+                                ]
+                                Ui.none
+                            )
+                        )
             ]
 
 
@@ -3980,9 +3982,8 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             MyUi.elButton (Dom.id "wordSpellingGame_joinGame") PressedJoinGame attributes (Ui.text "Join")
 
                         else
-                            Ui.text "sadf"
+                            Ui.none
                 )
-                |> Debug.log "asdf"
 
         boardPx : Int
         boardPx =
