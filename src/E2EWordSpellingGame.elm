@@ -452,6 +452,7 @@ tests normalConfig =
                         , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 1, attemptsLeft = 1 } state.backend)
                         , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
                         , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 2, attemptsLeft = 2 } state.backend)
+                        , admin.snapshotView 0 { name = "After a few failed moves" }
                         ]
                     ]
                 )
