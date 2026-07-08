@@ -422,7 +422,7 @@ updateHelper audioPort audioFunc userUpdate (Model model) =
 
 audioPortToJs : (JD.Value -> Cmd (Msg userMsg)) -> JE.Value -> Command FrontendOnly toMsg (Msg userMsg)
 audioPortToJs port_ data =
-    Command.sendToJs "audioPortFromJs" port_ data
+    Command.sendToJs "audioPortToJs" port_ data
 
 
 initHelper :

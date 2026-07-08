@@ -243,6 +243,9 @@ handlePortToJs requestAndData =
             -- Tests respond manually with startupDataJson so each test can control the user agent
             Nothing
 
+        "audioPortToJs" ->
+            Nothing
+
         _ ->
             let
                 _ =
