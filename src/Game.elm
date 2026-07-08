@@ -32,7 +32,7 @@ import Array exposing (Array)
 import Audio exposing (Audio)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Go
 import Html
@@ -328,6 +328,7 @@ type OutMsg
     = OutLocalChange LocalChange
     | CopyText String
     | OutSelectMatch (Maybe (Id ChannelMessageId))
+    | ScrollToBottom HtmlId
 
 
 update :
@@ -443,7 +444,13 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
                             ( { model | startedGames = SeqDict.insert matchId (WordSpellingGame_Game game2) model.startedGames }
                             , case maybeAction of
                                 Just action ->
-                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId (WordSpellingGame.Action action)) ]
+                                    [ OutLocalChange
+                                        (LocalChange_WordSpellingGame
+                                            matchId
+                                            (WordSpellingGame.Action { userId = currentUserId, time = time, change = action })
+                                        )
+                                    , ScrollToBottom WordSpellingGame.pastWordsContainerId
+                                    ]
 
                                 Nothing ->
                                     []

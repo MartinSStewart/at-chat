@@ -592,14 +592,9 @@ updateAction setup action shared =
                                 FilledInByBackend IsNotValid ->
                                     case OneOrGreater.decrement shared.attemptsLeft of
                                         Just attemptsLeft ->
-                                            -- Still had a try to spare: use one up and keep it the
-                                            -- same player's turn.
                                             { shared2 | attemptsLeft = attemptsLeft }
 
                                         Nothing ->
-                                            -- That was the last attempt, so the turn passes to the
-                                            -- next player (which resets attemptsLeft, see
-                                            -- `incrementTurnCount`).
                                             incrementTurnCount setup shared2
 
                                 FilledInByBackend IsValid ->
@@ -1176,7 +1171,7 @@ updateGame :
     -> Shared
     -> GameMsg
     -> GameData
-    -> ( GameData, Maybe ActionWithTime )
+    -> ( GameData, Maybe Action )
 updateGame time windowSize currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
@@ -1238,14 +1233,14 @@ updateGame time windowSize currentUserId setup shared msg model =
                                     kept
                                     (List.range 0 (newTileCount - 1))
                         }
-                    , Just { userId = currentUserId, change = PlaceWord placement EmptyPlaceholder, time = time }
+                    , Just (PlaceWord placement EmptyPlaceholder)
                     )
 
                 Nothing ->
                     ( model, Nothing )
 
         PressedJoinGame ->
-            ( model, Just { userId = currentUserId, change = JoinGame, time = time } )
+            ( model, Just JoinGame )
 
         PressedReplaceTrayOrPass ->
             let
@@ -1272,7 +1267,7 @@ updateGame time windowSize currentUserId setup shared msg model =
                         list
                         |> Array.fromList
               }
-            , Just { userId = currentUserId, change = ReplaceTrayOrPass, time = time }
+            , Just ReplaceTrayOrPass
             )
 
         PressedClearBoard ->
@@ -3360,7 +3355,21 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 PlaceWord placedWord isValid ->
                                     case isValid of
                                         FilledInByBackend IsNotValid ->
-                                            ( [], "played an invalid word" )
+                                            case OneOrGreater.decrement shared2.attemptsLeft of
+                                                Just attemptsLeft ->
+                                                    ( []
+                                                    , "played an invalid word ("
+                                                        ++ (case OneOrGreater.toString attemptsLeft of
+                                                                "1" ->
+                                                                    "1 attempt left)"
+
+                                                                n ->
+                                                                    n ++ " attempts left)"
+                                                           )
+                                                    )
+
+                                                Nothing ->
+                                                    ( [], "played an invalid word (turn ended)" )
 
                                         _ ->
                                             case placeWord setup shared2.board placedWord of

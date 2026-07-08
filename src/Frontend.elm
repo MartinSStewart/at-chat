@@ -2015,30 +2015,9 @@ updateLoaded msg model =
                                         outMsgs
 
                                 ( model2, effectCmd ) =
-                                    handleWordSpellingGameOutMsgs
-                                        outMsgs
-                                        { model | loginStatus = LoggedIn loggedIn2 }
-
-                                scrollCmd : Command FrontendOnly ToBackend FrontendMsg_
-                                scrollCmd =
-                                    -- A move the local player just made adds a Past moves entry;
-                                    -- keep the list pinned to the bottom if they were already there
-                                    -- (same behaviour as the conversation view).
-                                    if List.any isWordSpellingActionOutMsg outMsgs then
-                                        case gamesTab.maybeMatchId of
-                                            Just matchId ->
-                                                Scroll.toBottomOfChannelIfAtBottom
-                                                    WordSpellingGame.pastWordsContainerId
-                                                    SetScrollToBottom
-                                                    (Game.wordSpellingScrollPosition matchId gameModel2)
-
-                                            Nothing ->
-                                                Command.none
-
-                                    else
-                                        Command.none
+                                    handleWordSpellingGameOutMsgs outMsgs { model | loginStatus = LoggedIn loggedIn2 }
                             in
-                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd), scrollCmd ] )
+                            ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
                         Nothing ->
                             ( model, Command.none )
@@ -7112,19 +7091,6 @@ routeToInitialDataRequest route =
             InitialLoadRequested_None
 
 
-{-| True when an out message represents a committed word-spelling move (a new Past moves entry),
-which is what should trigger the list to auto-scroll to the bottom.
--}
-isWordSpellingActionOutMsg : Game.OutMsg -> Bool
-isWordSpellingActionOutMsg outMsg =
-    case outMsg of
-        Game.OutLocalChange (Game.LocalChange_WordSpellingGame _ (WordSpellingGame.Action _)) ->
-            True
-
-        _ ->
-            False
-
-
 handleWordSpellingGameOutMsgs :
     List Game.OutMsg
     -> LoadedFrontend
@@ -7151,6 +7117,9 @@ handleWordSpellingGameOutMsgs outMsgs model =
 
                 Game.OutLocalChange _ ->
                     ( model2, cmds )
+
+                Game.ScrollToBottom htmlId ->
+                    ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
         )
         ( model, [] )
         outMsgs
