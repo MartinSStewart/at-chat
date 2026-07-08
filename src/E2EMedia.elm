@@ -154,7 +154,7 @@ imageViewerTests imageUploadConfig =
             E2EHelper.startTime
             imageUploadConfig
             [ E2EHelper.connectTwoUsersAndJoinNewGuild
-                E2EHelper.iphone14Window
+                { width = 400, height = 800 }
                 (\admin _ ->
                     let
                         touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }

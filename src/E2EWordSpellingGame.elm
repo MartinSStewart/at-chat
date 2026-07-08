@@ -246,20 +246,16 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
                     , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
                     , T.collapsableGroup
-                        "Place \"load\""
-                        [ dragTile 100 admin (trayTile 3) (boardCell 6 7)
-                        , dragTile 100 admin (trayTile 1) (boardCell 7 7)
-                        , dragTile 100 admin (trayTile 0) (boardCell 8 7)
-                        , dragTile 100 admin (trayTile 4) (boardCell 9 7)
-                        , -- Admin is holding all 7 tray tiles (each schedules a fade-in pop) with 4 of
-                          -- them placed on the board (each schedules a placement pop): 7 + 4 = 11 pops.
-                          admin.checkModel 100 (checkPopCount 11)
-                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
-                        , -- After committing LOAD, admin's board is clear and the tray is refilled back to
-                          -- 7 tiles, so only the 7 fade-in pops remain (a mover doesn't animate its own word).
-                          admin.checkModel 100 (checkPopCount 7)
-                        , admin.snapshotView 5000 { name = "Place \"load\"" }
-                        , user.snapshotView 0 { name = "Place \"load\"" }
+                        "Place \"date\""
+                        [ dragTile 4000 admin (trayTile 3) (boardCell 6 7)
+                        , dragTile 100 admin (trayTile 6) (boardCell 7 7)
+                        , dragTile 100 admin (trayTile 2) (boardCell 8 7)
+                        , dragTile 100 admin (trayTile 5) (boardCell 9 7)
+                        , admin.checkModel 100 (checkPopCount 11)
+                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7") admin.checkModel 100
+                        , checkPopCount 7
+                        , admin.snapshotView 5000 { name = "Place \"date\"" }
+                        , user.snapshotView 0 { name = "Place \"date\"" }
                         ]
                     , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
                     ]

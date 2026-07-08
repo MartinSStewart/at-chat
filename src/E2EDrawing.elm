@@ -437,7 +437,7 @@ drawingScalesWithImages imageUploadConfig =
                                             )
                                         )
                                     )
-                                    E2EHelper.iphone14Window
+                                    { width = 400, height = 800 }
                                     (\userMobile ->
                                         [ userMobile.portEvent
                                             10

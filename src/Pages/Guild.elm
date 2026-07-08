@@ -1305,9 +1305,6 @@ memberColumnWidth =
 memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
 memberColumnNotMobile localUser membersAndOwner =
     let
-        _ =
-            Debug.log "rerendered memberColumn" ()
-
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
@@ -1343,9 +1340,6 @@ discordMemberColumnNotMobile :
     -> Element FrontendMsg_
 discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
     let
-        _ =
-            Debug.log "rerendered memberColumn" ()
-
         members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
@@ -1378,9 +1372,6 @@ discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
 memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
 memberColumnMobile canScroll2 localUser membersAndOwner =
     let
-        _ =
-            Debug.log "rerendered memberColumn" ()
-
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
@@ -1431,9 +1422,6 @@ discordMemberColumnMobile :
     -> Element FrontendMsg_
 discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOwner =
     let
-        _ =
-            Debug.log "rerendered memberColumn" ()
-
         members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
@@ -5092,9 +5080,6 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        _ =
-            Debug.log "rerender messageViewNotThreadStarter" ()
     in
     messageView
         isMobile
@@ -5125,9 +5110,6 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
     let
         { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        _ =
-            Debug.log "discord rerender messageViewNotThreadStarter" ()
     in
     --Ui.el
     --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
@@ -5165,9 +5147,6 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        _ =
-            Debug.log "rerender messageViewThreadStarter" ()
     in
     messageView
         isMobile
@@ -5199,20 +5178,7 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
     let
         { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        -- TODO, figure out why this lazy keeps getting triggered even though all the values seem reference unchanged
-        --_ =
-        --    Debug.log "discord rerender messageViewThreadStarter" ()
     in
-    --Ui.el
-    --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
-    --    , Ui.inFront (MyUi.lazyChangedValue "localUser" localUser)
-    --    , Ui.inFront (MyUi.lazyChangedValue "messageIndex" messageIndex)
-    --    , Ui.inFront (MyUi.lazyChangedValue "thread" thread)
-    --    , Ui.inFront (MyUi.lazyChangedValue "message" message)
-    --    , Ui.inFront (MyUi.lazyChangedValue "data" data)
-    --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
-    --    ]
     discordMessageView
         isMobile
         containerWidth
@@ -5240,9 +5206,6 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        _ =
-            Debug.log "rerender threadMessageViewLazy" ()
     in
     threadMessageView
         isMobile
@@ -5271,9 +5234,6 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
     let
         { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
-
-        _ =
-            Debug.log "discord rerender threadMessageViewLazy" ()
     in
     discordThreadMessageView
         isMobile
@@ -7754,9 +7714,6 @@ friendsColumn :
     -> Element FrontendMsg_
 friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels discordDmChannels localUser =
     let
-        _ =
-            Debug.log "friendsColumn rerendered" ()
-
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
             SeqDict.update
@@ -8038,9 +7995,6 @@ discordFriendLabel :
     -> Element FrontendMsg_
 discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
     let
-        _ =
-            Debug.log "rerender discord friendLabel" ()
-
         message : MessageState ChannelMessageId (Discord.Id Discord.UserId)
         message =
             IdArray.last channel.messages |> Maybe.withDefault MessageUnloaded
