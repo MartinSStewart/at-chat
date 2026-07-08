@@ -1,17 +1,9 @@
 module GuildColumn exposing
     ( canScroll
     , channelOrThreadHasNotifications
-    , discordDmGuildIcon
     , discordDmHasNotifications
-    , discordGuildIcon
-    , dmGuildIcon
     , elLinkButton
-    , guildColumnCanScrollMobile
-    , guildColumnCanScrollNotMobile
-    , guildColumnCannotScrollMobile
-    , guildColumnCannotScrollNotMobile
     , guildColumnLazy
-    , guildIcon
     , rowLinkButton
     )
 
@@ -189,10 +181,6 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
 discordGuildIcon : LocalUser -> Route -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Element FrontendMsg_
 discordGuildIcon localUser route guildId guild =
     let
-        _ =
-            Debug.log "discordGuildIcon" ()
-    in
-    let
         maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, DiscordFrontendCurrentUser )
         maybeDiscordUserId =
             SeqDict.filter
@@ -254,10 +242,6 @@ discordGuildIcon localUser route guildId guild =
 
 guildIcon : LocalUser -> Route -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
 guildIcon localUser route guildId guild =
-    let
-        _ =
-            Debug.log "GuildIcon" ()
-    in
     elLinkButton
         (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
         (GuildRoute
@@ -303,10 +287,6 @@ guildIcon localUser route guildId guild =
 dmGuildIcon : Route -> LocalUser -> Id UserId -> FrontendDmChannel -> Element FrontendMsg_
 dmGuildIcon route localUser otherUserId dmChannel =
     let
-        _ =
-            Debug.log "dmGuildIcon" ()
-    in
-    let
         dmIcon =
             case dmHasNotifications localUser.user otherUserId dmChannel of
                 Just count ->
@@ -349,10 +329,6 @@ discordDmGuildIcon :
     -> DiscordFrontendDmChannel
     -> Element FrontendMsg_
 discordDmGuildIcon route localUser channelId dmChannel =
-    let
-        _ =
-            Debug.log "discorddmGuildIcon" ()
-    in
     let
         dmIcon =
             case discordDmHasNotifications localUser channelId dmChannel of
