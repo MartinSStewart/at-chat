@@ -252,8 +252,8 @@ tests normalConfig =
                         , dragTile 100 admin (trayTile 2) (boardCell 8 7)
                         , dragTile 100 admin (trayTile 5) (boardCell 9 7)
                         , admin.checkModel 100 (checkPopCount 11)
-                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7") admin.checkModel 100
-                        , checkPopCount 7
+                        , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                        , admin.checkModel 100 (checkPopCount 7)
                         , admin.snapshotView 5000 { name = "Place \"date\"" }
                         , user.snapshotView 0 { name = "Place \"date\"" }
                         ]
