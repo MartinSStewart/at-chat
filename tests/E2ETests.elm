@@ -897,7 +897,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
-            E2EHelper.mobileWindow
+            E2EHelper.iphone14Window
             (\admin user ->
                 let
                     shortText : String
@@ -1102,7 +1102,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             100
             E2EHelper.sessionId2
             "/"
-            E2EHelper.mobileWindow
+            E2EHelper.iphone14Window
             (\admin ->
                 [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail admin
                 , admin.click 100 (Dom.id "guild_openGuild_0")
