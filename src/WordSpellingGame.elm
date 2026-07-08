@@ -590,7 +590,7 @@ updateAction setup action shared =
                             in
                             case isValid of
                                 FilledInByBackend IsNotValid ->
-                                    case OneOrGreater.decrement shared.attemptsLeft of
+                                    case OneOrGreater.decrement shared2.attemptsLeft of
                                         Just attemptsLeft ->
                                             { shared2 | attemptsLeft = attemptsLeft }
 
@@ -3397,7 +3397,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                                     ( [], "played a word" )
 
                                 ReplaceTrayOrPass ->
-                                    case passBehavior setup shared of
+                                    case passBehavior setup shared2 of
                                         ShouldReplaceTray ->
                                             ( [], "swapped their tiles" )
 
