@@ -1,7 +1,6 @@
 module E2EWordSpellingGame exposing (tests)
 
 import Audio
-import Backend
 import Broadcast
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
