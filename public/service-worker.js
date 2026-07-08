@@ -135,6 +135,23 @@ self.addEventListener('fetch', (event) => {
                 const keys = await cache.keys();
                 await Promise.all(keys.map((key) => cache.delete(key)));
                 await cache.put(event.request, fetchedResponse.clone());
+
+                // Serve the freshly cached copy rather than `fetchedResponse`
+                // itself. Reading the network body twice (once via the clone we
+                // hand to cache.put, once via the response we return) tees the
+                // stream, and the branch that is drained second can be truncated
+                // to the browser's tee buffer limit (~320 KiB). Lamdera's
+                // hot-reload loads the new bundle with `<script type="module">`,
+                // so a truncated body reaches the parser mid-expression and
+                // throws "missing ) after argument list", breaking the in-place
+                // upgrade (a full page refresh then works because it reads the
+                // complete bytes back out of this cache). Returning the cached
+                // copy guarantees the page receives the same complete bytes we
+                // just stored.
+                const cachedFetchedResponse = await cache.match(event.request);
+                if (cachedFetchedResponse) {
+                    return cachedFetchedResponse;
+                }
             }
             return fetchedResponse;
         }));
