@@ -3380,9 +3380,9 @@ recentActionsContent : Bool -> LocalUser -> ValidatedSetup -> Array ActionWithTi
 recentActionsContent isPersonalDm localUser setup actions shared =
     let
         ( _, _, log ) =
-            Array.foldr
+            Array.foldl
                 (\action ( index, shared2, acc ) ->
-                    ( index - 1
+                    ( index + 1
                     , updateAction setup action shared2
                     , { index = index
                       , userId = action.userId
@@ -3435,7 +3435,7 @@ recentActionsContent isPersonalDm localUser setup actions shared =
                         :: acc
                     )
                 )
-                ( Array.length actions, initShared setup, [] )
+                ( 1, initShared setup, [] )
                 actions
 
         playerCount =
@@ -3464,7 +3464,7 @@ recentActionsContent isPersonalDm localUser setup actions shared =
                     , Ui.text (" " ++ Tuple.second entry.description)
                     ]
             )
-            log
+            (List.reverse log)
             ++ (case joinWarning isPersonalDm playerCount localUser shared of
                     Just element ->
                         [ element ]
