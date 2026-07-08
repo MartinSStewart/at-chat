@@ -1747,38 +1747,55 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
 
         DiscordGuildOrDmId _ ->
             loggedIn
-    , if sameChannel then
-        Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+    , Command.batch
+        [ if sameChannel then
+            Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
-      else
-        let
-            scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
-            scrollToBottom =
+          else
+            let
+                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg_
+                scrollToBottom =
+                    Process.sleep Duration.millisecond
+                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                        |> Task.attempt (\_ -> SetScrollToBottom)
+            in
+            Command.batch
+                [ setFocus model3 Pages.Guild.channelTextInputId
+                , case threadRoute of
+                    ViewThreadWithFriends _ maybeMessageIndex _ ->
+                        case maybeMessageIndex of
+                            Just messageIndex ->
+                                Scroll.smoothScroll
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.threadMessageHtmlId messageIndex)
+                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                            Nothing ->
+                                scrollToBottom
+
+                    NoThreadWithFriends maybeMessageIndex _ ->
+                        case maybeMessageIndex of
+                            Just messageIndex ->
+                                Scroll.smoothScroll
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.channelMessageHtmlId messageIndex)
+                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                            Nothing ->
+                                scrollToBottom
+                ]
+
+        -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
+        -- list render first (its container may not be in the DOM yet on this frame).
+        , case tab of
+            Just (Route.ChannelHeaderTab_Games _) ->
                 Process.sleep Duration.millisecond
-                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                    |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
                     |> Task.attempt (\_ -> SetScrollToBottom)
-        in
-        Command.batch
-            [ setFocus model3 Pages.Guild.channelTextInputId
-            , case threadRoute of
-                ViewThreadWithFriends _ maybeMessageIndex _ ->
-                    case maybeMessageIndex of
-                        Just messageIndex ->
-                            Scroll.smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
-                                |> Task.attempt (\_ -> ScrolledToMessage)
 
-                        Nothing ->
-                            scrollToBottom
-
-                NoThreadWithFriends maybeMessageIndex _ ->
-                    case maybeMessageIndex of
-                        Just messageIndex ->
-                            Scroll.smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
-                                |> Task.attempt (\_ -> ScrolledToMessage)
-
-                        Nothing ->
-                            scrollToBottom
-            ]
+            _ ->
+                Command.none
+        ]
     )
 
 

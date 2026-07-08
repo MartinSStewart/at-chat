@@ -270,7 +270,7 @@ view : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> Ti
 view windowSize textInputFocus timezone time twoFactorStatus =
     let
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
     in
     MyUi.container
         MyUi.background1
@@ -422,7 +422,7 @@ setupView windowSize textInputFocus { qrCodeUrl, code, attempts } =
                             , Ui.padding 12
                             , Ui.rounded 8
                             , Ui.width Ui.shrink
-                            , if MyUi.isMobile { windowSize = windowSize } then
+                            , if MyUi.isMobileAlt windowSize then
                                 Ui.centerX
 
                               else

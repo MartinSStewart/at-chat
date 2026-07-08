@@ -65,7 +65,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
-import Scroll
+import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
@@ -77,7 +77,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -89,6 +89,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import WordSpellingGame
 
 
 app :
@@ -1265,7 +1266,7 @@ updateLoaded msg model =
                                                 model.time
                                                 (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_Emoji emoji) |> Just)
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
 
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn, Command.none )
@@ -1275,7 +1276,7 @@ updateLoaded msg model =
                                                 model.time
                                                 (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_CustomEmoji customEmojiId) |> Just)
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+                                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
 
                                 --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
@@ -1972,6 +1973,7 @@ updateLoaded msg model =
                                 ( gameModel2, outMsgs ) =
                                     Game.update
                                         model.time
+                                        model.windowSize
                                         local.localUser.session.userId
                                         gamesTab.guildOrDmId
                                         gameMsg
@@ -2013,9 +2015,7 @@ updateLoaded msg model =
                                         outMsgs
 
                                 ( model2, effectCmd ) =
-                                    handleWordSpellingGameOutMsgs
-                                        outMsgs
-                                        { model | loginStatus = LoggedIn loggedIn2 }
+                                    handleWordSpellingGameOutMsgs outMsgs { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
@@ -2361,7 +2361,7 @@ updateLoaded msg model =
                                 model.time
                                 (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                 loggedIn
-                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+                                (Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition)
                         )
                         model
 
@@ -2400,7 +2400,7 @@ updateLoaded msg model =
                                                         model
                                                         (DmRoute
                                                             { channelId =
-                                                                DmChannelId.channelIdFromUserIds
+                                                                DmChannelId.fromUserIds
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
@@ -2414,7 +2414,7 @@ updateLoaded msg model =
                                                         model
                                                         (DmRoute
                                                             { channelId =
-                                                                DmChannelId.channelIdFromUserIds
+                                                                DmChannelId.fromUserIds
                                                                     (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                                                     otherUserId
                                                             , threadRoute =
@@ -2541,7 +2541,7 @@ updateLoaded msg model =
                             case model.loginStatus of
                                 LoggedIn loggedIn ->
                                     { channelId =
-                                        DmChannelId.channelIdFromUserIds
+                                        DmChannelId.fromUserIds
                                             (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
                                             otherUserId
                                     , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
@@ -3486,7 +3486,7 @@ updateLoaded msg model =
                             in
                             case
                                 ( Route.toGuildOrDmId local.localUser.session.userId model.route
-                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
+                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight) < Scroll.closeToTop
                                 )
                             of
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
@@ -3543,7 +3543,7 @@ updateLoaded msg model =
                                 }
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
-                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
                                     , removePartialStickers loggedIn.textInputFocus Pages.Guild.channelTextInputId text
                                     ]
                                 )
@@ -3643,10 +3643,10 @@ updateLoaded msg model =
                                                 , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
                                             }
                                             (if MyUi.isMobile model then
-                                                Scroll.toBottomOfChannelSmooth
+                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
                                              else
-                                                Scroll.toBottomOfChannel
+                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
                                             )
 
                                     else
@@ -4190,7 +4190,7 @@ updateLoaded msg model =
                                         model
                                         (DmRoute
                                             { channelId =
-                                                DmChannelId.channelIdFromUserIds local.localUser.session.userId otherUserId
+                                                DmChannelId.fromUserIds local.localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Just ChannelHeaderTab_VoiceChat
                                             }
@@ -4786,6 +4786,7 @@ pageUpOrDownScroll isUp model =
     ( model
     , Command.batch
         [ Scroll.smoothScrollBy
+            Pages.Guild.conversationContainerId
             ((if isUp then
                 -0.9
 
@@ -4913,7 +4914,7 @@ toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
             Command.none
 
          else
-            Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+            Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
         )
 
 
@@ -5425,7 +5426,7 @@ pressedReply guildOrDmId threadRoute loggedIn model =
         }
     , Command.batch
         [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+        , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
         ]
     )
 
@@ -5510,7 +5511,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                     loggedIn
             , Command.batch
                 [ FrontendExtra.setFocus model MessageMenu.editMessageTextInputId
-                , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
                 ]
             )
         )
@@ -5791,14 +5792,17 @@ dragTarget startTouches model =
                 insideBoard : Bool
                 insideBoard =
                     case FrontendExtra.currentGame local model of
-                        Just { match } ->
+                        Just { guildOrDmId, match, matchId } ->
                             -- The board is laid out below the safe-area inset, so undo it before the
                             -- hit-test (the call thumbnail above is positioned including the inset, so
                             -- its check keeps the raw centroid).
                             Game.insideBoard
                                 model.windowSize
                                 (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
+                                guildOrDmId
+                                matchId
                                 match
+                                loggedIn.games
 
                         Nothing ->
                             False
@@ -6188,7 +6192,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6200,7 +6204,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6212,7 +6216,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6224,7 +6228,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
                                             if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6239,7 +6243,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
                                             if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6251,7 +6255,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6263,7 +6267,7 @@ updateLoadedFromBackend msg model =
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
                                             if channelId == data.channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6380,10 +6384,10 @@ updateLoadedFromBackend msg model =
                                                 , case loggedIn2.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth
+                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                         else
-                                                            Scroll.toBottomOfChannel
+                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -6426,10 +6430,10 @@ updateLoadedFromBackend msg model =
                                                 , case loggedIn2.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth
+                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                         else
-                                                            Scroll.toBottomOfChannel
+                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -6469,7 +6473,7 @@ updateLoadedFromBackend msg model =
                                     in
                                     ( loggedIn2
                                     , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
-                                        Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
+                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                       else
                                         Command.none
@@ -6485,7 +6489,7 @@ updateLoadedFromBackend msg model =
                                     in
                                     ( loggedIn2
                                     , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
-                                        Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
+                                        Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                       else
                                         Command.none
@@ -6496,7 +6500,7 @@ updateLoadedFromBackend msg model =
                                     , case Route.toGuildOrDmId local.localUser.session.userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
                                             if channelId == data.channelId then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6514,7 +6518,7 @@ updateLoadedFromBackend msg model =
                                                     && (channelIdA == channelIdB)
                                                     && (Id.threadRouteWithoutMessage threadRouteA == threadRouteB)
                                             then
-                                                Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
+                                                Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition
 
                                             else
                                                 Command.none
@@ -6524,13 +6528,13 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_AddReactionEmoji _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
 
                                 Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
 
                                 Server_DiscordAddReactionDmEmoji _ _ _ _ ->
-                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn2.channelScrollPosition )
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
@@ -6543,14 +6547,44 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_Game _ guildOrDmId gameChange ->
+                                    let
+                                        updatedGameModel : Maybe Game.Model
+                                        updatedGameModel =
+                                            Game.gameChangeFromServer
+                                                model.time
+                                                gameChange
+                                                (SeqDict.get guildOrDmId loggedIn2.games)
+                                    in
                                     ( { loggedIn2
-                                        | games =
-                                            SeqDict.update
-                                                guildOrDmId
-                                                (Game.gameChangeFromServer model.time gameChange)
-                                                loggedIn2.games
+                                        | games = SeqDict.update guildOrDmId (\_ -> updatedGameModel) loggedIn2.games
                                       }
-                                    , Command.none
+                                    , -- Another player's move adds a Past moves entry; if we're
+                                      -- watching that match, keep the list pinned to the bottom when
+                                      -- it already was (mirrors the conversation view).
+                                      case gameChange of
+                                        Game.LocalChange_WordSpellingGame matchId (WordSpellingGame.Action _) ->
+                                            case FrontendExtra.currentGamesTab local model.route of
+                                                Just gamesTab ->
+                                                    if gamesTab.guildOrDmId == guildOrDmId && gamesTab.maybeMatchId == Just matchId then
+                                                        Scroll.toBottomOfChannelIfAtBottom
+                                                            WordSpellingGame.pastWordsContainerId
+                                                            SetScrollToBottom
+                                                            (case updatedGameModel of
+                                                                Just gameModel3 ->
+                                                                    Game.wordSpellingScrollPosition matchId gameModel3
+
+                                                                Nothing ->
+                                                                    ScrolledToBottom
+                                                            )
+
+                                                    else
+                                                        Command.none
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        _ ->
+                                            Command.none
                                     )
 
                                 _ ->
@@ -7083,6 +7117,9 @@ handleWordSpellingGameOutMsgs outMsgs model =
 
                 Game.OutLocalChange _ ->
                     ( model2, cmds )
+
+                Game.ScrollToBottom htmlId ->
+                    ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
         )
         ( model, [] )
         outMsgs

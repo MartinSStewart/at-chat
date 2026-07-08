@@ -1031,7 +1031,7 @@ view windowSize roomId calls model =
             hasJoined roomId calls
 
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
     in
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))

@@ -372,7 +372,7 @@ view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord Cs
 view textSelection loginForm windowSize pwaStatus =
     let
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         installWarning =
             isMobile && pwaStatus == BrowserView

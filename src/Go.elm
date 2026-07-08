@@ -1423,7 +1423,7 @@ setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
     in
     Ui.column
         [ Ui.spacing
@@ -1976,7 +1976,7 @@ spectatorView currentTime windowSize data model =
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         state : Shared
         state =
@@ -2032,7 +2032,7 @@ gameView currentTime windowSize localUser setup shared model =
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         players =
             getPlayers setup shared
@@ -2234,7 +2234,7 @@ boardView windowSize setup state model =
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         width : Int
         width =

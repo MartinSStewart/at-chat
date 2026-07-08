@@ -637,7 +637,7 @@ getVoiceChatDataHelper roomId session otherSession otherClientId remoteCallData 
             let
                 dmChannelId : DmChannelId
                 dmChannelId =
-                    DmChannelId.channelIdFromUserIds otherSession.userId dmingWith
+                    DmChannelId.fromUserIds otherSession.userId dmingWith
             in
             case DmChannelId.otherUserId session.userId dmChannelId of
                 Just otherUserId ->
@@ -2008,7 +2008,7 @@ asDmUser model sessionId { otherUserId } func =
         Just session ->
             let
                 dmChannelId =
-                    DmChannelId.channelIdFromUserIds session.userId otherUserId
+                    DmChannelId.fromUserIds session.userId otherUserId
             in
             case
                 ( NonemptyDict.get session.userId model.users

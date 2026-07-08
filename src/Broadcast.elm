@@ -1151,7 +1151,7 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
                             (String.Nonempty.toString text)
                             (UserTextMessage message)
                             (DmRoute
-                                { channelId = DmChannelId.channelIdFromUserIds userId otherUserId
+                                { channelId = DmChannelId.fromUserIds userId otherUserId
                                 , threadRoute =
                                     case threadRouteWithReplyTo of
                                         NoThreadWithMaybeMessage _ ->

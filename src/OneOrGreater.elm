@@ -2,6 +2,7 @@ module OneOrGreater exposing
     ( OneOrGreater(..)
     , decrement
     , fromInt
+    , fromString
     , increment
     , one
     , plus
@@ -56,6 +57,16 @@ fromInt int =
 
     else
         Nothing
+
+
+fromString : String -> Maybe OneOrGreater
+fromString text =
+    case String.toInt text of
+        Just int ->
+            fromInt int
+
+        Nothing ->
+            Nothing
 
 
 plus : OneOrGreater -> OneOrGreater -> OneOrGreater

@@ -25,13 +25,14 @@ module Game exposing
     , routeRequest
     , update
     , view
+    , wordSpellingScrollPosition
     )
 
 import Array exposing (Array)
 import Audio exposing (Audio)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Go
 import Html
@@ -42,6 +43,7 @@ import List.Nonempty
 import Message exposing (GameType(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -146,14 +148,23 @@ isAnimating time windowSize matchId (MatchData matchData) model =
                    )
 
 
-insideBoard : Coord CssPixels -> Coord CssPixels -> MatchData -> Bool
-insideBoard windowSize coord (MatchData matchData) =
+insideBoard : Coord CssPixels -> Coord CssPixels -> GuildOrDmId -> Id ChannelMessageId -> MatchData -> SeqDict GuildOrDmId Model -> Bool
+insideBoard windowSize coord guildOrDmId matchId (MatchData matchData) games =
     case matchData.data of
         FrontendGameData_Go _ _ _ ->
             False
 
         FrontendGameData_WordSpellingGame setup _ _ ->
-            WordSpellingGame.insideBoard setup windowSize coord
+            case SeqDict.get guildOrDmId games |> Maybe.withDefault initModel |> .startedGames |> SeqDict.get matchId of
+                Just (WordSpellingGame_Game game) ->
+                    WordSpellingGame.insideBoard
+                        setup
+                        game
+                        windowSize
+                        coord
+
+                _ ->
+                    False
 
 
 initModel : Model
@@ -189,6 +200,20 @@ addGoAction action (MatchData match) =
                     match.data
     }
         |> MatchData
+
+
+{-| How far the Past moves list is scrolled for the given word-spelling match. Frontend uses this to
+decide whether a new action should auto-scroll the list to the bottom (see
+`WordSpellingGame.recentActionsView`). Defaults to the bottom when the match hasn't been opened yet.
+-}
+wordSpellingScrollPosition : Id ChannelMessageId -> Model -> Scroll.ScrollPosition
+wordSpellingScrollPosition matchId model =
+    case SeqDict.get matchId model.startedGames of
+        Just (WordSpellingGame_Game gameData) ->
+            gameData.scrollPosition
+
+        _ ->
+            Scroll.ScrolledToBottom
 
 
 routeRequest :
@@ -303,10 +328,12 @@ type OutMsg
     = OutLocalChange LocalChange
     | CopyText String
     | OutSelectMatch (Maybe (Id ChannelMessageId))
+    | ScrollToBottom HtmlId
 
 
 update :
     Time.Posix
+    -> Coord CssPixels
     -> Id UserId
     -> GuildOrDmId
     -> Msg
@@ -314,7 +341,7 @@ update :
     -> Maybe ( Id ChannelMessageId, MatchData )
     -> Model
     -> ( Model, List OutMsg )
-update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
+update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model =
     case msg of
         PressedShareMatch matchId ->
             ( model, [ OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) ] )
@@ -407,6 +434,7 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                                 ( game2, maybeAction ) =
                                     WordSpellingGame.updateGame
                                         time
+                                        windowSize
                                         currentUserId
                                         setup
                                         cache
@@ -416,7 +444,13 @@ update time currentUserId guildOrDmId msg newMatchId maybeMatch model =
                             ( { model | startedGames = SeqDict.insert matchId (WordSpellingGame_Game game2) model.startedGames }
                             , case maybeAction of
                                 Just action ->
-                                    [ OutLocalChange (LocalChange_WordSpellingGame matchId (WordSpellingGame.Action action)) ]
+                                    [ OutLocalChange
+                                        (LocalChange_WordSpellingGame
+                                            matchId
+                                            (WordSpellingGame.Action { userId = currentUserId, time = time, change = action })
+                                        )
+                                    , ScrollToBottom WordSpellingGame.pastWordsContainerId
+                                    ]
 
                                 Nothing ->
                                     []
@@ -574,7 +608,7 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
     let
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobileAlt windowSize
 
         isPersonalDm : Bool
         isPersonalDm =

@@ -1,11 +1,11 @@
 module DmChannelId exposing
     ( DmChannelId(..)
     , GuildOrFullDmId(..)
-    , channelIdFromString
-    , channelIdFromUserIds
-    , channelIdToString
+    , fromString
+    , fromUserIds
     , otherUserId
-    , userIdsFromChannelId
+    , toString
+    , toUserIds
     )
 
 import Id exposing (ChannelId, GuildId, Id, UserId)
@@ -22,30 +22,30 @@ type GuildOrFullDmId
     | GuildOrFullDmId_Dm DmChannelId
 
 
-channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
-channelIdFromUserIds userIdA userIdB =
+fromUserIds : Id UserId -> Id UserId -> DmChannelId
+fromUserIds userIdA userIdB =
     DmChannelId
         (min (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
         (max (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
 
 
-userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
-userIdsFromChannelId (DmChannelId userIdA userIdB) =
+toUserIds : DmChannelId -> ( Id UserId, Id UserId )
+toUserIds (DmChannelId userIdA userIdB) =
     ( userIdA, userIdB )
 
 
-channelIdToString : DmChannelId -> String
-channelIdToString (DmChannelId userIdA userIdB) =
+toString : DmChannelId -> String
+toString (DmChannelId userIdA userIdB) =
     Id.toString userIdA ++ "-" ++ Id.toString userIdB
 
 
-channelIdFromString : String -> Result () DmChannelId
-channelIdFromString text =
+fromString : String -> Result () DmChannelId
+fromString text =
     case String.split "-" text of
         [ idA, idB ] ->
             case ( Id.fromString idA, Id.fromString idB ) of
                 ( Just idA2, Just idB2 ) ->
-                    channelIdFromUserIds idA2 idB2 |> Ok
+                    fromUserIds idA2 idB2 |> Ok
 
                 _ ->
                     Err ()

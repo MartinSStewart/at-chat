@@ -37,7 +37,6 @@ module Types exposing
     , NewGuildForm
     , PublicGoMatch(..)
     , RevealedSpoilers
-    , ScrollPosition(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
@@ -110,6 +109,7 @@ import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (ChannelHeaderTab, Route)
+import Scroll exposing (ScrollPosition)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -573,12 +573,6 @@ type FrontendMsg_
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
-
-
-type ScrollPosition
-    = ScrolledToBottom
-    | ScrolledToTop
-    | ScrolledToMiddle
 
 
 type alias NewChannelForm =

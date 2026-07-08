@@ -357,6 +357,107 @@ tests normalConfig =
                 )
             ]
         , E2EHelper.startTest
+            "Running out of place-word attempts passes the turn and resets the count"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- Same board/tray geometry as the other tall-desktop tests. Tray tiles cap
+                        -- at 50px however small the tray, so these positions match despite the
+                        -- 2-tile tray.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+
+                        -- Placing both Q tiles horizontally through the centre square is always a
+                        -- legal placement but "QQ" is never a real word, so every submission is
+                        -- rejected and burns one place-word attempt.
+                        placeInvalidQQ delay tab =
+                            T.group
+                                [ dragTile delay tab (trayTile 0) (boardCell 7 7)
+                                , dragTile 100 tab (trayTile 1) (boardCell 8 7)
+                                , tab.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+                                ]
+                    in
+                    [ -- Admin creates a match whose bag is all Q tiles (so the only word the players
+                      -- can spell, "QQ", is a legal placement but never valid) and gives each turn
+                      -- two attempts to place a valid word.
+                      admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
+                    , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "QQQQQQQQ"
+                    , admin.input 100 (Dom.id "wsg_attemptsPerTurn") "2"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the same match and joins, so turns alternate between the
+                    -- two players.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                    -- It starts on the admin's turn with both attempts available.
+                    , T.checkState 1000 (\state -> checkWordSpellingState { turnCount = 0, attemptsLeft = 2 } state.backend)
+
+                    -- The admin's first rejected word uses one attempt but keeps their turn.
+                    , T.collapsableGroup
+                        "Admin's first failed attempt"
+                        [ placeInvalidQQ 100 admin
+                        , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 0, attemptsLeft = 1 } state.backend)
+                        ]
+
+                    -- The second rejected word uses the last attempt, so the turn passes to the
+                    -- other player and the attempts reset back to two.
+                    , T.collapsableGroup
+                        "Admin runs out of attempts"
+                        [ placeInvalidQQ 2000 admin
+                        , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 1, attemptsLeft = 2 } state.backend)
+                        ]
+
+                    -- The attempts always reset when a turn ends, even when the turn ends before
+                    -- running out: the user fails once (2 -> 1) then swaps their tray to end the
+                    -- turn, and the admin's next turn starts back at two attempts.
+                    , T.collapsableGroup
+                        "Attempts reset when a turn ends early"
+                        [ placeInvalidQQ 100 user
+                        , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 1, attemptsLeft = 1 } state.backend)
+                        , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                        , T.checkState 2000 (\state -> checkWordSpellingState { turnCount = 2, attemptsLeft = 2 } state.backend)
+                        , admin.snapshotView 0 { name = "After a few failed moves" }
+                        ]
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
             "Word spelling game match (mobile)"
             E2EHelper.startTime
             normalConfig
@@ -628,7 +729,7 @@ tests normalConfig =
                                             [ Test.Html.Selector.exactText "AT"
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
-                                            , Test.Html.Selector.text "Recent moves"
+                                            , Test.Html.Selector.text "Past moves"
                                             , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )
@@ -652,6 +753,44 @@ guildChannelGames backend =
     SeqDict.values backend.guilds
         |> List.concatMap (\guild -> SeqDict.values guild.channels)
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
+
+
+{-| All games stored in DM channels on the backend.
+-}
+dmChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameData )
+dmChannelGames backend =
+    SeqDict.values backend.dmChannels
+        |> List.concatMap (\channel -> SeqDict.toList channel.games)
+
+
+{-| Assert the current turn and the number of place-word attempts left for the single word spelling
+game running in a DM channel.
+-}
+checkWordSpellingState : { turnCount : Int, attemptsLeft : Int } -> BackendModel -> Result String ()
+checkWordSpellingState expected backend =
+    case dmChannelGames backend of
+        [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+            if shared.turnCount /= expected.turnCount then
+                Err
+                    ("Expected turnCount "
+                        ++ String.fromInt expected.turnCount
+                        ++ " but got "
+                        ++ String.fromInt shared.turnCount
+                    )
+
+            else if OneOrGreater.toInt shared.attemptsLeft /= expected.attemptsLeft then
+                Err
+                    ("Expected "
+                        ++ String.fromInt expected.attemptsLeft
+                        ++ " attempts left but got "
+                        ++ String.fromInt (OneOrGreater.toInt shared.attemptsLeft)
+                    )
+
+            else
+                Ok ()
+
+        _ ->
+            Err "Expected one word spelling game in a DM channel"
 
 
 {-| The message the audio port's JS side sends back after successfully loading a sound (see
