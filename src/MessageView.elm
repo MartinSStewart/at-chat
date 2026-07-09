@@ -49,6 +49,7 @@ type MessageViewMsg
     | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedCardAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -118,6 +119,9 @@ isPressMsg msg =
             True
 
         MessageView_PressedDateDivider _ _ _ ->
+            True
+
+        MessageView_PressedCardAnchor _ _ ->
             True
 
 

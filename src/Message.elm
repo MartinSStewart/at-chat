@@ -367,6 +367,9 @@ handleDrawingChange changeBy anchorType change message =
                                     data.embedDrawings
                         }
 
+                Drawing.CardAnchor ->
+                    message
+
         UserJoinedMessage time userId reactions drawings ->
             UserJoinedMessage time userId reactions drawings
 
@@ -374,10 +377,54 @@ handleDrawingChange changeBy anchorType change message =
             message
 
         CallStarted callStarted ->
-            CallStarted { callStarted | timestampDrawings = Drawing.handleLocalChange changeBy change callStarted.timestampDrawings }
+            case anchorType of
+                Drawing.TimestampAnchor ->
+                    CallStarted
+                        { callStarted
+                            | timestampDrawings =
+                                Drawing.handleLocalChange changeBy change callStarted.timestampDrawings
+                        }
+
+                Drawing.UserIconAnchor ->
+                    message
+
+                Drawing.ImageAttachmentAnchor id ->
+                    message
+
+                Drawing.EmbedImageAnchor int ->
+                    message
+
+                Drawing.CardAnchor ->
+                    CallStarted
+                        { callStarted
+                            | cardDrawings =
+                                Drawing.handleLocalChange changeBy change callStarted.cardDrawings
+                        }
 
         GameStarted gameStarted ->
-            GameStarted { gameStarted | timestampDrawings = Drawing.handleLocalChange changeBy change gameStarted.timestampDrawings }
+            case anchorType of
+                Drawing.TimestampAnchor ->
+                    GameStarted
+                        { gameStarted
+                            | timestampDrawings =
+                                Drawing.handleLocalChange changeBy change gameStarted.timestampDrawings
+                        }
+
+                Drawing.UserIconAnchor ->
+                    message
+
+                Drawing.ImageAttachmentAnchor id ->
+                    message
+
+                Drawing.EmbedImageAnchor int ->
+                    message
+
+                Drawing.CardAnchor ->
+                    GameStarted
+                        { gameStarted
+                            | cardDrawings =
+                                Drawing.handleLocalChange changeBy change gameStarted.cardDrawings
+                        }
 
 
 drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
@@ -397,6 +444,9 @@ drawing anchor message =
                 Drawing.EmbedImageAnchor embedIndex ->
                     SeqDict.get embedIndex data.embedDrawings |> Maybe.withDefault Drawing.emptyDrawing
 
+                Drawing.CardAnchor ->
+                    Drawing.emptyDrawing
+
         UserJoinedMessage _ _ _ drawings ->
             drawings
 
@@ -404,10 +454,38 @@ drawing anchor message =
             Drawing.emptyDrawing
 
         CallStarted callStarted ->
-            callStarted.timestampDrawings
+            case anchor of
+                Drawing.UserIconAnchor ->
+                    Drawing.emptyDrawing
+
+                Drawing.TimestampAnchor ->
+                    callStarted.timestampDrawings
+
+                Drawing.ImageAttachmentAnchor id ->
+                    Drawing.emptyDrawing
+
+                Drawing.EmbedImageAnchor int ->
+                    Drawing.emptyDrawing
+
+                Drawing.CardAnchor ->
+                    callStarted.cardDrawings
 
         GameStarted gameStarted ->
-            gameStarted.timestampDrawings
+            case anchor of
+                Drawing.UserIconAnchor ->
+                    Drawing.emptyDrawing
+
+                Drawing.TimestampAnchor ->
+                    gameStarted.timestampDrawings
+
+                Drawing.ImageAttachmentAnchor id ->
+                    Drawing.emptyDrawing
+
+                Drawing.EmbedImageAnchor int ->
+                    Drawing.emptyDrawing
+
+                Drawing.CardAnchor ->
+                    gameStarted.cardDrawings
 
 
 createdAt : Message messageId userId -> Time.Posix

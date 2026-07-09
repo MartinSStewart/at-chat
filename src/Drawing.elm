@@ -21,6 +21,7 @@ module Drawing exposing
     , initialAnchorSelection
     , inputOverlay
     , inputOverlayId
+    , overlayAttribute
     , profileImageAnchorId
     , redoButtonId
     , resetAnchor
@@ -69,6 +70,7 @@ type MessageAnchor
     | TimestampAnchor
     | ImageAttachmentAnchor (Id FileId)
     | EmbedImageAnchor Int
+    | CardAnchor
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor
