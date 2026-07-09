@@ -1,5 +1,7 @@
 module Message exposing
-    ( ChangeAttachments(..)
+    ( CallStartedData
+    , ChangeAttachments(..)
+    , GameStartedData
     , GameType(..)
     , Message(..)
     , MessageNoReply(..)
@@ -388,10 +390,10 @@ handleDrawingChange changeBy anchorType change message =
                 Drawing.UserIconAnchor ->
                     message
 
-                Drawing.ImageAttachmentAnchor id ->
+                Drawing.ImageAttachmentAnchor _ ->
                     message
 
-                Drawing.EmbedImageAnchor int ->
+                Drawing.EmbedImageAnchor _ ->
                     message
 
                 Drawing.CardAnchor ->
@@ -413,10 +415,10 @@ handleDrawingChange changeBy anchorType change message =
                 Drawing.UserIconAnchor ->
                     message
 
-                Drawing.ImageAttachmentAnchor id ->
+                Drawing.ImageAttachmentAnchor _ ->
                     message
 
-                Drawing.EmbedImageAnchor int ->
+                Drawing.EmbedImageAnchor _ ->
                     message
 
                 Drawing.CardAnchor ->
@@ -461,10 +463,10 @@ drawing anchor message =
                 Drawing.TimestampAnchor ->
                     callStarted.timestampDrawings
 
-                Drawing.ImageAttachmentAnchor id ->
+                Drawing.ImageAttachmentAnchor _ ->
                     Drawing.emptyDrawing
 
-                Drawing.EmbedImageAnchor int ->
+                Drawing.EmbedImageAnchor _ ->
                     Drawing.emptyDrawing
 
                 Drawing.CardAnchor ->
@@ -478,10 +480,10 @@ drawing anchor message =
                 Drawing.TimestampAnchor ->
                     gameStarted.timestampDrawings
 
-                Drawing.ImageAttachmentAnchor id ->
+                Drawing.ImageAttachmentAnchor _ ->
                     Drawing.emptyDrawing
 
-                Drawing.EmbedImageAnchor int ->
+                Drawing.EmbedImageAnchor _ ->
                     Drawing.emptyDrawing
 
                 Drawing.CardAnchor ->

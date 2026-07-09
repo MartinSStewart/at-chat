@@ -21,11 +21,9 @@ module Drawing exposing
     , initialAnchorSelection
     , inputOverlay
     , inputOverlayId
-    , overlayAttribute
     , profileImageAnchorId
     , redoButtonId
     , resetAnchor
-    , selectingAnchorHighlight
     , undoButtonId
     , undoRedoButton
     , userColor
