@@ -1180,10 +1180,10 @@ update msg model =
                                                                 DeletedMessage _ ->
                                                                     members
 
-                                                                CallStarted _ _ _ _ _ ->
+                                                                CallStarted _ ->
                                                                     members
 
-                                                                GameStarted _ _ _ _ _ ->
+                                                                GameStarted _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -2243,11 +2243,11 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
-                        CallStarted _ endedAt _ _ _ ->
-                            LocalState.callStartedText endedAt
+                        CallStarted callStarted ->
+                            LocalState.callStartedText callStarted.endedAt
 
-                        GameStarted _ _ _ _ game ->
-                            LocalState.gameStartedText game
+                        GameStarted gameStarted ->
+                            LocalState.gameStartedText gameStarted.gameType
 
                 Nothing ->
                     "Thread"
@@ -5683,11 +5683,13 @@ handleGuildGoGame time session clientId changeId guildId channelId matchId goCha
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
-                            createdAt
-                            session.userId
-                            SeqDict.empty
-                            Drawing.emptyDrawing
-                            GameType_Go
+                            { startedAt = createdAt
+                            , startedBy = session.userId
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_Go
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
                         )
                         channel
 
@@ -5792,11 +5794,13 @@ handleDmGoGame time session clientId changeId otherUserId matchId goChange dmCha
                 ( messageId, dmChannel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
-                            createdAt
-                            session.userId
-                            SeqDict.empty
-                            Drawing.emptyDrawing
-                            GameType_Go
+                            { startedAt = createdAt
+                            , startedBy = session.userId
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_Go
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
                         )
                         dmChannel
 
@@ -5924,11 +5928,13 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                 ( messageId, channel2 ) =
                     LocalState.createChannelMessageBackend
                         (GameStarted
-                            time
-                            session.userId
-                            SeqDict.empty
-                            Drawing.emptyDrawing
-                            GameType_WordSpellingGame
+                            { startedAt = time
+                            , startedBy = session.userId
+                            , reactions = SeqDict.empty
+                            , gameType = GameType_WordSpellingGame
+                            , timestampDrawings = Drawing.emptyDrawing
+                            , cardDrawings = Drawing.emptyDrawing
+                            }
                         )
                         channel
 
@@ -6362,11 +6368,13 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                     dmChannelId
                                                     (LocalState.createChannelMessageBackend
                                                         (CallStarted
-                                                            time
-                                                            Nothing
-                                                            session.userId
-                                                            SeqDict.empty
-                                                            Drawing.emptyDrawing
+                                                            { startedAt = time
+                                                            , endedAt = Nothing
+                                                            , startedBy = session.userId
+                                                            , reactions = SeqDict.empty
+                                                            , timestampDrawings = Drawing.emptyDrawing
+                                                            , cardDrawings = Drawing.emptyDrawing
+                                                            }
                                                         )
                                                         dmChannel
                                                         |> Tuple.second

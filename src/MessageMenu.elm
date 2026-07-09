@@ -851,10 +851,10 @@ messageCustomEmojiIds message =
         DeletedMessage _ ->
             []
 
-        CallStarted _ _ _ reactions _ ->
+        CallStarted { reactions } ->
             reactionIds reactions
 
-        GameStarted _ _ reactions _ _ ->
+        GameStarted { reactions } ->
             reactionIds reactions
 
 

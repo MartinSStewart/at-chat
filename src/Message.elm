@@ -271,10 +271,10 @@ addEmbed ( url, result ) message =
         DeletedMessage _ ->
             message
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             message
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             message
 
 
@@ -373,11 +373,11 @@ handleDrawingChange changeBy anchorType change message =
         DeletedMessage _ ->
             message
 
-        CallStarted time endedAt userId reactions drawings ->
-            CallStarted time endedAt userId reactions (Drawing.handleLocalChange changeBy change drawings)
+        CallStarted callStarted ->
+            CallStarted { callStarted | timestampDrawings = Drawing.handleLocalChange changeBy change callStarted.timestampDrawings }
 
-        GameStarted time userId reactions drawings game ->
-            GameStarted time userId reactions (Drawing.handleLocalChange changeBy change drawings) game
+        GameStarted gameStarted ->
+            GameStarted { gameStarted | timestampDrawings = Drawing.handleLocalChange changeBy change gameStarted.timestampDrawings }
 
 
 drawing : Drawing.MessageAnchor -> Message messageId userId -> Drawing userId
@@ -403,11 +403,11 @@ drawing anchor message =
         DeletedMessage _ ->
             Drawing.emptyDrawing
 
-        CallStarted _ _ _ _ drawings ->
-            drawings
+        CallStarted callStarted ->
+            callStarted.timestampDrawings
 
-        GameStarted _ _ _ drawings _ ->
-            drawings
+        GameStarted gameStarted ->
+            gameStarted.timestampDrawings
 
 
 createdAt : Message messageId userId -> Time.Posix
@@ -422,11 +422,11 @@ createdAt message =
         DeletedMessage time ->
             time
 
-        CallStarted time _ _ _ _ ->
-            time
+        CallStarted callStarted ->
+            callStarted.startedAt
 
-        GameStarted time _ _ _ _ ->
-            time
+        GameStarted gameStarted ->
+            gameStarted.startedAt
 
 
 addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
@@ -441,11 +441,11 @@ addReactionEmoji userId emoji message =
         DeletedMessage _ ->
             message
 
-        CallStarted time endedAt startedBy reactions drawings ->
-            CallStarted time endedAt startedBy (addReactionEmojiHelper userId emoji reactions) drawings
+        CallStarted callStarted ->
+            CallStarted { callStarted | reactions = addReactionEmojiHelper userId emoji callStarted.reactions }
 
-        GameStarted time startedBy reactions drawings game ->
-            GameStarted time startedBy (addReactionEmojiHelper userId emoji reactions) drawings game
+        GameStarted gameStarted ->
+            GameStarted { gameStarted | reactions = addReactionEmojiHelper userId emoji gameStarted.reactions }
 
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -465,11 +465,11 @@ removeReactionEmoji userId emoji message =
         DeletedMessage _ ->
             message
 
-        CallStarted time endedAt startedBy reactions drawings ->
-            CallStarted time endedAt startedBy (removeReactionEmojiHelper userId emoji reactions) drawings
+        CallStarted callStarted ->
+            CallStarted { callStarted | reactions = removeReactionEmojiHelper userId emoji callStarted.reactions }
 
-        GameStarted time startedBy reactions drawings game ->
-            GameStarted time startedBy (removeReactionEmojiHelper userId emoji reactions) drawings game
+        GameStarted gameStarted ->
+            GameStarted { gameStarted | reactions = removeReactionEmojiHelper userId emoji gameStarted.reactions }
 
 
 removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -501,8 +501,8 @@ reactionEmojis message =
         DeletedMessage _ ->
             SeqDict.empty
 
-        CallStarted _ _ _ reactions _ ->
-            reactions
+        CallStarted callStarted ->
+            callStarted.reactions
 
-        GameStarted _ _ reactions _ _ ->
-            reactions
+        GameStarted gameStarted ->
+            gameStarted.reactions

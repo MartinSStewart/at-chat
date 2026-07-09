@@ -1862,10 +1862,10 @@ maybeRepliedTo message channel =
         DeletedMessage _ ->
             Nothing
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Nothing
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Nothing
 
 
@@ -2929,11 +2929,11 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         DeletedMessage _ ->
                             Ui.none
 
-                        CallStarted _ _ userId _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+                        CallStarted { startedBy } ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
-                        GameStarted _ userId _ _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+                        GameStarted { startedBy } ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
                 _ ->
                     Ui.none
@@ -4394,10 +4394,10 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Ui.none
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Ui.none
 
 
@@ -4525,10 +4525,10 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Ui.none
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Ui.none
 
 
@@ -4837,7 +4837,23 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
+            let
+                time =
+                    callStartedData.startedAt
+
+                endedAt =
+                    callStartedData.endedAt
+
+                userId =
+                    callStartedData.startedBy
+
+                reactions =
+                    callStartedData.reactions
+
+                drawings =
+                    callStartedData.timestampDrawings
+            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -4873,7 +4889,23 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
+            let
+                time =
+                    gameStarted.startedAt
+
+                userId =
+                    gameStarted.startedBy
+
+                reactions =
+                    gameStarted.reactions
+
+                drawings =
+                    gameStarted.timestampDrawings
+
+                game =
+                    gameStarted.gameType
+            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5013,7 +5045,23 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
+            let
+                time =
+                    callStartedData.startedAt
+
+                endedAt =
+                    callStartedData.endedAt
+
+                userId =
+                    callStartedData.startedBy
+
+                reactions =
+                    callStartedData.reactions
+
+                drawings =
+                    callStartedData.timestampDrawings
+            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5049,7 +5097,23 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
+            let
+                time =
+                    gameStarted.startedAt
+
+                userId =
+                    gameStarted.startedBy
+
+                reactions =
+                    gameStarted.reactions
+
+                drawings =
+                    gameStarted.timestampDrawings
+
+                game =
+                    gameStarted.gameType
+            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5179,7 +5243,23 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
+            let
+                time =
+                    callStartedData.startedAt
+
+                endedAt =
+                    callStartedData.endedAt
+
+                userId =
+                    callStartedData.startedBy
+
+                reactions =
+                    callStartedData.reactions
+
+                drawings =
+                    callStartedData.timestampDrawings
+            in
             threadMessageContainer
                 highlight
                 messageId
@@ -5211,7 +5291,23 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
+            let
+                time =
+                    gameStarted.startedAt
+
+                userId =
+                    gameStarted.startedBy
+
+                reactions =
+                    gameStarted.reactions
+
+                drawings =
+                    gameStarted.timestampDrawings
+
+                game =
+                    gameStarted.gameType
+            in
             threadMessageContainer
                 highlight
                 messageId
@@ -5335,7 +5431,23 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
+            let
+                time =
+                    callStartedData.startedAt
+
+                endedAt =
+                    callStartedData.endedAt
+
+                userId =
+                    callStartedData.startedBy
+
+                reactions =
+                    callStartedData.reactions
+
+                drawings =
+                    callStartedData.timestampDrawings
+            in
             threadMessageContainer
                 highlight
                 messageId
@@ -5367,7 +5479,23 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
+            let
+                time =
+                    gameStarted.startedAt
+
+                userId =
+                    gameStarted.startedBy
+
+                reactions =
+                    gameStarted.reactions
+
+                drawings =
+                    gameStarted.timestampDrawings
+
+                game =
+                    gameStarted.gameType
+            in
             threadMessageContainer
                 highlight
                 messageId
@@ -5767,11 +5895,11 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                     (Ui.text LocalState.messageDeleted)
                 )
 
-        Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
+        Just ( repliedToIndex, CallStarted { startedAt, endedAt, startedBy } ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted startedBy startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GameStarted _ userId _ _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
+        Just ( repliedToIndex, GameStarted { startedBy } ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
 
         Nothing ->
             Ui.none
@@ -6392,10 +6520,10 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
 
-                            CallStarted _ endedAt userId _ _ ->
+                            CallStarted { endedAt, startedBy } ->
                                 [ Html.span
                                     []
-                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    [ Html.b [] [ User.toString startedBy allUsers |> Html.text ]
                                     , case endedAt of
                                         Just _ ->
                                             Html.text "'s call ended"
@@ -6405,10 +6533,10 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GameStarted _ userId _ _ _ ->
+                            GameStarted { startedBy } ->
                                 [ Html.span
                                     []
-                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    [ Html.b [] [ User.toString startedBy allUsers |> Html.text ]
                                     , Html.text " started a Go match"
                                     ]
                                 ]
@@ -7491,11 +7619,11 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ _ ->
+                                CallStarted { endedAt } ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ game ->
-                                    LocalState.gameStartedText game
+                                GameStarted { gameType } ->
+                                    LocalState.gameStartedText gameType
 
                         MessageUnloaded ->
                             ""
@@ -7617,11 +7745,11 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ _ ->
+                                CallStarted { endedAt } ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ game ->
-                                    LocalState.gameStartedText game
+                                GameStarted { gameType } ->
+                                    LocalState.gameStartedText gameType
 
                         MessageUnloaded ->
                             ""

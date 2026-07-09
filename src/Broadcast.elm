@@ -605,11 +605,11 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             DeletedMessage _ ->
                                                 ""
 
-                                            CallStarted _ endTime _ _ _ ->
-                                                LocalState.callStartedText endTime
+                                            CallStarted callStarted ->
+                                                LocalState.callStartedText callStarted.endedAt
 
-                                            GameStarted _ _ _ _ game ->
-                                                LocalState.gameStartedText game
+                                            GameStarted gameStarted ->
+                                                LocalState.gameStartedText gameStarted.gameType
                                         )
                                         message
                                         (DiscordGuildRoute
@@ -767,12 +767,12 @@ notificationEmail time email senderName userToString plainText message postmarkA
         DeletedMessage _ ->
             Command.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             helper
                 (NonemptyString 'C' "all started")
                 (Postmark.BodyText (senderName ++ " started a call"))
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             helper
                 (NonemptyString 'G' "ame started")
                 (Postmark.BodyText (senderName ++ " started a game"))
@@ -1244,7 +1244,15 @@ gameStartedDmNotification time senderId otherUserId gameType model =
                                 "<missing>"
                     )
                     (LocalState.gameStartedText gameType)
-                    (GameStarted time senderId SeqDict.empty Drawing.emptyDrawing gameType)
+                    (GameStarted
+                        { startedAt = time
+                        , startedBy = senderId
+                        , reactions = SeqDict.empty
+                        , gameType = gameType
+                        , timestampDrawings = Drawing.emptyDrawing
+                        , cardDrawings = Drawing.emptyDrawing
+                        }
+                    )
                     (DmRoute
                         { channelId = DmChannelId.fromUserIds senderId otherUserId
                         , threadRoute = NoThreadWithFriends Nothing HideMembersTab
@@ -1283,7 +1291,14 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
 
         message : Message messageId (Id UserId)
         message =
-            GameStarted time sender SeqDict.empty Drawing.emptyDrawing gameType
+            GameStarted
+                { startedAt = time
+                , startedBy = sender
+                , reactions = SeqDict.empty
+                , gameType = gameType
+                , timestampDrawings = Drawing.emptyDrawing
+                , cardDrawings = Drawing.emptyDrawing
+                }
     in
     SeqSet.fromList members
         |> SeqSet.remove sender
