@@ -4,6 +4,7 @@ module Broadcast exposing
     , broadcastDm
     , discordDmNotification
     , discordGuildMessageNotification
+    , gameStartedDmNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -34,6 +35,7 @@ import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
 import DmChannelId
+import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -1193,3 +1195,65 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
         , Command.batch cmds
         ]
     )
+
+
+{-| Notify the other participant of a DM when a game is started in it, unless they're already
+looking at the DM. `GameStarted` messages don't flow through the normal text-message broadcast,
+so this mirrors `broadcastDm`'s notification handling for the game-start case.
+-}
+gameStartedDmNotification :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> Message.GameType
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+gameStartedDmNotification time senderId otherUserId gameType model =
+    let
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\connection ->
+                    case connection.currentlyViewing of
+                        Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), NoThread ) ->
+                            viewingUserId == senderId
+
+                        _ ->
+                            False
+                )
+                (userGetAllConnections otherUserId model)
+    in
+    if senderId == otherUserId || isViewing then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get senderId model.users of
+            Just senderUser ->
+                notification
+                    time
+                    otherUserId
+                    (PersonName.toString senderUser.name)
+                    senderUser.icon
+                    (\userId2 ->
+                        case NonemptyDict.get userId2 model.users of
+                            Just user ->
+                                PersonName.toString user.name
+
+                            Nothing ->
+                                "<missing>"
+                    )
+                    (LocalState.gameStartedText gameType)
+                    (GameStarted time senderId SeqDict.empty Drawing.emptyDrawing gameType)
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds senderId otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                        , tab = Nothing
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )

@@ -5101,17 +5101,37 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\session _ _ dmChannelId dmChannel ->
                                     case gameChange of
                                         Game.LocalChange_Go matchId goChange ->
-                                            handleDmGoGame
-                                                time
-                                                session
-                                                clientId
-                                                changeId
-                                                otherUserId
-                                                matchId
-                                                goChange
-                                                dmChannelId
-                                                dmChannel
-                                                model
+                                            let
+                                                ( model2, cmd ) =
+                                                    handleDmGoGame
+                                                        time
+                                                        session
+                                                        clientId
+                                                        changeId
+                                                        otherUserId
+                                                        matchId
+                                                        goChange
+                                                        dmChannelId
+                                                        dmChannel
+                                                        model
+                                            in
+                                            case goChange of
+                                                Go.StartMatch _ _ ->
+                                                    let
+                                                        ( sessions, notificationCmd ) =
+                                                            Broadcast.gameStartedDmNotification
+                                                                time
+                                                                session.userId
+                                                                otherUserId
+                                                                GameType_Go
+                                                                model2
+                                                    in
+                                                    ( { model2 | sessions = sessions }
+                                                    , Command.batch [ cmd, notificationCmd ]
+                                                    )
+
+                                                _ ->
+                                                    ( model2, cmd )
 
                                         Game.CreatePublicLink matchId _ ->
                                             case SeqDict.get matchId dmChannel.games of
@@ -5146,29 +5166,49 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         Game.LocalChange_WordSpellingGame matchId wsChange ->
-                                            handleWordSpellingGame
-                                                time
-                                                session
-                                                clientId
-                                                changeId
-                                                guildOrDmId
-                                                dmChannel
-                                                (\dmChannel2 model2 ->
-                                                    { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
-                                                )
-                                                (\localMsg2 model2 ->
-                                                    Broadcast.toDmChannelExcludingOne
+                                            let
+                                                ( model2, cmd ) =
+                                                    handleWordSpellingGame
+                                                        time
+                                                        session
                                                         clientId
-                                                        session.userId
-                                                        otherUserId
-                                                        (\otherUserId2 ->
-                                                            Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                        changeId
+                                                        guildOrDmId
+                                                        dmChannel
+                                                        (\dmChannel2 model3 ->
+                                                            { model3 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model3.dmChannels }
                                                         )
-                                                        model2
-                                                )
-                                                matchId
-                                                wsChange
-                                                model
+                                                        (\localMsg2 model3 ->
+                                                            Broadcast.toDmChannelExcludingOne
+                                                                clientId
+                                                                session.userId
+                                                                otherUserId
+                                                                (\otherUserId2 ->
+                                                                    Server_Game session.userId (GuildOrDmId_Dm otherUserId2) localMsg2
+                                                                )
+                                                                model3
+                                                        )
+                                                        matchId
+                                                        wsChange
+                                                        model
+                                            in
+                                            case wsChange of
+                                                WordSpellingGame.StartMatch _ _ ->
+                                                    let
+                                                        ( sessions, notificationCmd ) =
+                                                            Broadcast.gameStartedDmNotification
+                                                                time
+                                                                session.userId
+                                                                otherUserId
+                                                                GameType_WordSpellingGame
+                                                                model2
+                                                    in
+                                                    ( { model2 | sessions = sessions }
+                                                    , Command.batch [ cmd, notificationCmd ]
+                                                    )
+
+                                                _ ->
+                                                    ( model2, cmd )
                                 )
 
                         GuildOrDmId_Guild guildId channelId ->

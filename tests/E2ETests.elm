@@ -1542,6 +1542,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Push notification sent when a game is started"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled and is currently viewing the guild channel (not the DM).
+                [ -- Admin opens the DM with the other user and starts a Go match there.
+                  admin.click 100 (Dom.id "guild_openDm_2")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "go_start")
+
+                -- The user isn't viewing the DM, so starting the game should push a notification to them.
+                , E2EHelper.checkNotification "Go match started"
+                ]
+            )
+        ]
     , E2EVoiceChat.voiceChatTest normalConfig
     , E2EVoiceChat.cloudflareCostTest normalConfig
     , E2EHelper.startTest "Logins are rate limited"
