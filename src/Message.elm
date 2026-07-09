@@ -45,8 +45,28 @@ type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
     | DeletedMessage Time.Posix
-    | CallStarted Time.Posix (Maybe Time.Posix) userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId)
-    | GameStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId)) (Drawing userId) GameType
+    | CallStarted (CallStartedData userId)
+    | GameStarted (GameStartedData userId)
+
+
+type alias CallStartedData userId =
+    { startedAt : Time.Posix
+    , endedAt : Maybe Time.Posix
+    , startedBy : userId
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , timestampDrawings : Drawing userId
+    , cardDrawings : Drawing userId
+    }
+
+
+type alias GameStartedData userId =
+    { startedAt : Time.Posix
+    , startedBy : userId
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    , gameType : GameType
+    , timestampDrawings : Drawing userId
+    , cardDrawings : Drawing userId
+    }
 
 
 type GameType

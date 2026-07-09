@@ -24,6 +24,7 @@ module Drawing exposing
     , profileImageAnchorId
     , redoButtonId
     , resetAnchor
+    , selectingAnchorHighlight
     , undoButtonId
     , undoRedoButton
     , userColor
@@ -566,26 +567,31 @@ anchorHighlight :
     -> Drawing userId
     -> List (Ui.Attribute msg)
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
-    [ Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
-    , Dom.idToString htmlId |> Ui.id
-    , Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
+    [ Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
     ]
         ++ (if isSelectingAnchor then
-                [ Ui.Anim.hovered
-                    (Ui.Anim.ms 10)
-                    [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
-                    , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
-                    ]
-                , MyUi.htmlStyle "outline-style" "solid"
-                , MyUi.htmlStyle "outline-width" "2px"
-                , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
-                , Ui.pointer
-                ]
+                selectingAnchorHighlight htmlId onPress
 
             else
                 []
            )
+
+
+selectingAnchorHighlight : HtmlId -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg) -> List (Ui.Attribute msg)
+selectingAnchorHighlight htmlId onPress =
+    [ Ui.Anim.hovered
+        (Ui.Anim.ms 10)
+        [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
+        , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
+        ]
+    , MyUi.htmlStyle "outline-style" "solid"
+    , MyUi.htmlStyle "outline-width" "2px"
+    , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
+    , Ui.pointer
+    , Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
+    , Dom.idToString htmlId |> Ui.id
+    ]
 
 
 {-| Same hover highlight as anchorHighlight but for elements rendered with plain

@@ -4853,7 +4853,15 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId time endedAt allUsers
+                    [ callStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        drawings
+                        userId
+                        time
+                        endedAt
+                        allUsers
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -4881,7 +4889,14 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings
+                        messageId
+                        userId
+                        allUsers
+                        game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5014,7 +5029,15 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId time endedAt allUsers
+                    [ callStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        drawings
+                        userId
+                        time
+                        endedAt
+                        allUsers
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5042,7 +5065,14 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings
+                        messageId
+                        userId
+                        allUsers
+                        game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5162,7 +5192,15 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard userId time endedAt allUsers
+                    [ callStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        drawings
+                        userId
+                        time
+                        endedAt
+                        allUsers
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5186,7 +5224,14 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings
+                        messageId
+                        userId
+                        allUsers
+                        game
                     , messageTimestamp
                         Drawing.userColor
                         drawings
@@ -5303,7 +5348,15 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard userId time endedAt allUsers
+                    [ callStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        drawings
+                        userId
+                        time
+                        endedAt
+                        allUsers
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5327,7 +5380,14 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        drawings
+                        messageId
+                        userId
+                        allUsers
+                        game
                     , messageTimestamp
                         Drawing.discordUserColor
                         drawings
@@ -5819,9 +5879,22 @@ goMatchStarted userId allUsers =
         ]
 
 
-callStartedCard : userId -> Time.Posix -> Maybe Time.Posix -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-callStartedCard userId startedAt endedAt allUsers =
+callStartedCard :
+    (userId -> String)
+    -> Bool
+    -> Id messageId
+    -> Drawing userId
+    -> userId
+    -> Time.Posix
+    -> Maybe Time.Posix
+    -> SeqDict userId { a | name : PersonName }
+    -> Element MessageViewMsg
+callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt allUsers =
     eventCard
+        userIdToColor
+        isSelectingAnchor
+        messageId
+        drawings
         (Dom.id "guild_callStartedCard")
         MessageViewMsg_PressedCallStartedCard
         (Ui.html Icons.phone)
@@ -5829,11 +5902,23 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> GameType -> Element MessageViewMsg
-goMatchStartedCard messageId userId allUsers game =
+goMatchStartedCard :
+    (userId -> String)
+    -> Bool
+    -> Drawing userId
+    -> Id messageId
+    -> userId
+    -> SeqDict userId { a | name : PersonName }
+    -> GameType
+    -> Element MessageViewMsg
+goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId allUsers game =
     case game of
         GameType_Go ->
             eventCard
+                userIdToColor
+                isSelectingAnchor
+                messageId
+                drawings
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
                 (Ui.html Icons.go)
@@ -5842,6 +5927,10 @@ goMatchStartedCard messageId userId allUsers game =
 
         GameType_WordSpellingGame ->
             eventCard
+                userIdToColor
+                isSelectingAnchor
+                messageId
+                drawings
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
                 (Ui.html Icons.go)
@@ -5849,23 +5938,20 @@ goMatchStartedCard messageId userId allUsers game =
                 "started a Word Spelling game"
 
 
-eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
-eventCard htmlId onPress icon userName action =
-    Ui.el
-        []
-        (MyUi.rowButton
-            htmlId
-            onPress
-            [ Ui.spacing 12
-            , Ui.paddingXY 16 6
-            , Ui.background MyUi.background2
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.rounded 6
-            , Ui.width Ui.shrink
-            , Ui.Font.color MyUi.font3
-            , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
-            ]
+eventCard :
+    (userId -> String)
+    -> Bool
+    -> Id messageId
+    -> Drawing userId
+    -> HtmlId
+    -> MessageViewMsg
+    -> Element MessageViewMsg
+    -> String
+    -> String
+    -> Element MessageViewMsg
+eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon userName action =
+    let
+        body =
             [ icon
             , Ui.column
                 [ Ui.spacing 2, Ui.width Ui.shrink ]
@@ -5873,6 +5959,41 @@ eventCard htmlId onPress icon userName action =
                 , Ui.el [ Ui.Font.size 13 ] (Ui.text action)
                 ]
             ]
+    in
+    Ui.el
+        []
+        (if isSelectingAnchor then
+            Ui.row
+                ([ Ui.spacing 12
+                 , Ui.paddingXY 16 6
+                 , Ui.background MyUi.background2
+                 , Ui.border 1
+                 , Ui.borderColor MyUi.border1
+                 , Ui.rounded 6
+                 , Ui.width Ui.shrink
+                 , Ui.Font.color MyUi.font3
+                 ]
+                    ++ Drawing.selectingAnchorHighlight
+                        ("guild_eventCard_" ++ Id.toString messageId |> Dom.id)
+                        MessageView_PressedTimestamp
+                )
+                body
+
+         else
+            MyUi.rowButton
+                htmlId
+                onPress
+                [ Ui.spacing 12
+                , Ui.paddingXY 16 6
+                , Ui.background MyUi.background2
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.rounded 6
+                , Ui.width Ui.shrink
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                ]
+                body
         )
 
 
