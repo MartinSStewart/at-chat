@@ -537,12 +537,28 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         "Load service worker data"
                     , case model.serviceWorkerData of
                         Just serviceWorkerData ->
-                            MyUi.copyBox
-                                (Dom.id "userOptions_serviceWorkerData")
-                                PressedCopyText
-                                FrontendNoOp
-                                loaded
-                                serviceWorkerData
+                            Ui.column
+                                [ if isMobile then
+                                    Ui.width Ui.fill
+
+                                  else
+                                    Ui.width Ui.shrink
+                                ]
+                                [ Ui.el
+                                    [ Ui.Font.size 14, Ui.Font.bold ]
+                                    (Ui.text
+                                        ("Service worker data (loaded at "
+                                            ++ MyUi.timestamp serviceWorkerData.loadedAt loaded.timezone
+                                            ++ ")"
+                                        )
+                                    )
+                                , MyUi.copyBox
+                                    (Dom.id "userOptions_serviceWorkerData")
+                                    PressedCopyText
+                                    FrontendNoOp
+                                    loaded
+                                    serviceWorkerData.data
+                                ]
 
                         Nothing ->
                             Ui.none

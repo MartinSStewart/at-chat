@@ -265,7 +265,7 @@ type alias UserOptionsModel =
     { name : Editable.Model
     , showLinkDiscordSetup : Bool
     , domainWhitelistInput : String
-    , serviceWorkerData : Maybe String
+    , serviceWorkerData : Maybe { data : String, loadedAt : Time.Posix }
     }
 
 

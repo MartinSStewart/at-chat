@@ -4380,7 +4380,11 @@ updateLoaded msg model =
                     ( { loggedIn
                         | userOptions =
                             Maybe.map
-                                (\userOptions -> { userOptions | serviceWorkerData = Just serviceWorkerData })
+                                (\userOptions ->
+                                    { userOptions
+                                        | serviceWorkerData = Just { data = serviceWorkerData, loadedAt = model.time }
+                                    }
+                                )
                                 loggedIn.userOptions
                       }
                     , Command.none
