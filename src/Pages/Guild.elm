@@ -4838,22 +4838,6 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 )
 
         CallStarted callStartedData ->
-            let
-                time =
-                    callStartedData.startedAt
-
-                endedAt =
-                    callStartedData.endedAt
-
-                userId =
-                    callStartedData.startedBy
-
-                reactions =
-                    callStartedData.reactions
-
-                drawings =
-                    callStartedData.timestampDrawings
-            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -4864,7 +4848,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
@@ -4873,17 +4857,17 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                         Drawing.userColor
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        drawings
-                        userId
-                        time
-                        endedAt
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
                         allUsers
                     , messageTimestamp
                         Drawing.userColor
-                        drawings
+                        callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
@@ -5030,22 +5014,6 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 )
 
         CallStarted callStartedData ->
-            let
-                time =
-                    callStartedData.startedAt
-
-                endedAt =
-                    callStartedData.endedAt
-
-                userId =
-                    callStartedData.startedBy
-
-                reactions =
-                    callStartedData.reactions
-
-                drawings =
-                    callStartedData.timestampDrawings
-            in
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5056,7 +5024,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
@@ -5065,17 +5033,17 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                         Drawing.discordUserColor
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        drawings
-                        userId
-                        time
-                        endedAt
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
                         allUsers
                     , messageTimestamp
                         Drawing.discordUserColor
-                        drawings
+                        callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
@@ -5212,29 +5180,13 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 )
 
         CallStarted callStartedData ->
-            let
-                time =
-                    callStartedData.startedAt
-
-                endedAt =
-                    callStartedData.endedAt
-
-                userId =
-                    callStartedData.startedBy
-
-                reactions =
-                    callStartedData.reactions
-
-                drawings =
-                    callStartedData.timestampDrawings
-            in
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
@@ -5244,17 +5196,17 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                         Drawing.userColor
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        drawings
-                        userId
-                        time
-                        endedAt
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
                         allUsers
                     , messageTimestamp
                         Drawing.userColor
-                        drawings
+                        callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.startedAt
                         localUser.timezone
                     ]
                 )
@@ -5384,29 +5336,13 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 )
 
         CallStarted callStartedData ->
-            let
-                time =
-                    callStartedData.startedAt
-
-                endedAt =
-                    callStartedData.endedAt
-
-                userId =
-                    callStartedData.startedBy
-
-                reactions =
-                    callStartedData.reactions
-
-                drawings =
-                    callStartedData.timestampDrawings
-            in
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
@@ -5416,17 +5352,17 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                         Drawing.discordUserColor
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        drawings
-                        userId
-                        time
-                        endedAt
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
                         allUsers
                     , messageTimestamp
                         Drawing.discordUserColor
-                        drawings
+                        callStartedData.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.startedAt
                         localUser.timezone
                     ]
                 )
