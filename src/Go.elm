@@ -23,6 +23,7 @@ module Go exposing
     , audio
     , boardSize9
     , currentPlayersTurn
+    , currentTurnUser
     , deadStones
     , dragEnd
     , dragStart
@@ -1950,6 +1951,28 @@ clockChip maybeUser maybeTimeLeft isActive stone score =
             , StringExtra.removeTrailing0s 1 score |> Ui.text
             ]
         ]
+
+
+{-| The user who has to act next, if the match is still in progress. Mirrors `isLocalUsersTurn`
+but returns who the turn belongs to instead of checking a specific user.
+-}
+currentTurnUser : ValidatedSetup -> Shared -> Maybe (Id UserId)
+currentTurnUser setup shared =
+    case shared.phase of
+        Scored _ ->
+            Nothing
+
+        _ ->
+            let
+                players =
+                    getPlayers setup shared
+            in
+            case shared.currentPlayer of
+                Black ->
+                    players.black
+
+                White ->
+                    players.white
 
 
 isLocalUsersTurn : Id UserId -> ValidatedSetup -> Shared -> Bool

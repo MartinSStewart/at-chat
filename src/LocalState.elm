@@ -80,6 +80,7 @@ module LocalState exposing
     , editMessageHelper
     , editMessageHelperNoThread
     , gameStartedText
+    , gameTurnText
     , getDiscordGuildAndChannel
     , getGuildAndChannel
     , guildOrDmIdToMessage
@@ -446,6 +447,16 @@ gameStartedText game =
 
         Message.GameType_WordSpellingGame ->
             "Word Spelling Game started"
+
+
+gameTurnText : Message.GameType -> String
+gameTurnText game =
+    case game of
+        Message.GameType_Go ->
+            "It's your turn in Go"
+
+        Message.GameType_WordSpellingGame ->
+            "It's your turn in Word Spelling Game"
 
 
 messageDeleted : String

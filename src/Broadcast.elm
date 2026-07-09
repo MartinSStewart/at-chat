@@ -6,6 +6,7 @@ module Broadcast exposing
     , discordGuildMessageNotification
     , gameStartedDmNotification
     , gameStartedGuildNotification
+    , gameTurnNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -47,7 +48,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -1262,6 +1263,122 @@ gameStartedDmNotification time senderId otherUserId gameType model =
                     )
                     model.sessions
                     model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+{-| Notify a player that it's their turn in a game, unless they're already looking at the
+channel the game is in (the your-turn card in the conversation view covers that case). Unlike
+`notification` this never sends an email: turns change far too often for that.
+-}
+gameTurnNotification :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> GuildOrDmId
+    -> Id ChannelMessageId
+    -> Message.GameType
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+gameTurnNotification time actorId turnUserId guildOrDmId matchId gameType model =
+    let
+        isViewingHelper : (LocalState.ConnectionData -> Bool) -> Bool
+        isViewingHelper isViewingChannel =
+            List.any isViewingChannel (userGetAllConnections turnUserId model)
+
+        ( isViewing, navigateTo ) =
+            case guildOrDmId of
+                -- `guildOrDmId` is from the actor's perspective; the notified user views this DM
+                -- under the actor's id.
+                GuildOrDmId_Dm otherUserId ->
+                    let
+                        peerId : Id UserId
+                        peerId =
+                            if turnUserId == otherUserId then
+                                actorId
+
+                            else
+                                otherUserId
+                    in
+                    ( isViewingHelper
+                        (\connection ->
+                            case connection.currentlyViewing of
+                                Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), NoThread ) ->
+                                    viewingUserId == peerId
+
+                                _ ->
+                                    False
+                        )
+                    , DmRoute
+                        { channelId = DmChannelId.fromUserIds turnUserId peerId
+                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                        , tab = Just (Route.ChannelHeaderTab_Games (Just matchId))
+                        }
+                    )
+
+                GuildOrDmId_Guild guildId channelId ->
+                    ( isViewingHelper
+                        (\connection ->
+                            case connection.currentlyViewing of
+                                Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), NoThread ) ->
+                                    viewingGuildId == guildId && viewingChannelId == channelId
+
+                                _ ->
+                                    False
+                        )
+                    , GuildRoute
+                        guildId
+                        (ChannelRoute
+                            channelId
+                            (NoThreadWithFriends Nothing HideMembersTab)
+                            (Just (Route.ChannelHeaderTab_Games (Just matchId)))
+                        )
+                    )
+    in
+    if turnUserId == actorId || isViewing then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get actorId model.users of
+            Just actorUser ->
+                SeqDict.foldl
+                    (\sessionId session ( sessions2, cmds ) ->
+                        if session.userId == turnUserId then
+                            case ( session.notificationMode, session.pushSubscription ) of
+                                ( PushNotifications, Subscribed pushSubscription _ ) ->
+                                    ( SeqDict.insert
+                                        sessionId
+                                        { session | pushSubscription = Subscribed pushSubscription time }
+                                        sessions2
+                                    , pushNotification
+                                        sessionId
+                                        session.userId
+                                        time
+                                        (PersonName.toString actorUser.name)
+                                        (LocalState.gameTurnText gameType)
+                                        (case actorUser.icon of
+                                            Just icon ->
+                                                FileStatus.fileUrl FileStatus.pngContent icon
+
+                                            Nothing ->
+                                                Env.domain ++ "/at-logo-no-background.png"
+                                        )
+                                        (Just navigateTo)
+                                        pushSubscription
+                                        model
+                                        :: cmds
+                                    )
+
+                                _ ->
+                                    ( sessions2, cmds )
+
+                        else
+                            ( sessions2, cmds )
+                    )
+                    ( model.sessions, [] )
+                    model.sessions
                     |> Tuple.mapSecond Command.batch
 
             Nothing ->

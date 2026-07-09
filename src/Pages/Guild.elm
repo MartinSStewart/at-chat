@@ -33,6 +33,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
+import Game
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName
@@ -3039,6 +3040,7 @@ conversationView :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
             , dateDividerDrawings : SeqDict Date (Drawing (Id UserId))
+            , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     -> Element FrontendMsg_
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
@@ -3072,6 +3074,25 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 Nothing ->
                     Nothing
+
+        yourTurnCard : Ui.Attribute FrontendMsg_
+        yourTurnCard =
+            case Route.toChannelHeaderTab model.route of
+                Just (Route.ChannelHeaderTab_Games _) ->
+                    Ui.noAttr
+
+                _ ->
+                    case
+                        Game.hasPendingTurn local.localUser.session.userId channel.games
+                            |> SeqSet.toList
+                            |> List.reverse
+                            |> List.head
+                    of
+                        Just matchId ->
+                            Ui.inFront (yourTurnCardView matchId channel.games)
+
+                        Nothing ->
+                            Ui.noAttr
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3086,6 +3107,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 local
                 loggedIn
                 model
+             , yourTurnCard
              , Ui.heightMin 0
              , Ui.height Ui.fill
              ]
@@ -3197,6 +3219,48 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
+            ]
+        ]
+
+
+{-| Floating card shown over the conversation while it's the user's turn in one of this
+channel's matches and the games tab is closed. Pressing it opens the games tab on that match
+(which hides the card); closing the tab brings the card back for as long as the turn is
+pending, since its visibility is derived from the match state on every view.
+-}
+yourTurnCardView : Id ChannelMessageId -> SeqDict (Id ChannelMessageId) Game.MatchData -> Element FrontendMsg_
+yourTurnCardView matchId games =
+    MyUi.rowButton
+        (Dom.id "guild_yourTurnCard")
+        (PressedChannelHeaderTab (Route.ChannelHeaderTab_Games (Just matchId)))
+        [ Ui.spacing 12
+        , Ui.paddingXY 16 6
+        , Ui.background MyUi.background2
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 6
+        , Ui.width Ui.shrink
+        , Ui.Font.color MyUi.font3
+        , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+        , Ui.centerX
+        , Ui.alignTop
+        , Ui.move { x = 0, y = 8, z = 0 }
+        ]
+        [ Ui.html Icons.go
+        , Ui.column
+            [ Ui.spacing 2, Ui.width Ui.shrink ]
+            [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text "It's your turn!")
+            , Ui.el
+                [ Ui.Font.size 13 ]
+                (Ui.text
+                    (case SeqDict.get matchId games of
+                        Just match ->
+                            "Continue playing " ++ Game.gameToString (Game.matchGameType match)
+
+                        Nothing ->
+                            "Open the game"
+                    )
+                )
             ]
         ]
 

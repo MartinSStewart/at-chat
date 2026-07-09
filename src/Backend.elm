@@ -5659,6 +5659,46 @@ notifyGameStartedInGuild time sender guildId channelId gameType guild model cmd 
     )
 
 
+{-| After a game action is applied, push a notification to the player the turn now belongs to,
+if the action handed the turn to someone new. Folded into the handler's existing result the same
+way as `notifyGameStartedInGuild`.
+-}
+notifyGameTurn :
+    Time.Posix
+    -> Id UserId
+    -> GuildOrDmId
+    -> Id ChannelMessageId
+    -> GameType
+    -> Maybe (Id UserId)
+    -> Maybe (Id UserId)
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+notifyGameTurn time actorId guildOrDmId matchId gameType turnUserBefore turnUserAfter ( model, cmd ) =
+    case turnUserAfter of
+        Just turnUserId ->
+            if turnUserAfter == turnUserBefore then
+                ( model, cmd )
+
+            else
+                let
+                    ( sessions, notificationCmd ) =
+                        Broadcast.gameTurnNotification
+                            time
+                            actorId
+                            turnUserId
+                            guildOrDmId
+                            matchId
+                            gameType
+                            model
+                in
+                ( { model | sessions = sessions }
+                , Command.batch [ cmd, notificationCmd ]
+                )
+
+        Nothing ->
+            ( model, cmd )
+
+
 handleGuildGoGame :
     Time.Posix
     -> UserSession
@@ -5737,6 +5777,11 @@ handleGuildGoGame time session clientId changeId guildId channelId matchId goCha
                             Game.LocalChange_Go matchId (Go.Action { actionWithTime | time = time })
                     in
                     if isValidGoAction session.userId goSetup actions actionWithTime then
+                        let
+                            gameData2 : Game.BackendGameData
+                            gameData2 =
+                                Game.GameData_Go goSetup (Array.push actionWithTime actions)
+                        in
                         ( { model
                             | guilds =
                                 SeqDict.insert
@@ -5745,13 +5790,7 @@ handleGuildGoGame time session clientId changeId guildId channelId matchId goCha
                                         | channels =
                                             SeqDict.insert
                                                 channelId
-                                                { channel
-                                                    | games =
-                                                        SeqDict.insert
-                                                            matchId
-                                                            (Game.GameData_Go goSetup (Array.push actionWithTime actions))
-                                                            channel.games
-                                                }
+                                                { channel | games = SeqDict.insert matchId gameData2 channel.games }
                                                 guild.channels
                                     }
                                     model.guilds
@@ -5767,6 +5806,14 @@ handleGuildGoGame time session clientId changeId guildId channelId matchId goCha
                                 model
                             ]
                         )
+                            |> notifyGameTurn
+                                time
+                                session.userId
+                                guildOrDmId
+                                matchId
+                                GameType_Go
+                                (Game.backendCurrentTurnUser (Game.GameData_Go goSetup actions))
+                                (Game.backendCurrentTurnUser gameData2)
 
                     else
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -5845,17 +5892,16 @@ handleDmGoGame time session clientId changeId otherUserId matchId goChange dmCha
                             Game.LocalChange_Go matchId (Go.Action { actionWithTime | time = time })
                     in
                     if isValidGoAction session.userId goSetup actions actionWithTime then
+                        let
+                            gameData2 : Game.BackendGameData
+                            gameData2 =
+                                Game.GameData_Go goSetup (Array.push actionWithTime actions)
+                        in
                         ( { model
                             | dmChannels =
                                 SeqDict.insert
                                     dmChannelId
-                                    { dmChannel
-                                        | games =
-                                            SeqDict.insert
-                                                matchId
-                                                (Game.GameData_Go goSetup (Array.push actionWithTime actions))
-                                                dmChannel.games
-                                    }
+                                    { dmChannel | games = SeqDict.insert matchId gameData2 dmChannel.games }
                                     model.dmChannels
                           }
                         , Command.batch
@@ -5872,6 +5918,14 @@ handleDmGoGame time session clientId changeId otherUserId matchId goChange dmCha
                                 model
                             ]
                         )
+                            |> notifyGameTurn
+                                time
+                                session.userId
+                                (GuildOrDmId_Dm otherUserId)
+                                matchId
+                                GameType_Go
+                                (Game.backendCurrentTurnUser (Game.GameData_Go goSetup actions))
+                                (Game.backendCurrentTurnUser gameData2)
 
                     else
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -6030,17 +6084,21 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                             Game.LocalChange_WordSpellingGame
                                 matchId
                                 (WordSpellingGame.Action action2)
+
+                        turnUserBeforeAction : Maybe (Id UserId)
+                        turnUserBeforeAction =
+                            WordSpellingGame.currentTurnUser shared
+
+                        shared2 : WordSpellingGame.Shared
+                        shared2 =
+                            WordSpellingGame.updateAction setup action2 shared
                     in
                     ( setChannel
                         { channel
                             | games =
                                 SeqDict.insert
                                     matchId
-                                    (Game.GameData_WordSpellingGame
-                                        setup
-                                        (Array.push action2 actions)
-                                        (WordSpellingGame.updateAction setup action2 shared)
-                                    )
+                                    (Game.GameData_WordSpellingGame setup (Array.push action2 actions) shared2)
                                     channel.games
                         }
                         model
@@ -6051,6 +6109,14 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                         , broadcast localMsg2 model
                         ]
                     )
+                        |> notifyGameTurn
+                            time
+                            session.userId
+                            guildOrDmId
+                            matchId
+                            GameType_WordSpellingGame
+                            turnUserBeforeAction
+                            (WordSpellingGame.currentTurnUser shared2)
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )

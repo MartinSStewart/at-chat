@@ -30,6 +30,7 @@ module WordSpellingGame exposing
     , audio
     , boardTouchCoord
     , boardY
+    , currentTurnUser
     , dragEnd
     , dragStart
     , fullTrayBonusScore
@@ -2690,6 +2691,22 @@ type UserStatus
     = NotJoined
     | Joined
     | JoinedAndItsTheirTurn
+
+
+{-| The player who has to act next, if the match hasn't ended. Mirrors `isPlayerTurn` but
+returns who the turn belongs to instead of checking a specific user.
+-}
+currentTurnUser : Shared -> Maybe (Id UserId)
+currentTurnUser shared =
+    case getWinner shared of
+        Just _ ->
+            Nothing
+
+        Nothing ->
+            List.Extra.getAt
+                (modBy (List.Nonempty.length shared.players) shared.turnCount)
+                (List.Nonempty.toList shared.players)
+                |> Maybe.map .userId
 
 
 isPlayerTurn : Id UserId -> Shared -> UserStatus

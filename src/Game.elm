@@ -12,6 +12,7 @@ module Game exposing
     , addPublicLink
     , addWordSpellingGameAction
     , audio
+    , backendCurrentTurnUser
     , dragEnd
     , dragStart
     , gameChangeFromServer
@@ -21,6 +22,7 @@ module Game exposing
     , initModel
     , insideBoard
     , isAnimating
+    , matchGameType
     , pressedKey
     , routeRequest
     , update
@@ -289,6 +291,29 @@ addWordSpellingGameAction action (MatchData match) =
                         (WordSpellingGame.updateAction setup action cache)
     }
         |> MatchData
+
+
+{-| Which user has to act next in a match, if it's still in progress. Used by the backend to
+notify a player when it becomes their turn.
+-}
+backendCurrentTurnUser : BackendGameData -> Maybe (Id UserId)
+backendCurrentTurnUser gameData =
+    case gameData of
+        GameData_Go setup actions ->
+            Go.currentTurnUser setup (Go.foldActions setup actions)
+
+        GameData_WordSpellingGame _ _ shared ->
+            WordSpellingGame.currentTurnUser shared
+
+
+matchGameType : MatchData -> GameType
+matchGameType (MatchData match) =
+    case match.data of
+        FrontendGameData_Go _ _ _ ->
+            GameType_Go
+
+        FrontendGameData_WordSpellingGame _ _ _ ->
+            GameType_WordSpellingGame
 
 
 hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)

@@ -25,6 +25,7 @@ tests normalConfig =
         , goGuildMatchTest normalConfig
         , goTimeoutTest normalConfig
         , goTurnNotificationDotTest normalConfig
+        , goTurnCardAndNotificationTest normalConfig
         , publicGoMatchViewTest normalConfig
         , E2EHelper.startTest
             "Single player go"
@@ -299,6 +300,85 @@ goTurnNotificationDotTest normalConfig =
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
                         ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| While it's a player's turn, a card floats over the conversation view inviting them to open
+the match; opening the games tab hides it and closing the tab brings it back. If they aren't
+viewing the channel at all when the turn lands on them, a push notification is sent instead.
+-}
+goTurnCardAndNotificationTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+goTurnCardAndNotificationTest normalConfig =
+    E2EHelper.startTest
+        "Your-turn card is shown in the conversation and a push notification is sent"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled. Both start out viewing the guild's first channel.
+                [ -- Admin starts a Go match in the channel.
+                  admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "go_start")
+                , T.andThen
+                    100
+                    (\state ->
+                        case guildChannelGoGames state.backend of
+                            [ ( matchId, _, _ ) ] ->
+                                [ -- The user joins the match from its message card, then closes the games
+                                  -- tab again. It's still admin's (Black's) turn, so no your-turn card yet.
+                                  user.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                , user.click 100 (Dom.id "go_joinGame")
+                                , user.click 100 (Dom.id "guild_openGamesTab")
+                                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_yourTurnCard" ])
+
+                                -- Admin plays a stone, handing the turn to the user. The card appears in
+                                -- the user's conversation view, but no push notification is sent since
+                                -- they're viewing the channel.
+                                , admin.click 100 (Dom.id "go_cell_4_4")
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_yourTurnCard" ])
+                                , E2EHelper.checkNoNotification "It's your turn in Go"
+
+                                -- It isn't admin's turn, so they never see a card.
+                                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_yourTurnCard" ])
+
+                                -- Clicking the card opens the game on the right match, which hides the card.
+                                , user.click 100 (Dom.id "guild_yourTurnCard")
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "White to move" ])
+                                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_yourTurnCard" ])
+
+                                -- Closing the game tab while it's still the user's turn brings the card back.
+                                , user.click 100 (Dom.id "guild_openGamesTab")
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_yourTurnCard" ])
+
+                                -- The user opens the game from the card again and plays. The turn passes
+                                -- to admin, so after closing the games tab there's no card for the user.
+                                , user.click 100 (Dom.id "guild_yourTurnCard")
+                                , user.click 100 (Dom.id "go_cell_5_4")
+                                , user.click 100 (Dom.id "guild_openGamesTab")
+                                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_yourTurnCard" ])
+
+                                -- The user navigates away from the channel. When admin plays and hands
+                                -- the turn back, the user gets a push notification since they aren't
+                                -- viewing the channel.
+                                , user.click 100 (Dom.id "guildIcon_showFriends")
+                                , admin.click 100 (Dom.id "go_cell_4_5")
+                                , E2EHelper.checkNotification "It's your turn in Go"
+
+                                -- Returning to the channel shows the your-turn card again.
+                                , user.click 100 (Dom.id "guild_openGuild_1")
+                                , user.click 100 (Dom.id "guild_openChannel_0")
+                                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_yourTurnCard" ])
+                                ]
+
+                            _ ->
+                                [ T.checkState 0 (\_ -> Err "Expected one Go match in the guild channel") ]
                     )
                 ]
             )
