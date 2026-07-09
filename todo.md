@@ -16,7 +16,6 @@
 * Fix BrowserDomNotFound error in program-test that's breaking the zoom-in part of the "Draw on top of messages" test
 * Some Discord stickers width /= height but the current sticker view assumes width == height
 * Video nodes need to have a fixed height to prevent layout thrashing
-* Word Spelling Game "Recent moves" should show word that uses the most user letters, not the longest word
 
 Requested features:
 
