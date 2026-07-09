@@ -457,25 +457,35 @@ strokeSvg scale color points =
         , Svg.Attributes.height "1"
         , Svg.Attributes.style "position:absolute;left:0;top:0;overflow:visible;pointer-events:none;display:block"
         ]
-        [ Svg.polyline
-            [ List.Nonempty.toList points
-                |> List.map
-                    (\( x, y ) ->
-                        String.fromFloat x ++ "," ++ String.fromFloat y
-                    )
-                |> String.join " "
-                |> Svg.Attributes.points
-            , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
-            , -- Keep the stroke 3 css pixels wide regardless of how much the
-              -- points are scaled
-              Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
-            , Svg.Attributes.fill "none"
-            , Svg.Attributes.stroke color
-            , Svg.Attributes.strokeWidth "3"
-            , Svg.Attributes.strokeLinecap "round"
-            , Svg.Attributes.strokeLinejoin "round"
-            ]
-            []
+        [ case List.Nonempty.toList points of
+            [ ( x, y ) ] ->
+                Svg.circle
+                    [ Svg.Attributes.r "1.5"
+                    , Svg.Attributes.cx (String.fromFloat x)
+                    , Svg.Attributes.cy (String.fromFloat y)
+                    , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
+                    , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+                    , Svg.Attributes.fill color
+                    , Svg.Attributes.stroke color
+                    ]
+                    []
+
+            points2 ->
+                Svg.polyline
+                    [ List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y) points2
+                        |> String.join " "
+                        |> Svg.Attributes.points
+                    , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
+                    , -- Keep the stroke 3 css pixels wide regardless of how much the
+                      -- points are scaled
+                      Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+                    , Svg.Attributes.fill "none"
+                    , Svg.Attributes.stroke color
+                    , Svg.Attributes.strokeWidth "3"
+                    , Svg.Attributes.strokeLinecap "round"
+                    , Svg.Attributes.strokeLinejoin "round"
+                    ]
+                    []
         ]
 
 

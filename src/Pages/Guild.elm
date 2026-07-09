@@ -5655,7 +5655,7 @@ messageTimestamp userIdToColor drawings isSelectingAnchor messageId createdAt ti
                 isSelectingAnchor
                 drawings
         )
-        (Ui.text (MyUi.timestamp createdAt timezone))
+        (Ui.el [ MyUi.noPointerEvents ] (Ui.text (MyUi.timestamp createdAt timezone)))
 
 
 messagePreviewTimestamp : Time.Posix -> Time.Zone -> Html msg
