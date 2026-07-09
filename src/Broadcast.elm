@@ -5,6 +5,7 @@ module Broadcast exposing
     , discordDmNotification
     , discordGuildMessageNotification
     , gameStartedDmNotification
+    , gameStartedGuildNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -1257,3 +1258,79 @@ gameStartedDmNotification time senderId otherUserId gameType model =
 
             Nothing ->
                 ( model.sessions, Command.none )
+
+
+{-| Notify the members of a guild channel when a game is started in it, skipping anyone who is
+already viewing the channel. Like `gameStartedDmNotification`, this exists because `GameStarted`
+messages don't flow through the normal text-message broadcast. Unlike a plain chat message (which
+only notifies mentioned or notify-on-everything members), a game start is an invitation, so every
+member not currently looking at the channel is notified.
+-}
+gameStartedGuildNotification :
+    Time.Posix
+    -> Id UserId
+    -> Id GuildId
+    -> Id ChannelId
+    -> Message.GameType
+    -> List (Id UserId)
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+gameStartedGuildNotification time sender guildId channelId gameType members model =
+    let
+        plainText : String
+        plainText =
+            LocalState.gameStartedText gameType
+
+        message : Message messageId (Id UserId)
+        message =
+            GameStarted time sender SeqDict.empty Drawing.emptyDrawing gameType
+    in
+    SeqSet.fromList members
+        |> SeqSet.remove sender
+        |> SeqSet.foldl
+            (\userId2 ( sessions, cmds ) ->
+                let
+                    isViewing : Bool
+                    isViewing =
+                        List.any
+                            (\connection ->
+                                case connection.currentlyViewing of
+                                    Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), NoThread ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId
+
+                                    _ ->
+                                        False
+                            )
+                            (userGetAllConnections userId2 model)
+                in
+                if isViewing then
+                    ( sessions, cmds )
+
+                else
+                    case NonemptyDict.get sender model.users of
+                        Just senderUser ->
+                            notification
+                                time
+                                userId2
+                                (PersonName.toString senderUser.name)
+                                senderUser.icon
+                                (\userId3 ->
+                                    case NonemptyDict.get userId3 model.users of
+                                        Just user3 ->
+                                            PersonName.toString user3.name
+
+                                        Nothing ->
+                                            "<missing>"
+                                )
+                                plainText
+                                message
+                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                sessions
+                                model
+                                |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
+
+                        Nothing ->
+                            ( sessions, cmds )
+            )
+            ( model.sessions, [] )
+        |> Tuple.mapSecond Command.batch
