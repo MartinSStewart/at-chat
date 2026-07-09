@@ -1184,8 +1184,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (\data ->
                                 case lastDiscordDmMessage data.backend of
                                     Just ( messageId, _ ) ->
-                                        [ -- Click the message's profile image to use it as the drawing anchor
-                                          admin.custom
+                                        [ -- Hovering the message reveals its profile image anchor: the anchor
+                                          -- is only rendered (and clickable) while the message is hovered and
+                                          -- the drawing tab is picking an anchor.
+                                          admin.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+
+                                        -- Click the message's profile image to use it as the drawing anchor
+                                        , admin.custom
                                             100
                                             (Drawing.profileImageAnchorId messageId)
                                             "click"

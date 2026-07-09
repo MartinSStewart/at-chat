@@ -57,10 +57,15 @@ drawOnMessages imageUploadConfig =
                                     dividerDate =
                                         Date.fromPosix Time.utc data.time
                                 in
-                                [ -- Click the message's profile image to use it as the drawing
-                                  -- anchor. The anchor's screen position is part of the click
-                                  -- event (clientX/Y minus offsetX/Y).
-                                  admin.custom
+                                [ -- Hovering the message reveals its profile image anchor: the anchor
+                                  -- is only rendered (and clickable) while the message is hovered and
+                                  -- the drawing tab is picking an anchor.
+                                  admin.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+
+                                -- Click the message's profile image to use it as the drawing
+                                -- anchor. The anchor's screen position is part of the click
+                                -- event (clientX/Y minus offsetX/Y).
+                                , admin.custom
                                     100
                                     (Drawing.profileImageAnchorId messageId)
                                     "click"
