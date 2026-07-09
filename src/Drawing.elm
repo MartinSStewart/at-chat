@@ -68,6 +68,7 @@ type MessageAnchor
     | TimestampAnchor
     | ImageAttachmentAnchor (Id FileId)
     | EmbedImageAnchor Int
+    | CardAnchor
 
 
 {-| Points are in css pixels, relative to the top left corner of the anchor
@@ -457,25 +458,35 @@ strokeSvg scale color points =
         , Svg.Attributes.height "1"
         , Svg.Attributes.style "position:absolute;left:0;top:0;overflow:visible;pointer-events:none;display:block"
         ]
-        [ Svg.polyline
-            [ List.Nonempty.toList points
-                |> List.map
-                    (\( x, y ) ->
-                        String.fromFloat x ++ "," ++ String.fromFloat y
-                    )
-                |> String.join " "
-                |> Svg.Attributes.points
-            , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
-            , -- Keep the stroke 3 css pixels wide regardless of how much the
-              -- points are scaled
-              Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
-            , Svg.Attributes.fill "none"
-            , Svg.Attributes.stroke color
-            , Svg.Attributes.strokeWidth "3"
-            , Svg.Attributes.strokeLinecap "round"
-            , Svg.Attributes.strokeLinejoin "round"
-            ]
-            []
+        [ case List.Nonempty.toList points of
+            [ ( x, y ) ] ->
+                Svg.circle
+                    [ Svg.Attributes.r "1.5"
+                    , Svg.Attributes.cx (String.fromFloat x)
+                    , Svg.Attributes.cy (String.fromFloat y)
+                    , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
+                    , Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+                    , Svg.Attributes.fill color
+                    , Svg.Attributes.stroke color
+                    ]
+                    []
+
+            points2 ->
+                Svg.polyline
+                    [ List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y) points2
+                        |> String.join " "
+                        |> Svg.Attributes.points
+                    , Svg.Attributes.transform ("scale(" ++ String.fromFloat scale ++ ")")
+                    , -- Keep the stroke 3 css pixels wide regardless of how much the
+                      -- points are scaled
+                      Html.Attributes.attribute "vector-effect" "non-scaling-stroke"
+                    , Svg.Attributes.fill "none"
+                    , Svg.Attributes.stroke color
+                    , Svg.Attributes.strokeWidth "3"
+                    , Svg.Attributes.strokeLinecap "round"
+                    , Svg.Attributes.strokeLinejoin "round"
+                    ]
+                    []
         ]
 
 
@@ -556,26 +567,31 @@ anchorHighlight :
     -> Drawing userId
     -> List (Ui.Attribute msg)
 anchorHighlight htmlId userIdToColor onPress isSelectingAnchor drawings =
-    [ Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
-    , Dom.idToString htmlId |> Ui.id
-    , Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
+    [ Ui.Lazy.lazy2 overlayAttribute userIdToColor drawings |> Ui.inFront
     , Ui.width Ui.shrink
     ]
         ++ (if isSelectingAnchor then
-                [ Ui.Anim.hovered
-                    (Ui.Anim.ms 10)
-                    [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
-                    , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
-                    ]
-                , MyUi.htmlStyle "outline-style" "solid"
-                , MyUi.htmlStyle "outline-width" "2px"
-                , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
-                , Ui.pointer
-                ]
+                selectingAnchorHighlight htmlId onPress
 
             else
                 []
            )
+
+
+selectingAnchorHighlight : HtmlId -> (Point2d CssPixels ScreenCoordinate -> ( Float, Float ) -> msg) -> List (Ui.Attribute msg)
+selectingAnchorHighlight htmlId onPress =
+    [ Ui.Anim.hovered
+        (Ui.Anim.ms 10)
+        [ Ui.Anim.backgroundColor (Ui.rgba 96 165 250 0.3)
+        , Ui.Anim.outlineColor (Ui.rgba 96 165 250 1)
+        ]
+    , MyUi.htmlStyle "outline-style" "solid"
+    , MyUi.htmlStyle "outline-width" "2px"
+    , MyUi.htmlStyle "outline-color" "rgba(0,0,0,0)"
+    , Ui.pointer
+    , Ui.Events.on "click" (Json.Decode.map2 onPress decodeWithTargetScreenPosition decodeTargetHalfSize)
+    , Dom.idToString htmlId |> Ui.id
+    ]
 
 
 {-| Same hover highlight as anchorHighlight but for elements rendered with plain

@@ -421,11 +421,11 @@ messageToString allUsers3 message =
         DeletedMessage _ ->
             messageDeleted
 
-        CallStarted _ endedAt _ _ _ ->
-            callStartedText endedAt
+        CallStarted callStarted ->
+            callStartedText callStarted.endedAt
 
-        GameStarted _ _ _ _ game ->
-            gameStartedText game
+        GameStarted gameStarted ->
+            gameStartedText gameStarted.gameType
 
 
 callStartedText : Maybe Time.Posix -> String
@@ -914,10 +914,10 @@ createMessageBackend message channel =
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted _ _ _ _ _ ->
+                CallStarted _ ->
                     channel.lastTypedAt
 
-                GameStarted _ _ _ _ _ ->
+                GameStarted _ ->
                     channel.lastTypedAt
       }
     )
@@ -983,10 +983,10 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 DeletedMessage _ ->
                     Ok ( messageId2, channel2 )
 
-                CallStarted _ _ _ _ _ ->
+                CallStarted _ ->
                     Ok ( messageId2, channel2 )
 
-                GameStarted _ _ _ _ _ ->
+                GameStarted _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -1031,10 +1031,10 @@ createDiscordMessageBackend messageId message channel =
                     DeletedMessage _ ->
                         channel.lastTypedAt
 
-                    CallStarted _ _ _ _ _ ->
+                    CallStarted _ ->
                         channel.lastTypedAt
 
-                    GameStarted _ _ _ _ _ ->
+                    GameStarted _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (IdArray.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1121,10 +1121,10 @@ createMessageFrontend message channel =
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted _ _ _ _ _ ->
+                CallStarted _ ->
                     channel.lastTypedAt
 
-                GameStarted _ _ _ _ _ ->
+                GameStarted _ ->
                     channel.lastTypedAt
     }
 
@@ -2282,10 +2282,10 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (DeletedMessage _) ->
                                     []
 
-                                Just (CallStarted _ _ startedBy _ _) ->
+                                Just (CallStarted { startedBy }) ->
                                     [ startedBy ]
 
-                                Just (GameStarted _ startedBy _ _ _) ->
+                                Just (GameStarted { startedBy }) ->
                                     [ startedBy ]
 
                                 Nothing ->
@@ -2340,10 +2340,10 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 DeletedMessage _ ->
                                     []
 
-                                CallStarted _ _ startedBy _ _ ->
+                                CallStarted { startedBy } ->
                                     [ startedBy ]
 
-                                GameStarted _ startedBy _ _ _ ->
+                                GameStarted { startedBy } ->
                                     [ startedBy ]
 
                         _ ->
@@ -2372,10 +2372,10 @@ repliedToUserId maybeRepliedTo channel =
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted _ _ startedBy _ _ ->
+                        CallStarted { startedBy } ->
                             Just startedBy
 
-                        GameStarted _ startedBy _ _ _ ->
+                        GameStarted { startedBy } ->
                             Just startedBy
 
                 Nothing ->
@@ -2401,10 +2401,10 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted _ _ startedBy _ _ ->
+                        CallStarted { startedBy } ->
                             Just startedBy
 
-                        GameStarted _ startedBy _ _ _ ->
+                        GameStarted { startedBy } ->
                             Just startedBy
 
                 _ ->
@@ -2717,11 +2717,11 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             DeletedMessage time ->
                                                 DeletedMessage_NoReply time
 
-                                            CallStarted time _ startedBy reactions _ ->
-                                                CallStarted_NoReply time startedBy reactions
+                                            CallStarted { startedAt, startedBy, reactions } ->
+                                                CallStarted_NoReply startedAt startedBy reactions
 
-                                            GameStarted time _ reactions _ _ ->
-                                                GoMatchStarted_NoReply time reactions
+                                            GameStarted { startedAt, reactions } ->
+                                                GoMatchStarted_NoReply startedAt reactions
                                         )
                                             |> MessageLoaded_NoReply
 
@@ -2752,11 +2752,11 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                         DeletedMessage time ->
                                             DeletedMessage_NoReply time
 
-                                        CallStarted time _ startedBy reactions _ ->
-                                            CallStarted_NoReply time startedBy reactions
+                                        CallStarted { startedAt, startedBy, reactions } ->
+                                            CallStarted_NoReply startedAt startedBy reactions
 
-                                        GameStarted time _ reactions _ _ ->
-                                            GoMatchStarted_NoReply time reactions
+                                        GameStarted { startedAt, reactions } ->
+                                            GoMatchStarted_NoReply startedAt reactions
                                     )
                                         |> MessageLoaded_NoReply
 
@@ -2810,11 +2810,11 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                 DeletedMessage time ->
                                     DeletedMessage_NoReply time
 
-                                CallStarted time _ startedBy reactions _ ->
-                                    CallStarted_NoReply time startedBy reactions
+                                CallStarted { startedAt, startedBy, reactions } ->
+                                    CallStarted_NoReply startedAt startedBy reactions
 
-                                GameStarted time _ reactions _ _ ->
-                                    GoMatchStarted_NoReply time reactions
+                                GameStarted { startedAt, reactions } ->
+                                    GoMatchStarted_NoReply startedAt reactions
                             )
                                 |> MessageLoaded_NoReply
 
@@ -3191,7 +3191,7 @@ markCallMessageAsEndedBackend time channel =
             arrayFindIndexRight
                 (\message ->
                     case message of
-                        CallStarted _ _ _ _ _ ->
+                        CallStarted _ ->
                             True
 
                         _ ->
@@ -3202,11 +3202,16 @@ markCallMessageAsEndedBackend time channel =
     case lastCallIndex of
         Just ( lastCallIndex2, message ) ->
             case message of
-                CallStarted a Nothing b c d ->
-                    { channel
-                        | messages =
-                            IdArray.set (Id.fromInt lastCallIndex2) (CallStarted a (Just time) b c d) channel.messages
-                    }
+                CallStarted callStarted ->
+                    case callStarted.endedAt of
+                        Nothing ->
+                            { channel
+                                | messages =
+                                    IdArray.set (Id.fromInt lastCallIndex2) (CallStarted { callStarted | endedAt = Just time }) channel.messages
+                            }
+
+                        Just _ ->
+                            channel
 
                 _ ->
                     channel
@@ -3223,7 +3228,7 @@ markCallMessageAsEndedFrontend time channel =
             arrayFindIndexRight
                 (\message ->
                     case message of
-                        MessageLoaded (CallStarted _ _ _ _ _) ->
+                        MessageLoaded (CallStarted _) ->
                             True
 
                         _ ->
@@ -3234,11 +3239,16 @@ markCallMessageAsEndedFrontend time channel =
     case lastCallIndex of
         Just ( lastCallIndex2, message ) ->
             case message of
-                MessageLoaded (CallStarted a Nothing b c d) ->
-                    { channel
-                        | messages =
-                            IdArray.set (Id.fromInt lastCallIndex2) (MessageLoaded (CallStarted a (Just time) b c d)) channel.messages
-                    }
+                MessageLoaded (CallStarted callStarted) ->
+                    case callStarted.endedAt of
+                        Nothing ->
+                            { channel
+                                | messages =
+                                    IdArray.set (Id.fromInt lastCallIndex2) (MessageLoaded (CallStarted { callStarted | endedAt = Just time })) channel.messages
+                            }
+
+                        Just _ ->
+                            channel
 
                 _ ->
                     channel

@@ -8,6 +8,7 @@ module MyUi exposing
     , blockClickPropagation
     , border1
     , border2
+    , bounceScroll
     , buttonBackground
     , buttonBorder
     , buttonFontColor
@@ -64,6 +65,7 @@ module MyUi exposing
     , radioRowWithSeparators
     , replyToColor
     , rowButton
+    , scrollable
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
@@ -1075,6 +1077,22 @@ insetBottom =
 isMobile : { a | windowSize : Coord CssPixels } -> Bool
 isMobile model =
     Coord.xRaw model.windowSize < 700
+
+
+bounceScroll : Bool -> Ui.Attribute msg
+bounceScroll isMobile2 =
+    Ui.attrIf
+        isMobile2
+        (Ui.inFront (Ui.el [ Ui.height (Ui.px 1), Ui.alignBottom, Ui.move { x = 0, y = 1, z = 0 } ] Ui.none))
+
+
+scrollable : Bool -> Ui.Attribute msg
+scrollable canScroll2 =
+    if canScroll2 then
+        Ui.scrollable
+
+    else
+        Ui.clip
 
 
 isMobileAlt : Coord CssPixels -> Bool

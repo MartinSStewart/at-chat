@@ -4,6 +4,8 @@ module Broadcast exposing
     , broadcastDm
     , discordDmNotification
     , discordGuildMessageNotification
+    , gameStartedDmNotification
+    , gameStartedGuildNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -34,6 +36,7 @@ import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
 import DmChannelId
+import Drawing
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -602,11 +605,11 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             DeletedMessage _ ->
                                                 ""
 
-                                            CallStarted _ endTime _ _ _ ->
-                                                LocalState.callStartedText endTime
+                                            CallStarted callStarted ->
+                                                LocalState.callStartedText callStarted.endedAt
 
-                                            GameStarted _ _ _ _ game ->
-                                                LocalState.gameStartedText game
+                                            GameStarted gameStarted ->
+                                                LocalState.gameStartedText gameStarted.gameType
                                         )
                                         message
                                         (DiscordGuildRoute
@@ -764,12 +767,12 @@ notificationEmail time email senderName userToString plainText message postmarkA
         DeletedMessage _ ->
             Command.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             helper
                 (NonemptyString 'C' "all started")
                 (Postmark.BodyText (senderName ++ " started a call"))
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             helper
                 (NonemptyString 'G' "ame started")
                 (Postmark.BodyText (senderName ++ " started a game"))
@@ -1193,3 +1196,156 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
         , Command.batch cmds
         ]
     )
+
+
+{-| Notify the other participant of a DM when a game is started in it, unless they're already
+looking at the DM. `GameStarted` messages don't flow through the normal text-message broadcast,
+so this mirrors `broadcastDm`'s notification handling for the game-start case.
+-}
+gameStartedDmNotification :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> Message.GameType
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+gameStartedDmNotification time senderId otherUserId gameType model =
+    let
+        isViewing : Bool
+        isViewing =
+            List.any
+                (\connection ->
+                    case connection.currentlyViewing of
+                        Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), NoThread ) ->
+                            viewingUserId == senderId
+
+                        _ ->
+                            False
+                )
+                (userGetAllConnections otherUserId model)
+    in
+    if senderId == otherUserId || isViewing then
+        ( model.sessions, Command.none )
+
+    else
+        case NonemptyDict.get senderId model.users of
+            Just senderUser ->
+                notification
+                    time
+                    otherUserId
+                    (PersonName.toString senderUser.name)
+                    senderUser.icon
+                    (\userId2 ->
+                        case NonemptyDict.get userId2 model.users of
+                            Just user ->
+                                PersonName.toString user.name
+
+                            Nothing ->
+                                "<missing>"
+                    )
+                    (LocalState.gameStartedText gameType)
+                    (GameStarted
+                        { startedAt = time
+                        , startedBy = senderId
+                        , reactions = SeqDict.empty
+                        , gameType = gameType
+                        , timestampDrawings = Drawing.emptyDrawing
+                        , cardDrawings = Drawing.emptyDrawing
+                        }
+                    )
+                    (DmRoute
+                        { channelId = DmChannelId.fromUserIds senderId otherUserId
+                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                        , tab = Nothing
+                        }
+                        |> Just
+                    )
+                    model.sessions
+                    model
+                    |> Tuple.mapSecond Command.batch
+
+            Nothing ->
+                ( model.sessions, Command.none )
+
+
+{-| Notify the members of a guild channel when a game is started in it, skipping anyone who is
+already viewing the channel. Like `gameStartedDmNotification`, this exists because `GameStarted`
+messages don't flow through the normal text-message broadcast. Unlike a plain chat message (which
+only notifies mentioned or notify-on-everything members), a game start is an invitation, so every
+member not currently looking at the channel is notified.
+-}
+gameStartedGuildNotification :
+    Time.Posix
+    -> Id UserId
+    -> Id GuildId
+    -> Id ChannelId
+    -> Message.GameType
+    -> List (Id UserId)
+    -> BackendModel
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
+gameStartedGuildNotification time sender guildId channelId gameType members model =
+    let
+        plainText : String
+        plainText =
+            LocalState.gameStartedText gameType
+
+        message : Message messageId (Id UserId)
+        message =
+            GameStarted
+                { startedAt = time
+                , startedBy = sender
+                , reactions = SeqDict.empty
+                , gameType = gameType
+                , timestampDrawings = Drawing.emptyDrawing
+                , cardDrawings = Drawing.emptyDrawing
+                }
+    in
+    SeqSet.fromList members
+        |> SeqSet.remove sender
+        |> SeqSet.foldl
+            (\userId2 ( sessions, cmds ) ->
+                let
+                    isViewing : Bool
+                    isViewing =
+                        List.any
+                            (\connection ->
+                                case connection.currentlyViewing of
+                                    Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), NoThread ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId
+
+                                    _ ->
+                                        False
+                            )
+                            (userGetAllConnections userId2 model)
+                in
+                if isViewing then
+                    ( sessions, cmds )
+
+                else
+                    case NonemptyDict.get sender model.users of
+                        Just senderUser ->
+                            notification
+                                time
+                                userId2
+                                (PersonName.toString senderUser.name)
+                                senderUser.icon
+                                (\userId3 ->
+                                    case NonemptyDict.get userId3 model.users of
+                                        Just user3 ->
+                                            PersonName.toString user3.name
+
+                                        Nothing ->
+                                            "<missing>"
+                                )
+                                plainText
+                                message
+                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing) |> Just)
+                                sessions
+                                model
+                                |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
+
+                        Nothing ->
+                            ( sessions, cmds )
+            )
+            ( model.sessions, [] )
+        |> Tuple.mapSecond Command.batch

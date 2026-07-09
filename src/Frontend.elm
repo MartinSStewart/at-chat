@@ -2731,6 +2731,20 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
+                MessageView.MessageView_PressedCardAnchor elementPosition anchorHalfSize ->
+                    case Route.toChannelHeaderTab model.route of
+                        Just ChannelHeaderTab_Draw ->
+                            selectDrawingAnchor
+                                guildOrDmId
+                                (Drawing.MessageAnchor threadRoute Drawing.CardAnchor)
+                                elementPosition
+                                anchorHalfSize
+                                1
+                                model
+
+                        _ ->
+                            ( model, Command.none )
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

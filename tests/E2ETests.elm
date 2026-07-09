@@ -1542,6 +1542,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Push notification sent when a game is started"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                -- `user` has push notifications enabled. Both start out viewing the guild's first channel.
+                [ -- Guild case: move the user off the channel, then admin starts a Word Spelling Game in
+                  -- it. The user isn't viewing the channel, so the game start should push a notification.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Word Spelling Game")
+                , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
+                , admin.click 100 (Dom.id "wsg_start")
+                , E2EHelper.checkNotification "Word Spelling Game started"
+
+                -- DM case: admin opens the DM with the other user and starts a Go match there. The user
+                -- isn't viewing the DM either, so starting the game should push a notification to them.
+                , admin.click 100 (Dom.id "guild_openDm_2")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "go_start")
+                , E2EHelper.checkNotification "Go match started"
+                ]
+            )
+        ]
     , E2EVoiceChat.voiceChatTest normalConfig
     , E2EVoiceChat.cloudflareCostTest normalConfig
     , E2EHelper.startTest "Logins are rate limited"

@@ -33,6 +33,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
+import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName
 import Html exposing (Html)
@@ -43,7 +44,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmoji
 import IdArray exposing (IdArray)
 import ImageEditor
 import Json.Decode
-import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
@@ -72,12 +73,11 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg_(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import Ui.Gradient
 import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
@@ -86,455 +86,6 @@ import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import UserSession exposing (DiscordFrontendUser)
 import VisibleMessages exposing (VisibleMessages)
-
-
-{-| In the case of a channel, it's just the channel, not the threads it contains
--}
-channelOrThreadHasNotifications :
-    Maybe (NonemptyDict ( channelId, ThreadRoute ) OneOrGreater)
-    -> Bool
-    -> channelId
-    -> ThreadRoute
-    -> Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (MessageState messageId userId) }
-    -> ChannelNotificationType
-channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
-    if notifyOnAllMessages then
-        case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
-            Just count ->
-                NewMessageForUser count
-
-            Nothing ->
-                NoNotification
-
-    else
-        case Maybe.andThen (NonemptyDict.get ( channelId, threadRoute )) maybeDirectMentions of
-            Just count ->
-                NewMessageForUser count
-
-            Nothing ->
-                case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
-                    Just count ->
-                        NewMessage count
-
-                    Nothing ->
-                        NoNotification
-
-
-newMessageCount : Maybe (Id messageId) -> { b | messages : IdArray messageId (MessageState messageId userId) } -> Int
-newMessageCount maybeLastViewed channel =
-    case maybeLastViewed of
-        Just lastViewed ->
-            IdArray.length channel.messages - 1 - Id.toInt lastViewed
-
-        Nothing ->
-            IdArray.length channel.messages
-
-
-channelNewMessageCount :
-    AnyGuildOrDmId
-    -> FrontendCurrentUser
-    ->
-        { b
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId) }
-        }
-    -> Int
-channelNewMessageCount guildOrDmId currentUser channel =
-    SeqDict.foldl
-        (\threadId thread count ->
-            newMessageCount
-                (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
-                thread
-                + count
-        )
-        (newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel)
-        channel.threads
-
-
-guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> Int
-guildNewMessageCount currentUser guildId guild =
-    SeqDict.foldl
-        (\channelId channel count ->
-            channelNewMessageCount (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) currentUser channel + count
-        )
-        0
-        guild.channels
-
-
-discordGuildNewMessageCount :
-    Discord.Id Discord.UserId
-    -> FrontendCurrentUser
-    -> Discord.Id Discord.GuildId
-    -> DiscordFrontendGuild
-    -> Int
-discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
-    SeqDict.foldl
-        (\channelId channel count ->
-            channelNewMessageCount (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)) currentUser channel + count
-        )
-        0
-        guild.channels
-
-
-guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
-guildHasNotifications currentUser guildId guild =
-    if SeqSet.member guildId currentUser.notifyOnAllMessages then
-        case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
-            Just count ->
-                NewMessageForUser count
-
-            Nothing ->
-                NoNotification
-
-    else
-        case SeqDict.get guildId currentUser.directMentions of
-            Just directMentions ->
-                NonemptyDict.values directMentions
-                    |> List.Nonempty.foldl1 OneOrGreater.plus
-                    |> NewMessageForUser
-
-            Nothing ->
-                case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
-                    Just count ->
-                        NewMessage count
-
-                    Nothing ->
-                        NoNotification
-
-
-discordGuildHasNotifications :
-    Discord.Id Discord.UserId
-    -> FrontendCurrentUser
-    -> Discord.Id Discord.GuildId
-    -> DiscordFrontendGuild
-    -> ChannelNotificationType
-discordGuildHasNotifications currentDiscordUserId currentUser guildId guild =
-    --if SeqSet.member guildId currentUser.notifyOnAllMessages then
-    --    case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
-    --        Just count ->
-    --            NewMessageForUser count
-    --
-    --        Nothing ->
-    --            NoNotification
-    --
-    --else
-    case SeqDict.get guildId currentUser.discordDirectMentions of
-        Just directMentions ->
-            NonemptyDict.values directMentions
-                |> List.Nonempty.foldl1 OneOrGreater.plus
-                |> NewMessageForUser
-
-        Nothing ->
-            case discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild |> OneOrGreater.fromInt of
-                Just count ->
-                    NewMessage count
-
-                Nothing ->
-                    NoNotification
-
-
-dmHasNotifications : FrontendCurrentUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
-dmHasNotifications currentUser otherUserId dmChannel =
-    channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
-
-
-{-| Find the linked Discord user that is a member of this Discord DM channel (i.e. "us").
--}
-discordDmCurrentUserId : LocalUser -> DiscordFrontendDmChannel -> Maybe (Discord.Id Discord.UserId)
-discordDmCurrentUserId localUser dmChannel =
-    List.Extra.findMap
-        (\( userId, _ ) ->
-            if NonemptyDict.member userId dmChannel.members then
-                Just userId
-
-            else
-                Nothing
-        )
-        (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers))
-
-
-discordDmHasNotifications :
-    LocalUser
-    -> Discord.Id Discord.PrivateChannelId
-    -> DiscordFrontendDmChannel
-    -> Maybe ( Discord.Id Discord.UserId, OneOrGreater )
-discordDmHasNotifications localUser channelId dmChannel =
-    case discordDmCurrentUserId localUser dmChannel of
-        Just currentUserId ->
-            newMessageCount
-                (SeqDict.get
-                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                    localUser.user.lastViewed
-                )
-                dmChannel
-                |> OneOrGreater.fromInt
-                |> Maybe.map (Tuple.pair currentUserId)
-
-        Nothing ->
-            Nothing
-
-
-canScroll : Drag -> Bool
-canScroll drag =
-    case drag of
-        Dragging dragging ->
-            not dragging.horizontalStart
-
-        _ ->
-            True
-
-
-guildColumn :
-    Bool
-    -> Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Bool
-    -> Element FrontendMsg_
-guildColumn isMobile route localUser dmChannels discordDmChannels guilds discordGuilds canScroll2 =
-    let
-        allUsers =
-            LocalState.allUsers localUser
-    in
-    Ui.el
-        [ Ui.inFront
-            (Ui.el
-                [ Ui.backgroundGradient
-                    [ Ui.Gradient.linear
-                        (Ui.radians 0)
-                        [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
-                        , Ui.Gradient.percent 100 MyUi.background1
-                        ]
-                    ]
-                , MyUi.htmlStyle "height" ("calc(max(6px, " ++ MyUi.insetTop ++ "))")
-                ]
-                Ui.none
-            )
-        , Ui.width Ui.shrink
-        , Ui.height Ui.fill
-        ]
-        (Ui.column
-            [ Ui.spacing 4
-            , Ui.width (Ui.px GuildIcon.fullWidth)
-            , Ui.height Ui.fill
-            , Ui.background MyUi.background1
-            , scrollable canScroll2
-            , MyUi.htmlStyle "overflow-x" "hidden"
-            , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            , MyUi.htmlStyle "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
-            , bounceScroll isMobile
-            ]
-            (List.filterMap
-                (\( otherUserId, dmChannel ) ->
-                    let
-                        dmIcon =
-                            case dmHasNotifications localUser.user otherUserId dmChannel of
-                                Just count ->
-                                    elLinkButton
-                                        (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                        (DmRoute
-                                            { channelId = DmChannelId.fromUserIds localUser.session.userId otherUserId
-                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
-                                            , tab = Nothing
-                                            }
-                                        )
-                                        []
-                                        (case SeqDict.get otherUserId allUsers of
-                                            Just otherUser ->
-                                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
-
-                                            Nothing ->
-                                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
-                                        )
-                                        |> Just
-
-                                Nothing ->
-                                    Nothing
-                    in
-                    case route of
-                        DmRoute dmRoute ->
-                            if Just otherUserId == DmChannelId.otherUserId localUser.session.userId dmRoute.channelId then
-                                Nothing
-
-                            else
-                                dmIcon
-
-                        _ ->
-                            dmIcon
-                )
-                (SeqDict.toList dmChannels)
-                ++ List.filterMap
-                    (\( channelId, dmChannel ) ->
-                        let
-                            dmIcon =
-                                case discordDmHasNotifications localUser channelId dmChannel of
-                                    Just ( currentUserId, count ) ->
-                                        let
-                                            userId : Discord.Id Discord.UserId
-                                            userId =
-                                                NonemptyDict.remove currentUserId dmChannel.members
-                                                    |> SeqDict.keys
-                                                    |> List.head
-                                                    |> Maybe.withDefault currentUserId
-
-                                            maybeIcon : Maybe FileHash
-                                            maybeIcon =
-                                                User.getDiscordUser userId localUser |> Maybe.andThen .icon
-                                        in
-                                        elLinkButton
-                                            (Dom.id ("guildsColumn_openDiscordDm_" ++ Discord.idToString channelId))
-                                            (DiscordDmRoute
-                                                { currentDiscordUserId = currentUserId
-                                                , channelId = channelId
-                                                , viewingMessage = Nothing
-                                                , showMembersTab = HideMembersTab
-                                                , tab = Nothing
-                                                }
-                                            )
-                                            []
-                                            (GuildIcon.discordUserView (NewMessageForUser count) maybeIcon userId)
-                                            |> Just
-
-                                    Nothing ->
-                                        Nothing
-                        in
-                        case route of
-                            DiscordDmRoute dmRoute ->
-                                if dmRoute.channelId == channelId then
-                                    Nothing
-
-                                else
-                                    dmIcon
-
-                            _ ->
-                                dmIcon
-                    )
-                    (SeqDict.toList discordDmChannels)
-                ++ GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
-                :: List.map
-                    (\( guildId, guild ) ->
-                        elLinkButton
-                            (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
-                            (GuildRoute
-                                guildId
-                                (case SeqDict.get guildId localUser.user.lastChannelViewed of
-                                    Just ( channelId, threadRoute ) ->
-                                        ChannelRoute
-                                            channelId
-                                            (case threadRoute of
-                                                ViewThread threadId ->
-                                                    ViewThreadWithFriends threadId Nothing HideMembersTab
-
-                                                NoThread ->
-                                                    NoThreadWithFriends Nothing HideMembersTab
-                                            )
-                                            Nothing
-
-                                    Nothing ->
-                                        ChannelRoute
-                                            (LocalState.announcementChannel guild)
-                                            (NoThreadWithFriends Nothing HideMembersTab)
-                                            Nothing
-                                )
-                            )
-                            []
-                            (GuildIcon.view
-                                (case route of
-                                    GuildRoute a _ ->
-                                        if a == guildId then
-                                            GuildIcon.IsSelected
-
-                                        else
-                                            guildHasNotifications localUser.user guildId guild
-                                                |> GuildIcon.Normal
-
-                                    _ ->
-                                        guildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
-                                )
-                                guild
-                            )
-                    )
-                    (SeqDict.toList guilds)
-                ++ List.filterMap
-                    (\( guildId, guild ) ->
-                        let
-                            maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, DiscordFrontendCurrentUser )
-                            maybeDiscordUserId =
-                                SeqDict.filter
-                                    (\linkedUserId _ ->
-                                        MembersAndOwner.isMember linkedUserId guild.membersAndOwner /= IsNotMember
-                                    )
-                                    (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
-                                    |> SeqDict.toList
-                                    |> List.head
-                        in
-                        case maybeDiscordUserId of
-                            Just ( discordUserId, _ ) ->
-                                elLinkButton
-                                    (Dom.id ("guild_openDiscordGuild_" ++ Discord.idToString guildId))
-                                    ({ currentDiscordUserId = discordUserId
-                                     , guildId = guildId
-                                     , channelRoute =
-                                        case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
-                                            Just ( channelId, threadRoute ) ->
-                                                DiscordChannel_ChannelRoute
-                                                    channelId
-                                                    (case threadRoute of
-                                                        ViewThread threadId ->
-                                                            ViewThreadWithFriends threadId Nothing HideMembersTab
-
-                                                        NoThread ->
-                                                            NoThreadWithFriends Nothing HideMembersTab
-                                                    )
-                                                    Nothing
-
-                                            Nothing ->
-                                                DiscordChannel_ChannelRoute
-                                                    (LocalState.discordAnnouncementChannel guild)
-                                                    (NoThreadWithFriends Nothing HideMembersTab)
-                                                    Nothing
-                                     }
-                                        |> DiscordGuildRoute
-                                    )
-                                    []
-                                    (GuildIcon.view
-                                        (case route of
-                                            DiscordGuildRoute data ->
-                                                if data.guildId == guildId then
-                                                    GuildIcon.IsSelected
-
-                                                else
-                                                    discordGuildHasNotifications discordUserId localUser.user guildId guild
-                                                        |> GuildIcon.Normal
-
-                                            _ ->
-                                                discordGuildHasNotifications discordUserId localUser.user guildId guild |> GuildIcon.Normal
-                                        )
-                                        guild
-                                    )
-                                    |> Just
-
-                            Nothing ->
-                                Nothing
-                    )
-                    (SeqDict.toList discordGuilds)
-                ++ [ GuildIcon.addGuildButton (Dom.id "guild_createGuild") False PressedCreateGuild ]
-            )
-        )
-
-
-elLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Element FrontendMsg_
-elLinkButton htmlId route attributes content =
-    MyUi.elButton htmlId (PressedLink route) attributes content
-
-
-rowLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg_) -> List (Element FrontendMsg_) -> Element FrontendMsg_
-rowLinkButton htmlId route attributes content =
-    MyUi.rowButton htmlId (PressedLink route) attributes content
 
 
 loggedInAsView : LocalUser -> Element FrontendMsg_
@@ -631,8 +182,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ guildColumnLazy True model local
-                            , friendsColumnLazy (canScroll model.drag) True model.time maybeOtherUserId local
+                            [ GuildColumn.guildColumnLazy True model local
+                            , friendsColumnLazy (GuildColumn.canScroll model.drag) True model.time maybeOtherUserId local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -647,8 +198,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.height Ui.fill, Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize)) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ guildColumnLazy False model local
-                            , friendsColumnLazy (canScroll model.drag) False model.time maybeOtherUserId local
+                            [ GuildColumn.guildColumnLazy False model local
+                            , friendsColumnLazy (GuildColumn.canScroll model.drag) False model.time maybeOtherUserId local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -684,78 +235,6 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         NoDmChannelSelected ->
                             Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
                     ]
-
-
-guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
-guildColumnLazy isMobile model local =
-    Ui.Lazy.lazy6
-        (case ( canScroll model.drag, isMobile ) of
-            ( True, True ) ->
-                guildColumnCanScrollMobile
-
-            ( True, False ) ->
-                guildColumnCanScrollNotMobile
-
-            ( False, True ) ->
-                guildColumnCannotScrollMobile
-
-            ( False, False ) ->
-                guildColumnCannotScrollNotMobile
-        )
-        model.route
-        local.localUser
-        local.dmChannels
-        local.discordDmChannels
-        local.guilds
-        local.discordGuilds
-
-
-guildColumnCanScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCanScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCanScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds True
-
-
-guildColumnCannotScrollMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn True route localUser dmChannels discordDmChannels guilds discordGuilds False
-
-
-guildColumnCannotScrollNotMobile :
-    Route
-    -> LocalUser
-    -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    -> Element FrontendMsg_
-guildColumnCannotScrollNotMobile route localUser dmChannels discordDmChannels guilds discordGuilds =
-    guildColumn False route localUser dmChannels discordDmChannels guilds discordGuilds False
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -920,7 +399,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                canScroll model.drag
+                                GuildColumn.canScroll model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -985,7 +464,7 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ guildColumnLazy True model local
+                                [ GuildColumn.guildColumnLazy True model local
                                 , Ui.Lazy.lazy6
                                     (if canScroll2 then
                                         channelColumnCanScrollMobile
@@ -1012,7 +491,7 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ guildColumnLazy False model local
+                                    [ GuildColumn.guildColumnLazy False model local
                                     , Ui.Lazy.lazy6
                                         channelColumnNotMobile
                                         local.localUser
@@ -1054,7 +533,7 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ guildColumnLazy True model local
+                                [ GuildColumn.guildColumnLazy True model local
                                 , pageMissingMobile "Guild not found"
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -1069,7 +548,7 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ guildColumnLazy False model local
+                                    [ GuildColumn.guildColumnLazy False model local
                                     , Ui.el
                                         [ Ui.background MyUi.background2
                                         , Ui.height Ui.fill
@@ -1122,7 +601,7 @@ discordGuildView model routeData loggedIn local =
                     else if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                canScroll model.drag
+                                GuildColumn.canScroll model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -1188,7 +667,7 @@ discordGuildView model routeData loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ guildColumnLazy True model local
+                                [ GuildColumn.guildColumnLazy True model local
                                 , Ui.Lazy.lazy5
                                     (if canScroll2 then
                                         discordChannelColumnCanScrollMobile
@@ -1214,7 +693,7 @@ discordGuildView model routeData loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ guildColumnLazy False model local
+                                    [ GuildColumn.guildColumnLazy False model local
                                     , Ui.Lazy.lazy5
                                         discordChannelColumnNotMobile
                                         (nearestHour model.time)
@@ -1267,7 +746,7 @@ guildErrorPage error local model =
             ]
             [ Ui.row
                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                [ guildColumnLazy True model local
+                [ GuildColumn.guildColumnLazy True model local
                 , pageMissingMobile error
                 ]
             , Ui.Lazy.lazy loggedInAsView local.localUser
@@ -1282,7 +761,7 @@ guildErrorPage error local model =
                 ]
                 [ Ui.row
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ guildColumnLazy False model local
+                    [ GuildColumn.guildColumnLazy False model local
                     , Ui.el
                         [ Ui.background MyUi.background2
                         , Ui.height Ui.fill
@@ -1395,7 +874,7 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
             , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
-            , scrollable canScroll2
+            , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
             [ Ui.column
@@ -1445,7 +924,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOw
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
             , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
-            , scrollable canScroll2
+            , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
             [ Ui.column
@@ -1470,7 +949,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOw
 
 memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_
 memberLabel isMobile localUser userId =
-    rowLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute
             { channelId = DmChannelId.fromUserIds localUser.session.userId userId
@@ -1779,7 +1258,7 @@ guildSettingsForm model loggedIn local guildId guild =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , scrollable (canScroll model.drag)
+            , MyUi.scrollable (GuildColumn.canScroll model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile False (Ui.text "Guild settings") Nothing
             , if isOwner then
@@ -2383,10 +1862,10 @@ maybeRepliedTo message channel =
         DeletedMessage _ ->
             Nothing
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Nothing
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Nothing
 
 
@@ -3310,15 +2789,6 @@ decodeMessageView value =
     }
 
 
-scrollable : Bool -> Ui.Attribute msg
-scrollable canScroll2 =
-    if canScroll2 then
-        Ui.scrollable
-
-    else
-        Ui.clip
-
-
 conversationContainerId : HtmlId
 conversationContainerId =
     Dom.id "conversationContainer"
@@ -3459,11 +2929,11 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         DeletedMessage _ ->
                             Ui.none
 
-                        CallStarted _ _ userId _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+                        CallStarted { startedBy } ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
-                        GameStarted _ userId _ _ _ ->
-                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+                        GameStarted { startedBy } ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just startedBy) allUsers
 
                 _ ->
                     Ui.none
@@ -3625,7 +3095,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , scrollable (canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3635,7 +3105,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         loggedIn.channelScrollPosition
                     )
                  , Ui.heightMin 0
-                 , bounceScroll isMobile
+                 , MyUi.bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
@@ -3803,7 +3273,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , scrollable (canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3813,7 +3283,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         loggedIn.channelScrollPosition
                     )
                  , Ui.heightMin 0
-                 , bounceScroll isMobile
+                 , MyUi.bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
@@ -4069,7 +3539,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , scrollable (canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -4079,7 +3549,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         loggedIn.channelScrollPosition
                     )
                  , Ui.heightMin 0
-                 , bounceScroll isMobile
+                 , MyUi.bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
@@ -4255,7 +3725,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , scrollable (canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -4265,7 +3735,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         loggedIn.channelScrollPosition
                     )
                  , Ui.heightMin 0
-                 , bounceScroll isMobile
+                 , MyUi.bounceScroll isMobile
                  , MyUi.htmlStyle "background-image" "url(/grid1.png)"
                  ]
                     ++ drawingZoomAttributes model.route loggedIn.drawingMode
@@ -4924,10 +4394,10 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Ui.none
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Ui.none
 
 
@@ -5055,10 +4525,10 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted _ _ _ _ _ ->
+        CallStarted _ ->
             Ui.none
 
-        GameStarted _ _ _ _ _ ->
+        GameStarted _ ->
             Ui.none
 
 
@@ -5367,7 +4837,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5378,24 +4848,32 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId time endedAt allUsers
-                    , messageTimestamp
+                    [ callStartedCard
                         Drawing.userColor
-                        drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
+                        allUsers
+                    , messageTimestamp
+                        Drawing.userColor
+                        callStartedData.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        callStartedData.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5406,18 +4884,25 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 False
                 currentUserId
                 localUser.user
-                reactions
+                gameStarted.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        gameStarted.cardDrawings
+                        messageId
+                        gameStarted.startedBy
+                        allUsers
+                        gameStarted.gameType
                     , messageTimestamp
                         Drawing.userColor
-                        drawings
+                        gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        gameStarted.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
@@ -5528,7 +5013,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5539,24 +5024,32 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ callStartedCard userId time endedAt allUsers
-                    , messageTimestamp
+                    [ callStartedCard
                         Drawing.discordUserColor
-                        drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
+                        allUsers
+                    , messageTimestamp
+                        Drawing.discordUserColor
+                        callStartedData.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        callStartedData.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
@@ -5567,18 +5060,25 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 False
                 currentUserId
                 localUser.user
-                reactions
+                gameStarted.reactions
                 maybeThreadStarter
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        gameStarted.cardDrawings
+                        messageId
+                        gameStarted.startedBy
+                        allUsers
+                        gameStarted.gameType
                     , messageTimestamp
                         Drawing.discordUserColor
-                        drawings
+                        gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        gameStarted.startedAt
                         localUser.timezone
                     , messageIdView messageId
                     ]
@@ -5679,50 +5179,65 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard userId time endedAt allUsers
-                    , messageTimestamp
+                    [ callStartedCard
                         Drawing.userColor
-                        drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
+                        allUsers
+                    , messageTimestamp
+                        Drawing.userColor
+                        callStartedData.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        callStartedData.startedAt
                         localUser.timezone
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                gameStarted.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.userColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        gameStarted.cardDrawings
+                        messageId
+                        gameStarted.startedBy
+                        allUsers
+                        gameStarted.gameType
                     , messageTimestamp
                         Drawing.userColor
-                        drawings
+                        gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        gameStarted.startedAt
                         localUser.timezone
                     ]
                 )
@@ -5820,50 +5335,65 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                     localUser.timezone
                 )
 
-        CallStarted time endedAt userId reactions drawings ->
+        CallStarted callStartedData ->
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                callStartedData.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
                 (Ui.row
                     []
-                    [ callStartedCard userId time endedAt allUsers
-                    , messageTimestamp
+                    [ callStartedCard
                         Drawing.discordUserColor
-                        drawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        callStartedData.cardDrawings
+                        callStartedData.startedBy
+                        callStartedData.startedAt
+                        callStartedData.endedAt
+                        allUsers
+                    , messageTimestamp
+                        Drawing.discordUserColor
+                        callStartedData.timestampDrawings
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        messageId
+                        callStartedData.startedAt
                         localUser.timezone
                     ]
                 )
 
-        GameStarted time userId reactions drawings game ->
+        GameStarted gameStarted ->
             threadMessageContainer
                 highlight
                 messageId
                 False
                 currentUserId
                 localUser.user
-                reactions
+                gameStarted.reactions
                 localUser.customEmojis
                 allUsers
                 isHovered
                 (Ui.row
                     []
-                    [ goMatchStartedCard messageId userId allUsers game
+                    [ goMatchStartedCard
+                        Drawing.discordUserColor
+                        (isHovered == IsHoveredWhileSelectingAnchor)
+                        gameStarted.cardDrawings
+                        messageId
+                        gameStarted.startedBy
+                        allUsers
+                        gameStarted.gameType
                     , messageTimestamp
                         Drawing.discordUserColor
-                        drawings
+                        gameStarted.timestampDrawings
                         (isHovered == IsHoveredWhileSelectingAnchor)
                         messageId
-                        time
+                        gameStarted.startedAt
                         localUser.timezone
                     ]
                 )
@@ -6185,7 +5715,7 @@ messageTimestamp userIdToColor drawings isSelectingAnchor messageId createdAt ti
                 isSelectingAnchor
                 drawings
         )
-        (Ui.text (MyUi.timestamp createdAt timezone))
+        (Ui.el [ MyUi.noPointerEvents ] (Ui.text (MyUi.timestamp createdAt timezone)))
 
 
 messagePreviewTimestamp : Time.Posix -> Time.Zone -> Html msg
@@ -6237,11 +5767,11 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                     (Ui.text LocalState.messageDeleted)
                 )
 
-        Just ( repliedToIndex, CallStarted startedAt endedAt userId _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId startedAt endedAt allUsers)
+        Just ( repliedToIndex, CallStarted { startedAt, endedAt, startedBy } ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted startedBy startedAt endedAt allUsers)
 
-        Just ( repliedToIndex, GameStarted _ userId _ _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
+        Just ( repliedToIndex, GameStarted { startedBy } ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted startedBy allUsers)
 
         Nothing ->
             Ui.none
@@ -6349,9 +5879,22 @@ goMatchStarted userId allUsers =
         ]
 
 
-callStartedCard : userId -> Time.Posix -> Maybe Time.Posix -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-callStartedCard userId startedAt endedAt allUsers =
+callStartedCard :
+    (userId -> String)
+    -> Bool
+    -> Id messageId
+    -> Drawing userId
+    -> userId
+    -> Time.Posix
+    -> Maybe Time.Posix
+    -> SeqDict userId { a | name : PersonName }
+    -> Element MessageViewMsg
+callStartedCard userIdToColor isSelectingAnchor messageId drawings userId startedAt endedAt allUsers =
     eventCard
+        userIdToColor
+        isSelectingAnchor
+        messageId
+        drawings
         (Dom.id "guild_callStartedCard")
         MessageViewMsg_PressedCallStartedCard
         (Ui.html Icons.phone)
@@ -6359,11 +5902,23 @@ callStartedCard userId startedAt endedAt allUsers =
         ("started a call" ++ eventDurationText startedAt endedAt)
 
 
-goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> GameType -> Element MessageViewMsg
-goMatchStartedCard messageId userId allUsers game =
+goMatchStartedCard :
+    (userId -> String)
+    -> Bool
+    -> Drawing userId
+    -> Id messageId
+    -> userId
+    -> SeqDict userId { a | name : PersonName }
+    -> GameType
+    -> Element MessageViewMsg
+goMatchStartedCard userIdToColor isSelectingAnchor drawings messageId userId allUsers game =
     case game of
         GameType_Go ->
             eventCard
+                userIdToColor
+                isSelectingAnchor
+                messageId
+                drawings
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
                 (Ui.html Icons.go)
@@ -6372,6 +5927,10 @@ goMatchStartedCard messageId userId allUsers game =
 
         GameType_WordSpellingGame ->
             eventCard
+                userIdToColor
+                isSelectingAnchor
+                messageId
+                drawings
                 (Dom.id ("guild_gameStartedCard_" ++ Id.toString messageId))
                 MessageViewMsg_PressedGameStartedCard
                 (Ui.html Icons.go)
@@ -6379,30 +5938,55 @@ goMatchStartedCard messageId userId allUsers game =
                 "started a Word Spelling game"
 
 
-eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
-eventCard htmlId onPress icon userName action =
+eventCard :
+    (userId -> String)
+    -> Bool
+    -> Id messageId
+    -> Drawing userId
+    -> HtmlId
+    -> MessageViewMsg
+    -> Element MessageViewMsg
+    -> String
+    -> String
+    -> Element MessageViewMsg
+eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon userName action =
     Ui.el
         []
-        (MyUi.rowButton
-            htmlId
-            onPress
-            [ Ui.spacing 12
-            , Ui.paddingXY 16 6
-            , Ui.background MyUi.background2
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.rounded 6
-            , Ui.width Ui.shrink
-            , Ui.Font.color MyUi.font3
-            , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
-            ]
-            [ icon
-            , Ui.column
-                [ Ui.spacing 2, Ui.width Ui.shrink ]
-                [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text userName)
-                , Ui.el [ Ui.Font.size 13 ] (Ui.text action)
+        (Ui.el
+            (Ui.rounded 6
+                :: Drawing.anchorHighlight
+                    ("guild_eventCard_" ++ Id.toString messageId |> Dom.id)
+                    userIdToColor
+                    MessageView_PressedCardAnchor
+                    isSelectingAnchor
+                    drawings
+            )
+            (MyUi.rowButton
+                htmlId
+                onPress
+                [ Ui.spacing 12
+                , Ui.paddingXY 16 6
+                , Ui.background MyUi.background2
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.rounded 6
+                , Ui.width Ui.shrink
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                , if isSelectingAnchor then
+                    MyUi.noPointerEvents
+
+                  else
+                    Ui.noAttr
                 ]
-            ]
+                [ icon
+                , Ui.column
+                    [ Ui.spacing 2, Ui.width Ui.shrink ]
+                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text userName)
+                    , Ui.el [ Ui.Font.size 13 ] (Ui.text action)
+                    ]
+                ]
+            )
         )
 
 
@@ -6801,10 +6385,10 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
 
-                            CallStarted _ endedAt userId _ _ ->
+                            CallStarted { endedAt, startedBy } ->
                                 [ Html.span
                                     []
-                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    [ Html.b [] [ User.toString startedBy allUsers |> Html.text ]
                                     , case endedAt of
                                         Just _ ->
                                             Html.text "'s call ended"
@@ -6814,10 +6398,10 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     ]
                                 ]
 
-                            GameStarted _ userId _ _ _ ->
+                            GameStarted { startedBy } ->
                                 [ Html.span
                                     []
-                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    [ Html.b [] [ User.toString startedBy allUsers |> Html.text ]
                                     , Html.text " started a Go match"
                                     ]
                                 ]
@@ -6926,13 +6510,6 @@ channelColumnContainer header content =
         )
 
 
-bounceScroll : Bool -> Ui.Attribute msg
-bounceScroll isMobile =
-    Ui.attrIf
-        isMobile
-        (Ui.inFront (Ui.el [ Ui.height (Ui.px 1), Ui.alignBottom, Ui.move { x = 0, y = 1, z = 0 } ] Ui.none))
-
-
 channelColumn :
     Bool
     -> Time.Posix
@@ -6961,7 +6538,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                         isSelected =
                             channelRoute == NewChannelRoute
                     in
-                    rowLinkButton
+                    GuildColumn.rowLinkButton
                         (Dom.id "guild_newChannel")
                         (GuildRoute guildId NewChannelRoute)
                         [ Ui.paddingXY 4 8
@@ -6983,7 +6560,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
-        , elLinkButton
+        , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute)
             [ Ui.Font.color MyUi.font2
@@ -6996,18 +6573,18 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
             (Ui.html Icons.inviteUserIcon)
         ]
         (Ui.column
-            [ scrollable canScroll2
+            [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
             , Ui.paddingXY 0 8
             , Ui.attrIf isMobile (Ui.height Ui.fill)
-            , bounceScroll isMobile
+            , MyUi.bounceScroll isMobile
             ]
             ((List.map
                 (\( channelId, channel ) ->
                     let
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            channelOrThreadHasNotifications
+                            GuildColumn.channelOrThreadHasNotifications
                                 directMentions
                                 (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                 channelId
@@ -7109,7 +6686,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
                 (Ui.html Icons.discord)
             , Ui.text guildName
             ]
-        , elLinkButton
+        , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
@@ -7127,18 +6704,18 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             (Ui.html Icons.inviteUserIcon)
         ]
         (Ui.column
-            [ scrollable canScroll2
+            [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
             , Ui.paddingXY 0 8
             , Ui.attrIf isMobile (Ui.height Ui.fill)
-            , bounceScroll isMobile
+            , MyUi.bounceScroll isMobile
             ]
             (List.map
                 (\( channelId, channel ) ->
                     let
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            channelOrThreadHasNotifications
+                            GuildColumn.channelOrThreadHasNotifications
                                 directMentions
                                 (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                 channelId
@@ -7214,7 +6791,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            channelOrThreadHasNotifications
+                            GuildColumn.channelOrThreadHasNotifications
                                 directMentions
                                 (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                 channelId
@@ -7282,7 +6859,7 @@ channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThr
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ elLinkButton
+        [ GuildColumn.elLinkButton
             htmlId
             route
             [ Ui.height Ui.fill
@@ -7354,7 +6931,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            channelOrThreadHasNotifications
+                            GuildColumn.channelOrThreadHasNotifications
                                 directMentions
                                 (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                 channelId
@@ -7452,7 +7029,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ elLinkButton
+        [ GuildColumn.elLinkButton
             (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
             (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
             [ Ui.height Ui.fill
@@ -7491,7 +7068,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
             ]
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
-            elLinkButton
+            GuildColumn.elLinkButton
                 (Dom.id ("guild_editChannel_" ++ Id.toString channelId))
                 (GuildRoute guildId (EditChannelRoute channelId))
                 [ Ui.alignRight
@@ -7549,7 +7126,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ elLinkButton
+        [ GuildColumn.elLinkButton
             (Dom.id ("guild_openChannel_" ++ Discord.idToString channelId))
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
@@ -7597,7 +7174,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
             ]
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
-            elLinkButton
+            GuildColumn.elLinkButton
                 (Dom.id ("guild_editChannel_" ++ Discord.idToString channelId))
                 (DiscordGuildRoute
                     { currentDiscordUserId = routeData.currentDiscordUserId
@@ -7801,7 +7378,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
          )
             |> List.sortBy (\( time, _ ) -> Time.posixToMillis time |> negate)
             |> List.map Tuple.second
-            |> Ui.column [ scrollable canScroll2, Ui.heightMin 0 ]
+            |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
         )
 
 
@@ -7907,16 +7484,16 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ _ ->
+                                CallStarted { endedAt } ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ game ->
-                                    LocalState.gameStartedText game
+                                GameStarted { gameType } ->
+                                    LocalState.gameStartedText gameType
 
                         MessageUnloaded ->
                             ""
     in
-    rowLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute
             { channelId = DmChannelId.fromUserIds localUser.session.userId otherUserId
@@ -8033,11 +7610,11 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted _ endedAt _ _ _ ->
+                                CallStarted { endedAt } ->
                                     LocalState.callStartedText endedAt
 
-                                GameStarted _ _ _ _ game ->
-                                    LocalState.gameStartedText game
+                                GameStarted { gameType } ->
+                                    LocalState.gameStartedText gameType
 
                         MessageUnloaded ->
                             ""
@@ -8067,7 +7644,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         NoNotification
 
                     else
-                        case discordDmHasNotifications localUser dmChannelId channel of
+                        case GuildColumn.discordDmHasNotifications localUser dmChannelId channel of
                             Just ( _, count ) ->
                                 NewMessageForUser count
 

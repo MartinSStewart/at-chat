@@ -3214,11 +3214,13 @@ changeUpdate localMsg local =
                                                                 Maybe.withDefault DmChannel.frontendInit maybe
                                                                     |> LocalState.createChannelMessageFrontend
                                                                         (CallStarted
-                                                                            time
-                                                                            Nothing
-                                                                            local2.localUser.session.userId
-                                                                            SeqDict.empty
-                                                                            Drawing.emptyDrawing
+                                                                            { startedAt = time
+                                                                            , endedAt = Nothing
+                                                                            , startedBy = local2.localUser.session.userId
+                                                                            , reactions = SeqDict.empty
+                                                                            , timestampDrawings = Drawing.emptyDrawing
+                                                                            , cardDrawings = Drawing.emptyDrawing
+                                                                            }
                                                                         )
                                                                     |> Just
                                                             )
@@ -4378,11 +4380,13 @@ changeUpdate localMsg local =
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
                                                                     (CallStarted
-                                                                        time
-                                                                        Nothing
-                                                                        (Tuple.first otherClientId)
-                                                                        SeqDict.empty
-                                                                        Drawing.emptyDrawing
+                                                                        { startedAt = time
+                                                                        , endedAt = Nothing
+                                                                        , startedBy = Tuple.first otherClientId
+                                                                        , reactions = SeqDict.empty
+                                                                        , timestampDrawings = Drawing.emptyDrawing
+                                                                        , cardDrawings = Drawing.emptyDrawing
+                                                                        }
                                                                     )
                                                                 |> Just
                                                         )
@@ -4420,11 +4424,13 @@ changeUpdate localMsg local =
                                                         Maybe.withDefault DmChannel.frontendInit maybe
                                                             |> LocalState.createChannelMessageFrontend
                                                                 (CallStarted
-                                                                    time
-                                                                    Nothing
-                                                                    local.localUser.session.userId
-                                                                    SeqDict.empty
-                                                                    Drawing.emptyDrawing
+                                                                    { startedAt = time
+                                                                    , endedAt = Nothing
+                                                                    , startedBy = local.localUser.session.userId
+                                                                    , reactions = SeqDict.empty
+                                                                    , timestampDrawings = Drawing.emptyDrawing
+                                                                    , cardDrawings = Drawing.emptyDrawing
+                                                                    }
                                                                 )
                                                             |> Just
                                                     )
@@ -4512,7 +4518,15 @@ gameChangeUpdateChannel changeBy gameChange channel =
                     let
                         channel2 =
                             LocalState.createChannelMessageFrontend
-                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing GameType_Go)
+                                (GameStarted
+                                    { startedAt = createdAt
+                                    , startedBy = changeBy
+                                    , reactions = SeqDict.empty
+                                    , gameType = GameType_Go
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
                                 channel
 
                         newMatchId : Id ChannelMessageId
@@ -4553,7 +4567,15 @@ gameChangeUpdateChannel changeBy gameChange channel =
                     let
                         channel2 =
                             LocalState.createChannelMessageFrontend
-                                (GameStarted createdAt changeBy SeqDict.empty Drawing.emptyDrawing GameType_WordSpellingGame)
+                                (GameStarted
+                                    { startedAt = createdAt
+                                    , startedBy = changeBy
+                                    , reactions = SeqDict.empty
+                                    , gameType = GameType_WordSpellingGame
+                                    , timestampDrawings = Drawing.emptyDrawing
+                                    , cardDrawings = Drawing.emptyDrawing
+                                    }
+                                )
                                 channel
 
                         newMatchId : Id ChannelMessageId
