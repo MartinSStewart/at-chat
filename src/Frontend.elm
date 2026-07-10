@@ -128,6 +128,11 @@ app_ =
         }
 
 
+checkAppVersion : Command FrontendOnly toMsg FrontendMsg_
+checkAppVersion =
+    Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
+
+
 subscriptions : AudioData -> FrontendModel_ -> Subscription FrontendOnly FrontendMsg_
 subscriptions _ model =
     Subscription.batch
@@ -378,7 +383,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
-        , Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
+        , checkAppVersion
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -655,7 +660,16 @@ updateLoaded msg model =
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
-            ( { model | time = time }, Command.none )
+            ( { model | time = time }
+            , -- A big gap between once-per-second ticks means the page was suspended (OS
+              -- sleep or browser tab freezing). A new version might have been deployed in
+              -- the meantime and no focus/visibility event fires in the OS sleep case.
+              if model.pageHasFocus && (Duration.from model.time time |> Quantity.greaterThan (Duration.seconds 10)) then
+                checkAppVersion
+
+              else
+                Command.none
+            )
 
         GotWindowSize width height ->
             FrontendExtra.updateLoggedIn
@@ -1446,6 +1460,7 @@ updateLoaded msg model =
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
+                        , checkAppVersion
                         ]
                     )
 
@@ -2889,25 +2904,38 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
         PageHasFocusChanged hasFocus ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (if hasFocus then
-                            Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
+            let
+                ( model2, cmd ) =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (if hasFocus then
+                                    Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
 
-                         else
-                            Local_CurrentlyViewing StopViewingChannel |> Just
-                        )
-                        loggedIn
-                        (if hasFocus then
-                            Ports.closeNotifications
+                                 else
+                                    Local_CurrentlyViewing StopViewingChannel |> Just
+                                )
+                                loggedIn
+                                (if hasFocus then
+                                    Ports.closeNotifications
 
-                         else
-                            Command.none
+                                 else
+                                    Command.none
+                                )
                         )
-                )
-                { model | pageHasFocus = hasFocus }
+                        { model | pageHasFocus = hasFocus }
+            in
+            ( model2
+            , Command.batch
+                [ cmd
+                , if hasFocus then
+                    checkAppVersion
+
+                  else
+                    Command.none
+                ]
+            )
 
         GotServiceWorkerMessage url ->
             case Url.fromString url of
@@ -3041,17 +3069,19 @@ updateLoaded msg model =
             ( model, Command.none )
 
         GotVersionNumber result ->
-            ( { model
-                | versionNumber =
-                    case result of
-                        Ok version ->
-                            Just version
+            case ( result, model.versionNumber ) of
+                ( Ok version, Just previousVersion ) ->
+                    if version == previousVersion then
+                        ( model, Command.none )
 
-                        Err _ ->
-                            model.versionNumber
-              }
-            , Command.none
-            )
+                    else
+                        ( model, BrowserNavigation.reload )
+
+                ( Ok version, Nothing ) ->
+                    ( { model | versionNumber = Just version }, Command.none )
+
+                ( Err _, _ ) ->
+                    ( model, Command.none )
 
         PressedCloseExternalLinkWarning ->
             FrontendExtra.updateLoggedIn
