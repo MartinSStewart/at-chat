@@ -128,9 +128,12 @@ app_ =
         }
 
 
-checkAppVersion : Command FrontendOnly toMsg FrontendMsg_
-checkAppVersion =
-    Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
+checkAppVersion : Bool -> Command FrontendOnly toMsg FrontendMsg_
+checkAppVersion reloadOnNewVersion =
+    Http.get
+        { url = "/_i"
+        , expect = Http.expectJson (GotVersionNumber reloadOnNewVersion) (Json.Decode.field "v" Json.Decode.int)
+        }
 
 
 subscriptions : AudioData -> FrontendModel_ -> Subscription FrontendOnly FrontendMsg_
@@ -383,7 +386,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
-        , checkAppVersion
+        , checkAppVersion True
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -665,7 +668,7 @@ updateLoaded msg model =
               -- sleep or browser tab freezing). A new version might have been deployed in
               -- the meantime and no focus/visibility event fires in the OS sleep case.
               if model.pageHasFocus && (Duration.from model.time time |> Quantity.greaterThan (Duration.seconds 10)) then
-                checkAppVersion
+                checkAppVersion True
 
               else
                 Command.none
@@ -1460,7 +1463,7 @@ updateLoaded msg model =
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
-                        , checkAppVersion
+                        , checkAppVersion True
                         ]
                     )
 
@@ -2886,7 +2889,7 @@ updateLoaded msg model =
 
         GotStartupData startupData ->
             ( { model | startupData = startupData }
-            , Command.none
+            , checkAppVersion False
             )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
@@ -2930,7 +2933,7 @@ updateLoaded msg model =
             , Command.batch
                 [ cmd
                 , if hasFocus then
-                    checkAppVersion
+                    checkAppVersion True
 
                   else
                     Command.none
@@ -3068,19 +3071,19 @@ updateLoaded msg model =
         TypedDiscordLinkBookmarklet ->
             ( model, Command.none )
 
-        GotVersionNumber result ->
-            case ( result, model.versionNumber ) of
-                ( Ok version, Just previousVersion ) ->
+        GotVersionNumber reloadOnNewVersion result ->
+            case ( result, model.versionNumber, reloadOnNewVersion ) of
+                ( Ok version, Just previousVersion, True ) ->
                     if version == previousVersion then
                         ( model, Command.none )
 
                     else
                         ( model, BrowserNavigation.reload )
 
-                ( Ok version, Nothing ) ->
+                ( Ok version, _, _ ) ->
                     ( { model | versionNumber = Just version }, Command.none )
 
-                ( Err _, _ ) ->
+                ( Err _, _, _ ) ->
                     ( model, Command.none )
 
         PressedCloseExternalLinkWarning ->
