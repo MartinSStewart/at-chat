@@ -2108,7 +2108,7 @@ isPressMsg msg =
         TypedDiscordLinkBookmarklet ->
             False
 
-        GotVersionNumber _ ->
+        GotVersionNumber _ _ ->
             False
 
         PressedDiscordGuildNotificationLevel _ _ _ ->
