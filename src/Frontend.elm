@@ -128,12 +128,8 @@ app_ =
         }
 
 
-{-| Ask the server what version of the app it is running. GotVersionNumber compares it
-with the version we got when the page first loaded and reloads the page if they don't
-match (tabs that were asleep during a deploy otherwise stay stuck on the old version).
--}
-checkForNewVersion : Command FrontendOnly toMsg FrontendMsg_
-checkForNewVersion =
+checkAppVersion : Command FrontendOnly toMsg FrontendMsg_
+checkAppVersion =
     Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
 
 
@@ -387,7 +383,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
-        , checkForNewVersion
+        , checkAppVersion
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -668,8 +664,8 @@ updateLoaded msg model =
             , -- A big gap between once-per-second ticks means the page was suspended (OS
               -- sleep or browser tab freezing). A new version might have been deployed in
               -- the meantime and no focus/visibility event fires in the OS sleep case.
-              if model.pageHasFocus && (Duration.from model.time time |> Duration.inSeconds) > 10 then
-                checkForNewVersion
+              if model.pageHasFocus && (Duration.from model.time time |> Quantity.greaterThan (Duration.seconds 10)) then
+                checkAppVersion
 
               else
                 Command.none
@@ -1464,7 +1460,7 @@ updateLoaded msg model =
                         , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
                         , Ports.registerServiceWorker
-                        , checkForNewVersion
+                        , checkAppVersion
                         ]
                     )
 
@@ -2934,7 +2930,7 @@ updateLoaded msg model =
             , Command.batch
                 [ cmd
                 , if hasFocus then
-                    checkForNewVersion
+                    checkAppVersion
 
                   else
                     Command.none
@@ -3079,9 +3075,6 @@ updateLoaded msg model =
                         ( model, Command.none )
 
                     else
-                        -- A new version was deployed after this page loaded. Reload so the
-                        -- user isn't stuck on the old version (some page state is lost but
-                        -- anything important is stored on the backend anyway).
                         ( model, BrowserNavigation.reload )
 
                 ( Ok version, Nothing ) ->
