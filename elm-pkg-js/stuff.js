@@ -25,8 +25,33 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
+// Original code found here https://medium.com/@joelmalone/prevent-edge-swipe-gestures-in-your-html-game-but-only-in-safari-fba815a529a2
+function preventBrowserHistorySwipeGestures() {
+  function touchStart(ev) {
+    if (ev.touches.length === 1) {
+      const touch = ev.touches[0];
+      if (
+        touch.clientX < window.innerWidth * 0.1 ||
+        touch.clientX > window.innerWidth * 0.9
+      ) {
+        ev.preventDefault();
+      }
+    }
+  }
+
+  // Safari defaults to passive: true for the touchstart event, so we need  to explicitly specify false
+  // See https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
+  const options= { passive: false };
+
+  window.addEventListener("touchstart", touchStart, options);
+
+  return () => window.removeEventListener("touchstart", touchStart, options);
+}
+
 exports.init = async function init(app)
 {
+    preventBrowserHistorySwipeGestures();
+
     // Register a Service Worker.
     let activeNotifications = [];
 
