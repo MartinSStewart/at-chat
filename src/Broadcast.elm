@@ -1016,7 +1016,13 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , title = title
                 , body = body
                 , icon = icon
-                , navigate = Env.domain
+                , navigate =
+                    case navigateTo of
+                        Just navigateTo2 ->
+                            Env.domain ++ Route.encode navigateTo2
+
+                        Nothing ->
+                            Env.domain
                 , data =
                     case navigateTo of
                         Just navigateTo2 ->
