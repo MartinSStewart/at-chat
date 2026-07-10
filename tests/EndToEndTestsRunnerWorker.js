@@ -7,12 +7,16 @@ global.Image = image.Image;
 
 const { Elm } = require('./EndToEndTestsRunnerElm.js');
 
-parentPort.on('message', moduleName => {
-    const app = Elm[moduleName].init();
-    // Port names have to be unique across the whole compiled bundle, so each
-    // batch module suffixes its port with the batch number.
-    const portName = 'testResults' + moduleName.replace('EndToEndTestsRunnerBatch', '');
-    app.ports[portName].subscribe(results => {
-        parentPort.postMessage({ moduleName, results });
-    });
+const app = Elm.EndToEndTestsRunner.init();
+
+app.ports.testsLoaded.subscribe(data => {
+    parentPort.postMessage({ type: 'loaded', ...data });
+});
+
+app.ports.testResult.subscribe(result => {
+    parentPort.postMessage({ type: 'result', ...result });
+});
+
+parentPort.on('message', testIndex => {
+    app.ports.runTest.send(testIndex);
 });

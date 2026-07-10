@@ -1,7 +1,8 @@
-// Runs the end-to-end tests in parallel. The Elm bundle contains one main per
-// EndToEndTestsRunnerBatchN.elm module, each running a slice of the tests via
-// Effect.Test.startHeadlessRange. Batches are distributed over a pool of
-// worker threads (see EndToEndTestsRunnerWorker.js).
+// Runs the end-to-end tests in parallel. Each worker thread (see
+// EndToEndTestsRunnerWorker.js) hosts an instance of the EndToEndTestsRunner
+// Elm program, which loads the test list via Effect.Test.getTestResults and
+// runs one test per request. Tests are handed out to workers one at a time so
+// the load stays balanced regardless of how long individual tests take.
 const { Worker } = require('node:worker_threads');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,75 +10,71 @@ const path = require('node:path');
 // XMLHttpRequest.js resolves file paths relative to the tests directory.
 process.chdir(__dirname);
 
-const { Elm } = require('./EndToEndTestsRunnerElm.js');
-
-const batches = Object.keys(Elm)
-    .filter(name => name.startsWith('EndToEndTestsRunnerBatch'))
-    .sort((a, b) => Number(a.replace('EndToEndTestsRunnerBatch', '')) - Number(b.replace('EndToEndTestsRunnerBatch', '')));
-
-if (batches.length === 0) {
-    console.error('No EndToEndTestsRunnerBatch modules found in EndToEndTestsRunnerElm.js');
-    process.exit(1);
-}
-
-const workerCount = Math.min(os.availableParallelism ? os.availableParallelism() : os.cpus().length, batches.length);
-console.log(`Running ${batches.length} test batches on ${workerCount} worker threads...`);
+const workerCount = os.availableParallelism ? os.availableParallelism() : os.cpus().length;
+console.log(`Running end-to-end tests on ${workerCount} worker threads...`);
 
 const startTime = Date.now();
-let nextBatch = 0;
-let remainingBatches = batches.length;
+let totalTests = null;
+let nextTest = 0;
+let finishedTests = 0;
 const failures = [];
 
-function runNextBatch(worker) {
-    if (nextBatch < batches.length) {
-        worker.batchStartTime = Date.now();
-        worker.postMessage(batches[nextBatch]);
-        nextBatch++;
+function finish() {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    if (failures.length > 0) {
+        console.error('The following tests failed:\n' + failures.join('\n'));
+        process.exit(1);
+    }
+    else {
+        console.log(`All ${totalTests} end-to-end tests passed! (${elapsed}s)`);
+        process.exit();
+    }
+}
+
+function runNextTest(worker) {
+    if (nextTest < totalTests) {
+        worker.postMessage(nextTest);
+        nextTest++;
     }
     else {
         worker.terminate();
     }
 }
 
-function batchFinished() {
-    remainingBatches--;
-    if (remainingBatches === 0) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        if (failures.length > 0) {
-            console.error(failures.join('\n'));
-            process.exit(1);
-        }
-        else {
-            console.log(`All end-to-end tests passed! (${elapsed}s)`);
-            process.exit();
-        }
-    }
-}
-
 for (let i = 0; i < workerCount; i++) {
     const worker = new Worker(path.join(__dirname, 'EndToEndTestsRunnerWorker.js'));
 
-    worker.on('message', ({ moduleName, results }) => {
-        const elapsed = ((Date.now() - worker.batchStartTime) / 1000).toFixed(1);
-        if (results === null) {
-            console.log(`${moduleName} passed (${elapsed}s)`);
+    worker.on('message', message => {
+        if (message.type === 'loaded') {
+            if (message.error !== undefined) {
+                console.error(message.error);
+                process.exit(1);
+            }
+            if (totalTests === null) {
+                totalTests = message.testCount;
+                if (totalTests === 0) {
+                    finish();
+                }
+            }
+            runNextTest(worker);
         }
-        else if (results === 'No tests executed') {
-            // This batch's range starts beyond the total number of tests.
-            console.log(`${moduleName} had no tests to run`);
+        else if (message.type === 'result') {
+            finishedTests++;
+            if (message.error !== null) {
+                console.log(`${message.name} failed`);
+                failures.push(` - ${message.name}: ${message.error}`);
+            }
+            if (finishedTests === totalTests) {
+                finish();
+            }
+            else {
+                runNextTest(worker);
+            }
         }
-        else {
-            console.log(`${moduleName} failed (${elapsed}s)`);
-            failures.push(results);
-        }
-        batchFinished();
-        runNextBatch(worker);
     });
 
     worker.on('error', error => {
         console.error(error);
         process.exit(1);
     });
-
-    runNextBatch(worker);
 }
