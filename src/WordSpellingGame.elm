@@ -2416,18 +2416,39 @@ dragEnd currentTime windowSize newTouches setup shared model =
             in
             case boardCellAtPosition currentTime windowSize setup model position of
                 Just cell ->
-                    if SeqDict.member cell shared.board || cellOccupiedByOtherTile tileIndex cell model.tiles then
+                    if SeqDict.member cell shared.board then
                         returnToTray
 
                     else
-                        { model
-                            | dragging = NotDragging
-                            , tiles =
-                                Array.Extra.update
-                                    tileIndex
-                                    (\tile -> { tile | position = TileOnBoard cell currentTime })
-                                    model.tiles
-                        }
+                        case otherTileAtCell tileIndex cell model.tiles of
+                            Just otherIndex ->
+                                case Array.get tileIndex model.tiles |> Maybe.map .position of
+                                    Just (TileOnBoard previousCell _) ->
+                                        -- Both tiles are resting on the board, so they trade cells.
+                                        { model
+                                            | dragging = NotDragging
+                                            , tiles =
+                                                model.tiles
+                                                    |> Array.Extra.update
+                                                        tileIndex
+                                                        (\tile -> { tile | position = TileOnBoard cell currentTime })
+                                                    |> Array.Extra.update
+                                                        otherIndex
+                                                        (\tile -> { tile | position = TileOnBoard previousCell currentTime })
+                                        }
+
+                                    _ ->
+                                        returnToTray
+
+                            Nothing ->
+                                { model
+                                    | dragging = NotDragging
+                                    , tiles =
+                                        Array.Extra.update
+                                            tileIndex
+                                            (\tile -> { tile | position = TileOnBoard cell currentTime })
+                                            model.tiles
+                                }
 
                 Nothing ->
                     returnToTray
@@ -2500,17 +2521,24 @@ firstOpenTrayIndex draggedIndex tiles =
     TrayIndex (find 0)
 
 
-cellOccupiedByOtherTile : Int -> ( Int, Int ) -> Array Tile -> Bool
-cellOccupiedByOtherTile draggedIndex cell tiles =
+{-| The index of the tile (other than the dragged one) resting on the given board cell, if any.
+Dropping a board tile on such a cell swaps the two tiles (see `dragEnd`).
+-}
+otherTileAtCell : Int -> ( Int, Int ) -> Array Tile -> Maybe Int
+otherTileAtCell draggedIndex cell tiles =
     Array.toIndexedList tiles
-        |> List.any
+        |> List.Extra.findMap
             (\( index, tile ) ->
                 case tile.position of
                     TileOnBoard pos _ ->
-                        (index /= draggedIndex) && pos == cell
+                        if (index /= draggedIndex) && pos == cell then
+                            Just index
+
+                        else
+                            Nothing
 
                     TileInTray _ _ ->
-                        False
+                        Nothing
             )
 
 
@@ -3814,21 +3842,36 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         dragHighlight : Ui.Attribute GameMsg
         dragHighlight =
             case ( model.dragging, maybeDragging ) of
-                ( Dragging _, Just dragging2 ) ->
+                ( Dragging draggedIndex, Just dragging2 ) ->
                     case boardCellAtPosition currentTime windowSize setup model (Touch.touchCentroid dragging2) of
                         Just ( x, y ) ->
+                            let
+                                -- A board tile dropped on another of the player's placed tiles
+                                -- swaps with it, so that cell is still a valid drop target; a
+                                -- tray tile dropped there just returns to the tray.
+                                draggedFromBoard : Bool
+                                draggedFromBoard =
+                                    case Array.get draggedIndex model.tiles |> Maybe.map .position of
+                                        Just (TileOnBoard _ _) ->
+                                            True
+
+                                        _ ->
+                                            False
+                            in
                             if
                                 SeqDict.member ( x, y ) shared.board
-                                    || Array.Extra.any
-                                        (\tile ->
-                                            case tile.position of
-                                                TileOnBoard pos _ ->
-                                                    pos == ( x, y )
+                                    || (not draggedFromBoard
+                                            && Array.Extra.any
+                                                (\tile ->
+                                                    case tile.position of
+                                                        TileOnBoard pos _ ->
+                                                            pos == ( x, y )
 
-                                                TileInTray _ _ ->
-                                                    False
-                                        )
-                                        model.tiles
+                                                        TileInTray _ _ ->
+                                                            False
+                                                )
+                                                model.tiles
+                                       )
                             then
                                 Ui.noAttr
 

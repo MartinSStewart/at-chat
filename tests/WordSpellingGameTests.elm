@@ -1,16 +1,20 @@
 module WordSpellingGameTests exposing (tests)
 
+import Array
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Duration
 import Effect.Time as Time
 import Expect
 import Id
 import List.Nonempty exposing (Nonempty(..))
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater
 import SeqDict exposing (SeqDict)
 import Test exposing (Test)
+import Touch exposing (Touch)
 import UserSession exposing (ToBeFilledInByBackend(..))
-import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
+import WordSpellingGame exposing (Drag(..), IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord, TilePosition(..))
 import WordSpellingGameEnglish
 
 
@@ -111,6 +115,59 @@ o =
 t : Letter
 t =
     LetterChar 'T'
+
+
+{-| A desktop-sized window (no mobile board zoom), so screen positions map straight onto cells.
+-}
+dragWindowSize : Coord CssPixels
+dragWindowSize =
+    Coord.xy 1200 800
+
+
+{-| A single touch resting at the given screen position.
+-}
+touchAt : Coord CssPixels -> NonemptyDict Int Touch
+touchAt coord =
+    NonemptyDict.fromNonemptyList (Nonempty ( 0, { client = Coord.toPoint2d coord, target = Nothing } ) [])
+
+
+{-| A fresh game where the player's first two tiles have been placed at (7,7) and (8,7), with the
+rest still in the tray.
+-}
+gameWithTwoPlacedTiles : WordSpellingGame.GameData
+gameWithTwoPlacedTiles =
+    let
+        base : WordSpellingGame.GameData
+        base =
+            WordSpellingGame.initGame (Time.millisToPosix 0) testSetup
+    in
+    { base
+        | tiles =
+            Array.indexedMap
+                (\index tile ->
+                    if index == 0 then
+                        { tile | position = TileOnBoard ( 7, 7 ) (Time.millisToPosix 0) }
+
+                    else if index == 1 then
+                        { tile | position = TileOnBoard ( 8, 7 ) (Time.millisToPosix 0) }
+
+                    else
+                        tile
+                )
+                base.tiles
+    }
+
+
+{-| The board cell a tile is resting on, or `Nothing` while it's in the tray.
+-}
+placedCellOf : Int -> WordSpellingGame.GameData -> Maybe ( Int, Int )
+placedCellOf index model =
+    case Array.get index model.tiles |> Maybe.map .position of
+        Just (TileOnBoard cell _) ->
+            Just cell
+
+        _ ->
+            Nothing
 
 
 tests : Test
@@ -497,5 +554,52 @@ tests =
                 \_ ->
                     WordSpellingGame.animatedTilePlacement False 100000 (FilledInByBackend IsNotValid) 3 0
                         |> Expect.equal Nothing
+            ]
+        , Test.describe "dragEnd"
+            [ Test.test "dropping a placed tile onto another placed tile swaps them" <|
+                \_ ->
+                    let
+                        result : WordSpellingGame.GameData
+                        result =
+                            WordSpellingGame.dragEnd
+                                (Time.millisToPosix 10000)
+                                dragWindowSize
+                                (touchAt (WordSpellingGame.boardTouchCoord testSetup.traySize dragWindowSize [] ( 8, 7 )))
+                                testSetup
+                                (WordSpellingGame.initShared testSetup)
+                                { gameWithTwoPlacedTiles | dragging = Dragging 0 }
+                    in
+                    ( placedCellOf 0 result, placedCellOf 1 result, result.dragging )
+                        |> Expect.equal ( Just ( 8, 7 ), Just ( 7, 7 ), NotDragging )
+            , Test.test "dropping a placed tile onto an empty cell just moves it" <|
+                \_ ->
+                    let
+                        result : WordSpellingGame.GameData
+                        result =
+                            WordSpellingGame.dragEnd
+                                (Time.millisToPosix 10000)
+                                dragWindowSize
+                                (touchAt (WordSpellingGame.boardTouchCoord testSetup.traySize dragWindowSize [] ( 9, 7 )))
+                                testSetup
+                                (WordSpellingGame.initShared testSetup)
+                                { gameWithTwoPlacedTiles | dragging = Dragging 0 }
+                    in
+                    ( placedCellOf 0 result, placedCellOf 1 result )
+                        |> Expect.equal ( Just ( 9, 7 ), Just ( 8, 7 ) )
+            , Test.test "dropping a tray tile onto a placed tile still returns it to the tray" <|
+                \_ ->
+                    let
+                        result : WordSpellingGame.GameData
+                        result =
+                            WordSpellingGame.dragEnd
+                                (Time.millisToPosix 10000)
+                                dragWindowSize
+                                (touchAt (WordSpellingGame.boardTouchCoord testSetup.traySize dragWindowSize [] ( 8, 7 )))
+                                testSetup
+                                (WordSpellingGame.initShared testSetup)
+                                { gameWithTwoPlacedTiles | dragging = Dragging 2 }
+                    in
+                    ( placedCellOf 2 result, placedCellOf 1 result )
+                        |> Expect.equal ( Nothing, Just ( 8, 7 ) )
             ]
         ]
