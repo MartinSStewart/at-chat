@@ -5,7 +5,6 @@ import E2ETests
 import Effect.Test as T
 import Json.Encode
 import Task
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
 {-| Sent once at startup, either `{ testCount : Int }` or `{ error : String }`.
