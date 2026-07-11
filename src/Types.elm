@@ -486,7 +486,7 @@ type FrontendMsg_
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
-    | TouchStart (Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )) Duration (NonemptyDict Int Touch)
+    | TouchStart Duration (NonemptyDict Int Touch)
     | TouchMoved Duration (NonemptyDict Int Touch)
     | TouchEnd Duration
     | TouchCancel Duration
