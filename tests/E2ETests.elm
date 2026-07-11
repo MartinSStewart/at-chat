@@ -303,6 +303,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMedia.videoAttachmentTest videoUploadConfig
     , E2EMedia.audioAttachmentTest audioUploadConfig
     , E2EMisc.inviteUserAndDmChat normalConfig
+    , E2EMisc.handleNavigationHistoryOnMobile normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"

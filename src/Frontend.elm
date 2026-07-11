@@ -376,6 +376,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
+            , lastUrlChange = Nothing
             }
 
         ( model2, cmdA ) =
@@ -661,15 +662,28 @@ updateLoaded msg model =
 
         UrlChanged url ->
             let
-                ( model2, cmds ) =
-                    FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
-            in
-            case model2.startupData.pwaStatus of
-                InstalledPwa ->
-                    ( model2, Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ] )
+                ignoreUrlChange : Bool
+                ignoreUrlChange =
+                    case model.startupData.pwaStatus of
+                        InstalledPwa ->
+                            case model.lastUrlChange of
+                                Just previousUrlChange2 ->
+                                    Duration.from previousUrlChange2 model.time |> Quantity.lessThan (Duration.seconds 2)
 
-                BrowserView ->
-                    ( model2, cmds )
+                                Nothing ->
+                                    False
+
+                        BrowserView ->
+                            False
+            in
+            if ignoreUrlChange then
+                ( model, Command.none )
+
+            else
+                FrontendExtra.routeRequest
+                    (Just model.route)
+                    (Route.decode url)
+                    { model | lastUrlChange = Just model.time }
 
         GotTime time ->
             ( { model | time = time }
