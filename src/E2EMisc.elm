@@ -1,7 +1,6 @@
 module E2EMisc exposing (handleNavigationHistoryOnMobile, inactiveThreadsAreHiddenTest, inviteUserAndDmChat)
 
 import Audio
-import Broadcast
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
