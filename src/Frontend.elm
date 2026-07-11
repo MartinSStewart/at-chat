@@ -680,10 +680,21 @@ updateLoaded msg model =
                 ( model, Command.none )
 
             else
-                FrontendExtra.routeRequest
-                    (Just model.route)
-                    (Route.decode url)
-                    { model | lastUrlChange = Just model.time }
+                let
+                    ( model2, cmds ) =
+                        FrontendExtra.routeRequest
+                            (Just model.route)
+                            (Route.decode url)
+                            { model | lastUrlChange = Just model.time }
+                in
+                ( model2
+                , case model.startupData.pwaStatus of
+                    InstalledPwa ->
+                        Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ]
+
+                    BrowserView ->
+                        cmds
+                )
 
         GotTime time ->
             ( { model | time = time }
