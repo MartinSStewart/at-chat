@@ -2220,6 +2220,15 @@ isPressMsg msg =
         LoadedPopSound _ ->
             False
 
+        PressedOpenFriendsSearch ->
+            True
+
+        TypedFriendsSearch _ ->
+            False
+
+        PressedCloseFriendsSearch ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =

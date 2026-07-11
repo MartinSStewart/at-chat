@@ -476,6 +476,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
+            , friendsSearch = Nothing
             }
     in
     ( loggedIn
@@ -4485,6 +4486,25 @@ updateLoaded msg model =
 
         LoadedPopSound result ->
             ( { model | popSound = result }, Command.none )
+
+        PressedOpenFriendsSearch ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | friendsSearch = Just "" }
+                    , FrontendExtra.setFocus model Pages.Guild.friendsSearchInputId
+                    )
+                )
+                model
+
+        TypedFriendsSearch text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | friendsSearch = Just text }, Command.none ))
+                model
+
+        PressedCloseFriendsSearch ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | friendsSearch = Nothing }, Command.none ))
+                model
 
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but

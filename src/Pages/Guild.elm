@@ -9,6 +9,7 @@ module Pages.Guild exposing
     , discordGuildView
     , dropdownButtonId
     , encodeMessageView
+    , friendsSearchInputId
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
@@ -183,7 +184,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
-                            , friendsColumnLazy (GuildColumn.canScroll model.drag) True model.time maybeOtherUserId local
+                            , friendsColumnLazy (GuildColumn.canScroll model.drag) True model.time maybeOtherUserId loggedIn.friendsSearch local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -199,7 +200,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
-                            , friendsColumnLazy (GuildColumn.canScroll model.drag) False model.time maybeOtherUserId local
+                            , friendsColumnLazy (GuildColumn.canScroll model.drag) False model.time maybeOtherUserId loggedIn.friendsSearch local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -7202,9 +7203,10 @@ friendsColumnLazy :
     -> Bool
     -> Time.Posix
     -> DmChannelSelection
+    -> Maybe String
     -> LocalState
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch local =
     let
         msInMinute =
             1000 * 60
@@ -7213,83 +7215,98 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
     in
-    case openedOtherUserId of
-        NoDmChannelSelected ->
-            Ui.Lazy.lazy6
-                friendsColumn_NoDmChannelSelected
+    case friendsSearch of
+        Just searchText ->
+            -- The search text changes too often for laziness to be worth it here
+            friendsColumn
                 canScroll2
                 isMobile
                 currentTimeRoundedToMinute
+                (Just searchText)
+                openedOtherUserId
                 local.dmChannels
                 local.discordDmChannels
                 local.localUser
 
-        SelectedDmChannel dmRouteData ->
-            Ui.Lazy.lazy6
-                (if isMobile then
-                    friendsColumn_SelectedDmChannel_Mobile
+        Nothing ->
+            case openedOtherUserId of
+                NoDmChannelSelected ->
+                    Ui.Lazy.lazy6
+                        friendsColumn_NoDmChannelSelected
+                        canScroll2
+                        isMobile
+                        currentTimeRoundedToMinute
+                        local.dmChannels
+                        local.discordDmChannels
+                        local.localUser
 
-                 else
-                    friendsColumn_SelectedDmChannel_NotMobile
-                )
-                canScroll2
-                currentTimeRoundedToMinute
-                dmRouteData
-                local.dmChannels
-                local.discordDmChannels
-                local.localUser
+                SelectedDmChannel dmRouteData ->
+                    Ui.Lazy.lazy6
+                        (if isMobile then
+                            friendsColumn_SelectedDmChannel_Mobile
 
-        SelectedDiscordDmChannel discordDmRouteData ->
-            Ui.Lazy.lazy6
-                (if isMobile then
-                    friendsColumn_SelectedDiscordDmChannel_Mobile
+                         else
+                            friendsColumn_SelectedDmChannel_NotMobile
+                        )
+                        canScroll2
+                        currentTimeRoundedToMinute
+                        dmRouteData
+                        local.dmChannels
+                        local.discordDmChannels
+                        local.localUser
 
-                 else
-                    friendsColumn_SelectedDiscordDmChannel_NotMobile
-                )
-                canScroll2
-                currentTimeRoundedToMinute
-                discordDmRouteData
-                local.dmChannels
-                local.discordDmChannels
-                local.localUser
+                SelectedDiscordDmChannel discordDmRouteData ->
+                    Ui.Lazy.lazy6
+                        (if isMobile then
+                            friendsColumn_SelectedDiscordDmChannel_Mobile
+
+                         else
+                            friendsColumn_SelectedDiscordDmChannel_NotMobile
+                        )
+                        canScroll2
+                        currentTimeRoundedToMinute
+                        discordDmRouteData
+                        local.dmChannels
+                        local.discordDmChannels
+                        local.localUser
 
 
 friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 isMobile currentTime NoDmChannelSelected dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 isMobile currentTime Nothing NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 True currentTime Nothing (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 False currentTime Nothing (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 True currentTime Nothing (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 False currentTime Nothing (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn :
     Bool
     -> Bool
     -> Int
+    -> Maybe String
     -> DmChannelSelection
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels discordDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime friendsSearch openedOtherUserId dmChannels discordDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -7301,78 +7318,148 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
         discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
             discordDmChannels
+
+        searchFilter : String
+        searchFilter =
+            Maybe.withDefault "" friendsSearch |> String.trim |> String.toLower
+
+        matchesSearch : PersonName -> Bool
+        matchesSearch name =
+            String.contains searchFilter (String.toLower (PersonName.toString name))
     in
     channelColumnContainer
-        [ Ui.el
-            [ Ui.Font.bold
-            , Ui.paddingXY 8 8
-            , Ui.Font.color MyUi.font1
-            ]
-            (Ui.text "Direct messages")
-        ]
+        (case friendsSearch of
+            Just searchText ->
+                [ Ui.Input.text
+                    [ Ui.id (Dom.idToString friendsSearchInputId)
+                    , Ui.background MyUi.inputBackground
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.rounded 4
+                    , Ui.paddingXY 8 4
+                    , Ui.Font.color MyUi.font1
+                    ]
+                    { onChange = TypedFriendsSearch
+                    , text = searchText
+                    , placeholder = Just "Filter friends"
+                    , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
+                    }
+                , MyUi.elButton
+                    (Dom.id "guild_closeFriendsSearch")
+                    PressedCloseFriendsSearch
+                    [ Ui.Font.color MyUi.font2
+                    , Ui.width (Ui.px 40)
+                    , Ui.paddingXY 8 0
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    ]
+                    (Ui.html Icons.x)
+                ]
+
+            Nothing ->
+                [ Ui.el
+                    [ Ui.Font.bold
+                    , Ui.paddingXY 8 8
+                    , Ui.Font.color MyUi.font1
+                    ]
+                    (Ui.text "Direct messages")
+                , MyUi.elButton
+                    (Dom.id "guild_openFriendsSearch")
+                    PressedOpenFriendsSearch
+                    [ Ui.Font.color MyUi.font2
+                    , Ui.width (Ui.px 40)
+                    , Ui.alignRight
+                    , Ui.paddingXY 8 0
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterY
+                    ]
+                    (Ui.html Icons.magnifyingGlass)
+                ]
+        )
         ((List.filterMap
             (\( otherUserId, dmChannel ) ->
                 case User.getUser otherUserId localUser of
                     Just otherUser ->
+                        if matchesSearch otherUser.name then
+                            ( case IdArray.last dmChannel.messages of
+                                Just (MessageLoaded message2) ->
+                                    Message.createdAt message2
+
+                                _ ->
+                                    Time.millisToPosix 0
+                            , Ui.Lazy.lazy6
+                                (if isMobile then
+                                    friendLabelMobile
+
+                                 else
+                                    friendLabelNotMobile
+                                )
+                                currentTime
+                                (case openedOtherUserId of
+                                    SelectedDmChannel dmRoute ->
+                                        DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+
+                                    _ ->
+                                        False
+                                )
+                                localUser
+                                otherUserId
+                                otherUser
+                                dmChannel
+                            )
+                                |> Just
+
+                        else
+                            Nothing
+
+                    Nothing ->
+                        Nothing
+            )
+            (SeqDict.toList dmChannelsIncludingCurrentUser)
+            ++ List.filterMap
+                (\( channelId, dmChannel ) ->
+                    if
+                        (searchFilter == "")
+                            || List.any
+                                (\( userId, _ ) ->
+                                    case User.getDiscordUser userId localUser of
+                                        Just discordUser ->
+                                            matchesSearch discordUser.name
+
+                                        Nothing ->
+                                            False
+                                )
+                                (NonemptyDict.toList dmChannel.members)
+                    then
                         ( case IdArray.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
                                 Message.createdAt message2
 
                             _ ->
                                 Time.millisToPosix 0
-                        , Ui.Lazy.lazy6
+                        , Ui.Lazy.lazy5
                             (if isMobile then
-                                friendLabelMobile
+                                discordFriendLabelMobile
 
                              else
-                                friendLabelNotMobile
+                                discordFriendLabelNotMobile
                             )
                             currentTime
                             (case openedOtherUserId of
-                                SelectedDmChannel dmRoute ->
-                                    DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
 
                                 _ ->
                                     False
                             )
-                            localUser
-                            otherUserId
-                            otherUser
+                            channelId
                             dmChannel
+                            localUser
                         )
                             |> Just
 
-                    Nothing ->
+                    else
                         Nothing
-            )
-            (SeqDict.toList dmChannelsIncludingCurrentUser)
-            ++ List.map
-                (\( channelId, dmChannel ) ->
-                    ( case IdArray.last dmChannel.messages of
-                        Just (MessageLoaded message2) ->
-                            Message.createdAt message2
-
-                        _ ->
-                            Time.millisToPosix 0
-                    , Ui.Lazy.lazy5
-                        (if isMobile then
-                            discordFriendLabelMobile
-
-                         else
-                            discordFriendLabelNotMobile
-                        )
-                        currentTime
-                        (case openedOtherUserId of
-                            SelectedDiscordDmChannel routeData ->
-                                routeData.channelId == channelId
-
-                            _ ->
-                                False
-                        )
-                        channelId
-                        dmChannel
-                        localUser
-                    )
                 )
                 (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
          )
@@ -7380,6 +7467,11 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             |> List.map Tuple.second
             |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
         )
+
+
+friendsSearchInputId : HtmlId
+friendsSearchInputId =
+    Dom.id "guild_friendsSearchInput"
 
 
 friendLabelMobile :

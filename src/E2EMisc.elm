@@ -1,4 +1,4 @@
-module E2EMisc exposing (handleNavigationHistoryOnMobile, inactiveThreadsAreHiddenTest, inviteUserAndDmChat)
+module E2EMisc exposing (friendsSearchTest, handleNavigationHistoryOnMobile, inactiveThreadsAreHiddenTest, inviteUserAndDmChat)
 
 import Audio
 import Duration
@@ -7,6 +7,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
 import Id
+import Pages.Guild
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
@@ -135,6 +136,58 @@ handleNavigationHistoryOnMobile config =
                                             [ T.checkState 0 (\_ -> Err "Should be only one new message notification") ]
                                 )
                             ]
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+friendsSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+friendsSearchTest config =
+    E2EHelper.startTest
+        "Filter friends with the direct messages search input"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , E2EHelper.writeMessage user 100 "Hello admin!"
+                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        , admin.checkView 100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guild_friendLabel_0"
+                                , Test.Html.Selector.id "guild_friendLabel_2"
+                                , Test.Html.Selector.exactText "Direct messages"
+                                ]
+                            )
+                        , admin.click 100 (Dom.id "guild_openFriendsSearch")
+                        , admin.snapshotView 100 { name = "Friends search input open" }
+                        , admin.input 100 Pages.Guild.friendsSearchInputId "sven"
+                        , admin.checkView 100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_friendLabel_2" ])
+                        , admin.checkView 100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_friendLabel_0" ])
+                        , admin.snapshotView 100 { name = "Friends search input filters friends column" }
+                        , admin.input 100 Pages.Guild.friendsSearchInputId "does not match anyone"
+                        , admin.checkView 100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_friendLabel_2" ])
+                        , admin.click 100 (Dom.id "guild_closeFriendsSearch")
+                        , admin.checkView 100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.id "guild_friendLabel_0"
+                                , Test.Html.Selector.id "guild_friendLabel_2"
+                                , Test.Html.Selector.exactText "Direct messages"
+                                ]
+                            )
                         ]
                     )
                 ]
