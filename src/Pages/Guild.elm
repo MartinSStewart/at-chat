@@ -184,7 +184,14 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
-                            , friendsColumnLazy (GuildColumn.canScroll model.drag) True model.time maybeOtherUserId loggedIn.friendsSearch local
+                            , friendsColumnLazy
+                                (GuildColumn.canScroll model.drag)
+                                True
+                                model.time
+                                maybeOtherUserId
+                                loggedIn.friendsSearch
+                                (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
+                                local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -200,7 +207,14 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
-                            , friendsColumnLazy (GuildColumn.canScroll model.drag) False model.time maybeOtherUserId loggedIn.friendsSearch local
+                            , friendsColumnLazy
+                                (GuildColumn.canScroll model.drag)
+                                False
+                                model.time
+                                maybeOtherUserId
+                                loggedIn.friendsSearch
+                                (Maybe.map .htmlId loggedIn.textInputFocus == Just friendsSearchInputId)
+                                local
                             ]
                         , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
@@ -7203,10 +7217,11 @@ friendsColumnLazy :
     -> Bool
     -> Time.Posix
     -> DmChannelSelection
-    -> Maybe String
+    -> String
+    -> Bool
     -> LocalState
     -> Element FrontendMsg_
-friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch local =
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
     let
         msInMinute =
             1000 * 60
@@ -7215,98 +7230,99 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearc
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
     in
-    case friendsSearch of
-        Just searchText ->
-            -- The search text changes too often for laziness to be worth it here
-            friendsColumn
-                canScroll2
-                isMobile
-                currentTimeRoundedToMinute
-                (Just searchText)
-                openedOtherUserId
-                local.dmChannels
-                local.discordDmChannels
-                local.localUser
+    if (friendsSearch /= "") || friendsSearchHasFocus then
+        -- The search text changes too often for laziness to be worth it here
+        friendsColumn
+            canScroll2
+            isMobile
+            currentTimeRoundedToMinute
+            friendsSearch
+            friendsSearchHasFocus
+            openedOtherUserId
+            local.dmChannels
+            local.discordDmChannels
+            local.localUser
 
-        Nothing ->
-            case openedOtherUserId of
-                NoDmChannelSelected ->
-                    Ui.Lazy.lazy6
-                        friendsColumn_NoDmChannelSelected
-                        canScroll2
-                        isMobile
-                        currentTimeRoundedToMinute
-                        local.dmChannels
-                        local.discordDmChannels
-                        local.localUser
+    else
+        case openedOtherUserId of
+            NoDmChannelSelected ->
+                Ui.Lazy.lazy6
+                    friendsColumn_NoDmChannelSelected
+                    canScroll2
+                    isMobile
+                    currentTimeRoundedToMinute
+                    local.dmChannels
+                    local.discordDmChannels
+                    local.localUser
 
-                SelectedDmChannel dmRouteData ->
-                    Ui.Lazy.lazy6
-                        (if isMobile then
-                            friendsColumn_SelectedDmChannel_Mobile
+            SelectedDmChannel dmRouteData ->
+                Ui.Lazy.lazy6
+                    (if isMobile then
+                        friendsColumn_SelectedDmChannel_Mobile
 
-                         else
-                            friendsColumn_SelectedDmChannel_NotMobile
-                        )
-                        canScroll2
-                        currentTimeRoundedToMinute
-                        dmRouteData
-                        local.dmChannels
-                        local.discordDmChannels
-                        local.localUser
+                     else
+                        friendsColumn_SelectedDmChannel_NotMobile
+                    )
+                    canScroll2
+                    currentTimeRoundedToMinute
+                    dmRouteData
+                    local.dmChannels
+                    local.discordDmChannels
+                    local.localUser
 
-                SelectedDiscordDmChannel discordDmRouteData ->
-                    Ui.Lazy.lazy6
-                        (if isMobile then
-                            friendsColumn_SelectedDiscordDmChannel_Mobile
+            SelectedDiscordDmChannel discordDmRouteData ->
+                Ui.Lazy.lazy6
+                    (if isMobile then
+                        friendsColumn_SelectedDiscordDmChannel_Mobile
 
-                         else
-                            friendsColumn_SelectedDiscordDmChannel_NotMobile
-                        )
-                        canScroll2
-                        currentTimeRoundedToMinute
-                        discordDmRouteData
-                        local.dmChannels
-                        local.discordDmChannels
-                        local.localUser
+                     else
+                        friendsColumn_SelectedDiscordDmChannel_NotMobile
+                    )
+                    canScroll2
+                    currentTimeRoundedToMinute
+                    discordDmRouteData
+                    local.dmChannels
+                    local.discordDmChannels
+                    local.localUser
 
 
 friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 isMobile currentTime Nothing NoDmChannelSelected dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 isMobile currentTime "" False NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime Nothing (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 True currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime Nothing (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 False currentTime "" False (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 True currentTime Nothing (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 True currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg_
 friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
-    friendsColumn canScroll2 False currentTime Nothing (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+    friendsColumn canScroll2 False currentTime "" False (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
 friendsColumn :
     Bool
     -> Bool
     -> Int
-    -> Maybe String
+    -> String
+    -> Bool
     -> DmChannelSelection
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch openedOtherUserId dmChannels discordDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus openedOtherUserId dmChannels discordDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -7319,53 +7335,86 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch openedOtherUserId dm
         discordDmChannelsIncludingLinkedUsers =
             discordDmChannels
 
+        searchIsVisible : Bool
+        searchIsVisible =
+            friendsSearchHasFocus || (friendsSearch /= "")
+
         searchFilter : String
         searchFilter =
-            Maybe.withDefault "" friendsSearch |> String.trim |> String.toLower
+            String.trim friendsSearch |> String.toLower
 
         matchesSearch : PersonName -> Bool
         matchesSearch name =
             String.contains searchFilter (String.toLower (PersonName.toString name))
     in
     channelColumnContainer
-        (case friendsSearch of
-            Just searchText ->
-                [ Ui.Input.text
-                    [ Ui.id (Dom.idToString friendsSearchInputId)
-                    , Ui.background MyUi.inputBackground
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.inputBorder
-                    , Ui.rounded 4
-                    , Ui.paddingXY 8 4
-                    , Ui.Font.color MyUi.font1
-                    ]
-                    { onChange = TypedFriendsSearch
-                    , text = searchText
-                    , placeholder = Just "Filter friends"
-                    , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
-                    }
-                , MyUi.elButton
-                    (Dom.id "guild_closeFriendsSearch")
-                    PressedCloseFriendsSearch
-                    [ Ui.Font.color MyUi.font2
-                    , Ui.width (Ui.px 40)
-                    , Ui.paddingXY 8 0
-                    , Ui.height Ui.fill
-                    , Ui.contentCenterY
-                    ]
-                    (Ui.html Icons.x)
-                ]
+        [ Ui.el
+            [ Ui.height Ui.fill
+            , -- The search input is always in the DOM, invisible and covering the magnifying glass
+              -- icon so that clicking the icon focuses it. It has to stay in the DOM while hidden
+              -- because recreating it on press would drop the browser focus that reveals it.
+              Ui.inFront
+                (Ui.row
+                    [ Ui.height Ui.fill ]
+                    [ Ui.Input.text
+                        (Ui.id (Dom.idToString friendsSearchInputId)
+                            :: (if searchIsVisible then
+                                    [ Ui.background MyUi.inputBackground
+                                    , Ui.border 1
+                                    , Ui.borderColor MyUi.inputBorder
+                                    , Ui.rounded 4
+                                    , Ui.paddingXY 8 4
+                                    , Ui.Font.color MyUi.font1
+                                    , Ui.centerY
+                                    ]
 
-            Nothing ->
+                                else
+                                    [ Ui.opacity 0
+                                    , Ui.width (Ui.px 40)
+                                    , Ui.alignRight
+                                    , Ui.height Ui.fill
+                                    , Ui.pointer
+                                    ]
+                               )
+                        )
+                        { onChange = TypedFriendsSearch
+                        , text = friendsSearch
+                        , placeholder =
+                            if searchIsVisible then
+                                Just "Filter friends"
+
+                            else
+                                Nothing
+                        , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
+                        }
+                    , if friendsSearch == "" then
+                        Ui.none
+
+                      else
+                        MyUi.elButton
+                            (Dom.id "guild_clearFriendsSearch")
+                            PressedClearFriendsSearch
+                            [ Ui.Font.color MyUi.font2
+                            , Ui.width (Ui.px 40)
+                            , Ui.paddingXY 8 0
+                            , Ui.height Ui.fill
+                            , Ui.contentCenterY
+                            ]
+                            (Ui.html Icons.x)
+                    ]
+                )
+            ]
+            (Ui.row
+                [ Ui.height Ui.fill
+                , Ui.attrIf searchIsVisible (Ui.opacity 0)
+                ]
                 [ Ui.el
                     [ Ui.Font.bold
                     , Ui.paddingXY 8 8
                     , Ui.Font.color MyUi.font1
                     ]
                     (Ui.text "Direct messages")
-                , MyUi.elButton
-                    (Dom.id "guild_openFriendsSearch")
-                    PressedOpenFriendsSearch
+                , Ui.el
                     [ Ui.Font.color MyUi.font2
                     , Ui.width (Ui.px 40)
                     , Ui.alignRight
@@ -7375,7 +7424,8 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch openedOtherUserId dm
                     ]
                     (Ui.html Icons.magnifyingGlass)
                 ]
-        )
+            )
+        ]
         ((List.filterMap
             (\( otherUserId, dmChannel ) ->
                 case User.getUser otherUserId localUser of

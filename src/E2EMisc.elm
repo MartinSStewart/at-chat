@@ -6,7 +6,9 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
+import Html.Attributes
 import Id
+import Json.Encode
 import Pages.Guild
 import Test.Html.Query
 import Test.Html.Selector
@@ -143,6 +145,26 @@ handleNavigationHistoryOnMobile config =
         ]
 
 
+{-| Simulates the browser moving focus into the friends search input. Unlike
+`E2EHelper.focusEvent` this includes the `selectionDirection` field, which the
+focus decoder requires before it will record the input as focused.
+-}
+focusFriendsSearchInput :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+focusFriendsSearchInput client =
+    client.portEvent
+        100
+        "focus_changed_from_js"
+        (Json.Encode.object
+            [ ( "id", Json.Encode.string (Dom.idToString Pages.Guild.friendsSearchInputId) )
+            , ( "selectionStart", Json.Encode.int 0 )
+            , ( "selectionEnd", Json.Encode.int 0 )
+            , ( "selectionDirection", Json.Encode.string "forward" )
+            ]
+        )
+
+
 friendsSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 friendsSearchTest config =
     E2EHelper.startTest
@@ -162,6 +184,9 @@ friendsSearchTest config =
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , E2EHelper.writeMessage user 100 "Hello admin!"
                         , admin.click 100 (Dom.id "guild_openDm_2")
+
+                        -- The search input is transparent until it gets focus, so its placeholder
+                        -- text is used to detect whether it is shown or not.
                         , admin.checkView 100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.id "guild_friendLabel_0"
@@ -169,7 +194,15 @@ friendsSearchTest config =
                                 , Test.Html.Selector.exactText "Direct messages"
                                 ]
                             )
-                        , admin.click 100 (Dom.id "guild_openFriendsSearch")
+                        , admin.checkView 100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
+                            )
+                        , focusFriendsSearchInput admin
+                        , admin.checkView 100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
+                            )
                         , admin.snapshotView 100 { name = "Friends search input open" }
                         , admin.input 100 Pages.Guild.friendsSearchInputId "sven"
                         , admin.checkView 100
@@ -180,13 +213,23 @@ friendsSearchTest config =
                         , admin.input 100 Pages.Guild.friendsSearchInputId "does not match anyone"
                         , admin.checkView 100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_friendLabel_2" ])
-                        , admin.click 100 (Dom.id "guild_closeFriendsSearch")
+
+                        -- Clearing the text shows all friends again, and the input stays visible
+                        -- because it still has focus.
+                        , admin.click 100 (Dom.id "guild_clearFriendsSearch")
                         , admin.checkView 100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.id "guild_friendLabel_0"
                                 , Test.Html.Selector.id "guild_friendLabel_2"
-                                , Test.Html.Selector.exactText "Direct messages"
+                                , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends")
                                 ]
+                            )
+
+                        -- Once the empty input loses focus it becomes transparent again.
+                        , E2EHelper.focusEvent admin 100 Nothing Nothing
+                        , admin.checkView 100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter friends") ]
                             )
                         ]
                     )

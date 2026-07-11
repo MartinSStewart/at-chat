@@ -2220,13 +2220,10 @@ isPressMsg msg =
         LoadedPopSound _ ->
             False
 
-        PressedOpenFriendsSearch ->
-            True
-
         TypedFriendsSearch _ ->
             False
 
-        PressedCloseFriendsSearch ->
+        PressedClearFriendsSearch ->
             True
 
 
