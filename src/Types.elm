@@ -149,6 +149,7 @@ type alias LoadingFrontend =
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
     , popSound : Result Audio.LoadError Audio.Source
+    , lastUrlChange : Maybe Time.Posix
     }
 
 

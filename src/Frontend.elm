@@ -307,6 +307,7 @@ init url key =
                 _ ->
                     PublicGoMatch_NotLoaded
         , popSound = Err Audio.UnknownError
+        , lastUrlChange = Nothing
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -578,7 +579,22 @@ update _ msg model =
                     ( Loading { loading | timezone = timezone }, Command.none, Audio.cmdNone )
 
                 GotStartupData startupData ->
-                    tryInitLoadedFrontend { loading | startupData = Just startupData }
+                    let
+                        ( model2, cmds, audioCmds ) =
+                            tryInitLoadedFrontend { loading | startupData = Just startupData }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ cmds
+                        , case startupData.pwaStatus of
+                            InstalledPwa ->
+                                BrowserNavigation.back loading.navigationKey 1
+
+                            BrowserView ->
+                                Command.none
+                        ]
+                    , audioCmds
+                    )
 
                 LoadedPopSound result ->
                     ( Loading { loading | popSound = result }, Command.none, Audio.cmdNone )
@@ -688,7 +704,7 @@ updateLoaded msg model =
                             { model | lastUrlChange = Just model.time }
                 in
                 ( model2
-                , case model.startupData.pwaStatus of
+                , case model2.startupData.pwaStatus of
                     InstalledPwa ->
                         Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ]
 
