@@ -233,6 +233,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleMultiFileUpload
                 E2EHelper.domain
 
+        -- Same as normalConfig except the upload response reports no image size,
+        -- like the Rust server does for files it can't decode as an image.
+        nonImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        nonImageUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleHttpRequestsWithUploadedImageSize Nothing)
+                E2EHelper.handlePortToJs
+                handleFileRequest
+                handleMultiFileUpload
+                E2EHelper.domain
+
         imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
         imageUploadConfig =
             T.Config
@@ -305,6 +318,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.inviteUserAndDmChat normalConfig
     , E2EMisc.friendsSearchTest normalConfig
     , E2EMisc.handleNavigationHistoryOnMobile normalConfig
+    , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"
@@ -829,9 +843,16 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     atLimit =
                         String.repeat 2000 "c"
 
+                    -- Goes over the limit by appending fewer than 1000 chars to the previous
+                    -- input, so it doesn't count as a large paste (which would get converted
+                    -- into a file attachment instead of overflowing the message).
                     overLimit : String
                     overLimit =
-                        String.repeat 2001 "d"
+                        atThreshold ++ String.repeat 901 "d"
+
+                    overLimitEdit : String
+                    overLimitEdit =
+                        atLimit ++ "d"
                 in
                 [ E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -867,7 +888,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         ]
                     )
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
-                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimitEdit
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
 
@@ -916,9 +937,16 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     atLimit =
                         String.repeat 2000 "c"
 
+                    -- Goes over the limit by appending fewer than 1000 chars to the previous
+                    -- input, so it doesn't count as a large paste (which would get converted
+                    -- into a file attachment instead of overflowing the message).
                     overLimit : String
                     overLimit =
-                        String.repeat 2001 "d"
+                        atThreshold ++ String.repeat 901 "d"
+
+                    overLimitEdit : String
+                    overLimitEdit =
+                        atLimit ++ "d"
                 in
                 [ E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
@@ -953,7 +981,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         ]
                     )
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
-                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimitEdit
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
                 , admin.click 100 (Dom.id "messageMenu_editMobile_sendMessage")
 

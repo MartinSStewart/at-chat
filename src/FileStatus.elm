@@ -38,6 +38,7 @@ module FileStatus exposing
     , uploadBytes
     , uploadFile
     , uploadResponseCodec
+    , uploadString
     , uploadTrackerId
     , uploadUrl
     , uploadUrlCodec
@@ -443,6 +444,25 @@ uploadFile onResult sessionId guildOrDmId fileId file2 =
         , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Just Duration.minute
+        , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        }
+
+
+uploadString :
+    (Result Http.Error UploadResponse -> msg)
+    -> SessionIdHash
+    -> ( AnyGuildOrDmId, ThreadRoute )
+    -> Id FileId
+    -> String
+    -> Command restriction toFrontend msg
+uploadString onResult sessionId guildOrDmId fileId text =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , url = domain ++ "/file/upload"
+        , body = Http.stringBody "text/plain" text
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Just Duration.minute
         , tracker = uploadTrackerId guildOrDmId fileId |> Just

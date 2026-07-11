@@ -7,13 +7,85 @@ import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
 import Html.Attributes
+import FileStatus
 import Id
 import Json.Encode
 import Pages.Guild
+import SeqDict
+import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import Url
+
+
+{-| Pasting a large chunk of text that would push the message over the max message length converts the pasted text into a text file attachment instead of inserting it into the text input.
+-}
+largePasteBecomesAttachment :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+largePasteBecomesAttachment config =
+    E2EHelper.startTest
+        "Pasted text too long to fit in a message is attached as a text file instead"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                let
+                    pastedText : String
+                    pastedText =
+                        String.repeat 250 "0123456789"
+                in
+                [ E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+                , admin.input 100 (Dom.id "channel_textinput") "Check this out! "
+                , admin.input 100 (Dom.id "channel_textinput") ("Check this out! " ++ pastedText)
+
+                -- The pasted text is removed from the draft and replaced with an attached file placeholder
+                , T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get admin.clientId data.frontends |> Maybe.map Audio.userModel of
+                            Just (Types.Loaded loaded) ->
+                                case loaded.loginStatus of
+                                    Types.LoggedIn loggedIn ->
+                                        if
+                                            List.map
+                                                String.Nonempty.toString
+                                                (SeqDict.values loggedIn.drafts)
+                                                == [ "Check this out! [!1]" ]
+                                        then
+                                            Ok ()
+
+                                        else
+                                            Err "The pasted text should have been replaced with a file attachment placeholder in the draft"
+
+                                    Types.NotLoggedIn _ ->
+                                        Err "Expected admin to be logged in"
+
+                            _ ->
+                                Err "Expected admin frontend to be loaded"
+                    )
+
+                -- The Rust server tells the backend about the uploaded file (in tests the
+                -- upload HTTP response is mocked so this notification is injected manually,
+                -- like E2EHelper.uploadNonImageAttachment does).
+                , T.backendUpdate
+                    100
+                    (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 2500 Nothing)
+                , admin.keyDown 1000 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "guild_message_1" ]
+                    )
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "message.txt" ])
+                ]
+            )
+        ]
 
 
 handleNavigationHistoryOnMobile :

@@ -11,6 +11,7 @@ module MessageInput exposing
     , editView
     , emojiDropdownList
     , isPress
+    , largePastedText
     , pressedArrowInDropdown
     , pressedDropdownItem
     , userDropdownList
@@ -93,6 +94,72 @@ type Msg
 counterThreshold : number
 counterThreshold =
     900
+
+
+{-| Pasted text has to be longer than this before it's turned into a file attachment.
+-}
+largePasteThreshold : number
+largePasteThreshold =
+    1000
+
+
+{-| If the text input changed by a large chunk of text appearing all at once (i.e. the user pasted something long) and the result doesn't fit within a single message, return the pasted text so it can be attached as a file instead, along with the text surrounding it.
+-}
+largePastedText : String -> String -> Maybe { textBeforePaste : String, pastedText : String, textAfterPaste : String }
+largePastedText previousText text =
+    if String.length text > RichText.maxLength then
+        let
+            previousChars : List Char
+            previousChars =
+                String.toList previousText
+
+            chars : List Char
+            chars =
+                String.toList text
+
+            prefixLength : Int
+            prefixLength =
+                commonPrefixLength 0 previousChars chars
+
+            suffixLength : Int
+            suffixLength =
+                commonPrefixLength
+                    0
+                    (List.drop prefixLength previousChars |> List.reverse)
+                    (List.drop prefixLength chars |> List.reverse)
+
+            pastedText : String
+            pastedText =
+                List.drop prefixLength chars
+                    |> List.take (List.length chars - prefixLength - suffixLength)
+                    |> String.fromList
+        in
+        if String.length pastedText > largePasteThreshold then
+            Just
+                { textBeforePaste = List.take prefixLength chars |> String.fromList
+                , pastedText = pastedText
+                , textAfterPaste = List.drop (List.length chars - suffixLength) chars |> String.fromList
+                }
+
+        else
+            Nothing
+
+    else
+        Nothing
+
+
+commonPrefixLength : Int -> List Char -> List Char -> Int
+commonPrefixLength count listA listB =
+    case ( listA, listB ) of
+        ( headA :: restA, headB :: restB ) ->
+            if headA == headB then
+                commonPrefixLength (count + 1) restA restB
+
+            else
+                count
+
+        _ ->
+            count
 
 
 isPress : Msg -> Bool
