@@ -664,7 +664,7 @@ updateLoaded msg model =
                 ( model2, cmds ) =
                     FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
             in
-            case model.startupData.pwaStatus of
+            case model2.startupData.pwaStatus of
                 InstalledPwa ->
                     ( model2, Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ] )
 
