@@ -579,7 +579,7 @@ update _ msg model =
                         ( loading2, backCmd ) =
                             case startupData.pwaStatus of
                                 InstalledPwa ->
-                                    ( { loading | lastUrlChange = Just startupData.timeOrigin }
+                                    ( { loading | lastUrlChange = Just startupData.loadStartupDataTime }
                                     , BrowserNavigation.back loading.navigationKey 1
                                     )
 
@@ -590,7 +590,7 @@ update _ msg model =
                             tryInitLoadedFrontend
                                 { loading2
                                     | startupData = Just startupData
-                                    , time = Just startupData.timeOrigin
+                                    , time = Just startupData.loadStartupDataTime
                                 }
                     in
                     ( model2

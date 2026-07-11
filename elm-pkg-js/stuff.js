@@ -532,6 +532,7 @@ exports.init = async function init(app)
             // `Date.now() - performance.now()`, and re-send it whenever the page becomes visible/
             // focused again (see the listeners below) so it re-anchors to the current wall clock.
             timeOrigin: Date.now() - performance.now(),
+            loadStartupDataTime: Date.now(),
             userAgent: window.navigator.userAgent,
             scrollbarWidth: scrollbarWidth,
             isPwa: isPwa,

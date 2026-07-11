@@ -178,6 +178,7 @@ startupDataJsonWithInset : Time.Posix -> String -> Int -> Bool -> Json.Encode.Va
 startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
     Json.Encode.object
         [ ( "timeOrigin", Time.posixToMillis time |> toFloat |> Json.Encode.float )
+        , ( "loadStartupDataTime", Time.posixToMillis time |> toFloat |> Json.Encode.float )
         , ( "userAgent", Json.Encode.string userAgent )
         , ( "scrollbarWidth", Json.Encode.int 20 )
         , ( "isPwa", Json.Encode.bool isPwa )

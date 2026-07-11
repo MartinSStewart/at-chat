@@ -250,6 +250,7 @@ serviceWorkerData msg =
 -}
 type alias StartupData =
     { timeOrigin : Time.Posix
+    , loadStartupDataTime : Time.Posix
     , userAgent : UserAgent
     , scrollbarWidth : Int
     , pwaStatus : PwaStatus
@@ -274,6 +275,7 @@ startupDataSub msg =
             Json.Decode.decodeValue decodeStartupData json
                 |> Result.withDefault
                     { timeOrigin = Time.millisToPosix 0
+                    , loadStartupDataTime = Time.millisToPosix 0
                     , userAgent = UserAgent.init
                     , scrollbarWidth = 0
                     , pwaStatus = BrowserView
@@ -286,8 +288,9 @@ startupDataSub msg =
 
 decodeStartupData : Json.Decode.Decoder StartupData
 decodeStartupData =
-    Json.Decode.map6 StartupData
+    Json.Decode.map7 StartupData
         (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
         (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
         (Json.Decode.field "scrollbarWidth" Json.Decode.int)
         (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
