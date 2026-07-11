@@ -51,7 +51,9 @@ loginTests isMobile normalConfig =
             "/"
             windowSize
             (\client ->
-                [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson userAgent)
+                [ T.andThen
+                    10
+                    (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time userAgent) ])
                 , client.snapshotView 100 { name = "homepage" }
                 , client.click 100 Pages.Home.loginButtonId
                 , client.snapshotView 100 { name = "login" }

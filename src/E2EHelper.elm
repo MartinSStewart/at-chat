@@ -166,18 +166,18 @@ domain =
 
 {-| The data the app loads through the load\_startup\_data ports at startup. timeOrigin is 0 so that event timeStamps in tests are used as-is.
 -}
-startupDataJson : String -> Json.Encode.Value
-startupDataJson userAgent =
-    startupDataJsonWithInset userAgent 0 False
+startupDataJson : Time.Posix -> String -> Json.Encode.Value
+startupDataJson time userAgent =
+    startupDataJsonWithInset time userAgent 0 False
 
 
 {-| Like [`startupDataJson`](#startupDataJson) but with a nonzero safe-area top inset (e.g. a phone
 notch), so a test can check that touch coordinates are adjusted for it.
 -}
-startupDataJsonWithInset : String -> Int -> Bool -> Json.Encode.Value
-startupDataJsonWithInset userAgent safeAreaInsetTop isPwa =
+startupDataJsonWithInset : Time.Posix -> String -> Int -> Bool -> Json.Encode.Value
+startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
     Json.Encode.object
-        [ ( "timeOrigin", Json.Encode.float 0 )
+        [ ( "timeOrigin", Time.posixToMillis time |> toFloat |> Json.Encode.float )
         , ( "userAgent", Json.Encode.string userAgent )
         , ( "scrollbarWidth", Json.Encode.int 20 )
         , ( "isPwa", Json.Encode.bool isPwa )
@@ -433,7 +433,7 @@ handleLogin :
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 handleLogin userAgent emailAddress client =
-    [ client.portEvent 10 "load_startup_data_from_js" (startupDataJson userAgent)
+    [ T.andThen 10 (\data -> [ client.portEvent 0 "load_startup_data_from_js" (startupDataJson data.time userAgent) ])
     , client.click 100 Pages.Home.loginButtonId
     , handleLoginFromLoginPage emailAddress client
     ]
@@ -445,7 +445,9 @@ handleMobilePwaLogin :
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 handleMobilePwaLogin emailAddress client =
-    [ client.portEvent 10 "load_startup_data_from_js" (startupDataJsonWithInset safariIphone 0 True)
+    [ T.andThen
+        10
+        (\data -> [ client.portEvent 10 "load_startup_data_from_js" (startupDataJsonWithInset data.time safariIphone 0 True) ])
     , client.click 100 Pages.Home.loginButtonId
     , handleLoginFromLoginPage emailAddress client
     ]
@@ -1429,7 +1431,9 @@ joinGuildFromInvite inviteUrl windowSize sessionId email name continueFunc =
         (dropPrefix Env.domain inviteUrl)
         windowSize
         (\user ->
-            [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+            [ T.andThen
+                10
+                (\data -> [ user.portEvent 0 "load_startup_data_from_js" (startupDataJson data.time firefoxDesktop) ])
             , handleLoginFromLoginPage email user
             , user.input 100 (Dom.id "loginForm_name") name
             , user.click 100 (Dom.id "loginForm_submit")
@@ -1482,7 +1486,9 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                 (dropPrefix Env.domain text)
                                 windowSize
                                 (\user ->
-                                    [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+                                    [ T.andThen
+                                        10
+                                        (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
                                     , handleLoginFromLoginPage userEmail user
                                     , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
                                     , user.click 100 (Dom.id "loginForm_submit")
@@ -1965,7 +1971,9 @@ linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready dis
         ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
         desktopWindow
         (\userA ->
-            [ userA.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+            [ T.andThen
+                10
+                (\data -> [ userA.portEvent 10 "load_startup_data_from_js" (startupDataJson data.time firefoxDesktop) ])
             , handleLoginFromLoginPage emailAddress userA
             , if isNewAccount then
                 T.group
@@ -2037,7 +2045,9 @@ linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
         ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondAuth)
         desktopWindow
         (\userB ->
-            [ userB.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+            [ T.andThen
+                10
+                (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (startupDataJson data.time firefoxDesktop) ])
             , T.andThen
                 120
                 (\data ->
@@ -3033,7 +3043,9 @@ inviteUser admin continueWith =
                                     (String.dropLeft (String.length Env.domain) copyText)
                                     desktopWindow
                                     (\user ->
-                                        [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson firefoxDesktop)
+                                        [ T.andThen
+                                            10
+                                            (\data2 -> [ user.portEvent 10 "load_startup_data_from_js" (startupDataJson data2.time firefoxDesktop) ])
                                         , handleLoginFromLoginPage userEmail user
                                         , user.input 100 (Dom.id "loginForm_name") "Sven"
                                         , user.click 100 (Dom.id "loginForm_submit")

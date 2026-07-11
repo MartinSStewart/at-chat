@@ -100,7 +100,9 @@ goMatchTest normalConfig =
                             "/"
                             E2EHelper.tallDesktopWindow
                             (\user2 ->
-                                [ user2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                [ T.andThen
+                                    10
+                                    (\data -> [ user2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
                                 , user2.click 100 (Dom.id "game_select_Go")
@@ -421,7 +423,9 @@ publicGoMatchViewTest normalConfig =
                             "/go-match/does-not-exist"
                             E2EHelper.tallDesktopWindow
                             (\missingViewer ->
-                                [ missingViewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                [ T.andThen
+                                    10
+                                    (\data -> [ missingViewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                                 , missingViewer.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
@@ -459,7 +463,9 @@ publicGoMatchViewTest normalConfig =
                                                         (String.dropLeft (String.length Env.domain) shareUrl)
                                                         E2EHelper.tallDesktopWindow
                                                         (\viewer ->
-                                                            [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                                            [ T.andThen
+                                                                10
+                                                                (\data2 -> [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop) ])
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])

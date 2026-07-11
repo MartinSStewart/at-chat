@@ -310,8 +310,7 @@ init url key =
         , lastUrlChange = Nothing
         }
     , Command.batch
-        [ Task.perform GotTime Time.now
-        , BrowserNavigation.replaceUrl key (Route.encode route)
+        [ BrowserNavigation.replaceUrl key (Route.encode route)
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
         , Lamdera.sendToBackend
             (CheckLoginRequest (routeToInitialDataRequest route))
@@ -569,9 +568,6 @@ update _ msg model =
     case model of
         Loading loading ->
             case msg of
-                GotTime time ->
-                    tryInitLoadedFrontend { loading | time = Just time }
-
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = Coord.xy width height }, Command.none, Audio.cmdNone )
 
@@ -580,18 +576,27 @@ update _ msg model =
 
                 GotStartupData startupData ->
                     let
+                        ( loading2, backCmd ) =
+                            case startupData.pwaStatus of
+                                InstalledPwa ->
+                                    ( { loading | lastUrlChange = Just startupData.timeOrigin }
+                                    , BrowserNavigation.back loading.navigationKey 1
+                                    )
+
+                                BrowserView ->
+                                    ( loading, Command.none )
+
                         ( model2, cmds, audioCmds ) =
-                            tryInitLoadedFrontend { loading | startupData = Just startupData }
+                            tryInitLoadedFrontend
+                                { loading2
+                                    | startupData = Just startupData
+                                    , time = Just startupData.timeOrigin
+                                }
                     in
                     ( model2
                     , Command.batch
                         [ cmds
-                        , case startupData.pwaStatus of
-                            InstalledPwa ->
-                                BrowserNavigation.back loading.navigationKey 1
-
-                            BrowserView ->
-                                Command.none
+                        , backCmd
                         ]
                     , audioCmds
                     )

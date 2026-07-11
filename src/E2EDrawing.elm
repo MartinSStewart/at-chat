@@ -310,10 +310,15 @@ drawOnMessages imageUploadConfig =
                                     )
                                     E2EHelper.desktopWindow
                                     (\admin2 ->
-                                        [ admin2.portEvent
+                                        [ T.andThen
                                             10
-                                            "load_startup_data_from_js"
-                                            (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                            (\data2 ->
+                                                [ admin2.portEvent
+                                                    10
+                                                    "load_startup_data_from_js"
+                                                    (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop)
+                                                ]
+                                            )
                                         , -- Drawings are part of the channel data so they render
                                           -- as soon as the messages are shown
                                           admin2.checkView 2000 (E2EHelper.expectPolylineCount 4)
@@ -444,10 +449,15 @@ drawingScalesWithImages imageUploadConfig =
                                     )
                                     { width = 400, height = 800 }
                                     (\userMobile ->
-                                        [ userMobile.portEvent
+                                        [ T.andThen
                                             10
-                                            "load_startup_data_from_js"
-                                            (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                            (\data2 ->
+                                                [ userMobile.portEvent
+                                                    10
+                                                    "load_startup_data_from_js"
+                                                    (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop)
+                                                ]
+                                            )
                                         , userMobile.checkView 2000 (E2EHelper.expectPolylineCount 1)
                                         , userMobile.checkView 100 (E2EHelper.expectPolylineScale (mobileDisplayWidth / imageWidth))
                                         , userMobile.snapshotView 100 { name = "Drawing scaled down along with the image on a small screen" }

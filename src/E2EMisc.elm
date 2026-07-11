@@ -222,7 +222,9 @@ inactiveThreadsAreHiddenTest config =
             "/"
             E2EHelper.desktopWindow
             (\admin ->
-                [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , admin.click 100 (Dom.id "guild_openGuild_0")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
                 , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")

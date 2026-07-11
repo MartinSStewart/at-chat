@@ -552,7 +552,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
             E2EHelper.desktopWindow
             (\admin ->
-                [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
@@ -646,7 +648,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec E2EHelper.discordUserAuth)
                     E2EHelper.desktopWindow
                     (\adminB ->
-                        [ adminB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                        [ T.andThen
+                            10
+                            (\data -> [ adminB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , adminA.checkView
                             200
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])
@@ -1425,7 +1429,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
             E2EHelper.desktopWindow
             (\viewer ->
-                [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ viewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , viewer.checkModel 200 (checkDiscordUserLoaded "Discord guild member AT" True guildOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)

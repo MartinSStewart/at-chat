@@ -370,7 +370,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.linkDiscordUrl
             E2EHelper.desktopWindow
             (\user ->
-                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , E2EHelper.handleLoginFromLoginPage E2EHelper.joeEmail user
                 , user.input 100 (Dom.id "loginForm_name") "Joe"
                 , user.click 100 (Dom.id "loginForm_submit")
@@ -1319,7 +1321,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
@@ -1367,7 +1371,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
                         , E2EHelper.writeMessage userReload 100 "Another message"
                         , userReload.checkView
@@ -1480,7 +1486,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Route.encode Route.HomePageRoute)
                     E2EHelper.desktopWindow
                     (\userReload ->
-                        [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot
@@ -1598,7 +1606,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     tooManyIncorrectAttempts =
                         [ Test.Html.Selector.text "Too many incorrect attempts." ]
                 in
-                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , openLoginAndSubmitEmail True 100
                 , List.range 0 9
                     |> List.map
@@ -1668,7 +1678,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             "/"
             E2EHelper.desktopWindow
             (\user ->
-                [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                [ T.andThen
+                    10
+                    (\data -> [ user.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                 , user.click 100 Pages.Home.loginButtonId
                 , user.input 100 LoginForm.emailInputId (EmailAddress.toString E2EHelper.adminEmail)
                 , user.click 100 LoginForm.submitEmailButtonId
@@ -1711,10 +1723,15 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             { width = 1887, height = 770 }
             (\tabA ->
                 [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                , tabA.portEvent
-                    2
-                    "load_startup_data_from_js"
-                    (E2EHelper.startupDataJson "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
+                , T.andThen
+                    10
+                    (\data ->
+                        [ tabA.portEvent
+                            2
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
+                        ]
+                    )
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
@@ -2146,7 +2163,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                             urlPath
                                             E2EHelper.desktopWindow
                                             (\secondUser ->
-                                                [ secondUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                                [ T.andThen
+                                                    10
+                                                    (\data2 -> [ secondUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop) ])
                                                 , E2EHelper.handleLoginFromLoginPage E2EHelper.userEmail secondUser
                                                 , secondUser.input 100 (Dom.id "loginForm_name") "Sven"
                                                 , secondUser.click 100 (Dom.id "loginForm_submit")
@@ -2186,7 +2205,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                     urlPath
                                                     E2EHelper.desktopWindow
                                                     (\thirdUser ->
-                                                        [ thirdUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.firefoxDesktop)
+                                                        [ T.andThen
+                                                            10
+                                                            (\data2 -> [ thirdUser.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data2.time E2EHelper.firefoxDesktop) ])
                                                         , E2EHelper.handleLoginFromLoginPage E2EHelper.joeEmail thirdUser
                                                         , thirdUser.input 100 (Dom.id "loginForm_name") "Joe"
                                                         , thirdUser.click 100 (Dom.id "loginForm_submit")

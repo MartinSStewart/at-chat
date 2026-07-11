@@ -365,7 +365,9 @@ tests normalConfig =
                         )
                         E2EHelper.iphone14Window
                         (\userReload ->
-                            [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson E2EHelper.safariIphone)
+                            [ T.andThen
+                                10
+                                (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.safariIphone) ])
                             , userReload.snapshotView 100 { name = "Game ended out of letters, mobile" }
                             ]
                         )
@@ -542,8 +544,12 @@ tests normalConfig =
                     [ -- Pretend both players are on a phone with a notch: their touch coordinates come
                       -- in offset by the safe-area inset (see touchEvent), and the frontend has to undo
                       -- that offset when hit-testing the board.
-                      admin.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset E2EHelper.firefoxDesktop safeAreaInsetTop False)
-                    , user.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset E2EHelper.firefoxDesktop safeAreaInsetTop False)
+                      T.andThen
+                        10
+                        (\data -> [ admin.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset data.time E2EHelper.firefoxDesktop safeAreaInsetTop False) ])
+                    , T.andThen
+                        10
+                        (\data -> [ user.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset data.time E2EHelper.firefoxDesktop safeAreaInsetTop False) ])
 
                     -- Both players open the DM and the match. On mobile the "open DM" buttons live
                     -- behind the show-members button in the channel header.
