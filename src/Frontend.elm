@@ -660,7 +660,16 @@ updateLoaded msg model =
                     )
 
         UrlChanged url ->
-            FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
+            let
+                ( model2, cmds ) =
+                    FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
+            in
+            case model2.startupData.pwaStatus of
+                InstalledPwa ->
+                    ( model2, Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ] )
+
+                BrowserView ->
+                    ( model2, cmds )
 
         GotTime time ->
             ( { model | time = time }
@@ -1477,8 +1486,8 @@ updateLoaded msg model =
             in
             ( { model | startupData = { startupData | notificationPermission = notificationPermission } }, Command.none )
 
-        TouchStart maybeGuildOrDmIdAndMessageIndex timeStamp touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing (Duration.addTo model.startupData.timeOrigin timeStamp) touches model
+        TouchStart timeStamp touches ->
+            touchStart Nothing Nothing Nothing (Duration.addTo model.startupData.timeOrigin timeStamp) touches model
 
         TouchMoved timeStamp newTouches ->
             let

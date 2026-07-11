@@ -448,7 +448,7 @@ layout model attributes child =
             :: attributes
             ++ (if MyUi.isMobile model then
                     [ Ui.clip
-                    , Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    , Html.Events.on "touchstart" (Touch.decodeTouchEvent TouchStart) |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchend"
@@ -465,7 +465,7 @@ layout model attributes child =
                     ]
 
                 else
-                    [ Html.Events.on "pointerdown" (Touch.decoderPointerEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    [ Html.Events.on "pointerdown" (Touch.decoderPointerEvent TouchStart) |> Ui.htmlAttribute
                     , case model.drag of
                         Types.NoDrag ->
                             Ui.noAttr
@@ -1931,7 +1931,7 @@ isPressMsg msg =
         CheckedNotificationPermission _ ->
             False
 
-        TouchStart _ _ _ ->
+        TouchStart _ _ ->
             False
 
         TouchMoved _ _ ->
