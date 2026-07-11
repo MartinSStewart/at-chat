@@ -666,7 +666,7 @@ updateLoaded msg model =
             in
             case model.startupData.pwaStatus of
                 InstalledPwa ->
-                    ( model2, cmds )
+                    ( model2, Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ] )
 
                 BrowserView ->
                     ( model2, cmds )
