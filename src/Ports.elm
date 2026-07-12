@@ -37,6 +37,7 @@ port module Ports exposing
     , showNotification
     , smoothScrollBy
     , startupDataSub
+    , stepBackToFirstHistoryItem
     , subscribeDataCodec
     , textInputSelectAll
     , unregisterServiceWorker
@@ -386,6 +387,22 @@ smoothScrollBy containerId scrollY =
             , ( "scrollY", Json.Encode.float scrollY )
             ]
         )
+
+
+port step_back_to_first_history_item_to_js : Json.Encode.Value -> Cmd msg
+
+
+{-| Step back to the first item in the browser's navigation history without triggering an
+UrlChanged update. The popstate event caused by the jump is swallowed on the JS side before
+Elm's Browser.application listener can see it, so the model is unaffected (note that this also
+means the address bar will show the first entry's URL until the next pushUrl/replaceUrl).
+-}
+stepBackToFirstHistoryItem : Command FrontendOnly toMsg msg
+stepBackToFirstHistoryItem =
+    Command.sendToJs
+        "step_back_to_first_history_item_to_js"
+        step_back_to_first_history_item_to_js
+        Json.Encode.null
 
 
 port set_cursor_position_to_js : Json.Encode.Value -> Cmd msg

@@ -57,6 +57,78 @@ exports.init = async function init(app)
 
     preventBrowserHistorySwipeGestures();
 
+    // Elm's Browser.application converts every popstate (and hashchange) event on window into an
+    // UrlChanged update. To be able to jump back to the first navigation history item without Elm
+    // noticing, we need two things:
+    //
+    // 1. Knowing how many entries back the first item is. history.length can't tell us (it includes
+    //    entries from before the app loaded, and going back then pushing truncates it), so we stamp
+    //    every entry the app creates with its index by wrapping pushState/replaceState. Elm passes a
+    //    plain {} as the state object, so merging our field into it is safe.
+    //
+    // 2. Swallowing the popstate/hashchange produced by our own history.go() call. Elm's listeners
+    //    are bubble-phase, and at-target capture listeners always run before bubble listeners, so a
+    //    capture listener can stopImmediatePropagation() before Elm sees the event. The suppression
+    //    flag is only set around our own go() call, so real user navigation (back button, edge
+    //    swipe) still reaches Elm as usual.
+    let historyIndex =
+        (history.state && typeof history.state.elmPkgJsHistoryIndex === 'number')
+            ? history.state.elmPkgJsHistoryIndex // Page was reloaded mid-history; state survives reloads.
+            : 0;
+    let suppressPopstate = false;
+    let suppressHashchange = false;
+
+    function stateWithIndex(state, index) {
+        return Object.assign({}, state || {}, { elmPkgJsHistoryIndex: index });
+    }
+
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    // Stamp the entry we loaded on so the first item is recognizable as index 0.
+    originalReplaceState(stateWithIndex(history.state, historyIndex), '');
+
+    history.pushState = function (state, title, url) {
+        historyIndex += 1;
+        return originalPushState(stateWithIndex(state, historyIndex), title, url);
+    };
+
+    history.replaceState = function (state, title, url) {
+        return originalReplaceState(stateWithIndex(state, historyIndex), title, url);
+    };
+
+    window.addEventListener('popstate', (event) => {
+        if (event.state && typeof event.state.elmPkgJsHistoryIndex === 'number') {
+            historyIndex = event.state.elmPkgJsHistoryIndex;
+        }
+        if (suppressPopstate) {
+            suppressPopstate = false;
+            // If the jump also changed the fragment, a hashchange event follows synchronously in
+            // the same traversal task (Elm listens to that too). Let it be suppressed, then drop
+            // the flag on the next tick so real hash changes still get through.
+            setTimeout(() => { suppressHashchange = false; }, 0);
+            event.stopImmediatePropagation();
+        }
+    }, true);
+
+    window.addEventListener('hashchange', (event) => {
+        if (suppressHashchange) {
+            event.stopImmediatePropagation();
+        }
+    }, true);
+
+    // Step back to the first item in the navigation history without triggering an UrlChanged
+    // update in Elm. (Guarded because the port only exists once Elm code references it.)
+    if (app.ports.step_back_to_first_history_item_to_js) {
+        app.ports.step_back_to_first_history_item_to_js.subscribe(() => {
+            if (historyIndex > 0) {
+                suppressPopstate = true;
+                suppressHashchange = true;
+                history.go(-historyIndex);
+            }
+        });
+    }
+
     // Register a Service Worker.
     let activeNotifications = [];
 
