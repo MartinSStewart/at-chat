@@ -7346,6 +7346,94 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         matchesSearch : PersonName -> Bool
         matchesSearch name =
             String.contains searchFilter (String.toLower (PersonName.toString name))
+
+        columnItems =
+            List.filterMap
+                (\( otherUserId, dmChannel ) ->
+                    case User.getUser otherUserId localUser of
+                        Just otherUser ->
+                            if matchesSearch otherUser.name then
+                                ( case IdArray.last dmChannel.messages of
+                                    Just (MessageLoaded message2) ->
+                                        Message.createdAt message2
+
+                                    _ ->
+                                        Time.millisToPosix 0
+                                , Ui.Lazy.lazy6
+                                    (if isMobile then
+                                        friendLabelMobile
+
+                                     else
+                                        friendLabelNotMobile
+                                    )
+                                    currentTime
+                                    (case openedOtherUserId of
+                                        SelectedDmChannel dmRoute ->
+                                            DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+
+                                        _ ->
+                                            False
+                                    )
+                                    localUser
+                                    otherUserId
+                                    otherUser
+                                    dmChannel
+                                )
+                                    |> Just
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+                )
+                (SeqDict.toList dmChannelsIncludingCurrentUser)
+                ++ List.filterMap
+                    (\( channelId, dmChannel ) ->
+                        if
+                            (searchFilter == "")
+                                || List.any
+                                    (\( userId, _ ) ->
+                                        case User.getDiscordUser userId localUser of
+                                            Just discordUser ->
+                                                matchesSearch discordUser.name
+
+                                            Nothing ->
+                                                False
+                                    )
+                                    (NonemptyDict.toList dmChannel.members)
+                        then
+                            ( case IdArray.last dmChannel.messages of
+                                Just (MessageLoaded message2) ->
+                                    Message.createdAt message2
+
+                                _ ->
+                                    Time.millisToPosix 0
+                            , Ui.Lazy.lazy5
+                                (if isMobile then
+                                    discordFriendLabelMobile
+
+                                 else
+                                    discordFriendLabelNotMobile
+                                )
+                                currentTime
+                                (case openedOtherUserId of
+                                    SelectedDiscordDmChannel routeData ->
+                                        routeData.channelId == channelId
+
+                                    _ ->
+                                        False
+                                )
+                                channelId
+                                dmChannel
+                                localUser
+                            )
+                                |> Just
+
+                        else
+                            Nothing
+                    )
+                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
     in
     channelColumnContainer
         [ Ui.el
@@ -7426,96 +7514,21 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                 ]
             )
         ]
-        ((List.filterMap
-            (\( otherUserId, dmChannel ) ->
-                case User.getUser otherUserId localUser of
-                    Just otherUser ->
-                        if matchesSearch otherUser.name then
-                            ( case IdArray.last dmChannel.messages of
-                                Just (MessageLoaded message2) ->
-                                    Message.createdAt message2
+        (case columnItems of
+            [] ->
+                Ui.Prose.paragraph
+                    [ Ui.Font.italic
+                    , Ui.Font.lineHeight 1.5
+                    , Ui.paddingXY 16 20
+                    ]
+                    [ Ui.text "No results found for "
+                    , Ui.el [ Ui.Font.bold ] (Ui.text friendsSearch)
+                    ]
 
-                                _ ->
-                                    Time.millisToPosix 0
-                            , Ui.Lazy.lazy6
-                                (if isMobile then
-                                    friendLabelMobile
-
-                                 else
-                                    friendLabelNotMobile
-                                )
-                                currentTime
-                                (case openedOtherUserId of
-                                    SelectedDmChannel dmRoute ->
-                                        DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
-
-                                    _ ->
-                                        False
-                                )
-                                localUser
-                                otherUserId
-                                otherUser
-                                dmChannel
-                            )
-                                |> Just
-
-                        else
-                            Nothing
-
-                    Nothing ->
-                        Nothing
-            )
-            (SeqDict.toList dmChannelsIncludingCurrentUser)
-            ++ List.filterMap
-                (\( channelId, dmChannel ) ->
-                    if
-                        (searchFilter == "")
-                            || List.any
-                                (\( userId, _ ) ->
-                                    case User.getDiscordUser userId localUser of
-                                        Just discordUser ->
-                                            matchesSearch discordUser.name
-
-                                        Nothing ->
-                                            False
-                                )
-                                (NonemptyDict.toList dmChannel.members)
-                    then
-                        ( case IdArray.last dmChannel.messages of
-                            Just (MessageLoaded message2) ->
-                                Message.createdAt message2
-
-                            _ ->
-                                Time.millisToPosix 0
-                        , Ui.Lazy.lazy5
-                            (if isMobile then
-                                discordFriendLabelMobile
-
-                             else
-                                discordFriendLabelNotMobile
-                            )
-                            currentTime
-                            (case openedOtherUserId of
-                                SelectedDiscordDmChannel routeData ->
-                                    routeData.channelId == channelId
-
-                                _ ->
-                                    False
-                            )
-                            channelId
-                            dmChannel
-                            localUser
-                        )
-                            |> Just
-
-                    else
-                        Nothing
-                )
-                (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
-         )
-            |> List.sortBy (\( time, _ ) -> Time.posixToMillis time |> negate)
-            |> List.map Tuple.second
-            |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
+            _ ->
+                List.sortBy (\( time, _ ) -> Time.posixToMillis time |> negate) columnItems
+                    |> List.map Tuple.second
+                    |> Ui.column [ MyUi.scrollable canScroll2, Ui.heightMin 0 ]
         )
 
 
