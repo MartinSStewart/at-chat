@@ -278,7 +278,6 @@ type FileDrag
 
 type alias UserOptionsModel =
     { name : Editable.Model
-    , showLinkDiscordSetup : Bool
     , domainWhitelistInput : String
     , serviceWorkerData : Maybe { data : String, loadedAt : Time.Posix }
     }
@@ -555,7 +554,6 @@ type FrontendMsg_
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
-    | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
     | PressedDiscordGuildMemberLabel

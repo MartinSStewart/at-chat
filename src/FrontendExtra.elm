@@ -2200,9 +2200,6 @@ isPressMsg msg =
         PressedDiscordAcknowledgment _ ->
             True
 
-        PressedLinkDiscordUser ->
-            True
-
         PressedReloadDiscordUser _ ->
             True
 

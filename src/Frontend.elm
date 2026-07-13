@@ -3070,20 +3070,6 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedLinkDiscordUser ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | showLinkDiscordSetup = True })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
         PressedReloadDiscordUser discordUserId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
