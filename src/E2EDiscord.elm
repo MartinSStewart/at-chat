@@ -617,6 +617,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\user ->
                 [ user.click 100 (Dom.id "guild_showUserOptions")
+                , user.click 100 (Dom.id "userOptions_discordSection")
                 , user.checkView
                     100
                     (Test.Html.Query.has
@@ -639,6 +640,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\adminA ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , adminA.click 100 (Dom.id "userOptions_discordSection")
                 , adminA.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading user data" ])

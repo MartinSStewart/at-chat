@@ -117,7 +117,6 @@ type Msg
     | PressedAddUserRow
     | PressedDeleteUser UserTableId
     | PressedResetUser (Id UserId)
-    | ScrolledToSection
     | UserTableMsg Table.Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
@@ -1078,9 +1077,6 @@ update navigationKey time adminData localState msg model =
                     )
                 )
                 model
-
-        ScrolledToSection ->
-            ( model, Command.none, NoOutMsg )
 
         UserTableMsg tableMsg ->
             updateUserTable
@@ -4281,11 +4277,6 @@ section isMobile expandedSections section2 content =
 expandSectionButtonId : AdminUiSection -> HtmlId
 expandSectionButtonId section2 =
     Dom.id ("admin_expandSectionButton_" ++ User.sectionToString section2)
-
-
-collapseSectionButtonId : AdminUiSection -> HtmlId
-collapseSectionButtonId section2 =
-    Dom.id ("admin_collapseSectionButton_" ++ User.sectionToString section2)
 
 
 applyChangesToBackendUsers :

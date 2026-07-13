@@ -85,6 +85,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "wsg_cancel")
                     , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , T.collapsableGroup
@@ -235,6 +236,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
 
@@ -308,6 +310,7 @@ tests normalConfig =
                       admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
                     , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AAAA"
@@ -430,6 +433,7 @@ tests normalConfig =
                       admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
                     , admin.input 100 (Dom.id "wsg_fullTrayBonusInput") "0"
                     , admin.input 100 (Dom.id "wsg_lettersInput") "QQQQQQQQ"
@@ -557,6 +561,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "guild_openDm_2")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
                     , user.click 2000 (Dom.id "guild_showMembers")
@@ -655,6 +660,7 @@ tests normalConfig =
                       -- default 1 point to 2 via the per-letter value input.
                       admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "A")
                     , admin.input 100 (Dom.id "wsg_letterValue_A") "2"
                     , admin.click 100 (Dom.id "wsg_start")

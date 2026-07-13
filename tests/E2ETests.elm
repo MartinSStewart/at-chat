@@ -769,6 +769,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Enable email notifications through the user options UI.
                 , user.click 100 (Dom.id "guild_showUserOptions")
+                , user.click 100 (Dom.id "userOptions_settings")
                 , user.keyUp 100 (Dom.id "userOptions_emailNotifications") "ArrowDown" []
                 , user.click 100 (Dom.id "userOptions_closeUserOptions")
 
@@ -1010,6 +1011,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\adminA ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , adminA.click 100 (Dom.id "userOptions_connectedDevices")
                 , E2EHelper.hasExactText adminA [ "Desktop • Firefox", "Current device" ]
                 , T.connectFrontend
                     100
@@ -1020,6 +1022,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ E2EHelper.handleLogin E2EHelper.safariIphone E2EHelper.adminEmail adminB
                         , E2EHelper.hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox", "Current device" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
+                        , adminB.click 100 (Dom.id "userOptions_connectedDevices")
                         , T.connectFrontend
                             100
                             E2EHelper.sessionId2
@@ -1035,6 +1038,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     , "Desktop • Chrome"
                                     ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
+                                , adminC.click 100 (Dom.id "userOptions_connectedDevices")
                                 , E2EHelper.hasExactText
                                     adminC
                                     [ "Mobile • Safari"
@@ -1064,6 +1068,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\adminA ->
                 [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , adminA.click 100 (Dom.id "userOptions_connectedDevices")
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1593,6 +1598,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                   user.click 100 (Dom.id "guildIcon_showFriends")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Word Spelling Game")
+                , admin.click 100 (Dom.id "wsg_advancedSection")
                 , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                 , admin.click 100 (Dom.id "wsg_start")
                 , E2EHelper.checkNotification "Word Spelling Game started"
