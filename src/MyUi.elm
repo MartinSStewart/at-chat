@@ -713,8 +713,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Bool -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
-container isExpanded onPressedExpand backgroundColor isMobile2 label2 contents =
+container : Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
     let
         paddingX =
             if isMobile2 then
@@ -739,6 +739,7 @@ container isExpanded onPressedExpand backgroundColor isMobile2 label2 contents =
                 , Ui.width Ui.shrink
                 , Ui.background backgroundColor
                 , Ui.Input.button onPressedExpand
+                , Ui.id (Dom.idToString htmlId)
                 ]
                 [ Icons.collapseContainer
                 , Ui.text label2
@@ -763,6 +764,7 @@ container isExpanded onPressedExpand backgroundColor isMobile2 label2 contents =
             , Ui.width Ui.shrink
             , Ui.background backgroundColor
             , Ui.Input.button onPressedExpand
+            , Ui.id (Dom.idToString htmlId)
             ]
             [ Icons.expandContainer
             , Ui.text label2

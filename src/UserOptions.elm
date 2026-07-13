@@ -27,6 +27,7 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -177,7 +178,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
         , Ui.heightMin 0
         , Ui.background MyUi.background1
         , Ui.inFront
-            (Ui.row
+            (Ui.el
                 [ Ui.background MyUi.background1
                 , MyUi.htmlStyle "padding-top" MyUi.insetTop
                 , Ui.el
@@ -192,24 +193,40 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         0
                     ]
                     (Ui.el
-                        [ Ui.borderWith
-                            { left = 0, right = 0, top = 0, bottom = 1 }
+                        [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                         , Ui.borderColor MyUi.white
                         ]
                         Ui.none
                     )
                     |> Ui.inFront
                 ]
-                [ Ui.el [ Ui.Font.size 20, Ui.paddingXY 16 0 ] (Ui.text "User settings")
-                , MyUi.elButton
-                    (Dom.id "userOptions_closeUserOptions")
-                    PressedCloseUserOptions
-                    [ Ui.padding 16
-                    , Ui.width (Ui.px 56)
-                    , Ui.alignRight
+                (Ui.row
+                    [ Ui.Font.size 20, Ui.widthMax 1000, Ui.centerX ]
+                    [ Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "User settings")
+                    , MyUi.rowButton
+                        (Dom.id "userOptions_closeUserOptions")
+                        PressedCloseUserOptions
+                        [ Ui.padding 16
+                        , Ui.alignRight
+                        , Ui.Font.color
+                            (if isMobile then
+                                MyUi.font1
+
+                             else
+                                MyUi.font3
+                            )
+                        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                        , Ui.spacing 8
+                        ]
+                        [ if isMobile then
+                            Ui.none
+
+                          else
+                            Ui.el [ Ui.alignBottom ] (Ui.text "Close")
+                        , Ui.html Icons.x
+                        ]
                     ]
-                    (Ui.html Icons.x)
-                ]
+                )
             )
         ]
         (Ui.el
@@ -235,6 +252,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         Ui.none
                 , MyUi.container
                     (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_settings")
                     (PressedExpandContainer UserOption_Settings)
                     MyUi.background1
                     isMobile
@@ -348,6 +366,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     ]
                 , MyUi.container
                     (SeqSet.member UserOption_TwoFactorAuthentication loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_twoFactor")
                     (PressedExpandContainer UserOption_TwoFactorAuthentication)
                     MyUi.background1
                     isMobile
@@ -371,6 +390,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     in
                     MyUi.container
                         (SeqSet.member UserOption_WhitelistedDomains loggedIn.expandedUserOptions)
+                        (Dom.id "userOptions_whitelistedDomains")
                         (PressedExpandContainer UserOption_WhitelistedDomains)
                         MyUi.background1
                         isMobile
@@ -407,6 +427,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         ]
                 , MyUi.container
                     (SeqSet.member UserOption_Discord loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_discordSection")
                     (PressedExpandContainer UserOption_Discord)
                     MyUi.background1
                     isMobile
@@ -476,6 +497,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     ]
                 , MyUi.container
                     (SeqSet.member UserOption_ConnectedDevices loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_connectedDevices")
                     (PressedExpandContainer UserOption_ConnectedDevices)
                     MyUi.background1
                     isMobile
@@ -489,6 +511,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     )
                 , MyUi.container
                     (SeqSet.member UserOption_Debug loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_debug")
                     (PressedExpandContainer UserOption_Debug)
                     MyUi.background1
                     isMobile

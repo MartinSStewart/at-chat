@@ -4600,6 +4600,7 @@ setupView windowSize isReadonly setup =
             ]
         , MyUi.container
             setup.advancedSettingsExpanded
+            (Dom.id "wsg_advancedSection")
             PressedExpandAdvancedSettings
             MyUi.background1
             isMobile
