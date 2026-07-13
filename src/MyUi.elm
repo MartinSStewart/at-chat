@@ -764,7 +764,7 @@ container isExpanded onPressedExpand backgroundColor isMobile2 label2 contents =
             , Ui.background backgroundColor
             , Ui.Input.button onPressedExpand
             ]
-            [ Icons.collapseContainer
+            [ Icons.expandContainer
             , Ui.text label2
             ]
 

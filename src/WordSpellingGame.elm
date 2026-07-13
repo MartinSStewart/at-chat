@@ -195,6 +195,7 @@ type SetupMsg
     | PressedStartGame
     | PressedCancel
     | PressedLanguage Language
+    | PressedExpandAdvancedSettings
 
 
 {-| OpaqueVariants
@@ -224,6 +225,7 @@ type alias SetupModel =
     , letterValues : SeqDict Char String
     , language : Language
     , placeWordAttempts : OneOrGreater
+    , advancedSettingsExpanded : Bool
     }
 
 
@@ -254,6 +256,7 @@ initSetup =
     , letterValues = SeqDict.empty
     , language = English
     , placeWordAttempts = OneOrGreater.three
+    , advancedSettingsExpanded = False
     }
 
 
@@ -1163,6 +1166,11 @@ updateSetup time currentUserId msg setup =
             , Nothing
             )
 
+        PressedExpandAdvancedSettings ->
+            ( Setup { setup | advancedSettingsExpanded = not setup.advancedSettingsExpanded }
+            , Nothing
+            )
+
 
 updateGame :
     Time.Posix
@@ -1736,6 +1744,7 @@ validatedToSetupModel setup =
             |> SeqDict.fromList
     , language = setup.language
     , placeWordAttempts = setup.placeWordAttempts
+    , advancedSettingsExpanded = True
     }
 
 
@@ -4590,6 +4599,8 @@ setupView windowSize isReadonly setup =
                 )
             ]
         , MyUi.container
+            setup.advancedSettingsExpanded
+            PressedExpandAdvancedSettings
             MyUi.background1
             isMobile
             "Advanced settings"

@@ -477,6 +477,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
+            , expandedUserOptions = SeqSet.empty
             }
     in
     ( loggedIn
@@ -2008,6 +2009,22 @@ updateLoaded msg model =
         PressedCloseUserOptions ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn -> ( { loggedIn | userOptions = Nothing }, Command.none ))
+                model
+
+        PressedExpandContainer section ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | expandedUserOptions =
+                            if SeqSet.member section loggedIn.expandedUserOptions then
+                                SeqSet.remove section loggedIn.expandedUserOptions
+
+                            else
+                                SeqSet.insert section loggedIn.expandedUserOptions
+                      }
+                    , Command.none
+                    )
+                )
                 model
 
         TwoFactorMsg twoFactorMsg ->

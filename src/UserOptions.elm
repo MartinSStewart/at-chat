@@ -347,13 +347,20 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    ]
                     --    (Ui.text "Link Slack account")
                     ]
-                , TwoFactorAuthentication.view
-                    loaded.windowSize
-                    textInputFocus
-                    local.localUser.timezone
-                    time
-                    loggedIn.twoFactor
-                    |> Ui.map TwoFactorMsg
+                , MyUi.container
+                    (SeqSet.member UserOption_TwoFactorAuthentication loggedIn.expandedUserOptions)
+                    (PressedExpandContainer UserOption_TwoFactorAuthentication)
+                    MyUi.background1
+                    isMobile
+                    "Two-factor authentication"
+                    [ TwoFactorAuthentication.view
+                        loaded.windowSize
+                        textInputFocus
+                        local.localUser.timezone
+                        time
+                        loggedIn.twoFactor
+                        |> Ui.map TwoFactorMsg
+                    ]
                 , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
 
