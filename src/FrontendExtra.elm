@@ -7,9 +7,11 @@ module FrontendExtra exposing
     , drawingRedo
     , drawingUndo
     , editMessage_gotFiles
+    , editMessage_gotPastedText
     , externalLinkWarning
     , fileDragOverlayOpacity
     , gotFiles
+    , gotPastedText
     , handleEscapeKey
     , handleLocalChange
     , handlePressedArrowUpInEmptyInput
@@ -33,6 +35,7 @@ module FrontendExtra exposing
 import AiChat
 import Array exposing (Array)
 import Audio exposing (Audio, AudioData)
+import Bytes.Encode
 import Call exposing (CallId(..), ChannelSidebarMode(..))
 import ChannelDescription
 import ChannelHeader
@@ -827,6 +830,116 @@ gotFiles guildOrDmId threadRoute files model =
             )
         )
         model
+
+
+{-| Pasted text that is too long to fit in a message is attached as a text file instead of being inserted into the text input.
+-}
+gotPastedText :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> { textBeforePaste : String, pastedText : String, textAfterPaste : String }
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPaste } loggedIn =
+    let
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+
+        fileId : Id FileId
+        fileId =
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
+                Just dict ->
+                    Id.nextId (NonemptyDict.toSeqDict dict)
+
+                Nothing ->
+                    Id.fromInt 1
+
+        draft : String
+        draft =
+            textBeforePaste
+                ++ RichText.attachedFilePrefix
+                ++ Id.toString fileId
+                ++ RichText.attachedFileSuffix
+                ++ textAfterPaste
+    in
+    ( { loggedIn
+        | filesToUpload =
+            SeqDict.update
+                ( guildOrDmId, threadRoute )
+                (\maybe ->
+                    case maybe of
+                        Just dict ->
+                            NonemptyDict.insert fileId (pastedTextFileStatus pastedText) dict |> Just
+
+                        Nothing ->
+                            NonemptyDict.singleton fileId (pastedTextFileStatus pastedText) |> Just
+                )
+                loggedIn.filesToUpload
+        , drafts =
+            case String.Nonempty.fromString draft of
+                Just nonempty ->
+                    SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
+
+                Nothing ->
+                    loggedIn.drafts
+      }
+    , FileStatus.uploadString
+        (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
+        local.localUser.session.sessionIdHash
+        ( guildOrDmId, threadRoute )
+        fileId
+        pastedText
+    )
+
+
+editMessage_gotPastedText :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> { textBeforePaste : String, pastedText : String, textAfterPaste : String }
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
+editMessage_gotPastedText guildOrDmId { textBeforePaste, pastedText, textAfterPaste } loggedIn =
+    case SeqDict.get guildOrDmId loggedIn.editMessage of
+        Just edit ->
+            let
+                fileId : Id FileId
+                fileId =
+                    Id.nextId edit.attachedFiles
+            in
+            ( { loggedIn
+                | editMessage =
+                    SeqDict.insert
+                        guildOrDmId
+                        { edit
+                            | text =
+                                textBeforePaste
+                                    ++ RichText.attachedFilePrefix
+                                    ++ Id.toString fileId
+                                    ++ RichText.attachedFileSuffix
+                                    ++ textAfterPaste
+                            , attachedFiles =
+                                SeqDict.insert fileId (pastedTextFileStatus pastedText) edit.attachedFiles
+                        }
+                        loggedIn.editMessage
+              }
+            , FileStatus.uploadString
+                (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
+                (Local.model loggedIn.localState).localUser.session.sessionIdHash
+                guildOrDmId
+                fileId
+                pastedText
+            )
+
+        Nothing ->
+            ( loggedIn, Command.none )
+
+
+pastedTextFileStatus : String -> FileStatus
+pastedTextFileStatus pastedText =
+    FileUploading
+        (FileName.fromString "message.txt")
+        { sent = 0, size = Bytes.Encode.getStringWidth pastedText }
+        (FileStatus.contentType "text/plain")
 
 
 editMessage_gotFiles :

@@ -3274,66 +3274,74 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                                 Just edit ->
-                                    let
-                                        oldTypingDebouncer : Bool
-                                        oldTypingDebouncer =
-                                            loggedIn.typingDebouncer
+                                    case MessageInput.largePastedText edit.text text of
+                                        Just largePaste ->
+                                            FrontendExtra.editMessage_gotPastedText
+                                                ( guildOrDmId, threadRoute )
+                                                largePaste
+                                                loggedIn
 
-                                        loggedIn2 : LoggedIn2
-                                        loggedIn2 =
-                                            { loggedIn
-                                                | editMessage =
-                                                    SeqDict.insert
-                                                        ( guildOrDmId, threadRoute )
-                                                        { edit | text = text }
-                                                        loggedIn.editMessage
-                                                , typingDebouncer = False
-                                            }
-                                    in
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (if oldTypingDebouncer then
-                                            --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
-                                            Local_MemberEditTyping
+                                        Nothing ->
+                                            let
+                                                oldTypingDebouncer : Bool
+                                                oldTypingDebouncer =
+                                                    loggedIn.typingDebouncer
+
+                                                loggedIn2 : LoggedIn2
+                                                loggedIn2 =
+                                                    { loggedIn
+                                                        | editMessage =
+                                                            SeqDict.insert
+                                                                ( guildOrDmId, threadRoute )
+                                                                { edit | text = text }
+                                                                loggedIn.editMessage
+                                                        , typingDebouncer = False
+                                                    }
+                                            in
+                                            FrontendExtra.handleLocalChange
                                                 model.time
-                                                guildOrDmId
-                                                (case threadRoute of
-                                                    ViewThread threadId ->
-                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+                                                (if oldTypingDebouncer then
+                                                    --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
+                                                    Local_MemberEditTyping
+                                                        model.time
+                                                        guildOrDmId
+                                                        (case threadRoute of
+                                                            ViewThread threadId ->
+                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
 
-                                                    NoThread ->
-                                                        NoThreadWithMessage edit.messageIndex
+                                                            NoThread ->
+                                                                NoThreadWithMessage edit.messageIndex
+                                                        )
+                                                        |> Just
+
+                                                 else
+                                                    Nothing
                                                 )
-                                                |> Just
+                                                { loggedIn2
+                                                    | messageHover =
+                                                        case loggedIn2.messageHover of
+                                                            NoMessageHover ->
+                                                                loggedIn2.messageHover
 
-                                         else
-                                            Nothing
-                                        )
-                                        { loggedIn2
-                                            | messageHover =
-                                                case loggedIn2.messageHover of
-                                                    NoMessageHover ->
-                                                        loggedIn2.messageHover
+                                                            MessageHover _ _ ->
+                                                                loggedIn2.messageHover
 
-                                                    MessageHover _ _ ->
-                                                        loggedIn2.messageHover
-
-                                                    MessageMenu extraOptions ->
-                                                        { extraOptions
-                                                            | mobileMode =
-                                                                MessageMenu.mobileMenuMaxHeight
-                                                                    extraOptions
-                                                                    (Local.model loggedIn2.localState)
-                                                                    model
-                                                                    |> MessageMenuFixed
-                                                        }
-                                                            |> MessageMenu
-                                        }
-                                        (Command.batch
-                                            [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
-                                            , removePartialStickers loggedIn2.textInputFocus MessageMenu.editMessageTextInputId text
-                                            ]
-                                        )
+                                                            MessageMenu extraOptions ->
+                                                                { extraOptions
+                                                                    | mobileMode =
+                                                                        MessageMenu.mobileMenuMaxHeight
+                                                                            extraOptions
+                                                                            (Local.model loggedIn2.localState)
+                                                                            model
+                                                                            |> MessageMenuFixed
+                                                                }
+                                                                    |> MessageMenu
+                                                }
+                                                (Command.batch
+                                                    [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
+                                                    , removePartialStickers loggedIn2.textInputFocus MessageMenu.editMessageTextInputId text
+                                                    ]
+                                                )
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -3622,30 +3630,42 @@ updateLoaded msg model =
                 MessageInput.TypedMessage text ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (if loggedIn.typingDebouncer then
-                                    Local_MemberTyping model.time ( guildOrDmId, threadRoute ) |> Just
+                            case
+                                MessageInput.largePastedText
+                                    (SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts
+                                        |> Maybe.map String.Nonempty.toString
+                                        |> Maybe.withDefault ""
+                                    )
+                                    text
+                            of
+                                Just largePaste ->
+                                    FrontendExtra.gotPastedText guildOrDmId threadRoute largePaste loggedIn
 
-                                 else
-                                    Nothing
-                                )
-                                { loggedIn
-                                    | drafts =
-                                        case String.Nonempty.fromString text of
-                                            Just nonempty ->
-                                                SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
+                                Nothing ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (if loggedIn.typingDebouncer then
+                                            Local_MemberTyping model.time ( guildOrDmId, threadRoute ) |> Just
 
-                                            Nothing ->
-                                                SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.drafts
-                                    , typingDebouncer = False
-                                }
-                                (Command.batch
-                                    [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
-                                    , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
-                                    , removePartialStickers loggedIn.textInputFocus Pages.Guild.channelTextInputId text
-                                    ]
-                                )
+                                         else
+                                            Nothing
+                                        )
+                                        { loggedIn
+                                            | drafts =
+                                                case String.Nonempty.fromString text of
+                                                    Just nonempty ->
+                                                        SeqDict.insert ( guildOrDmId, threadRoute ) nonempty loggedIn.drafts
+
+                                                    Nothing ->
+                                                        SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.drafts
+                                            , typingDebouncer = False
+                                        }
+                                        (Command.batch
+                                            [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
+                                            , Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+                                            , removePartialStickers loggedIn.textInputFocus Pages.Guild.channelTextInputId text
+                                            ]
+                                        )
                         )
                         model
 
