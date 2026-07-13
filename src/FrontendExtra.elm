@@ -1,5 +1,6 @@
 module FrontendExtra exposing
-    ( audio
+    ( addRoutingLog
+    , audio
     , canDropFiles
     , changeUpdate
     , currentGame
@@ -1256,13 +1257,25 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             Command.none
 
 
+{-| Prepend an entry to the routing log shown by the "Load debug data" button in the user options.
+-}
+addRoutingLog : String -> LoadedFrontend -> LoadedFrontend
+addRoutingLog entry model =
+    { model | routingLog = List.take 200 ({ time = model.time, entry = entry } :: model.routingLog) }
+
+
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routePush model route =
     if MyUi.isMobile model then
-        routeRequest (Just model.route) route model
+        routeRequest
+            (Just model.route)
+            route
+            (addRoutingLog ("routePush (mobile, no url change): " ++ Route.encode route) model)
 
     else
-        ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
+        ( addRoutingLog ("routePush: pushUrl " ++ Route.encode route) model
+        , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+        )
 
 
 routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg_
@@ -1405,8 +1418,24 @@ sameThread threadRoute previousThreadRoute =
 
 
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-routeRequest previousRoute newRoute model =
+routeRequest previousRoute newRoute modelNoLog =
     let
+        model : LoadedFrontend
+        model =
+            addRoutingLog
+                ("routeRequest: "
+                    ++ (case previousRoute of
+                            Just route ->
+                                Route.encode route
+
+                            Nothing ->
+                                "(no previous route)"
+                       )
+                    ++ " -> "
+                    ++ Route.encode newRoute
+                )
+                modelNoLog
+
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
@@ -2310,7 +2339,7 @@ isPressMsg msg =
         PressedUnregisterServiceWorkers ->
             True
 
-        PressedLoadServiceWorkerData ->
+        PressedLoadDebugData ->
             True
 
         GotServiceWorkerData _ ->
