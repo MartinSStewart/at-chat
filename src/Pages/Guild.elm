@@ -7359,9 +7359,8 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     [ Ui.Input.text
                         (Ui.id (Dom.idToString friendsSearchInputId)
                             :: (if searchIsVisible then
-                                    [ Ui.background MyUi.inputBackground
-                                    , Ui.border 1
-                                    , Ui.borderColor MyUi.inputBorder
+                                    [ Ui.background MyUi.background2
+                                    , Ui.border 0
                                     , Ui.rounded 4
                                     , Ui.paddingXY 8 4
                                     , Ui.Font.color MyUi.font1
@@ -7370,6 +7369,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
 
                                 else
                                     [ Ui.opacity 0
+                                    , Ui.border 0
                                     , Ui.width (Ui.px 40)
                                     , Ui.alignRight
                                     , Ui.height Ui.fill
@@ -7387,10 +7387,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                 Nothing
                         , label = Ui.Input.labelHidden (Dom.idToString friendsSearchInputId)
                         }
-                    , if friendsSearch == "" then
-                        Ui.none
-
-                      else
+                    , if searchIsVisible then
                         MyUi.elButton
                             (Dom.id "guild_clearFriendsSearch")
                             PressedClearFriendsSearch
@@ -7401,6 +7398,9 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                             , Ui.contentCenterY
                             ]
                             (Ui.html Icons.x)
+
+                      else
+                        Ui.none
                     ]
                 )
             ]
