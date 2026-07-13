@@ -40,6 +40,7 @@ module Types exposing
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
+    , UserOptionSection(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
     , WordSpellingGameSwedish(..)
@@ -112,6 +113,7 @@ import Route exposing (ChannelHeaderTab, Route)
 import Scroll exposing (ScrollPosition)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
@@ -256,7 +258,17 @@ type alias LoggedIn2 =
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
+    , expandedUserOptions : SeqSet UserOptionSection
     }
+
+
+type UserOptionSection
+    = UserOption_TwoFactorAuthentication
+    | UserOption_Settings
+    | UserOption_WhitelistedDomains
+    | UserOption_Discord
+    | UserOption_ConnectedDevices
+    | UserOption_Debug
 
 
 type FileDrag
@@ -509,6 +521,7 @@ type FrontendMsg_
     | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
     | PressedShowUserOption
     | PressedCloseUserOptions
+    | PressedExpandContainer UserOptionSection
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GameMsg Game.Msg

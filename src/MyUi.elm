@@ -713,8 +713,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
-container backgroundColor isMobile2 label2 contents =
+container : Bool -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container isExpanded onPressedExpand backgroundColor isMobile2 label2 contents =
     let
         paddingX =
             if isMobile2 then
@@ -723,36 +723,50 @@ container backgroundColor isMobile2 label2 contents =
             else
                 16
     in
-    Ui.el
-        [ Ui.paddingWith
-            { left = paddingX
-            , right = paddingX
-            , top = 10
-            , bottom = 0
-            }
-        , Ui.text label2
-            |> Ui.el
+    if isExpanded then
+        Ui.el
+            [ Ui.paddingWith
+                { left = paddingX
+                , right = paddingX
+                , top = 10
+                , bottom = 0
+                }
+            , Ui.row
                 [ Ui.Font.bold
-                , Ui.Font.size 14
-                , Ui.move
-                    { x = paddingX + 12
-                    , y = 0
-                    , z = 0
-                    }
-                , Ui.paddingXY 2 0
+                , Ui.Font.size 16
+                , Ui.spacing 8
+                , Ui.paddingXY 5 0
                 , Ui.width Ui.shrink
                 , Ui.background backgroundColor
+                , Ui.Input.button onPressedExpand
                 ]
-            |> Ui.inFront
-        ]
-        (Ui.column
-            [ Ui.border 1
-            , Ui.rounded 4
-            , Ui.padding 16
-            , Ui.spacing 16
+                [ Icons.collapseContainer
+                , Ui.text label2
+                ]
+                |> Ui.inFront
             ]
-            contents
-        )
+            (Ui.column
+                [ Ui.border 1
+                , Ui.rounded 4
+                , Ui.padding 16
+                , Ui.spacing 16
+                ]
+                contents
+            )
+
+    else
+        Ui.row
+            [ Ui.Font.bold
+            , Ui.Font.size 16
+            , Ui.spacing 8
+            , Ui.paddingXY 5 0
+            , Ui.width Ui.shrink
+            , Ui.background backgroundColor
+            , Ui.Input.button onPressedExpand
+            ]
+            [ Icons.collapseContainer
+            , Ui.text label2
+            ]
 
 
 simpleButton : HtmlId -> msg -> Element msg -> Element msg

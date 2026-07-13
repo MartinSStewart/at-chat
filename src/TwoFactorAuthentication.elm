@@ -31,6 +31,7 @@ import QRCode
 import Range exposing (Range)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet
 import TOTP.Algorithm
 import TOTP.Key
 import Ui exposing (Element)
@@ -273,6 +274,8 @@ view windowSize textInputFocus timezone time twoFactorStatus =
             MyUi.isMobileAlt windowSize
     in
     MyUi.container
+        (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+        (PressedExpandContainer UserOption_Settings)
         MyUi.background1
         isMobile
         "Two-factor authentication"

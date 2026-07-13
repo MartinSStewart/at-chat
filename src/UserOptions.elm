@@ -25,7 +25,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
@@ -235,6 +235,8 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     IsNotAdmin ->
                         Ui.none
                 , MyUi.container
+                    (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+                    (PressedExpandContainer UserOption_Settings)
                     MyUi.background1
                     isMobile
                     "Account settings"
@@ -362,6 +364,8 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
+                        (SeqSet.member UserOption_WhitelistedDomains loggedIn.expandedUserOptions)
+                        (PressedExpandContainer UserOption_WhitelistedDomains)
                         MyUi.background1
                         isMobile
                         ("Whitelisted domains (" ++ String.fromInt (SeqSet.size local.localUser.user.domainWhitelist) ++ ")")
@@ -400,6 +404,8 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             ]
                         ]
                 , MyUi.container
+                    (SeqSet.member UserOption_Discord loggedIn.expandedUserOptions)
+                    (PressedExpandContainer UserOption_Discord)
                     MyUi.background1
                     isMobile
                     "Discord integration"
@@ -481,6 +487,8 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             (Ui.text "Link Discord account")
                     ]
                 , MyUi.container
+                    (SeqSet.member UserOption_ConnectedDevices loggedIn.expandedUserOptions)
+                    (PressedExpandContainer UserOption_ConnectedDevices)
                     MyUi.background1
                     isMobile
                     "Connected devices"
@@ -507,6 +515,8 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             Ui.none
                     ]
                 , MyUi.container
+                    (SeqSet.member UserOption_Debug loggedIn.expandedUserOptions)
+                    (PressedExpandContainer UserOption_Debug)
                     MyUi.background1
                     isMobile
                     "Debug"
