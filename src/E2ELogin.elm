@@ -98,6 +98,7 @@ loginTests isMobile normalConfig =
             (\user ->
                 [ E2EHelper.handleLogin userAgent E2EHelper.adminEmail user
                 , user.click 100 (Dom.id "guild_showUserOptions")
+                , user.click 100 (Dom.id "userOptions_twoFactor")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
                 , E2EHelper.tallSnapshot user 100 { name = "2FA setup" }
                 , user.input 100 (Dom.id "userOverview_twoFactorCodeInput") "123123"
@@ -138,6 +139,7 @@ loginTests isMobile normalConfig =
                             Nothing ->
                                 [ T.checkState 100 (\_ -> Err "User not found") ]
                     )
+                , user.click 100 (Dom.id "userOptions_connectedDevices")
                 , user.click 100 (Dom.id "options_logout")
                 ]
             )
@@ -167,6 +169,7 @@ loginTests isMobile normalConfig =
                                                         |> String.padLeft LoginForm.twoFactorCodeLength '0'
                                                     )
                                                 , user.click 100 (Dom.id "guild_showUserOptions")
+                                                , user.click 100 (Dom.id "userOptions_twoFactor")
                                                 , user.checkView
                                                     100
                                                     (Test.Html.Query.has

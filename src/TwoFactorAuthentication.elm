@@ -268,55 +268,46 @@ updateFromBackend toFrontend model =
 
 view : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Zone -> Time.Posix -> TwoFactorState -> Element Msg
 view windowSize textInputFocus timezone time twoFactorStatus =
-    let
-        isMobile =
-            MyUi.isMobileAlt windowSize
-    in
-    MyUi.container
-        MyUi.background1
-        isMobile
-        "Two-factor authentication"
-        [ case twoFactorStatus of
-            TwoFactorNotStarted ->
-                MyUi.simpleButton
-                    (Dom.id "userOverview_start2FaSetup")
-                    PressedStart2FaSetup
-                    (Ui.text "Add two factor authentication")
+    case twoFactorStatus of
+        TwoFactorNotStarted ->
+            MyUi.simpleButton
+                (Dom.id "userOverview_start2FaSetup")
+                PressedStart2FaSetup
+                (Ui.text "Add two factor authentication")
 
-            TwoFactorLoading ->
-                MyUi.simpleButton
-                    (Dom.id "userOverview_start2FaSetup")
-                    PressedStart2FaSetup
-                    (Ui.text "Loading...")
+        TwoFactorLoading ->
+            MyUi.simpleButton
+                (Dom.id "userOverview_start2FaSetup")
+                PressedStart2FaSetup
+                (Ui.text "Loading...")
 
-            TwoFactorSetup data ->
-                setupView windowSize textInputFocus data
+        TwoFactorSetup data ->
+            setupView windowSize textInputFocus data
 
-            TwoFactorComplete ->
-                Ui.column
-                    []
-                    [ Ui.el [ Ui.Font.size 18, Ui.Font.bold, Ui.paddingXY 0 4 ] (Ui.text "Two factor authentication enabled!")
-                    , Ui.text "Next time you log in you'll be prompted to use your authenticator app in addition to the normal login."
+        TwoFactorComplete ->
+            Ui.column
+                []
+                [ Ui.el [ Ui.Font.size 18, Ui.Font.bold, Ui.paddingXY 0 4 ] (Ui.text "Two factor authentication enabled!")
+                , Ui.text "Next time you log in you'll be prompted to use your authenticator app in addition to the normal login."
+                ]
+
+        TwoFactorAlreadyComplete enabledAt ->
+            Ui.column
+                [ Ui.spacing 12 ]
+                [ Ui.Prose.paragraph
+                    [ Ui.paddingXY 0 4 ]
+                    [ Ui.text "Two factor authentication was enabled "
+                    , MyUi.timeElapsedView timezone time enabledAt
+                    , Ui.text "."
                     ]
+                , MyUi.simpleButton
+                    (Dom.id "userOverview_startDisable2Fa")
+                    PressedStartDisable2Fa
+                    (Ui.text "Disable two factor authentication")
+                ]
 
-            TwoFactorAlreadyComplete enabledAt ->
-                Ui.column
-                    [ Ui.spacing 12 ]
-                    [ Ui.Prose.paragraph
-                        [ Ui.paddingXY 0 4 ]
-                        [ Ui.text "Two factor authentication was enabled "
-                        , MyUi.timeElapsedView timezone time enabledAt
-                        , Ui.text "."
-                        ]
-                    , MyUi.simpleButton
-                        (Dom.id "userOverview_startDisable2Fa")
-                        PressedStartDisable2Fa
-                        (Ui.text "Disable two factor authentication")
-                    ]
-
-            TwoFactorDisable _ data ->
-                disableView windowSize textInputFocus data
-        ]
+        TwoFactorDisable _ data ->
+            disableView windowSize textInputFocus data
 
 
 disableView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorDisableData -> Element Msg

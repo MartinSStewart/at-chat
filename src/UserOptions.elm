@@ -25,8 +25,9 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg_(..), LoadedFrontend, LoggedIn2, UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -38,7 +39,6 @@ import UserSession exposing (NotificationMode(..), PushSubscription(..))
 init : SeqSet RichText.Domain -> UserOptionsModel
 init domainWhitelist =
     { name = Editable.init
-    , showLinkDiscordSetup = False
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
     , serviceWorkerData = Nothing
     }
@@ -178,7 +178,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
         , Ui.heightMin 0
         , Ui.background MyUi.background1
         , Ui.inFront
-            (Ui.row
+            (Ui.el
                 [ Ui.background MyUi.background1
                 , MyUi.htmlStyle "padding-top" MyUi.insetTop
                 , Ui.el
@@ -193,24 +193,40 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         0
                     ]
                     (Ui.el
-                        [ Ui.borderWith
-                            { left = 0, right = 0, top = 0, bottom = 1 }
+                        [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                         , Ui.borderColor MyUi.white
                         ]
                         Ui.none
                     )
                     |> Ui.inFront
                 ]
-                [ Ui.el [ Ui.Font.size 20, Ui.paddingXY 16 0 ] (Ui.text "User settings")
-                , MyUi.elButton
-                    (Dom.id "userOptions_closeUserOptions")
-                    PressedCloseUserOptions
-                    [ Ui.padding 16
-                    , Ui.width (Ui.px 56)
-                    , Ui.alignRight
+                (Ui.row
+                    [ Ui.Font.size 20, Ui.widthMax 1000, Ui.centerX ]
+                    [ Ui.el [ Ui.paddingXY 16 0 ] (Ui.text "User settings")
+                    , MyUi.rowButton
+                        (Dom.id "userOptions_closeUserOptions")
+                        PressedCloseUserOptions
+                        [ Ui.padding 16
+                        , Ui.alignRight
+                        , Ui.Font.color
+                            (if isMobile then
+                                MyUi.font1
+
+                             else
+                                MyUi.font3
+                            )
+                        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                        , Ui.spacing 8
+                        ]
+                        [ if isMobile then
+                            Ui.none
+
+                          else
+                            Ui.el [ Ui.alignBottom ] (Ui.text "Close")
+                        , Ui.html Icons.x
+                        ]
                     ]
-                    (Ui.html Icons.x)
-                ]
+                )
             )
         ]
         (Ui.el
@@ -235,6 +251,9 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     IsNotAdmin ->
                         Ui.none
                 , MyUi.container
+                    (SeqSet.member UserOption_Settings loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_settings")
+                    (PressedExpandContainer UserOption_Settings)
                     MyUi.background1
                     isMobile
                     "Account settings"
@@ -248,7 +267,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         model.name
                     , Ui.column
                         [ Ui.spacing 8 ]
-                        [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Profile Picture")
+                        [ Ui.el [ Ui.Font.bold ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]
                             [ User.profileImage local.localUser.session.userId local.localUser.user.icon
@@ -345,13 +364,21 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     --    ]
                     --    (Ui.text "Link Slack account")
                     ]
-                , TwoFactorAuthentication.view
-                    loaded.windowSize
-                    textInputFocus
-                    local.localUser.timezone
-                    time
-                    loggedIn.twoFactor
-                    |> Ui.map TwoFactorMsg
+                , MyUi.container
+                    (SeqSet.member UserOption_TwoFactorAuthentication loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_twoFactor")
+                    (PressedExpandContainer UserOption_TwoFactorAuthentication)
+                    MyUi.background1
+                    isMobile
+                    "Two-factor authentication"
+                    [ TwoFactorAuthentication.view
+                        loaded.windowSize
+                        textInputFocus
+                        local.localUser.timezone
+                        time
+                        loggedIn.twoFactor
+                        |> Ui.map TwoFactorMsg
+                    ]
                 , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
 
@@ -362,6 +389,9 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
                     in
                     MyUi.container
+                        (SeqSet.member UserOption_WhitelistedDomains loggedIn.expandedUserOptions)
+                        (Dom.id "userOptions_whitelistedDomains")
+                        (PressedExpandContainer UserOption_WhitelistedDomains)
                         MyUi.background1
                         isMobile
                         ("Whitelisted domains (" ++ String.fromInt (SeqSet.size local.localUser.user.domainWhitelist) ++ ")")
@@ -379,30 +409,29 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             , label = Ui.Input.labelHidden "Whitelisted domains"
                             , spellcheck = False
                             }
-                        , Ui.row
-                            [ Ui.spacing 8, Ui.width Ui.shrink ]
-                            [ if hasChanges then
-                                MyUi.simpleButton
+                        , if hasChanges then
+                            Ui.row
+                                [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                [ MyUi.simpleButton
                                     (Dom.id "userOptions_saveWhitelistDomains")
                                     PressedSaveDomainWhitelist
                                     (Ui.text "Save")
-
-                              else
-                                Ui.none
-                            , if hasChanges then
-                                MyUi.simpleButton
+                                , MyUi.simpleButton
                                     (Dom.id "userOptions_resetWhitelistDomains")
                                     PressedResetDomainWhitelist
                                     (Ui.text "Reset")
+                                ]
 
-                              else
-                                Ui.none
-                            ]
+                          else
+                            Ui.none
                         ]
                 , MyUi.container
+                    (SeqSet.member UserOption_Discord loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_discordSection")
+                    (PressedExpandContainer UserOption_Discord)
                     MyUi.background1
                     isMobile
-                    "Discord integration"
+                    "Discord"
                     [ if SeqDict.isEmpty (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers) then
                         Ui.none
 
@@ -417,70 +446,59 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     (SeqDict.toList (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers))
                                 )
                             ]
-                    , if model.showLinkDiscordSetup then
-                        let
-                            bookmarkletLabel =
-                                Ui.Input.label
-                                    (Dom.idToString discordBookmarkletId)
-                                    [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
-                                    (Ui.text "Bookmarklet URL")
-                        in
-                        Ui.column
-                            [ Ui.spacing 16 ]
-                            [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
-                            , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
-                                Ui.column
-                                    [ Ui.spacing 16 ]
-                                    [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
-                                    , Ui.column
-                                        [ Ui.spacing 4 ]
-                                        [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
-                                        , Ui.text "1. Copy the bookmarklet URL below\n"
-                                        , Ui.text "2. Create a new bookmark in your browser\n"
-                                        , Ui.text "3. Paste the URL as the bookmark address\n"
-                                        , Ui.Prose.paragraph
-                                            [ Ui.paddingXY 0 5 ]
-                                            [ Ui.text "4. Go to "
-                                            , Ui.el
-                                                [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
-                                                , Ui.Font.underline
-                                                , Ui.linkNewTab "https://discord.com/app"
-                                                ]
-                                                (Ui.text "discord.com/app")
-                                            , Ui.text " in your browser and click the bookmark"
+                    , let
+                        bookmarkletLabel =
+                            Ui.Input.label
+                                (Dom.idToString discordBookmarkletId)
+                                [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+                                (Ui.text "Bookmarklet URL")
+                      in
+                      Ui.column
+                        [ Ui.spacing 16 ]
+                        [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
+                        , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
+                            Ui.column
+                                [ Ui.spacing 16 ]
+                                [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
+                                , Ui.column
+                                    [ Ui.spacing 4 ]
+                                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
+                                    , Ui.text "1. Copy the bookmarklet URL below\n"
+                                    , Ui.text "2. Create a new bookmark in your browser\n"
+                                    , Ui.text "3. Paste the URL as the bookmark address\n"
+                                    , Ui.Prose.paragraph
+                                        [ Ui.paddingXY 0 5 ]
+                                        [ Ui.text "4. Go to "
+                                        , Ui.el
+                                            [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                                            , Ui.Font.underline
+                                            , Ui.linkNewTab "https://discord.com/app"
                                             ]
+                                            (Ui.text "discord.com/app")
+                                        , Ui.text " in your browser"
                                         ]
-                                    , Ui.column
-                                        [ Ui.spacing 2, Ui.widthMax 400 ]
-                                        [ bookmarkletLabel.element
-                                        , MyUi.copyBox
-                                            (Dom.id "userOptions_bookmarklet")
-                                            PressedCopyText
-                                            TypedDiscordLinkBookmarklet
-                                            loaded
-                                            bookmarklet
-                                        ]
+                                    , Ui.text "5. Make sure you are logged in on Discord and then click on the bookmark"
                                     ]
+                                , Ui.column
+                                    [ Ui.spacing 2, Ui.widthMax 400 ]
+                                    [ bookmarkletLabel.element
+                                    , MyUi.copyBox
+                                        (Dom.id "userOptions_bookmarklet")
+                                        PressedCopyText
+                                        TypedDiscordLinkBookmarklet
+                                        loaded
+                                        bookmarklet
+                                    ]
+                                ]
 
-                              else
-                                Ui.none
-                            ]
-
-                      else
-                        MyUi.elButton
-                            (Dom.id "userOptions_linkDiscord")
-                            PressedLinkDiscordUser
-                            [ Ui.borderColor MyUi.buttonBorder
-                            , Ui.border 1
-                            , Ui.background MyUi.buttonBackground
-                            , Ui.Font.color MyUi.font1
-                            , Ui.width Ui.shrink
-                            , Ui.paddingXY 16 8
-                            , Ui.rounded 4
-                            ]
-                            (Ui.text "Link Discord account")
+                          else
+                            Ui.none
+                        ]
                     ]
                 , MyUi.container
+                    (SeqSet.member UserOption_ConnectedDevices loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_connectedDevices")
+                    (PressedExpandContainer UserOption_ConnectedDevices)
                     MyUi.background1
                     isMobile
                     "Connected devices"
@@ -491,22 +509,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             )
                             (SeqDict.toList local.otherSessions)
                     )
-                , Ui.row
-                    [ Ui.paddingXY 16 0 ]
-                    [ case loaded.versionNumber of
-                        Just version ->
-                            Ui.el
-                                [ Ui.Font.size 12
-                                , Ui.Font.color MyUi.font3
-                                , Ui.alignRight
-                                , Ui.centerY
-                                ]
-                                (Ui.text ("Version " ++ String.fromInt version))
-
-                        Nothing ->
-                            Ui.none
-                    ]
                 , MyUi.container
+                    (SeqSet.member UserOption_Debug loggedIn.expandedUserOptions)
+                    (Dom.id "userOptions_debug")
+                    (PressedExpandContainer UserOption_Debug)
                     MyUi.background1
                     isMobile
                     "Debug"
@@ -562,6 +568,16 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                         Nothing ->
                             Ui.none
+                    , Ui.text
+                        ("App version: "
+                            ++ (case loaded.versionNumber of
+                                    Just version ->
+                                        String.fromInt version
+
+                                    Nothing ->
+                                        "unknown"
+                               )
+                        )
                     ]
                 ]
             )
@@ -588,7 +604,7 @@ discordAcknowledgement discordAcknowledged =
                 [ Ui.html (Icons.warning 24), Ui.text "Before you link your Discord account, please note:" ]
             , numberPoint
                 1
-                (Ui.text "Using your Discord account via a 3rd party client breaks their terms of service. Discord can temporarily lock or even permanently ban your account for it. In practice this doesn't seem to happen as long as you don't act like a spam bot but the risk is still present.")
+                (Ui.text "Using your Discord account via a 3rd party client breaks their terms of service. Discord can temporarily or even permanently ban your account for it. In practice this doesn't seem to happen as long as you don't act like a spam bot but the risk is still present.")
             , numberPoint
                 2
                 (Ui.text "Discord doesn't have any permission system for 3rd party clients. This means that if you link your Discord account with this app, you are giving us complete access to your data and to act on your behalf. You are trusting us to not abuse that level of access or accidentally let hackers access your account.")

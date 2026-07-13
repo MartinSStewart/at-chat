@@ -77,7 +77,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -477,6 +477,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
+            , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
             }
     in
     ( loggedIn
@@ -2010,6 +2011,22 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | userOptions = Nothing }, Command.none ))
                 model
 
+        PressedExpandContainer section ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | expandedUserOptions =
+                            if SeqSet.member section loggedIn.expandedUserOptions then
+                                SeqSet.remove section loggedIn.expandedUserOptions
+
+                            else
+                                SeqSet.insert section loggedIn.expandedUserOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
         TwoFactorMsg twoFactorMsg ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3050,20 +3067,6 @@ updateLoaded msg model =
                         (Just (Local_LinkDiscordAcknowledgementIsChecked checked))
                         loggedIn
                         Command.none
-                )
-                model
-
-        PressedLinkDiscordUser ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | showLinkDiscordSetup = True })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
                 )
                 model
 

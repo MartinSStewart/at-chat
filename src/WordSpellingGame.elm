@@ -23,6 +23,7 @@ module WordSpellingGame exposing
     , TrayIndex(..)
     , UserStatus(..)
     , ValidatedSetup
+    , WordList(..)
     , ZoomAnimation
     , ZoomState
     , animatedTilePlacement
@@ -41,6 +42,7 @@ module WordSpellingGame exposing
     , isAnimating
     , isPlayerTurn
     , isZoomAnimating
+    , parseWordList
     , pastWordsContainerId
     , placeWord
     , placementConnects
@@ -51,8 +53,7 @@ module WordSpellingGame exposing
     , updateAction
     , updateGame
     , updateSetup
-    , validatePlacementEnglish
-    , validatePlacementSwedish
+    , validatePlacement
     , validateSetup
     )
 
@@ -66,9 +67,10 @@ import Char
 import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Dict exposing (Dict)
+import Dict
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
+import Effect.Http as Http
 import Effect.Time as Time
 import Go exposing (TimeControl)
 import Html
@@ -100,7 +102,6 @@ import Ui.Lazy
 import Ui.Prose
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
-import WordSpellingGameEnglish exposing (Dictionary)
 
 
 {-| OpaqueVariants
@@ -128,6 +129,13 @@ type alias GameData =
 
 type alias ZoomAnimation =
     { start : Time.Posix, from : ZoomState }
+
+
+type WordList
+    = WordList_NotLoaded
+    | WordList_Loading
+    | WordList_Error Http.Error
+    | WordList_Loaded (Set String)
 
 
 type Language
@@ -195,6 +203,7 @@ type SetupMsg
     | PressedStartGame
     | PressedCancel
     | PressedLanguage Language
+    | PressedExpandAdvancedSettings
 
 
 {-| OpaqueVariants
@@ -224,6 +233,7 @@ type alias SetupModel =
     , letterValues : SeqDict Char String
     , language : Language
     , placeWordAttempts : OneOrGreater
+    , advancedSettingsExpanded : Bool
     }
 
 
@@ -254,6 +264,7 @@ initSetup =
     , letterValues = SeqDict.empty
     , language = English
     , placeWordAttempts = OneOrGreater.three
+    , advancedSettingsExpanded = False
     }
 
 
@@ -897,8 +908,8 @@ wordScore setup board placedSet cells =
     letterSum * wordMultiplier
 
 
-validatePlacementEnglish : Dictionary -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacementEnglish dictionary setup board placedWord =
+validatePlacement : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+validatePlacement dictionary setup board placedWord =
     case placeWord setup board placedWord of
         Just result ->
             if List.isEmpty result.words then
@@ -907,38 +918,8 @@ validatePlacementEnglish dictionary setup board placedWord =
             else if
                 List.all
                     (\word ->
-                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= maxBruteForceWildcards then
-                            bruteForceMatch (distributionLetters setup) dictionary.all word.letters
-
-                        else
-                            scanForMatch dictionary.byLength word.letters
-                    )
-                    result.words
-            then
-                Ok result
-
-            else
-                Err ()
-
-        Nothing ->
-            Err ()
-
-
-{-| Swedish has a lot of words so we don't want to spend the extra RAM for storing copies of the dict in array form
-for each word length or the CPU cycles to scan over them.
-Instead we just restrict the letter distribution for having more than 2 wildcards
--}
-validatePlacementSwedish : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
-validatePlacementSwedish dictionary setup board placedWord =
-    case placeWord setup board placedWord of
-        Just result ->
-            if List.isEmpty result.words then
-                Err ()
-
-            else if
-                List.all
-                    (\word ->
-                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= maxBruteForceWildcards then
+                        -- We don't allow words with more than two wildcards for performance/RAM reasons
+                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= wildcardMax then
                             bruteForceMatch (distributionLetters setup) dictionary word.letters
 
                         else
@@ -953,15 +934,6 @@ validatePlacementSwedish dictionary setup board placedWord =
 
         Nothing ->
             Err ()
-
-
-{-| The most wildcards we'll resolve by trying every letter combination. With `k` wildcards that's
-26^k dictionary lookups, so we only do it while that stays cheap (26^2 = 676); beyond it we scan
-instead, which keeps the work bounded no matter how many wildcards a word has.
--}
-maxBruteForceWildcards : Int
-maxBruteForceWildcards =
-    2
 
 
 {-| The distinct letters present in the game's letter distribution: the only letters a wildcard
@@ -1002,54 +974,6 @@ bruteForceMatch candidateLetters wordList word =
                     List.any (\(LetterChar letter) -> search rest (prefix ++ String.fromChar letter)) candidateLetters
     in
     search word ""
-
-
-{-| Whether any dictionary word of the same length agrees with the word's fixed (non-wildcard)
-letters; the wildcards then stand for whatever letters that dictionary word has in their place. This
-costs a single pass over the words of that length, which is bounded however many wildcards there are.
--}
-scanForMatch : Dict Int (Array String) -> List LetterOrWildcard -> Bool
-scanForMatch byLength word =
-    let
-        pattern : List (Maybe Char)
-        pattern =
-            List.map
-                (\cell ->
-                    case cell of
-                        Letter (LetterChar letter) ->
-                            Just letter
-
-                        Wildcard ->
-                            Nothing
-                )
-                word
-    in
-    case Dict.get (List.length word) byLength of
-        Just candidates ->
-            Array.Extra.any (matchesPattern pattern) candidates
-
-        Nothing ->
-            False
-
-
-{-| Whether a dictionary word agrees with a pattern: each fixed position (`Just char`) must equal
-the word's character there, and wildcard positions (`Nothing`) match anything. The word and pattern
-are the same length, since the candidates come from the matching length bucket.
--}
-matchesPattern : List (Maybe Char) -> String -> Bool
-matchesPattern pattern candidate =
-    List.map2
-        (\patternChar candidateChar ->
-            case patternChar of
-                Just fixed ->
-                    fixed == candidateChar
-
-                Nothing ->
-                    True
-        )
-        pattern
-        (String.toList candidate)
-        |> List.all identity
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -1160,6 +1084,11 @@ updateSetup time currentUserId msg setup =
 
         PressedLanguage language ->
             ( Setup { setup | language = language, letters = defaultLetters language }
+            , Nothing
+            )
+
+        PressedExpandAdvancedSettings ->
+            ( Setup { setup | advancedSettingsExpanded = not setup.advancedSettingsExpanded }
             , Nothing
             )
 
@@ -1736,7 +1665,13 @@ validatedToSetupModel setup =
             |> SeqDict.fromList
     , language = setup.language
     , placeWordAttempts = setup.placeWordAttempts
+    , advancedSettingsExpanded = True
     }
+
+
+wildcardMax : number
+wildcardMax =
+    2
 
 
 parseLettersAndValues : SetupModel -> Result String (NonemptyDict LetterOrWildcard { count : OneOrGreater, value : Int })
@@ -1766,15 +1701,15 @@ parseLettersAndValues setup =
             in
             case NonemptyDict.fromSeqDict counts of
                 Just nonempty ->
-                    case ( setup.language, NonemptyDict.get Wildcard nonempty ) of
-                        ( Swedish, Just value ) ->
-                            if OneOrGreater.toInt value > 2 then
-                                Err "No more than 2 wildcards (spaces) are allowed for Swedish"
+                    case NonemptyDict.get Wildcard nonempty of
+                        Just value ->
+                            if OneOrGreater.toInt value > wildcardMax then
+                                Err "No more than 2 wildcards (spaces) are allowed"
 
                             else
                                 Ok nonempty
 
-                        _ ->
+                        Nothing ->
                             Ok nonempty
 
                 Nothing ->
@@ -4590,6 +4525,9 @@ setupView windowSize isReadonly setup =
                 )
             ]
         , MyUi.container
+            setup.advancedSettingsExpanded
+            (Dom.id "wsg_advancedSection")
+            PressedExpandAdvancedSettings
             MyUi.background1
             isMobile
             "Advanced settings"
@@ -4996,3 +4934,16 @@ audio popSound currentUserId shared model =
             Nothing ->
                 Audio.silence
         ]
+
+
+parseWordList : Result Http.Error String -> WordList
+parseWordList result =
+    case result of
+        Ok text ->
+            String.split "\n" text
+                |> List.filterMap (\row -> String.split " " row |> List.head)
+                |> Set.fromList
+                |> WordList_Loaded
+
+        Err error ->
+            WordList_Error error

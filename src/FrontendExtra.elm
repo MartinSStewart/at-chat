@@ -2200,9 +2200,6 @@ isPressMsg msg =
         PressedDiscordAcknowledgment _ ->
             True
 
-        PressedLinkDiscordUser ->
-            True
-
         PressedReloadDiscordUser _ ->
             True
 
@@ -2337,6 +2334,9 @@ isPressMsg msg =
             False
 
         PressedClearFriendsSearch ->
+            True
+
+        PressedExpandContainer _ ->
             True
 
 

@@ -40,9 +40,9 @@ module Types exposing
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
+    , UserOptionSection(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
-    , WordSpellingGameSwedish(..)
     , messageMenuMobileOffset
     )
 
@@ -112,8 +112,8 @@ import Route exposing (ChannelHeaderTab, Route)
 import Scroll exposing (ScrollPosition)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -127,6 +127,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
+import WordSpellingGame exposing (WordList)
 
 
 type alias FrontendModel =
@@ -256,7 +257,17 @@ type alias LoggedIn2 =
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
+    , expandedUserOptions : SeqSet UserOptionSection
     }
+
+
+type UserOptionSection
+    = UserOption_TwoFactorAuthentication
+    | UserOption_Settings
+    | UserOption_WhitelistedDomains
+    | UserOption_Discord
+    | UserOption_ConnectedDevices
+    | UserOption_Debug
 
 
 type FileDrag
@@ -266,7 +277,6 @@ type FileDrag
 
 type alias UserOptionsModel =
     { name : Editable.Model
-    , showLinkDiscordSetup : Bool
     , domainWhitelistInput : String
     , serviceWorkerData : Maybe { data : String, loadedAt : Time.Posix }
     }
@@ -389,15 +399,9 @@ type alias BackendModel =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
-    , wordSpellingGameSwedish : WordSpellingGameSwedish
+    , wordSpellingGameEnglish : WordList
+    , wordSpellingGameSwedish : WordList
     }
-
-
-type WordSpellingGameSwedish
-    = WordSpellingGameSwedish_NotLoaded
-    | WordSpellingGameSwedish_Loading
-    | WordSpellingGameSwedish_Error Http.Error
-    | WordSpellingGameSwedish_Loaded (Set String)
 
 
 type alias DiscordAttachmentData =
@@ -509,6 +513,7 @@ type FrontendMsg_
     | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
     | PressedShowUserOption
     | PressedCloseUserOptions
+    | PressedExpandContainer UserOptionSection
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GameMsg Game.Msg
@@ -542,7 +547,6 @@ type FrontendMsg_
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
-    | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
     | PressedDiscordGuildMemberLabel
@@ -737,6 +741,7 @@ type BackendMsg
     | GotCloudflareUsage Time.Posix (Result Http.Error Int)
     | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
     | GotRustServerFileUpload FileHash Int (Maybe (Coord CssPixels))
+    | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
 
 

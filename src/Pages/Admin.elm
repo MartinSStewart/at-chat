@@ -104,8 +104,6 @@ import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFil
 type Msg
     = PressedLogPage (Id PageId)
     | PressedCopyLogLink (Id ItemId)
-    | PressedCollapseSection AdminUiSection
-    | DoublePressedCollapseSection AdminUiSection
     | PressedExpandSection AdminUiSection
     | PressedEditCell UserTableId UserColumn
     | TypedEditCell String
@@ -119,7 +117,6 @@ type Msg
     | PressedAddUserRow
     | PressedDeleteUser UserTableId
     | PressedResetUser (Id UserId)
-    | ScrolledToSection
     | UserTableMsg Table.Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
@@ -787,11 +784,20 @@ update navigationKey time adminData localState msg model =
         PressedDeleteSession sessionIdHash ->
             ( model, Command.none, DeleteSession sessionIdHash |> AdminChange )
 
-        PressedCollapseSection section2 ->
-            ( model, Command.none, CollapseSection section2 |> AdminChange )
-
         PressedExpandSection section2 ->
-            ( model, Command.none, ExpandSection section2 |> AdminChange )
+            ( model
+            , Command.none
+            , case NonemptyDict.get localState.localUser.session.userId adminData.users of
+                Just user ->
+                    if SeqSet.member section2 user.expandedSections then
+                        CollapseSection section2 |> AdminChange
+
+                    else
+                        ExpandSection section2 |> AdminChange
+
+                Nothing ->
+                    NoOutMsg
+            )
 
         PressedEditCell userTableId column ->
             updateUserTable
@@ -1071,17 +1077,6 @@ update navigationKey time adminData localState msg model =
                     )
                 )
                 model
-
-        DoublePressedCollapseSection section2 ->
-            ( model
-            , Dom.getElement (collapseSectionButtonId section2)
-                |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y - 8))
-                |> Task.attempt (\_ -> ScrolledToSection)
-            , NoOutMsg
-            )
-
-        ScrolledToSection ->
-            ( model, Command.none, NoOutMsg )
 
         UserTableMsg tableMsg ->
             updateUserTable
@@ -1718,7 +1713,7 @@ view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> BackendUser
 view isMobile2 version time local adminData user model =
     Ui.el
         [ Ui.scrollable
-        , Ui.background MyUi.background1
+        , Ui.background MyUi.background3
         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
         , Ui.heightMin 0
         ]
@@ -1738,32 +1733,32 @@ view isMobile2 version time local adminData user model =
                     )
                 ]
             , adminData.vulnerabilityChecks |> Ui.text
-            , userSection local.localUser.timezone user adminData model
-            , guildsSection user adminData
-            , deletedGuildsSection user adminData
-            , discordGuildsSection user adminData
-            , dmChannelsSection user adminData
-            , discordDmChannelsSection user adminData
-            , discordUsersSection user adminData
+            , userSection isMobile2 local.localUser.timezone user adminData model
+            , guildsSection isMobile2 user adminData
+            , deletedGuildsSection isMobile2 user adminData
+            , discordGuildsSection isMobile2 user adminData
+            , dmChannelsSection isMobile2 user adminData
+            , discordDmChannelsSection isMobile2 user adminData
+            , discordUsersSection isMobile2 user adminData
             , logSection isMobile2 local.localUser user adminData model
-            , apiKeysSection local user adminData model
-            , connectionsSection local.localUser.timezone user adminData
-            , sessionsSection local.localUser.timezone user adminData
-            , websocketCloseEventsSection time local.localUser.timezone user adminData model
-            , voiceChatSection adminData model user
-            , wordSpellingGameSwedishSection user adminData
-            , filesSection user adminData
-            , stickersAndEmojisSection local user
-            , toBackendLogsSection user adminData
-            , exportSection user adminData model
+            , apiKeysSection isMobile2 local user adminData model
+            , connectionsSection isMobile2 local.localUser.timezone user adminData
+            , sessionsSection isMobile2 local.localUser.timezone user adminData
+            , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
+            , voiceChatSection isMobile2 adminData model user
+            , wordSpellingGameSwedishSection isMobile2 user adminData
+            , filesSection isMobile2 user adminData
+            , stickersAndEmojisSection isMobile2 local user
+            , toBackendLogsSection isMobile2 user adminData
+            , exportSection isMobile2 user adminData model
             ]
         )
 
 
-connectionsSection : Time.Zone -> BackendUser -> AdminData -> Element Msg
-connectionsSection timezone user adminData =
+connectionsSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Element Msg
+connectionsSection isMobile timezone user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         ConnectionsSection
         [ if SeqDict.isEmpty adminData.connections then
@@ -1810,10 +1805,10 @@ connectionsSection timezone user adminData =
         ]
 
 
-sessionsSection : Time.Zone -> BackendUser -> AdminData -> Element Msg
-sessionsSection timezone user adminData =
+sessionsSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Element Msg
+sessionsSection isMobile timezone user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         SessionsSection
         [ if SeqDict.isEmpty adminData.sessions then
@@ -1920,8 +1915,8 @@ websocketCloseEventToString event =
             ( ( "ListenCloseEvent", "#bb5ee0" ), time )
 
 
-websocketCloseEventsSection : Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-websocketCloseEventsSection currentTime timezone user adminData model =
+websocketCloseEventsSection : Bool -> Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+websocketCloseEventsSection isMobile currentTime timezone user adminData model =
     let
         allEvents : SeqDict ( String, String ) (Nonempty Time.Posix)
         allEvents =
@@ -1937,7 +1932,7 @@ websocketCloseEventsSection currentTime timezone user adminData model =
                 adminData.websocketCloseEvents
     in
     section
-        8
+        isMobile
         user.expandedSections
         WebsocketCloseEventsSection
         [ if Array.isEmpty adminData.websocketCloseEvents then
@@ -2296,19 +2291,19 @@ websocketCloseEventLineGraph now color eventTimes =
         ]
 
 
-filesSection : BackendUser -> AdminData -> Element Msg
-filesSection user adminData =
+filesSection : Bool -> BackendUser -> AdminData -> Element Msg
+filesSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-wordSpellingGameSwedishSection : BackendUser -> AdminData -> Element Msg
-wordSpellingGameSwedishSection user adminData =
+wordSpellingGameSwedishSection : Bool -> BackendUser -> AdminData -> Element Msg
+wordSpellingGameSwedishSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         WordSpellingGameSwedishSection
         [ Ui.text
@@ -2330,8 +2325,8 @@ wordSpellingGameSwedishSection user adminData =
         ]
 
 
-voiceChatSection : AdminData -> Model -> BackendUser -> Element Msg
-voiceChatSection adminData model user =
+voiceChatSection : Bool -> AdminData -> Model -> BackendUser -> Element Msg
+voiceChatSection isMobile adminData model user =
     let
         usersInCalls : SeqDict Cloudflare.RealtimeSessionId OneOrGreater
         usersInCalls =
@@ -2356,7 +2351,7 @@ voiceChatSection adminData model user =
                 adminData.connections
     in
     section
-        8
+        isMobile
         user.expandedSections
         VoiceChatSection
         [ Ui.column
@@ -2484,8 +2479,8 @@ voiceChatSection adminData model user =
         ]
 
 
-stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg
-stickersAndEmojisSection local user =
+stickersAndEmojisSection : Bool -> LocalState -> BackendUser -> Element Msg
+stickersAndEmojisSection isMobile local user =
     let
         stickers =
             local.localUser.stickers
@@ -2542,7 +2537,7 @@ stickersAndEmojisSection local user =
             SeqDict.size customEmojis
     in
     section
-        8
+        isMobile
         user.expandedSections
         StickersAndEmojisSection
         [ Ui.text ("Sticker count: " ++ String.fromInt stickerCount)
@@ -2609,10 +2604,10 @@ stickerUrlToString url =
             "Loading"
 
 
-toBackendLogsSection : BackendUser -> AdminData -> Element Msg
-toBackendLogsSection user adminData =
+toBackendLogsSection : Bool -> BackendUser -> AdminData -> Element Msg
+toBackendLogsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         ToBackendLogsSection
         [ toBackendLogsTable adminData.toBackendLogs ]
@@ -2754,10 +2749,10 @@ exportProgressText progress =
             "Assembling export..."
 
 
-exportSection : BackendUser -> AdminData -> Model -> Element Msg
-exportSection user adminData model =
+exportSection : Bool -> BackendUser -> AdminData -> Model -> Element Msg
+exportSection isMobile user adminData model =
     section
-        8
+        isMobile
         user.expandedSections
         ExportSection
         [ Ui.row
@@ -2925,10 +2920,10 @@ exportSubsetSelector adminData selection =
         ]
 
 
-apiKeysSection : LocalState -> BackendUser -> AdminData -> Model -> Element Msg
-apiKeysSection local user adminData2 model =
+apiKeysSection : Bool -> LocalState -> BackendUser -> AdminData -> Model -> Element Msg
+apiKeysSection isMobile local user adminData2 model =
     section
-        8
+        isMobile
         user.expandedSections
         ApiKeysSection
         [ Editable.view
@@ -3134,8 +3129,8 @@ apiKeysSection local user adminData2 model =
         ]
 
 
-userSection : Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-userSection timezone user adminData model =
+userSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+userSection isMobile timezone user adminData model =
     let
         emailNotificationsLabel : { element : Element msg, id : Ui.Input.Label }
         emailNotificationsLabel =
@@ -3159,7 +3154,7 @@ userSection timezone user adminData model =
                 (Ui.text "Discord account linking enabled")
     in
     section
-        8
+        isMobile
         user.expandedSections
         UsersSection
         [ Ui.row
@@ -3247,10 +3242,10 @@ userSection timezone user adminData model =
         ]
 
 
-guildsSection : BackendUser -> AdminData -> Element Msg
-guildsSection user adminData =
+guildsSection : Bool -> BackendUser -> AdminData -> Element Msg
+guildsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         GuildsSection
         [ if SeqDict.isEmpty adminData.guilds then
@@ -3321,10 +3316,10 @@ guildsSection user adminData =
         ]
 
 
-deletedGuildsSection : BackendUser -> AdminData -> Element Msg
-deletedGuildsSection user adminData =
+deletedGuildsSection : Bool -> BackendUser -> AdminData -> Element Msg
+deletedGuildsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         DeletedGuildsSection
         [ if SeqDict.isEmpty adminData.deletedGuilds then
@@ -3361,10 +3356,10 @@ deletedGuildsSection user adminData =
         ]
 
 
-discordGuildsSection : BackendUser -> AdminData -> Element Msg
-discordGuildsSection user adminData =
+discordGuildsSection : Bool -> BackendUser -> AdminData -> Element Msg
+discordGuildsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         DiscordGuildsSection
         [ if SeqDict.isEmpty adminData.discordGuilds then
@@ -3580,10 +3575,10 @@ dmChannelParticipants adminData channelId =
         |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
 
 
-dmChannelsSection : BackendUser -> AdminData -> Element Msg
-dmChannelsSection user adminData =
+dmChannelsSection : Bool -> BackendUser -> AdminData -> Element Msg
+dmChannelsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         DmChannelsSection
         [ if SeqDict.isEmpty adminData.dmChannels then
@@ -3606,10 +3601,10 @@ dmChannelsSection user adminData =
         ]
 
 
-discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
-discordDmChannelsSection user adminData =
+discordDmChannelsSection : Bool -> BackendUser -> AdminData -> Element Msg
+discordDmChannelsSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         DiscordDmChannelsSection
         [ if SeqDict.isEmpty adminData.discordDmChannels then
@@ -3687,10 +3682,10 @@ discordDmChannelsSection user adminData =
         ]
 
 
-discordUsersSection : BackendUser -> AdminData -> Element Msg
-discordUsersSection user adminData =
+discordUsersSection : Bool -> BackendUser -> AdminData -> Element Msg
+discordUsersSection isMobile user adminData =
     section
-        8
+        isMobile
         user.expandedSections
         DiscordUsersSection
         [ if SeqDict.isEmpty adminData.discordUsers then
@@ -4184,7 +4179,7 @@ logSection isMobile2 localUser user adminData model =
             Pagination.pageCount adminData.logs
     in
     section
-        0
+        isMobile2
         user.expandedSections
         LogSection
         [ MyUi.simpleButton
@@ -4262,65 +4257,26 @@ maxVisiblePages =
     20
 
 
-section : Int -> SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
-section paddingX expandedSections section2 content =
-    let
-        title : Element msg
-        title =
-            User.sectionToString section2
-                |> Ui.text
-                |> Ui.el
-                    [ Ui.Font.size 20
-                    , Ui.Font.bold
-                    , Ui.width Ui.shrink
-                    , if Env.isProduction then
-                        Ui.background MyUi.errorColor
+section : Bool -> SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
+section isMobile expandedSections section2 content =
+    MyUi.container
+        (SeqSet.member section2 expandedSections)
+        (expandSectionButtonId section2)
+        (PressedExpandSection section2)
+        (if Env.isProduction then
+            MyUi.errorColor
 
-                      else
-                        Ui.noAttr
-                    ]
-    in
-    if SeqSet.member section2 expandedSections then
-        Ui.column
-            [ Ui.Events.onDoubleClick (DoublePressedCollapseSection section2)
-            , Ui.background MyUi.background3
-            , Ui.rounded 8
-            , Ui.paddingBottom 8
-            ]
-            [ Ui.row
-                [ Ui.Input.button (PressedCollapseSection section2)
-                , Ui.spacing 4
-                , Dom.idToString (collapseSectionButtonId section2) |> Ui.id
-                , Ui.padding 8
-                ]
-                [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.collapseContainer
-                , title
-                ]
-            , Ui.column [ Ui.paddingXY paddingX 0, Ui.spacing 8 ] content
-            ]
-
-    else
-        Ui.row
-            [ Ui.Input.button (PressedExpandSection section2)
-            , Ui.spacing 4
-            , Dom.idToString (expandSectionButtonId section2) |> Ui.id
-            , Ui.padding 8
-            , Ui.background MyUi.background3
-            , Ui.rounded 8
-            ]
-            [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.expandContainer
-            , title
-            ]
+         else
+            MyUi.background3
+        )
+        isMobile
+        (User.sectionToString section2)
+        content
 
 
 expandSectionButtonId : AdminUiSection -> HtmlId
 expandSectionButtonId section2 =
     Dom.id ("admin_expandSectionButton_" ++ User.sectionToString section2)
-
-
-collapseSectionButtonId : AdminUiSection -> HtmlId
-collapseSectionButtonId section2 =
-    Dom.id ("admin_collapseSectionButton_" ++ User.sectionToString section2)
 
 
 applyChangesToBackendUsers :
