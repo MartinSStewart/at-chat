@@ -223,7 +223,12 @@ type ContentType
 
 contentType : String -> ContentType
 contentType a =
-    OneToOne.first a contentTypes |> Maybe.withDefault unknownContentType
+    case String.split ";" a of
+        head :: _ ->
+            OneToOne.first (String.trim head) contentTypes |> Maybe.withDefault unknownContentType
+
+        [] ->
+            unknownContentType
 
 
 unknownContentType : ContentType
