@@ -1171,8 +1171,32 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
             highNote =
                 min 127 ((List.maximum (List.map .note notes) |> Maybe.withDefault 72) + 2)
 
-            noteHeight =
+            whiteRowHeight =
                 14
+
+            blackRowHeight =
+                9
+
+            rowHeight note =
+                if isBlackKey note then
+                    blackRowHeight
+
+                else
+                    whiteRowHeight
+
+            isBlackKey note =
+                List.member (modBy 12 note) [ 1, 3, 6, 8, 10 ]
+
+            -- the y axis is flipped: the lowest note is the top row
+            ( rowOffsets, rollHeight ) =
+                List.foldl
+                    (\note ( offsets, y ) -> ( Dict.insert note y offsets, y + rowHeight note ))
+                    ( Dict.empty, 0 )
+                    (List.range lowNote highNote)
+
+            yFor : Note -> Int
+            yFor note =
+                Dict.get note rowOffsets |> Maybe.withDefault 0
 
             beats =
                 toFloat safeTotal / toFloat (max 1 ticksPerBeat)
@@ -1183,15 +1207,66 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
             pxPerTick =
                 toFloat rollWidth / toFloat safeTotal
 
-            rollHeight =
-                (highNote - lowNote + 1) * noteHeight
+            keyboardWidth =
+                56
 
-            yFor : Note -> Note
-            yFor note =
-                (highNote - note) * noteHeight
+            blackKeyWidth =
+                34
 
-            isBlackKey note =
-                List.member (modBy 12 note) [ 1, 3, 6, 8, 10 ]
+            pianoKeys =
+                Svg.rect
+                    [ Svg.Attributes.x "0"
+                    , Svg.Attributes.y "0"
+                    , Svg.Attributes.width (String.fromInt keyboardWidth)
+                    , Svg.Attributes.height (String.fromInt rollHeight)
+                    , Svg.Attributes.fill "#ffffff"
+                    ]
+                    []
+                    -- separators only where two white keys touch (E/F and B/C);
+                    -- the other boundaries are hidden behind a black key
+                    :: (List.range lowNote (highNote - 1)
+                            |> List.filter (\note -> not (isBlackKey note) && not (isBlackKey (note + 1)))
+                            |> List.map
+                                (\note ->
+                                    Svg.line
+                                        [ Svg.Attributes.x1 "0"
+                                        , Svg.Attributes.x2 (String.fromInt keyboardWidth)
+                                        , Svg.Attributes.y1 (String.fromInt (yFor (note + 1)))
+                                        , Svg.Attributes.y2 (String.fromInt (yFor (note + 1)))
+                                        , Svg.Attributes.stroke "#c9d0d9"
+                                        , Svg.Attributes.strokeWidth "1"
+                                        ]
+                                        []
+                                )
+                       )
+                    ++ (List.range lowNote highNote
+                            |> List.filter isBlackKey
+                            |> List.map
+                                (\note ->
+                                    Svg.rect
+                                        [ Svg.Attributes.x "0"
+                                        , Svg.Attributes.y (String.fromInt (yFor note))
+                                        , Svg.Attributes.width (String.fromInt blackKeyWidth)
+                                        , Svg.Attributes.height (String.fromInt blackRowHeight)
+                                        , Svg.Attributes.fill "#1f2430"
+                                        ]
+                                        []
+                                )
+                       )
+                    ++ (List.range lowNote highNote
+                            |> List.filter (\note -> modBy 12 note == 0)
+                            |> List.map
+                                (\note ->
+                                    Svg.text_
+                                        [ Svg.Attributes.x (String.fromInt (keyboardWidth - 4))
+                                        , Svg.Attributes.y (String.fromInt (yFor note + whiteRowHeight - 3))
+                                        , Svg.Attributes.textAnchor "end"
+                                        , Svg.Attributes.fontSize "10"
+                                        , Svg.Attributes.fill "#8494a5"
+                                        ]
+                                        [ Svg.text (noteName note) ]
+                                )
+                       )
 
             keyRows =
                 List.range lowNote highNote
@@ -1201,7 +1276,7 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                                 [ Svg.Attributes.x "0"
                                 , Svg.Attributes.y (String.fromInt (yFor note))
                                 , Svg.Attributes.width (String.fromInt rollWidth)
-                                , Svg.Attributes.height (String.fromInt noteHeight)
+                                , Svg.Attributes.height (String.fromInt (rowHeight note))
                                 , Svg.Attributes.fill
                                     (if isBlackKey note then
                                         "#e5e5e9"
@@ -1211,20 +1286,6 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                                     )
                                 ]
                                 []
-                        )
-
-            octaveLabels =
-                List.range lowNote highNote
-                    |> List.filter (\note -> modBy 12 note == 0)
-                    |> List.map
-                        (\note ->
-                            Svg.text_
-                                [ Svg.Attributes.x "3"
-                                , Svg.Attributes.y (String.fromInt (yFor note + noteHeight - 1))
-                                , Svg.Attributes.fontSize "14"
-                                , Svg.Attributes.fill "#8494a5"
-                                ]
-                                [ Svg.text (noteName note) ]
                         )
 
             beatLines =
@@ -1264,9 +1325,15 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                             , Svg.Attributes.y (String.fromFloat (toFloat (yFor pianoNote.note) + 0.5))
                             , Svg.Attributes.width
                                 (String.fromFloat (max 2 (toFloat pianoNote.duration * pxPerTick - 0.5)))
-                            , Svg.Attributes.height (String.fromInt (noteHeight - 1))
+                            , Svg.Attributes.height (String.fromInt (rowHeight pianoNote.note - 1))
                             , Svg.Attributes.rx "1.5"
-                            , Svg.Attributes.fill (channelColor pianoNote.channel)
+                            , Svg.Attributes.fill
+                                (if isBlackKey pianoNote.note then
+                                    darkenColor 0.8 (channelColor pianoNote.channel)
+
+                                 else
+                                    channelColor pianoNote.channel
+                                )
                             , Svg.Attributes.fillOpacity
                                 (String.fromFloat (0.45 + 0.55 * toFloat pianoNote.velocity / 127))
                             ]
@@ -1286,18 +1353,32 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                     notes
         in
         Html.div
-            [ Html.Attributes.style "overflow-x" "auto"
+            [ Html.Attributes.style "display" "flex"
             , Html.Attributes.style "border" "1px solid #c3ccd6"
             , Html.Attributes.style "border-radius" "6px"
+            , Html.Attributes.style "overflow" "hidden"
             ]
             [ Svg.svg
-                [ Svg.Attributes.width (String.fromInt rollWidth)
+                [ Svg.Attributes.width (String.fromInt keyboardWidth)
                 , Svg.Attributes.height (String.fromInt rollHeight)
                 , Svg.Attributes.viewBox
-                    ("0 0 " ++ String.fromInt rollWidth ++ " " ++ String.fromInt rollHeight)
+                    ("0 0 " ++ String.fromInt keyboardWidth ++ " " ++ String.fromInt rollHeight)
                 , Html.Attributes.style "display" "block"
+                , Html.Attributes.style "flex" "none"
+                , Html.Attributes.style "border-right" "1px solid #c3ccd6"
                 ]
-                (keyRows ++ beatLines ++ noteRects ++ octaveLabels)
+                pianoKeys
+            , Html.div
+                [ Html.Attributes.style "overflow-x" "auto" ]
+                [ Svg.svg
+                    [ Svg.Attributes.width (String.fromInt rollWidth)
+                    , Svg.Attributes.height (String.fromInt rollHeight)
+                    , Svg.Attributes.viewBox
+                        ("0 0 " ++ String.fromInt rollWidth ++ " " ++ String.fromInt rollHeight)
+                    , Html.Attributes.style "display" "block"
+                    ]
+                    (keyRows ++ beatLines ++ noteRects)
+                ]
             ]
 
 
@@ -1545,6 +1626,38 @@ channelColor channel =
     List.drop (modBy 16 channel) palette
         |> List.head
         |> Maybe.withDefault "#4269d0"
+
+
+{-| Darken a #rrggbb color by multiplying each component by the given factor
+-}
+darkenColor : Float -> String -> String
+darkenColor factor color =
+    let
+        component index =
+            String.slice index (index + 2) color
+                |> String.foldl (\char acc -> acc * 16 + hexDigitValue char) 0
+                |> (\value -> clamp 0 255 (round (toFloat value * factor)))
+    in
+    "#" ++ toHex (component 1) ++ toHex (component 3) ++ toHex (component 5)
+
+
+hexDigitValue : Char -> Int
+hexDigitValue char =
+    let
+        code =
+            Char.toCode char
+    in
+    if code >= 48 && code <= 57 then
+        code - 48
+
+    else if code >= 97 && code <= 102 then
+        code - 87
+
+    else if code >= 65 && code <= 70 then
+        code - 55
+
+    else
+        0
 
 
 
