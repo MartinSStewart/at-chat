@@ -1002,6 +1002,7 @@ view model =
         , Html.Attributes.style "margin" "0 auto"
         , Html.Attributes.style "padding" "24px 16px 64px 16px"
         , Html.Attributes.style "color" "#1c2733"
+        , Html.Attributes.style "background-color" "white"
         ]
         [ Html.div
             [ Html.Attributes.style "display" "flex"
@@ -1171,13 +1172,13 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                 min 127 ((List.maximum (List.map .note notes) |> Maybe.withDefault 72) + 2)
 
             noteHeight =
-                7
+                14
 
             beats =
                 toFloat safeTotal / toFloat (max 1 ticksPerBeat)
 
             rollWidth =
-                clamp 800 3200 (round (beats * 28))
+                round (beats * 128)
 
             pxPerTick =
                 toFloat rollWidth / toFloat safeTotal
@@ -1185,6 +1186,7 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
             rollHeight =
                 (highNote - lowNote + 1) * noteHeight
 
+            yFor : Note -> Note
             yFor note =
                 (highNote - note) * noteHeight
 
@@ -1202,7 +1204,7 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                                 , Svg.Attributes.height (String.fromInt noteHeight)
                                 , Svg.Attributes.fill
                                     (if isBlackKey note then
-                                        "#e9edf2"
+                                        "#e5e5e9"
 
                                      else
                                         "#f7f9fb"
@@ -1219,7 +1221,7 @@ viewPianoRoll ticksPerBeat { notes, totalTicks } =
                             Svg.text_
                                 [ Svg.Attributes.x "3"
                                 , Svg.Attributes.y (String.fromInt (yFor note + noteHeight - 1))
-                                , Svg.Attributes.fontSize "8"
+                                , Svg.Attributes.fontSize "14"
                                 , Svg.Attributes.fill "#8494a5"
                                 ]
                                 [ Svg.text (noteName note) ]
