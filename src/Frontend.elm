@@ -77,7 +77,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -477,7 +477,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
-            , expandedUserOptions = SeqSet.empty
+            , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
             }
     in
     ( loggedIn

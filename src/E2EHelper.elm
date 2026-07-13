@@ -514,14 +514,12 @@ regeneratedServerSecretValue =
 enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 enableNotifications isMobile user =
     [ user.click 100 (Dom.id "guild_showUserOptions")
-    , user.click 100 (Dom.id "userOptions_settings")
     , user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
     , if isMobile then
         T.group []
 
       else
         user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
-    , user.click 100 (Dom.id "userOptions_settings")
     , user.click 100 (Dom.id "userOptions_closeUserOptions")
     ]
         |> T.group

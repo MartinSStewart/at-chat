@@ -715,19 +715,16 @@ prewrap =
 
 container : Bool -> HtmlId -> msg -> Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
 container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 contents =
-    let
-        paddingX =
-            if isMobile2 then
-                8
-
-            else
-                16
-    in
     if isExpanded then
         Ui.el
             [ Ui.paddingWith
-                { left = paddingX
-                , right = paddingX
+                { left = 16
+                , right =
+                    if isMobile2 then
+                        8
+
+                    else
+                        16
                 , top = 10
                 , bottom = 0
                 }

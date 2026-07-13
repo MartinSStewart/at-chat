@@ -772,7 +772,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Enable email notifications through the user options UI.
                 , user.click 100 (Dom.id "guild_showUserOptions")
-                , user.click 100 (Dom.id "userOptions_settings")
                 , user.keyUp 100 (Dom.id "userOptions_emailNotifications") "ArrowDown" []
                 , user.click 100 (Dom.id "userOptions_closeUserOptions")
 
