@@ -114,7 +114,6 @@ import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)

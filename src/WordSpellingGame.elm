@@ -67,7 +67,7 @@ import Char
 import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Dict exposing (Dict)
+import Dict
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
