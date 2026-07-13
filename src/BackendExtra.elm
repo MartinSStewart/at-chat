@@ -83,12 +83,13 @@ import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..), WordSpellingGameSwedish(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
+import WordSpellingGame exposing (WordList(..))
 
 
 addLogWithCmd :
@@ -1038,16 +1039,16 @@ adminData model lastLogPageViewed =
             |> SeqDict.fromList
     , wordSpellingGameSwedish =
         case model.wordSpellingGameSwedish of
-            WordSpellingGameSwedish_NotLoaded ->
+            WordList_NotLoaded ->
                 LocalState.WordSpellingGameSwedishStatus_NotLoaded
 
-            WordSpellingGameSwedish_Loading ->
+            WordList_Loading ->
                 LocalState.WordSpellingGameSwedishStatus_Loading
 
-            WordSpellingGameSwedish_Error error ->
+            WordList_Error error ->
                 LocalState.WordSpellingGameSwedishStatus_Error error
 
-            WordSpellingGameSwedish_Loaded _ ->
+            WordList_Loaded _ ->
                 LocalState.WordSpellingGameSwedishStatus_Loaded
     }
 

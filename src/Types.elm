@@ -43,7 +43,6 @@ module Types exposing
     , UserOptionSection(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
-    , WordSpellingGameSwedish(..)
     , messageMenuMobileOffset
     )
 
@@ -129,6 +128,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
+import WordSpellingGame exposing (WordList)
 
 
 type alias FrontendModel =
@@ -400,15 +400,9 @@ type alias BackendModel =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , goMatchPublicIds : OneToOne (SecretId GamePublicId) ( GuildOrFullDmId, Id ChannelMessageId )
-    , wordSpellingGameSwedish : WordSpellingGameSwedish
+    , wordSpellingGameEnglish : WordList
+    , wordSpellingGameSwedish : WordList
     }
-
-
-type WordSpellingGameSwedish
-    = WordSpellingGameSwedish_NotLoaded
-    | WordSpellingGameSwedish_Loading
-    | WordSpellingGameSwedish_Error Http.Error
-    | WordSpellingGameSwedish_Loaded (Set String)
 
 
 type alias DiscordAttachmentData =
@@ -748,6 +742,7 @@ type BackendMsg
     | GotCloudflareUsage Time.Posix (Result Http.Error Int)
     | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
     | GotRustServerFileUpload FileHash Int (Maybe (Coord CssPixels))
+    | GotEnglishWordList (Result Http.Error String)
     | GotSwedishWordList (Result Http.Error String)
 
 

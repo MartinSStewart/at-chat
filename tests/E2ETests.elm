@@ -90,6 +90,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ "", "compact-emoji.json" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 emojiJson
 
+                [ "", "NWL2023.txt" ] ->
+                    E2EHelper.httpBasic currentRequest.url 200 "AA\nDATE\nNOSE\nLOAD\nROT\n"
+
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
                     E2EHelper.mockCloudflareSfu rest httpRequests
 
