@@ -40,6 +40,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import ImageViewer
+import Iso8601
 import Json.Decode
 import Lamdera as LamderaCore
 import LinkedAndOtherDiscordUsers
@@ -377,6 +378,20 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , popSound = loading.popSound
             , startupData = startupData
             , lastUrlChange = Nothing
+            , routingLog =
+                [ { time = time
+                  , entry =
+                        "Init: app started at "
+                            ++ Route.encode loading.route
+                            ++ (case startupData.pwaStatus of
+                                    InstalledPwa ->
+                                        " (installed PWA)"
+
+                                    BrowserView ->
+                                        " (browser view)"
+                               )
+                  }
+                ]
             }
 
         ( model2, cmdA ) =
@@ -667,10 +682,24 @@ updateLoaded msg model =
                         route : Route
                         route =
                             Route.decode url
+
+                        isSameRoute : Bool
+                        isSameRoute =
+                            model.route == route
                     in
-                    ( model
+                    ( FrontendExtra.addRoutingLog
+                        ("UrlClicked (internal): "
+                            ++ Url.toString url
+                            ++ (if isSameRoute then
+                                    " (same route, replaceUrl)"
+
+                                else
+                                    " (pushUrl)"
+                               )
+                        )
+                        model
                     , Command.batch
-                        [ if model.route == route then
+                        [ if isSameRoute then
                             BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
 
                           else
@@ -679,7 +708,7 @@ updateLoaded msg model =
                     )
 
                 External url ->
-                    ( model
+                    ( FrontendExtra.addRoutingLog ("UrlClicked (external): " ++ url) model
                     , BrowserNavigation.load url
                     )
 
@@ -700,7 +729,14 @@ updateLoaded msg model =
                             False
             in
             if ignoreUrlChange then
-                ( model, Command.none )
+                ( FrontendExtra.addRoutingLog
+                    ("UrlChanged: "
+                        ++ Url.toString url
+                        ++ " (IGNORED: installed PWA and previous url change was less than 2 seconds ago)"
+                    )
+                    model
+                , Command.none
+                )
 
             else
                 let
@@ -708,7 +744,19 @@ updateLoaded msg model =
                         FrontendExtra.routeRequest
                             (Just model.route)
                             (Route.decode url)
-                            { model | lastUrlChange = Just model.time }
+                            (FrontendExtra.addRoutingLog
+                                ("UrlChanged: "
+                                    ++ Url.toString url
+                                    ++ (case model.startupData.pwaStatus of
+                                            InstalledPwa ->
+                                                " (installed PWA, navigating back to stay on first history entry)"
+
+                                            BrowserView ->
+                                                ""
+                                       )
+                                )
+                                { model | lastUrlChange = Just model.time }
+                            )
                 in
                 ( model2
                 , case model2.startupData.pwaStatus of
@@ -2962,6 +3010,23 @@ updateLoaded msg model =
 
         GotStartupData startupData ->
             ( { model | startupData = startupData }
+                |> (if startupData.pwaStatus /= model.startupData.pwaStatus then
+                        -- pwaStatus determines how UrlChanged messages are handled so it's worth
+                        -- noting in the routing log if it changes mid-session.
+                        FrontendExtra.addRoutingLog
+                            ("GotStartupData: pwaStatus changed to "
+                                ++ (case startupData.pwaStatus of
+                                        InstalledPwa ->
+                                            "installed PWA"
+
+                                        BrowserView ->
+                                            "browser view"
+                                   )
+                            )
+
+                    else
+                        identity
+                   )
             , checkAppVersion False
             )
 
@@ -3014,12 +3079,23 @@ updateLoaded msg model =
             )
 
         GotServiceWorkerMessage url ->
+            let
+                model2 : LoadedFrontend
+                model2 =
+                    FrontendExtra.addRoutingLog
+                        ("GotServiceWorkerMessage (notification clicked): " ++ url)
+                        model
+            in
             case Url.fromString url of
                 Just url2 ->
-                    FrontendExtra.routePush model (Route.decode url2)
+                    FrontendExtra.routePush model2 (Route.decode url2)
 
                 Nothing ->
-                    ( model, Command.none )
+                    ( FrontendExtra.addRoutingLog
+                        "GotServiceWorkerMessage: message isn't a valid url, ignored"
+                        model2
+                    , Command.none
+                    )
 
         VisualViewportResized _ ->
             ( model, Command.none )
@@ -4483,10 +4559,21 @@ updateLoaded msg model =
         PressedUnregisterServiceWorkers ->
             ( model, Ports.unregisterServiceWorker )
 
-        PressedLoadServiceWorkerData ->
+        PressedLoadDebugData ->
             ( model, Ports.loadServiceWorkerData )
 
         GotServiceWorkerData serviceWorkerData ->
+            let
+                debugData : String
+                debugData =
+                    "Routing log (oldest first):\n"
+                        ++ (List.reverse model.routingLog
+                                |> List.map (\{ time, entry } -> Iso8601.fromTime time ++ " " ++ entry)
+                                |> String.join "\n"
+                           )
+                        ++ "\n\nService worker data:\n"
+                        ++ serviceWorkerData
+            in
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
@@ -4494,7 +4581,7 @@ updateLoaded msg model =
                             Maybe.map
                                 (\userOptions ->
                                     { userOptions
-                                        | serviceWorkerData = Just { data = serviceWorkerData, loadedAt = model.time }
+                                        | debugData = Just { data = debugData, loadedAt = model.time }
                                     }
                                 )
                                 loggedIn.userOptions

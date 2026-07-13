@@ -40,7 +40,7 @@ init : SeqSet RichText.Domain -> UserOptionsModel
 init domainWhitelist =
     { name = Editable.init
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
-    , serviceWorkerData = Nothing
+    , debugData = Nothing
     }
 
 
@@ -538,11 +538,11 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         PressedUnregisterServiceWorkers
                         "Unregister service workers"
                     , MyUi.secondaryButton
-                        (Dom.id "userOptions_loadServiceWorkerData")
-                        PressedLoadServiceWorkerData
-                        "Load service worker data"
-                    , case model.serviceWorkerData of
-                        Just serviceWorkerData ->
+                        (Dom.id "userOptions_loadDebugData")
+                        PressedLoadDebugData
+                        "Load debug data"
+                    , case model.debugData of
+                        Just debugData ->
                             Ui.column
                                 [ if isMobile then
                                     Ui.width Ui.fill
@@ -553,17 +553,17 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                 [ Ui.el
                                     [ Ui.Font.size 14, Ui.Font.bold ]
                                     (Ui.text
-                                        ("Service worker data (loaded at "
-                                            ++ MyUi.timestamp serviceWorkerData.loadedAt loaded.timezone
+                                        ("Debug data (loaded at "
+                                            ++ MyUi.timestamp debugData.loadedAt loaded.timezone
                                             ++ ")"
                                         )
                                     )
                                 , MyUi.copyBox
-                                    (Dom.id "userOptions_serviceWorkerData")
+                                    (Dom.id "userOptions_debugData")
                                     PressedCopyText
                                     FrontendNoOp
                                     loaded
-                                    serviceWorkerData.data
+                                    debugData.data
                                 ]
 
                         Nothing ->

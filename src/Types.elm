@@ -184,6 +184,10 @@ type alias LoadedFrontend =
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
     , lastUrlChange : Maybe Time.Posix
+    , -- Newest entry first. A log of routing related events (UrlClicked, UrlChanged, routeRequest
+      -- calls, etc.) shown by the "Load debug data" button, for diagnosing navigation issues such
+      -- as notification clicks not opening the right channel.
+      routingLog : List { time : Time.Posix, entry : String }
     }
 
 
@@ -278,7 +282,7 @@ type FileDrag
 type alias UserOptionsModel =
     { name : Editable.Model
     , domainWhitelistInput : String
-    , serviceWorkerData : Maybe { data : String, loadedAt : Time.Posix }
+    , debugData : Maybe { data : String, loadedAt : Time.Posix }
     }
 
 
@@ -576,7 +580,7 @@ type FrontendMsg_
     | FileDragLeave
     | FileDropped (List File)
     | PressedUnregisterServiceWorkers
-    | PressedLoadServiceWorkerData
+    | PressedLoadDebugData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
