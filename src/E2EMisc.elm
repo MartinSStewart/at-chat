@@ -1,4 +1,10 @@
-module E2EMisc exposing (friendsSearchTest, handleNavigationHistoryOnMobile, inactiveThreadsAreHiddenTest, inviteUserAndDmChat)
+module E2EMisc exposing
+    ( friendsSearchTest
+    , handleNavigationHistoryOnMobile
+    , inactiveThreadsAreHiddenTest
+    , inviteUserAndDmChat
+    , largePasteBecomesAttachment
+    )
 
 import Audio
 import Duration
@@ -6,8 +12,8 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Expect
-import Html.Attributes
 import FileStatus
+import Html.Attributes
 import Id
 import Json.Encode
 import Pages.Guild
