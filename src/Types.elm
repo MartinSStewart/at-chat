@@ -255,6 +255,7 @@ type alias LoggedIn2 =
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
+    , friendsSearch : String
     }
 
 
@@ -575,6 +576,8 @@ type FrontendMsg_
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
+    | TypedFriendsSearch String
+    | PressedClearFriendsSearch
 
 
 type alias NewChannelForm =
