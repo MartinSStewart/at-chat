@@ -3088,7 +3088,7 @@ updateLoaded msg model =
             in
             case Url.fromString url of
                 Just url2 ->
-                    FrontendExtra.routePush model2 (Route.decode url2)
+                    FrontendExtra.routePushFromNotification model2 (Route.decode url2)
 
                 Nothing ->
                     ( FrontendExtra.addRoutingLog

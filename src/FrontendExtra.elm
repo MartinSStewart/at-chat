@@ -27,6 +27,7 @@ module FrontendExtra exposing
     , playNotificationSound
     , playNotificationSoundForDiscordMessage
     , routePush
+    , routePushFromNotification
     , routeReplace
     , routeRequest
     , setFocus
@@ -1274,6 +1275,26 @@ routePush model route =
 
     else
         ( addRoutingLog ("routePush: pushUrl " ++ Route.encode route) model
+        , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+        )
+
+
+{-| Navigate in response to a clicked push notification. Unlike routePush, the previous route is
+ignored so the navigation behaves like opening the app from scratch. Otherwise, on mobile, guild
+channel routes keep the channel sidebar closed when coming from an unrelated route (that rule
+exists for in-app guild switching, where landing on the channel list is wanted) and the user never
+sees the conversation the notification pointed at.
+-}
+routePushFromNotification : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+routePushFromNotification model route =
+    if MyUi.isMobile model then
+        routeRequest
+            Nothing
+            route
+            (addRoutingLog ("routePushFromNotification (mobile, no url change): " ++ Route.encode route) model)
+
+    else
+        ( addRoutingLog ("routePushFromNotification: pushUrl " ++ Route.encode route) model
         , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
         )
 
