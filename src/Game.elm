@@ -51,6 +51,7 @@ import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Lazy
+import Ui.Shadow
 import User exposing (LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame
@@ -733,10 +734,20 @@ gameToString : GameType -> String
 gameToString game =
     case game of
         GameType_Go ->
-            "Go"
+            "Go (Baduk)"
 
         GameType_WordSpellingGame ->
             "Word Spelling Game"
+
+
+gameToPreviewUrl : GameType -> String
+gameToPreviewUrl game =
+    case game of
+        GameType_Go ->
+            "/go-preview.webp"
+
+        GameType_WordSpellingGame ->
+            "/word-spelling-game-preview.webp"
 
 
 gameSelectButton : GameType -> Element Msg
@@ -744,19 +755,27 @@ gameSelectButton game =
     MyUi.elButton
         (Dom.id ("game_select_" ++ gameToString game))
         (PressedSelectGame game)
-        [ Ui.width (Ui.px 200)
-        , Ui.height (Ui.px 200)
-        , Ui.rounded 8
-        , Ui.background MyUi.buttonBackground
-        , Ui.border 1
-        , Ui.borderColor MyUi.buttonBorder
+        [ Ui.width (Ui.px 240)
+        , Ui.height (Ui.px 240)
+        , Ui.rounded 16
+        , Ui.clip
         , Ui.contentCenterY
-        , Ui.Font.size 20
+        , Ui.Font.size 18
         , Ui.Font.center
         , Ui.Font.bold
-        , Ui.padding 16
+        , gameToString game
+            |> Ui.text
+            |> Ui.el
+                [ Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.alignBottom
+                , Ui.background (Ui.rgba 0 0 0 0.7)
+                , Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 100, color = Ui.rgba 0 0 0 1 } ]
+                , Ui.heightMin 40
+                ]
+            |> Ui.inFront
         ]
-        (gameToString game |> Ui.text)
+        (Ui.image [] { source = gameToPreviewUrl game, description = "", onLoad = Nothing })
 
 
 matchSwitcherView : Bool -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
