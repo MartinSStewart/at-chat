@@ -8,10 +8,10 @@ import List.Nonempty exposing (Nonempty(..))
 import NonemptyDict
 import OneOrGreater
 import SeqDict exposing (SeqDict)
+import Set
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
-import WordSpellingGameEnglish
 
 
 {-| Build a board from a list of plain (non-wildcard) tiles.
@@ -197,8 +197,8 @@ tests =
         , Test.describe "validatePlacement checks formed words against the word list"
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "CAT" ])
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -206,8 +206,8 @@ tests =
                         |> Expect.equal (Ok ( [ word [ c, a, t ] ], 5 ))
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "DOG" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "DOG" ])
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -219,8 +219,8 @@ tests =
                         existing =
                             board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "CAT", "CA", "AA", "TA" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "CAT", "CA", "AA", "TA" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -233,9 +233,9 @@ tests =
                         existing =
                             board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
-                    WordSpellingGame.validatePlacementEnglish
+                    WordSpellingGame.validatePlacement
                         -- "AA" is missing, so the placement is rejected.
-                        (WordSpellingGameEnglish.buildDictionary [ "CAT", "CA", "TA" ])
+                        (Set.fromList [ "CAT", "CA", "TA" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -249,8 +249,8 @@ tests =
                         existing =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "CAT" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -264,8 +264,8 @@ tests =
                         existing =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "DOG" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "DOG" ])
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -279,55 +279,13 @@ tests =
                         existing =
                             SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 8, 4 ), Wildcard ) ]
                     in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "CAT" ])
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "CAT" ])
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
                         |> Result.map (\result -> List.map .letters result.words)
                         |> Expect.equal (Ok [ [ Wildcard, Letter a, Wildcard ] ])
-            , Test.test "a word with many wildcards is matched by scanning the dictionary" <|
-                \_ ->
-                    -- Four wildcards around a fixed A form "__a__" (too many to brute force), which
-                    -- the dictionary accepts as "KOALA".
-                    let
-                        existing : SeqDict ( Int, Int ) LetterOrWildcard
-                        existing =
-                            SeqDict.fromList
-                                [ ( ( 5, 4 ), Wildcard )
-                                , ( ( 6, 4 ), Wildcard )
-                                , ( ( 8, 4 ), Wildcard )
-                                , ( ( 9, 4 ), Wildcard )
-                                ]
-                    in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "KOALA" ])
-                        testSetup
-                        existing
-                        (placedWord ( 7, 4 ) False a [])
-                        |> Result.map (\result -> List.map .letters result.words)
-                        |> Expect.equal
-                            (Ok [ [ Wildcard, Wildcard, Letter a, Wildcard, Wildcard ] ])
-            , Test.test "a word with many wildcards is rejected when nothing of that length fits" <|
-                \_ ->
-                    -- "__a__" has no completion among the only same-length word "ABCDE" (whose third
-                    -- letter is 'c', not 'a'), so the placement is rejected.
-                    let
-                        existing : SeqDict ( Int, Int ) LetterOrWildcard
-                        existing =
-                            SeqDict.fromList
-                                [ ( ( 5, 4 ), Wildcard )
-                                , ( ( 6, 4 ), Wildcard )
-                                , ( ( 8, 4 ), Wildcard )
-                                , ( ( 9, 4 ), Wildcard )
-                                ]
-                    in
-                    WordSpellingGame.validatePlacementEnglish
-                        (WordSpellingGameEnglish.buildDictionary [ "ABCDE" ])
-                        testSetup
-                        existing
-                        (placedWord ( 7, 4 ) False a [])
-                        |> Expect.equal (Err ())
             ]
         , Test.describe "validateSetup reads the letter distribution and values"
             [ Test.test "letters score the value chosen in the setup, whatever the alphabet" <|
