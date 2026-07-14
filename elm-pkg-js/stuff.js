@@ -209,6 +209,14 @@ exports.init = async function init(app)
                 result.notificationPermission = Notification.permission;
             }
 
+            if (window.pushManager) {
+                const windowPushManager = await window.pushManager.getSubscription();
+                result.windowPushManager = windowPushManager.toJSON();
+            }
+            else {
+                result.windowPushManager = null;
+            }
+
             app.ports.load_service_worker_data_from_js.send(JSON.stringify(result, null, 2));
         } catch (e) {
             app.ports.load_service_worker_data_from_js.send("Error loading service worker data: " + e.toString());
