@@ -992,6 +992,32 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
+{-| The url opened when the user taps a push notification. A `push-id` query parameter (ignored by
+Route.decode) makes the url unique per notification. Without it, iOS treats a declarative web push
+whose navigate url matches the url it has on record for the already-open web app as "already
+there" and only brings the app to the foreground, without navigating. No page load or event
+reaches the app, so it stays on whatever route it was on. The app keeps window.location pinned to
+the url it booted at (see the UrlChanged handler in Frontend.elm), so this happened for any
+notification targeting the route the app was launched or installed from.
+-}
+notificationNavigateUrl : Time.Posix -> Route -> String
+notificationNavigateUrl time route =
+    let
+        url : String
+        url =
+            Env.domain ++ Route.encode route
+    in
+    url
+        ++ (if String.contains "?" url then
+                "&"
+
+            else
+                "?"
+           )
+        ++ "push-id="
+        ++ String.fromInt (Time.posixToMillis time)
+
+
 pushNotification :
     SessionId
     -> Id UserId
@@ -1021,14 +1047,14 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , navigate =
                     case navigateTo of
                         Just navigateTo2 ->
-                            Env.domain ++ Route.encode navigateTo2
+                            notificationNavigateUrl time navigateTo2
 
                         Nothing ->
                             Env.domain
                 , data =
                     case navigateTo of
                         Just navigateTo2 ->
-                            Env.domain ++ Route.encode navigateTo2 |> Just
+                            notificationNavigateUrl time navigateTo2 |> Just
 
                         Nothing ->
                             Nothing
