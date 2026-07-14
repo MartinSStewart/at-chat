@@ -513,6 +513,7 @@ async fn push_notification_endpoint(
         icon,
         navigate,
         data,
+        mutable,
     }): Json<PushNotification>,
 ) -> Response<String> {
     // You would likely get this by deserializing a browser `pushSubscription` object.
@@ -526,7 +527,7 @@ async fn push_notification_endpoint(
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
     };
 
-    let content = match content.to_payload() {
+    let content = match content.to_payload(mutable) {
         Ok(content2) => content2,
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2")),
     };
@@ -1142,8 +1143,8 @@ impl<D: Serialize> Notification<D> {
         }
     }
 
-    pub fn to_payload(&self) -> serde_json::Result<Vec<u8>> {
-        serde_json::to_vec(&DeclarativePushPayload::new(self))
+    pub fn to_payload(&self, mutable: bool) -> serde_json::Result<Vec<u8>> {
+        serde_json::to_vec(&DeclarativePushPayload::new(self, mutable))
     }
 }
 
@@ -1155,11 +1156,11 @@ struct DeclarativePushPayload<'a, D> {
 }
 
 impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
-    pub fn new(notification: &'a Notification<D>) -> Self {
+    pub fn new(notification: &'a Notification<D>, mutable: bool) -> Self {
         DeclarativePushPayload {
             web_push: 8030,
             notification,
-            mutable: true,
+            mutable: mutable,
         }
     }
 }
@@ -1175,6 +1176,7 @@ pub struct PushNotification {
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,
+    pub mutable : bool
 }
 
 #[derive(Debug, Serialize, Deserialize)]
