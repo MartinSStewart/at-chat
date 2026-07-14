@@ -1609,7 +1609,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 -- isn't viewing the DM either, so starting the game should push a notification to them.
                 , admin.click 100 (Dom.id "guild_openDm_2")
                 , admin.click 100 (Dom.id "guild_openGamesTab")
-                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                 , admin.click 100 (Dom.id "go_start")
                 , E2EHelper.checkNotification "Go match started"
                 ]

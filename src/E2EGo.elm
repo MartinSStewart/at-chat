@@ -39,12 +39,12 @@ tests normalConfig =
                     [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
                     , admin.click 1000 (Dom.id "guild_friendLabel_0")
                     , admin.click 100 (Dom.id "guild_openGamesTab")
-                    , admin.click 100 (Dom.id "game_select_Go")
+                    , admin.click 100 (Dom.id "game_select_Go (Baduk)")
 
                     -- Cancel from the setup screen returns to the game select view.
                     , admin.click 100 (Dom.id "go_cancel")
                     , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_start" ])
-                    , admin.click 100 (Dom.id "game_select_Go")
+                    , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                     , admin.click 100 (Dom.id "go_start")
                     , admin.click 100 (Dom.id "go_cell_4_4")
                     , admin.click 100 (Dom.id "go_cell_5_4")
@@ -77,7 +77,7 @@ goMatchTest normalConfig =
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Go")
+                        , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
                         , user.click 100 (Dom.id "go_joinGame")
@@ -105,7 +105,7 @@ goMatchTest normalConfig =
                                     (\data -> [ user2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGamesTab")
-                                , user2.click 100 (Dom.id "game_select_Go")
+                                , user2.click 100 (Dom.id "game_select_Go (Baduk)")
                                 , user2.input 100 (Dom.id "go_matchSwitcher") "0"
 
                                 -- A few more moves to confirm the state persisted
@@ -169,7 +169,7 @@ goTimeoutTest normalConfig =
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Go")
+                        , admin.click 100 (Dom.id "game_select_Go (Baduk)")
 
                         -- Set up a very short time control: 1 minute main time, no increment.
                         , admin.input 100 (Dom.id "go_mainTimeInput") "1"
@@ -246,7 +246,7 @@ goTurnNotificationDotTest normalConfig =
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Go")
+                        , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                         , admin.click 100 (Dom.id "go_start")
                         , user.click 100 (Dom.id "guild_gameStartedCard_0")
                         , user.click 100 (Dom.id "go_joinGame")
@@ -320,7 +320,7 @@ goGuildMatchTest normalConfig =
             (\admin user ->
                 [ -- Both users start out viewing the guild's first channel.
                   admin.click 100 (Dom.id "guild_openGamesTab")
-                , admin.click 100 (Dom.id "game_select_Go")
+                , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                 , admin.click 100 (Dom.id "go_start")
                 , T.checkState
                     100
@@ -434,7 +434,7 @@ publicGoMatchViewTest normalConfig =
                         , user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_2")
                         , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Go")
+                        , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                         , admin.click 100 (Dom.id "go_start")
                         , admin.click 100 (Dom.id "go_cell_4_4")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "go_share" ])
