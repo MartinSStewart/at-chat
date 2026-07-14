@@ -151,6 +151,7 @@ type alias LoadingFrontend =
     , publicGoMatch : PublicGoMatch
     , popSound : Result Audio.LoadError Audio.Source
     , lastUrlChange : Maybe Time.Posix
+    , routingLog : List { time : Time.Posix, entry : String }
     }
 
 

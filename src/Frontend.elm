@@ -309,6 +309,11 @@ init url key =
                     PublicGoMatch_NotLoaded
         , popSound = Err Audio.UnknownError
         , lastUrlChange = Nothing
+        , routingLog =
+            [ { time = Time.millisToPosix 0
+              , entry = "Init: app started at " ++ Url.toString url
+              }
+            ]
         }
     , Command.batch
         [ BrowserNavigation.replaceUrl key (Route.encode route)
@@ -379,19 +384,19 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , startupData = startupData
             , lastUrlChange = Nothing
             , routingLog =
-                [ { time = time
-                  , entry =
-                        "Init: app started at "
-                            ++ Route.encode loading.route
-                            ++ (case startupData.pwaStatus of
-                                    InstalledPwa ->
-                                        " (installed PWA)"
+                { time = time
+                , entry =
+                    "Init: app started at "
+                        ++ Route.encode loading.route
+                        ++ (case startupData.pwaStatus of
+                                InstalledPwa ->
+                                    " (installed PWA)"
 
-                                    BrowserView ->
-                                        " (browser view)"
-                               )
-                  }
-                ]
+                                BrowserView ->
+                                    " (browser view)"
+                           )
+                }
+                    :: loading.routingLog
             }
 
         ( model2, cmdA ) =
