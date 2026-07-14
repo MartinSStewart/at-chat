@@ -198,7 +198,7 @@ tests =
             [ Test.test "accepts a placement when the word exists" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "CAT" ])
+                        (Set.singleton "CAT")
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -207,7 +207,7 @@ tests =
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "DOG" ])
+                        (Set.singleton "DOG")
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
@@ -250,7 +250,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "CAT" ])
+                        (Set.singleton "CAT")
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -265,7 +265,7 @@ tests =
                             SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "DOG" ])
+                        (Set.singleton "DOG")
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
@@ -280,7 +280,7 @@ tests =
                             SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 8, 4 ), Wildcard ) ]
                     in
                     WordSpellingGame.validatePlacement
-                        (Set.fromList [ "CAT" ])
+                        (Set.singleton "CAT")
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
