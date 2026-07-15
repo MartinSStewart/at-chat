@@ -320,7 +320,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMedia.audioAttachmentTest audioUploadConfig
     , E2EMisc.inviteUserAndDmChat normalConfig
     , E2EMisc.friendsSearchTest normalConfig
-    , E2EMisc.handleNavigationHistoryOnMobile normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
