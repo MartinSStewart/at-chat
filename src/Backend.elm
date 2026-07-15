@@ -5997,7 +5997,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                 , broadcast localMsg2 model
                 , if loadEnglishWordList then
                     Http.get
-                        { url = "/NWL2023.txt"
+                        { url = Env.domain ++ "/NWL2023.txt"
                         , expect = Http.expectString GotEnglishWordList
                         }
 
@@ -6005,7 +6005,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                     Command.none
                 , if loadSwedishWordList then
                     Http.get
-                        { url = "/swedish-word-list.txt"
+                        { url = Env.domain ++ "/swedish-word-list.txt"
                         , expect = Http.expectString GotSwedishWordList
                         }
 
