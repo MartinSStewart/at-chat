@@ -445,19 +445,7 @@ exports.init = async function init(app)
     });
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
-
-        if (window.pushManager) {
-            console.log("register_push_subscription_to_js");
-            console.log(window.pushManager);
-            window.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: publicKey
-            })
-            .then((subscription) => { app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription.toJSON() ]}) })
-            .catch((e) => { app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]}) });
-
-        }
-        else if (navigator.serviceWorker) {
+        if (navigator.serviceWorker) {
             try {
                 navigator.serviceWorker.ready
                 .then(function(registration) {
@@ -497,6 +485,7 @@ exports.init = async function init(app)
             catch (e) {
                 app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]});
             }
+
         } else {
             app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ "navigator.serviceWorker is missing" ]});
         }
