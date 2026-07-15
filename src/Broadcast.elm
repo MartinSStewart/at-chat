@@ -968,6 +968,7 @@ type alias PushNotification =
     , navigate : String
     , data : Maybe String
     , mutable : Bool
+    , isDeclarative : Bool
     }
 
 
@@ -984,6 +985,7 @@ pushNotificationCodec =
         |> Codec.field "navigate" .navigate Codec.string
         |> Codec.field "data" .data (Codec.nullable Codec.string)
         |> Codec.field "mutable" .mutable Codec.bool
+        |> Codec.field "isDeclarative" .isDeclarative Codec.bool
         |> Codec.buildObject
 
 
@@ -1059,6 +1061,7 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                         Nothing ->
                             Nothing
                 , mutable = False
+                , isDeclarative = False
                 }
                 |> Http.jsonBody
         , expect =
