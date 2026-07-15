@@ -539,7 +539,7 @@ sectionToString section2 =
             "Sessions"
 
         WordSpellingGameSwedishSection ->
-            "Swedish word spelling game"
+            "Word spelling game word lists"
 
 
 {-| User containing only publicly visible data

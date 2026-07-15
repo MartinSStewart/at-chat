@@ -4937,6 +4937,7 @@ initAdminData adminData =
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , websocketCloseEvents = adminData.websocketCloseEvents
     , sessions = adminData.sessions
+    , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
     }
 

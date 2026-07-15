@@ -32,7 +32,7 @@ module LocalState exposing
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
     , WebsocketClosedEvent(..)
-    , WordSpellingGameSwedishStatus(..)
+    , WordSpellingGameStatus(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -564,18 +564,19 @@ type alias AdminData =
     , serverSecretRefreshedAt : ServerSecretStatus
     , websocketCloseEvents : Array WebsocketClosedEvent
     , sessions : SeqDict SessionIdHash UserSession
-    , wordSpellingGameSwedish : WordSpellingGameSwedishStatus
+    , wordSpellingGameEnglish : WordSpellingGameStatus
+    , wordSpellingGameSwedish : WordSpellingGameStatus
     }
 
 
-{-| A summary of the backend's WordSpellingGameSwedish state, suitable for showing in the
+{-| A summary of the backend's word spelling game word list state, suitable for showing in the
 admin page without sending the entire word list to the frontend.
 -}
-type WordSpellingGameSwedishStatus
-    = WordSpellingGameSwedishStatus_NotLoaded
-    | WordSpellingGameSwedishStatus_Loading
-    | WordSpellingGameSwedishStatus_Error Http.Error
-    | WordSpellingGameSwedishStatus_Loaded
+type WordSpellingGameStatus
+    = WordSpellingGameStatus_NotLoaded
+    | WordSpellingGameStatus_Loading
+    | WordSpellingGameStatus_Error Http.Error
+    | WordSpellingGameStatus_Loaded
 
 
 type WebsocketClosedEvent
