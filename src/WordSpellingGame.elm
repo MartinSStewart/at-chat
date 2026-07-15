@@ -218,6 +218,7 @@ type GameMsg
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
     | UserScrolledPastMoves ScrollPosition
+    | PressedSubmitPremove PlacedWord
 
 
 type alias SetupModel =
@@ -315,6 +316,7 @@ type Action
     = PlaceWord PlacedWord (ToBeFilledInByBackend IsValid)
     | ReplaceTrayOrPass
     | JoinGame
+    | Premove PlacedWord (ToBeFilledInByBackend IsValid)
 
 
 type IsValid
@@ -359,6 +361,7 @@ type alias Player =
     { userId : Id UserId
     , tray : IdArray LetterId LetterOrWildcard
     , score : Int
+    , premove : Maybe ( PlacedWord, IsValid )
     }
 
 
@@ -686,6 +689,36 @@ updateAction setup action shared =
             else
                 shared
 
+        Premove placedWord isValid ->
+            case getWinner shared of
+                Nothing ->
+                    { shared
+                        | players =
+                            List.Nonempty.map
+                                (\player ->
+                                    if player.userId == action.userId then
+                                        { player
+                                            | premove =
+                                                Just
+                                                    ( placedWord
+                                                    , case isValid of
+                                                        FilledInByBackend isValid2 ->
+                                                            isValid2
+
+                                                        EmptyPlaceholder ->
+                                                            IsNotValid
+                                                    )
+                                        }
+
+                                    else
+                                        player
+                                )
+                                shared.players
+                    }
+
+                Just _ ->
+                    shared
+
 
 incrementTurnCount : ValidatedSetup -> Shared -> Shared
 incrementTurnCount setup shared =
@@ -702,6 +735,7 @@ initPlayer userId board setup existingPlayers =
     { userId = userId
     , tray = getLetters setup.traySize setup board existingPlayers 0 |> IdArray.fromList
     , score = 0
+    , premove = Nothing
     }
 
 
@@ -1291,6 +1325,14 @@ updateGame time windowSize currentUserId setup shared msg model =
             -- bottom when the player was already there (mirrors the conversation view; the scroll
             -- command itself is issued from Frontend).
             ( { model | scrollPosition = position }, Nothing )
+
+        PressedSubmitPremove placement ->
+            case placeWord setup shared.board placement of
+                Just result ->
+                    ( model, Just (PlaceWord placement EmptyPlaceholder) )
+
+                Nothing ->
+                    ( model, Nothing )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -2205,13 +2247,13 @@ boardTouchCoord traySize windowSize placedCells ( tx, ty ) =
                 effScale =
                     toFloat zoomedCellSize / toFloat size
 
-                project : Int -> Int -> Int -> Int
-                project cell boardOrigin axisTranslate =
+                project2 : Int -> Int -> Int -> Int
+                project2 cell boardOrigin axisTranslate =
                     boardOrigin + axisTranslate + round (effScale * (toFloat (cell * size) + toFloat size / 2))
             in
             Coord.xy
-                (project tx (boardX windowSize) (Coord.xRaw translate))
-                (project ty boardY (Coord.yRaw translate))
+                (project2 tx (boardX windowSize) (Coord.xRaw translate))
+                (project2 ty boardY (Coord.yRaw translate))
 
         Nothing ->
             Coord.xy
@@ -3312,69 +3354,81 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                 (\action ( index, shared2, acc ) ->
                     ( index + 1
                     , updateAction setup action shared2
-                    , { index = index
-                      , userId = action.userId
-                      , description =
-                            case action.change of
-                                PlaceWord placedWord isValid ->
-                                    case isValid of
-                                        FilledInByBackend IsNotValid ->
-                                            case OneOrGreater.decrement shared2.attemptsLeft of
-                                                Just attemptsLeft ->
-                                                    ( []
-                                                    , "played an invalid word ("
-                                                        ++ (case OneOrGreater.toString attemptsLeft of
-                                                                "1" ->
-                                                                    "1 attempt left)"
+                    , case action.change of
+                        PlaceWord placedWord isValid ->
+                            { index = index
+                            , userId = action.userId
+                            , description =
+                                case isValid of
+                                    FilledInByBackend IsNotValid ->
+                                        case OneOrGreater.decrement shared2.attemptsLeft of
+                                            Just attemptsLeft ->
+                                                ( []
+                                                , "played an invalid word ("
+                                                    ++ (case OneOrGreater.toString attemptsLeft of
+                                                            "1" ->
+                                                                "1 attempt left)"
 
-                                                                n ->
-                                                                    n ++ " attempts left)"
-                                                           )
-                                                    )
+                                                            n ->
+                                                                n ++ " attempts left)"
+                                                       )
+                                                )
 
-                                                Nothing ->
-                                                    ( [], "played an invalid word (turn ended)" )
+                                            Nothing ->
+                                                ( [], "played an invalid word (turn ended)" )
 
-                                        _ ->
-                                            case placeWord setup shared2.board placedWord of
-                                                Just result ->
-                                                    let
-                                                        bonus : Int
-                                                        bonus =
-                                                            fullTrayBonusScore setup placedWord
-                                                    in
-                                                    ( []
-                                                    , "played "
-                                                        ++ headlineWord result.words
-                                                        ++ " (+"
-                                                        ++ String.fromInt (result.score + bonus)
-                                                        ++ (if bonus == 0 then
-                                                                ""
+                                    _ ->
+                                        case placeWord setup shared2.board placedWord of
+                                            Just result ->
+                                                let
+                                                    bonus : Int
+                                                    bonus =
+                                                        fullTrayBonusScore setup placedWord
+                                                in
+                                                ( []
+                                                , "played "
+                                                    ++ headlineWord result.words
+                                                    ++ " (+"
+                                                    ++ String.fromInt (result.score + bonus)
+                                                    ++ (if bonus == 0 then
+                                                            ""
 
-                                                            else
-                                                                ", bingo!"
-                                                           )
-                                                        ++ ")"
-                                                    )
+                                                        else
+                                                            ", bingo!"
+                                                       )
+                                                    ++ ")"
+                                                )
 
-                                                Nothing ->
-                                                    ( [], "played a word" )
+                                            Nothing ->
+                                                ( [], "played a word" )
+                            }
+                                :: acc
 
-                                ReplaceTrayOrPass ->
-                                    case passBehavior setup shared2 of
-                                        ShouldReplaceTray ->
-                                            ( [], "swapped their tiles" )
+                        ReplaceTrayOrPass ->
+                            { index = index
+                            , userId = action.userId
+                            , description =
+                                case passBehavior setup shared2 of
+                                    ShouldReplaceTray ->
+                                        ( [], "swapped their tiles" )
 
-                                        ShouldPass ->
-                                            ( [], "passed" )
+                                    ShouldPass ->
+                                        ( [], "passed" )
 
-                                        ShouldEndGame ->
-                                            ( [], "ended the game" )
+                                    ShouldEndGame ->
+                                        ( [], "ended the game" )
+                            }
+                                :: acc
 
-                                JoinGame ->
-                                    ( [], "joined the game" )
-                      }
-                        :: acc
+                        JoinGame ->
+                            { index = index
+                            , userId = action.userId
+                            , description = ( [], "joined the game" )
+                            }
+                                :: acc
+
+                        Premove _ _ ->
+                            acc
                     )
                 )
                 ( 1, initShared setup, [] )
@@ -3593,17 +3647,6 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                 Nothing ->
                     Coord.origin
 
-        -- A board cell's top-left position (in board-local coordinates, relative to the board's
-        -- top-left corner) and drawn size, with the mobile zoom applied.
-        project : Int -> Int -> { pos : Coord CssPixels, size : Int }
-        project x y =
-            { pos =
-                Coord.xy
-                    (Coord.xRaw boardTranslate + zoomedCellSize * x)
-                    (Coord.yRaw boardTranslate + zoomedCellSize * y)
-            , size = zoomedCellSize
-            }
-
         animatingCellSet : Set ( Int, Int )
         animatingCellSet =
             animatingCells currentTime shared
@@ -3620,7 +3663,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                         let
                             p : { pos : Coord CssPixels, size : Int }
                             p =
-                                project x y
+                                project boardTranslate zoomedCellSize x y
                         in
                         boardTileInFront setup (Set.member ( x, y ) highlightedCells) p.size p.pos letter :: list
                 )
@@ -3655,7 +3698,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                         let
                                             p : { pos : Coord CssPixels, size : Int }
                                             p =
-                                                project x y
+                                                project boardTranslate zoomedCellSize x y
 
                                             startX : Int
                                             startX =
@@ -3759,7 +3802,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                         let
                                             p : { pos : Coord CssPixels, size : Int }
                                             p =
-                                                project x y
+                                                project boardTranslate zoomedCellSize x y
                                         in
                                         ( tileInFront setup currentTime tile.createdAt p.size p.pos letter :: boardAcc
                                         , trayAcc
@@ -3792,7 +3835,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                 let
                                     p : { pos : Coord CssPixels, size : Int }
                                     p =
-                                        project x y
+                                        project boardTranslate zoomedCellSize x y
                                 in
                                 Ui.inFront
                                     (Ui.el
@@ -3819,7 +3862,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                     let
                         p : { pos : Coord CssPixels, size : Int }
                         p =
-                            project x y
+                            project boardTranslate zoomedCellSize x y
                     in
                     Ui.inFront
                         (Ui.el
@@ -3842,47 +3885,26 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         lineButtons =
             case ( model.dragging, getWinner shared, isPlayerTurn currentUserId shared ) of
                 ( NotDragging, Nothing, JoinedAndItsTheirTurn ) ->
-                    submittableLines currentUserId shared model
-                        |> List.map
-                            (\line ->
-                                let
-                                    ( bx, by ) =
-                                        line.buttonCell
+                    submitLineButtons
+                        "wordSpellingGame_submitLine_"
+                        MyUi.buttonBackground
+                        PressedSubmitWord
+                        boardTranslate
+                        zoomedCellSize
+                        currentUserId
+                        shared
+                        model
 
-                                    p : { pos : Coord CssPixels, size : Int }
-                                    p =
-                                        project bx by
-
-                                    idString : String
-                                    idString =
-                                        "wordSpellingGame_submitLine_"
-                                            ++ (if line.placedWord.isVertical then
-                                                    "v"
-
-                                                else
-                                                    "h"
-                                               )
-                                            ++ "_"
-                                            ++ String.fromInt (Tuple.first line.placedWord.start)
-                                            ++ "_"
-                                            ++ String.fromInt (Tuple.second line.placedWord.start)
-                                in
-                                MyUi.elButton (Dom.id idString)
-                                    (PressedSubmitWord line.placedWord)
-                                    [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
-                                    , Ui.width (Ui.px p.size)
-                                    , Ui.height (Ui.px p.size)
-                                    , Ui.background MyUi.buttonBackground
-                                    , Ui.rounded (p.size // 4)
-                                    , Ui.borderColor (Ui.rgb 255 255 255)
-                                    , Ui.border 2
-                                    , Ui.contentCenterX
-                                    , Ui.contentCenterY
-                                    , Ui.Font.color (Ui.rgb 255 255 255)
-                                    ]
-                                    (Ui.html Icons.sendMessage)
-                                    |> Ui.inFront
-                            )
+                ( NotDragging, Nothing, Joined ) ->
+                    submitLineButtons
+                        "wsg_submitPremove_"
+                        (Ui.rgb 98 43 227)
+                        PressedSubmitPremove
+                        boardTranslate
+                        zoomedCellSize
+                        currentUserId
+                        shared
+                        model
 
                 _ ->
                     []
@@ -3983,7 +4005,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                     let
                                         p : { pos : Coord CssPixels, size : Int }
                                         p =
-                                            project x y
+                                            project boardTranslate zoomedCellSize x y
                                     in
                                     ( toFloat (Coord.xRaw p.pos) + toFloat p.size / 2
                                     , toFloat (Coord.yRaw p.pos) + toFloat p.size / 2
@@ -4095,6 +4117,72 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         , trayLayer
         ]
         boardLayer
+
+
+submitLineButtons :
+    String
+    -> Ui.Color
+    -> ({ start : ( Int, Int ), isVertical : Bool, letters : Nonempty LetterOrWildcard } -> msg)
+    -> Coord CssPixels
+    -> Int
+    -> Id UserId
+    -> Shared
+    -> GameData
+    -> List (Ui.Attribute msg)
+submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize currentUserId shared model =
+    submittableLines currentUserId shared model
+        |> List.map
+            (\line ->
+                let
+                    ( bx, by ) =
+                        line.buttonCell
+
+                    p : { pos : Coord CssPixels, size : Int }
+                    p =
+                        project boardTranslate zoomedCellSize bx by
+
+                    idString : String
+                    idString =
+                        htmlIdPrefix
+                            ++ (if line.placedWord.isVertical then
+                                    "v"
+
+                                else
+                                    "h"
+                               )
+                            ++ "_"
+                            ++ String.fromInt (Tuple.first line.placedWord.start)
+                            ++ "_"
+                            ++ String.fromInt (Tuple.second line.placedWord.start)
+                in
+                MyUi.elButton (Dom.id idString)
+                    (onPress line.placedWord)
+                    [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
+                    , Ui.width (Ui.px p.size)
+                    , Ui.height (Ui.px p.size)
+                    , Ui.background color
+                    , Ui.rounded (p.size // 4)
+                    , Ui.borderColor (Ui.rgb 255 255 255)
+                    , Ui.border 2
+                    , Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    ]
+                    (Ui.html Icons.sendMessage)
+                    |> Ui.inFront
+            )
+
+
+{-| A board cell's top-left position (in board-local coordinates, relative to the board's top-left corner) and drawn size, with the mobile zoom applied.
+-}
+project : Coord CssPixels -> Int -> Int -> Int -> { pos : Coord CssPixels, size : Int }
+project boardTranslate zoomedCellSize x y =
+    { pos =
+        Coord.xy
+            (Coord.xRaw boardTranslate + zoomedCellSize * x)
+            (Coord.yRaw boardTranslate + zoomedCellSize * y)
+    , size = zoomedCellSize
+    }
 
 
 tileInFront : ValidatedSetup -> Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
