@@ -135,7 +135,7 @@ view mode guild =
 
                             _ ->
                                 Ui.rounded (round (toFloat size * 8 / 50))
-                        , MyUi.montserrat
+                        , MyUi.notoSans
                         , Ui.Font.weight 600
                         , Ui.background (Ui.rgb 240 240 240)
                         , Ui.border 1
@@ -287,7 +287,7 @@ addGuildButton htmlId isSelected onPress =
 
           else
             Ui.rounded (round (toFloat size * 8 / 50))
-        , MyUi.montserrat
+        , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background (Ui.rgb 240 240 240)
         , Ui.border 1
@@ -318,7 +318,7 @@ showFriendsButton isSelected onPress =
 
           else
             Ui.rounded (round (toFloat size * 8 / 50))
-        , MyUi.montserrat
+        , MyUi.notoSans
         , Ui.Font.weight 600
         , Ui.background (Ui.rgb 240 240 240)
         , Ui.border 1

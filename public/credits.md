@@ -7,3 +7,5 @@ Swedish word list found here: https://github.com/axki/saol-wordlist
 English word list found
 here: https://raw.githubusercontent.com/scrabblewords/scrabblewords/refs/heads/main/words/North-American/NWL2023.txt
 Adrien's hand in go-preview.webp
+Noto Sans font (SIL Open Font License): https://fonts.google.com/noto/specimen/Noto+Sans
+DejaVu Sans Mono font (Bitstream Vera / public domain license): https://dejavu-fonts.github.io/

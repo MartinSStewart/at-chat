@@ -412,7 +412,7 @@ layout model attributes child =
             NotLoggedIn _ ->
                 []
          )
-            ++ Ui.Font.family [ Ui.Font.sansSerif ]
+            ++ MyUi.notoSans
             :: Ui.id "elm-ui-root-id"
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)

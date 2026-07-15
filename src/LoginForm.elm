@@ -378,7 +378,7 @@ view textSelection loginForm windowSize pwaStatus =
             isMobile && pwaStatus == BrowserView
     in
     Ui.column
-        [ MyUi.montserrat
+        [ MyUi.notoSans
         , if isMobile then
             MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 88px) 8px 0 8px")
 
@@ -635,7 +635,7 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
 
 inputFont : Ui.Attribute msg
 inputFont =
-    Ui.Font.family [ Ui.Font.typeface "Consolas", Ui.Font.monospace ]
+    MyUi.monospace
 
 
 enterLoginCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterLoginCode2 -> Element Msg

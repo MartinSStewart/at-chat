@@ -24,7 +24,7 @@ header isMobile route loginStatus =
         (Ui.row
             [ MyUi.htmlStyle "padding" ("calc(4px + " ++ MyUi.insetTop ++ ")" ++ " 16px 0 16px")
             , Ui.contentCenterY
-            , MyUi.montserrat
+            , MyUi.notoSans
             , Ui.widthMax 1280
             , Ui.centerX
             ]
@@ -84,7 +84,7 @@ loginButtonId =
 view : Int -> Element FrontendMsg_
 view windowWidth =
     Ui.column
-        [ MyUi.montserrat
+        [ MyUi.notoSans
         , if windowWidth < 800 then
             Ui.paddingWith { left = 24, right = 24, top = 120, bottom = 48 }
 
