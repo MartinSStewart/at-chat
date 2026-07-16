@@ -12,6 +12,7 @@ import Effect.Time as Time
 import FrontendExtra
 import Game
 import Id exposing (ChannelMessageId, Id)
+import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
@@ -792,6 +793,96 @@ dmChannelGames backend =
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
 
 
+{-| The shared state of the single word spelling game running in a DM channel.
+-}
+dmWordSpellingShared : BackendModel -> Result String WordSpellingGame.Shared
+dmWordSpellingShared backend =
+    case dmChannelGames backend of
+        [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+            Ok shared
+
+        _ ->
+            Err "Expected one word spelling game in a DM channel"
+
+
+{-| Assert the shared state of a word spelling game between AT (the match creator, always the
+first player) and one other player: whose turn it is, which cells are and aren't committed to the
+board, and the second player's score, tray size and stored premove (which, when expected, must
+also have passed backend validation).
+-}
+checkGame :
+    { turnCount : Int
+    , boardSize : Int
+    , committedCells : List ( Int, Int )
+    , emptyCells : List ( Int, Int )
+    , userScore : Int
+    , userTraySize : Int
+    , userHasPremove : Bool
+    }
+    -> WordSpellingGame.Shared
+    -> Result String ()
+checkGame expected shared =
+    case List.Nonempty.toList shared.players of
+        [ _, userPlayer ] ->
+            if shared.turnCount /= expected.turnCount then
+                Err
+                    ("Expected turnCount "
+                        ++ String.fromInt expected.turnCount
+                        ++ " but got "
+                        ++ String.fromInt shared.turnCount
+                    )
+
+            else if SeqDict.size shared.board /= expected.boardSize then
+                Err
+                    ("Expected "
+                        ++ String.fromInt expected.boardSize
+                        ++ " tiles on the board but got "
+                        ++ String.fromInt (SeqDict.size shared.board)
+                    )
+
+            else if List.any (\cell -> not (SeqDict.member cell shared.board)) expected.committedCells then
+                Err "A cell that should hold a committed tile is empty"
+
+            else if List.any (\cell -> SeqDict.member cell shared.board) expected.emptyCells then
+                Err "A cell that should be empty holds a committed tile"
+
+            else if userPlayer.score /= expected.userScore then
+                Err
+                    ("Expected the second player to have "
+                        ++ String.fromInt expected.userScore
+                        ++ " points but got "
+                        ++ String.fromInt userPlayer.score
+                    )
+
+            else if IdArray.length userPlayer.tray /= expected.userTraySize then
+                Err
+                    ("Expected the second player to hold "
+                        ++ String.fromInt expected.userTraySize
+                        ++ " letters but got "
+                        ++ String.fromInt (IdArray.length userPlayer.tray)
+                    )
+
+            else
+                case ( expected.userHasPremove, userPlayer.premove ) of
+                    ( True, Just ( _, WordSpellingGame.IsValid ) ) ->
+                        Ok ()
+
+                    ( True, Just ( _, WordSpellingGame.IsNotValid ) ) ->
+                        Err "Expected the second player's premove to have passed backend validation"
+
+                    ( True, Nothing ) ->
+                        Err "Expected the second player to have a stored premove"
+
+                    ( False, Just _ ) ->
+                        Err "Expected the second player to have no stored premove"
+
+                    ( False, Nothing ) ->
+                        Ok ()
+
+        _ ->
+            Err "Expected exactly two players"
+
+
 {-| Assert the current turn and the number of place-word attempts left for the single word spelling
 game running in a DM channel.
 -}
@@ -1002,6 +1093,86 @@ wordSpellingGamePremove normalConfig =
                     "Place \"rote\""
                     [ dragTile 100 admin (trayTile 1) (boardCell 7 9)
                     , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_9")
+                    ]
+                , -- Handing the turn to the user plays their premoved DIRT right away: the word is
+                  -- committed to the board, the premove is cleared, and the turn passes straight
+                  -- back to AT (turnCount 4 with two players = player 0, the match creator).
+                  T.checkState
+                    1000
+                    (\state ->
+                        dmWordSpellingShared state.backend
+                            |> Result.andThen
+                                (checkGame
+                                    { turnCount = 4
+                                    , boardSize = 10
+                                    , committedCells = [ ( 9, 8 ), ( 9, 9 ), ( 9, 10 ) ]
+                                    , emptyCells = []
+                                    , userScore = 10
+                                    , userTraySize = 3
+                                    , userHasPremove = False
+                                    }
+                                )
+                    )
+                , -- Both clients show it's AT's turn again (AT is on 14 points: 10 for LOAD plus
+                  -- 4 for ROTE).
+                  admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                    )
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                    )
+                , T.collapsableGroup
+                    "Premove \"rotes\" is cancelled by a move that affects it"
+                    [ -- Playing DIRT refilled the user's tray to I S S (the bag is empty, so
+                      -- that's everything they have left). While AT is on turn, they premove the
+                      -- S below ROTE, extending it to ROTES.
+                      dragTile 100 user (trayTile 1) (boardCell 7 10)
+                    , user.click 100 (Dom.id "wsg_submitPremove_h_7_10")
+                    , T.checkState
+                        1000
+                        (\state ->
+                            dmWordSpellingShared state.backend
+                                |> Result.andThen
+                                    (checkGame
+                                        { turnCount = 4
+                                        , boardSize = 10
+                                        , committedCells = []
+                                        , emptyCells = [ ( 7, 10 ) ]
+                                        , userScore = 10
+                                        , userTraySize = 3
+                                        , userHasPremove = True
+                                        }
+                                    )
+                        )
+                    , -- Admin plays their A left of DIRT's T, spelling AT. The new tile lands
+                      -- right next to the premoved S's cell, so the S would now also spell SAT —
+                      -- a word the backend never validated — meaning the premove's outcome has
+                      -- been affected and it must be cancelled instead of played: no tile appears
+                      -- at (7,10), the user keeps their letters and score, and the turn passes to
+                      -- them normally (turnCount 5 = player 1).
+                      dragTile 100 admin (trayTile 0) (boardCell 8 10)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_10")
+                    , T.checkState
+                        1000
+                        (\state ->
+                            dmWordSpellingShared state.backend
+                                |> Result.andThen
+                                    (checkGame
+                                        { turnCount = 5
+                                        , boardSize = 11
+                                        , committedCells = [ ( 8, 10 ) ]
+                                        , emptyCells = [ ( 7, 10 ) ]
+                                        , userScore = 10
+                                        , userTraySize = 3
+                                        , userHasPremove = False
+                                        }
+                                    )
+                        )
+                    , user.snapshotView 100 { name = "Premove cancelled" }
                     ]
                 ]
             )
