@@ -40,7 +40,6 @@ module WordSpellingGame exposing
     , initShared
     , insideBoard
     , isAnimating
-    , isPlayerTurn
     , isZoomAnimating
     , parseWordList
     , pastWordsContainerId
@@ -1449,7 +1448,7 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
 
         PressedSubmitPremove placement ->
             case placeWord setup shared.board placement of
-                Just result ->
+                Just _ ->
                     ( model, Just (Premove placement EmptyPlaceholder) )
 
                 Nothing ->

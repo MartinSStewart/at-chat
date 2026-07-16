@@ -16,7 +16,6 @@ module Game exposing
     , dragStart
     , gameChangeFromServer
     , gameToString
-    , hasPendingTurn
     , initMatchData
     , initModel
     , insideBoard
@@ -46,7 +45,6 @@ import NonemptyDict exposing (NonemptyDict)
 import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -290,33 +288,6 @@ addWordSpellingGameAction action (MatchData match) =
                         (WordSpellingGame.updateAction setup action cache)
     }
         |> MatchData
-
-
-hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
-hasPendingTurn userId matches =
-    SeqDict.foldl
-        (\matchId (MatchData match) set ->
-            case match.data of
-                FrontendGameData_Go setup _ cache ->
-                    if Go.isLocalUsersTurn userId setup cache then
-                        SeqSet.insert matchId set
-
-                    else
-                        set
-
-                FrontendGameData_WordSpellingGame _ _ cache ->
-                    case WordSpellingGame.isPlayerTurn userId cache of
-                        WordSpellingGame.NotJoined ->
-                            set
-
-                        WordSpellingGame.Joined ->
-                            set
-
-                        WordSpellingGame.JoinedAndItsTheirTurn ->
-                            SeqSet.insert matchId set
-        )
-        SeqSet.empty
-        matches
 
 
 type LocalChange

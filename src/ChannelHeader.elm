@@ -32,7 +32,6 @@ import PersonName
 import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
-import SeqSet
 import Thread
 import Touch
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
@@ -65,7 +64,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , drawButton isMobile currentChannelHeaderTab
                     ]
 
-            GuildOrDmId_Guild guildId channelId ->
+            GuildOrDmId_Guild _ _ ->
                 Ui.row
                     [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ channelHeaderTabRow
@@ -78,10 +77,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ LocalState.getGuildAndChannel guildId channelId local
-                            |> Maybe.map (\( _, channel2 ) -> channel2.games)
-                            |> Maybe.withDefault SeqDict.empty
-                            |> Ui.Lazy.lazy4 gameButton isMobile currentChannelHeaderTab local.localUser.session.userId
+                        [ Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
                         , drawButton isMobile currentChannelHeaderTab
                         , showFilesButton
                         ]
@@ -113,7 +109,7 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
                     , Ui.row
-                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawButton isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
                         ]
@@ -155,7 +151,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         , Ui.text name
                         ]
                     , Ui.row
-                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawButton isMobile currentChannelHeaderTab
                         , showFilesButton
                         ]
@@ -183,7 +179,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
                     , Ui.row
-                        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+                        [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawButton isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
                         ]
@@ -382,7 +378,7 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
+            , Ui.Lazy.lazy2 gameButton isMobile currentTab
             ]
         ]
 
@@ -400,64 +396,14 @@ privateChatWith isMobile currentTab otherUserId local name =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-            , SeqDict.get otherUserId local.dmChannels
-                |> Maybe.map .games
-                |> Maybe.withDefault SeqDict.empty
-                |> Ui.Lazy.lazy4 gameButton isMobile currentTab local.localUser.session.userId
+            , Ui.Lazy.lazy2 gameButton isMobile currentTab
             ]
         ]
 
 
-gameButton :
-    Bool
-    -> Maybe ChannelHeaderTab
-    -> Id UserId
-    -> SeqDict (Id ChannelMessageId) Game.MatchData
-    -> Element FrontendMsg_
-gameButton isMobile currentTab userId goMatches =
-    let
-        viewingGo : Bool
-        viewingGo =
-            case currentTab of
-                Just (ChannelHeaderTab_Games _) ->
-                    True
-
-                _ ->
-                    False
-
-        hasPendingTurn =
-            Game.hasPendingTurn userId goMatches
-    in
-    channelHeaderTab
-        isMobile
-        (Dom.id "guild_openGamesTab")
-        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> ChannelHeaderTab_Games)
-        currentTab
-        (Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.Font.bold
-            , case ( viewingGo, SeqSet.isEmpty hasPendingTurn ) of
-                ( False, False ) ->
-                    Ui.el
-                        [ Ui.width (Ui.px 10)
-                        , Ui.height (Ui.px 10)
-                        , Ui.background MyUi.alertColor
-                        , Ui.rounded 5
-                        , Ui.border 2
-                        , Ui.borderColor MyUi.background1
-                        , Ui.move { x = -3, y = 3, z = 0 }
-                        , Ui.alignRight
-                        , Ui.Accessibility.description "Your turn"
-                        , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
-                        ]
-                        Ui.none
-                        |> Ui.inFront
-
-                _ ->
-                    Ui.noAttr
-            ]
-            (Ui.html Icons.go)
-        )
+gameButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
+gameButton isMobile currentTab =
+    channelHeaderTab isMobile (Dom.id "guild_openGamesTab") (ChannelHeaderTab_Games Nothing) currentTab (Ui.html Icons.go)
 
 
 voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg_
