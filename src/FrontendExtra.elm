@@ -10,7 +10,6 @@ module FrontendExtra exposing
     , editMessage_gotPastedText
     , externalLinkWarning
     , fileDragOverlayOpacity
-    , getMatchData
     , gotFiles
     , gotPastedText
     , handleEscapeKey
@@ -1785,20 +1784,6 @@ currentGamesTab local route =
 
         _ ->
             Nothing
-
-
-{-| A specific match's data in a DM or guild channel, wherever the user is currently looking.
--}
-getMatchData : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Maybe Game.MatchData
-getMatchData guildOrDmId matchId local =
-    case guildOrDmId of
-        GuildOrDmId_Dm otherUserId ->
-            SeqDict.get otherUserId local.dmChannels
-                |> Maybe.andThen (\dmChannel -> SeqDict.get matchId dmChannel.games)
-
-        GuildOrDmId_Guild guildId channelId ->
-            LocalState.getGuildAndChannel guildId channelId local
-                |> Maybe.andThen (\( _, channel ) -> SeqDict.get matchId channel.games)
 
 
 {-| The match currently being viewed, if the user is looking at the games tab of a channel.
