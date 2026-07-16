@@ -1037,20 +1037,25 @@ adminData model lastLogPageViewed =
         SeqDict.values model.sessions
             |> List.map (\session -> ( session.sessionIdHash, session ))
             |> SeqDict.fromList
-    , wordSpellingGameSwedish =
-        case model.wordSpellingGameSwedish of
-            WordList_NotLoaded ->
-                LocalState.WordSpellingGameSwedishStatus_NotLoaded
-
-            WordList_Loading ->
-                LocalState.WordSpellingGameSwedishStatus_Loading
-
-            WordList_Error error ->
-                LocalState.WordSpellingGameSwedishStatus_Error error
-
-            WordList_Loaded _ ->
-                LocalState.WordSpellingGameSwedishStatus_Loaded
+    , wordSpellingGameEnglish = wordListStatus model.wordSpellingGameEnglish
+    , wordSpellingGameSwedish = wordListStatus model.wordSpellingGameSwedish
     }
+
+
+wordListStatus : WordList -> LocalState.WordSpellingGameStatus
+wordListStatus wordList =
+    case wordList of
+        WordList_NotLoaded ->
+            LocalState.WordSpellingGameStatus_NotLoaded
+
+        WordList_Loading ->
+            LocalState.WordSpellingGameStatus_Loading
+
+        WordList_Error error ->
+            LocalState.WordSpellingGameStatus_Error error
+
+        WordList_Loaded _ ->
+            LocalState.WordSpellingGameStatus_Loaded
 
 
 sendGuildMessage :

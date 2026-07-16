@@ -1,6 +1,5 @@
 module FrontendExtra exposing
-    ( addRoutingLog
-    , audio
+    ( audio
     , canDropFiles
     , changeUpdate
     , currentGame
@@ -412,7 +411,7 @@ layout model attributes child =
             NotLoggedIn _ ->
                 []
          )
-            ++ Ui.Font.family [ Ui.Font.sansSerif ]
+            ++ MyUi.notoSans
             :: Ui.id "elm-ui-root-id"
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
@@ -1257,25 +1256,13 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             Command.none
 
 
-{-| Prepend an entry to the routing log shown by the "Load debug data" button in the user options.
--}
-addRoutingLog : String -> LoadedFrontend -> LoadedFrontend
-addRoutingLog entry model =
-    { model | routingLog = List.take 200 ({ time = model.time, entry = entry } :: model.routingLog) }
-
-
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 routePush model route =
     if MyUi.isMobile model then
-        routeRequest
-            (Just model.route)
-            route
-            (addRoutingLog ("routePush (mobile, no url change): " ++ Route.encode route) model)
+        routeRequest (Just model.route) route model
 
     else
-        ( addRoutingLog ("routePush: pushUrl " ++ Route.encode route) model
-        , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
-        )
+        ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
 
 
 routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg_
@@ -1418,24 +1405,8 @@ sameThread threadRoute previousThreadRoute =
 
 
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
-routeRequest previousRoute newRoute modelNoLog =
+routeRequest previousRoute newRoute model =
     let
-        model : LoadedFrontend
-        model =
-            addRoutingLog
-                ("routeRequest: "
-                    ++ (case previousRoute of
-                            Just route ->
-                                Route.encode route
-
-                            Nothing ->
-                                "(no previous route)"
-                       )
-                    ++ " -> "
-                    ++ Route.encode newRoute
-                )
-                modelNoLog
-
         ( model2, viewCmd ) =
             updateLoggedIn
                 (\loggedIn ->
@@ -4937,6 +4908,7 @@ initAdminData adminData =
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , websocketCloseEvents = adminData.websocketCloseEvents
     , sessions = adminData.sessions
+    , wordSpellingGameEnglish = adminData.wordSpellingGameEnglish
     , wordSpellingGameSwedish = adminData.wordSpellingGameSwedish
     }
 

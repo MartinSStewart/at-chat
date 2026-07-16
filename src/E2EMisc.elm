@@ -1,6 +1,5 @@
 module E2EMisc exposing
     ( friendsSearchTest
-    , handleNavigationHistoryOnMobile
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
@@ -22,7 +21,6 @@ import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
-import Url
 
 
 {-| Pasting a large chunk of text that would push the message over the max message length converts the pasted text into a text file attachment instead of inserting it into the text input.
@@ -89,135 +87,6 @@ largePasteBecomesAttachment config =
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.text "message.txt" ])
-                ]
-            )
-        ]
-
-
-handleNavigationHistoryOnMobile :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-handleNavigationHistoryOnMobile config =
-    E2EHelper.startTest
-        "User clicks on push notification and is shown message"
-        E2EHelper.startTime
-        config
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.iphone14Window
-            (\admin ->
-                [ E2EHelper.handleMobilePwaLogin E2EHelper.adminEmail admin
-                , E2EHelper.enableNotifications True admin
-                , E2EHelper.inviteUser
-                    admin
-                    (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , T.collapsableGroup
-                            "First message"
-                            [ E2EHelper.writeMessage user 100 "Hello admin!"
-                            , T.andThen
-                                100
-                                (\data ->
-                                    case
-                                        List.filter
-                                            (\notification -> notification.body == "Hello admin!")
-                                            (E2EHelper.getNotifications data)
-                                    of
-                                        [ single ] ->
-                                            case Url.fromString single.navigate of
-                                                Just url ->
-                                                    [ admin.update 100 (Audio.userMsg (Types.UrlChanged url))
-                                                    , admin.checkView 100
-                                                        (Test.Html.Query.has
-                                                            [ Test.Html.Selector.exactText "Hello admin!"
-                                                            , Test.Html.Selector.exactText "Write a message to Sven"
-                                                            ]
-                                                        )
-                                                    , -- There shouldn't be anything to navigate back to. Mobile PWAs should stay at the first entry in the navigation history
-                                                      admin.navigateBack 100
-                                                    , admin.checkView 100
-                                                        (Test.Html.Query.has
-                                                            [ Test.Html.Selector.exactText "Hello admin!"
-                                                            , Test.Html.Selector.exactText "Write a message to Sven"
-                                                            ]
-                                                        )
-                                                    ]
-
-                                                Nothing ->
-                                                    [ T.checkState 0 (\_ -> Err "Message notification has malformed url") ]
-
-                                        _ ->
-                                            [ T.checkState 0 (\_ -> Err "Should be only one message notification") ]
-                                )
-                            ]
-                        , T.collapsableGroup
-                            "Second message"
-                            [ E2EHelper.writeMessage user 1000 "Hello admin again!"
-                            , T.andThen
-                                100
-                                (\data ->
-                                    case
-                                        List.filter
-                                            (\notification -> notification.body == "Hello admin again!")
-                                            (E2EHelper.getNotifications data)
-                                    of
-                                        [] ->
-                                            [ admin.checkView 100
-                                                (Test.Html.Query.has
-                                                    [ Test.Html.Selector.exactText "Hello admin again!"
-                                                    , Test.Html.Selector.exactText "Write a message to Sven"
-                                                    ]
-                                                )
-                                            ]
-
-                                        _ ->
-                                            [ T.checkState 0 (\_ -> Err "There shouldn't be an additional notification since the admin is viewing the channel") ]
-                                )
-                            ]
-                        , admin.click 100 (Dom.id "guild_headerBackButton")
-                        , admin.click 1000 (Dom.id "guild_friendLabel_0")
-                        , T.collapsableGroup
-                            "Third message"
-                            [ E2EHelper.writeMessage user 1000 "Hello admin 3!"
-                            , T.andThen
-                                100
-                                (\data ->
-                                    case
-                                        List.filter
-                                            (\notification -> notification.body == "Hello admin 3!")
-                                            (E2EHelper.getNotifications data |> Debug.log "asdf")
-                                    of
-                                        [ single ] ->
-                                            case Url.fromString single.navigate of
-                                                Just url ->
-                                                    [ admin.update 100 (Audio.userMsg (Types.UrlChanged url))
-                                                    , admin.checkView 100
-                                                        (Test.Html.Query.has
-                                                            [ Test.Html.Selector.exactText "Hello admin 3!"
-                                                            , Test.Html.Selector.exactText "Write a message to Sven"
-                                                            ]
-                                                        )
-                                                    , -- There shouldn't be anything to navigate back to. Mobile PWAs should stay at the first entry in the navigation history
-                                                      admin.navigateBack 100
-                                                    , admin.checkView 100
-                                                        (Test.Html.Query.has
-                                                            [ Test.Html.Selector.exactText "Hello admin 3!"
-                                                            , Test.Html.Selector.exactText "Write a message to Sven"
-                                                            ]
-                                                        )
-                                                    ]
-
-                                                Nothing ->
-                                                    [ T.checkState 0 (\_ -> Err "Message notification has malformed url") ]
-
-                                        _ ->
-                                            [ T.checkState 0 (\_ -> Err "Should be only one new message notification") ]
-                                )
-                            ]
-                        ]
-                    )
                 ]
             )
         ]

@@ -3355,7 +3355,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
                                 , Html.Attributes.style "padding" "0 4px 0 4px"
                                 , Html.Attributes.style "border-radius" "4px"
-                                , Html.Attributes.style "font-family" "monospace"
+                                , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
                                 ]
                                 [ Html.text (String.cons char rest) ]
                            ]
@@ -3379,7 +3379,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                         , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
                                         , Html.Attributes.style "padding" "0 4px 0 4px"
                                         , Html.Attributes.style "border-radius" "4px"
-                                        , Html.Attributes.style "font-family" "monospace"
+                                        , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
                                         ]
                                         [ if state.spoiler then
                                             Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]

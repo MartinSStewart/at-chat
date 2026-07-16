@@ -150,8 +150,6 @@ type alias LoadingFrontend =
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
     , popSound : Result Audio.LoadError Audio.Source
-    , lastUrlChange : Maybe Time.Posix
-    , routingLog : List { time : Time.Posix, entry : String }
     }
 
 
@@ -184,11 +182,6 @@ type alias LoadedFrontend =
       toFrontendLogs : Maybe (Array ToFrontend)
     , popSound : Result Audio.LoadError Audio.Source
     , startupData : Ports.StartupData
-    , lastUrlChange : Maybe Time.Posix
-    , -- Newest entry first. A log of routing related events (UrlClicked, UrlChanged, routeRequest
-      -- calls, etc.) shown by the "Load debug data" button, for diagnosing navigation issues such
-      -- as notification clicks not opening the right channel.
-      routingLog : List { time : Time.Posix, entry : String }
     }
 
 

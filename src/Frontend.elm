@@ -40,7 +40,6 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import ImageViewer
-import Iso8601
 import Json.Decode
 import Lamdera as LamderaCore
 import LinkedAndOtherDiscordUsers
@@ -308,12 +307,6 @@ init url key =
                 _ ->
                     PublicGoMatch_NotLoaded
         , popSound = Err Audio.UnknownError
-        , lastUrlChange = Nothing
-        , routingLog =
-            [ { time = Time.millisToPosix 0
-              , entry = "Init: app started at " ++ Url.toString url
-              }
-            ]
         }
     , Command.batch
         [ BrowserNavigation.replaceUrl key (Route.encode route)
@@ -382,21 +375,6 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , toFrontendLogs = Nothing
             , popSound = loading.popSound
             , startupData = startupData
-            , lastUrlChange = Nothing
-            , routingLog =
-                { time = time
-                , entry =
-                    "Init: app started at "
-                        ++ Route.encode loading.route
-                        ++ (case startupData.pwaStatus of
-                                InstalledPwa ->
-                                    " (installed PWA)"
-
-                                BrowserView ->
-                                    " (browser view)"
-                           )
-                }
-                    :: loading.routingLog
             }
 
         ( model2, cmdA ) =
@@ -597,31 +575,8 @@ update _ msg model =
                     ( Loading { loading | timezone = timezone }, Command.none, Audio.cmdNone )
 
                 GotStartupData startupData ->
-                    let
-                        ( loading2, backCmd ) =
-                            case startupData.pwaStatus of
-                                InstalledPwa ->
-                                    ( { loading | lastUrlChange = Just startupData.loadStartupDataTime }
-                                    , BrowserNavigation.back loading.navigationKey 1
-                                    )
-
-                                BrowserView ->
-                                    ( loading, Command.none )
-
-                        ( model2, cmds, audioCmds ) =
-                            tryInitLoadedFrontend
-                                { loading2
-                                    | startupData = Just startupData
-                                    , time = Just startupData.loadStartupDataTime
-                                }
-                    in
-                    ( model2
-                    , Command.batch
-                        [ cmds
-                        , backCmd
-                        ]
-                    , audioCmds
-                    )
+                    tryInitLoadedFrontend
+                        { loading | startupData = Just startupData, time = Just startupData.loadStartupDataTime }
 
                 LoadedPopSound result ->
                     ( Loading { loading | popSound = result }, Command.none, Audio.cmdNone )
@@ -692,17 +647,7 @@ updateLoaded msg model =
                         isSameRoute =
                             model.route == route
                     in
-                    ( FrontendExtra.addRoutingLog
-                        ("UrlClicked (internal): "
-                            ++ Url.toString url
-                            ++ (if isSameRoute then
-                                    " (same route, replaceUrl)"
-
-                                else
-                                    " (pushUrl)"
-                               )
-                        )
-                        model
+                    ( model
                     , Command.batch
                         [ if isSameRoute then
                             BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
@@ -713,64 +658,10 @@ updateLoaded msg model =
                     )
 
                 External url ->
-                    ( FrontendExtra.addRoutingLog ("UrlClicked (external): " ++ url) model
-                    , BrowserNavigation.load url
-                    )
+                    ( model, BrowserNavigation.load url )
 
         UrlChanged url ->
-            let
-                ignoreUrlChange : Bool
-                ignoreUrlChange =
-                    case model.startupData.pwaStatus of
-                        InstalledPwa ->
-                            case model.lastUrlChange of
-                                Just previousUrlChange2 ->
-                                    Duration.from previousUrlChange2 model.time |> Quantity.lessThan (Duration.seconds 2)
-
-                                Nothing ->
-                                    False
-
-                        BrowserView ->
-                            False
-            in
-            if ignoreUrlChange then
-                ( FrontendExtra.addRoutingLog
-                    ("UrlChanged: "
-                        ++ Url.toString url
-                        ++ " (IGNORED: installed PWA and previous url change was less than 2 seconds ago)"
-                    )
-                    model
-                , Command.none
-                )
-
-            else
-                let
-                    ( model2, cmds ) =
-                        FrontendExtra.routeRequest
-                            (Just model.route)
-                            (Route.decode url)
-                            (FrontendExtra.addRoutingLog
-                                ("UrlChanged: "
-                                    ++ Url.toString url
-                                    ++ (case model.startupData.pwaStatus of
-                                            InstalledPwa ->
-                                                " (installed PWA, navigating back to stay on first history entry)"
-
-                                            BrowserView ->
-                                                ""
-                                       )
-                                )
-                                { model | lastUrlChange = Just model.time }
-                            )
-                in
-                ( model2
-                , case model2.startupData.pwaStatus of
-                    InstalledPwa ->
-                        Command.batch [ BrowserNavigation.back model2.navigationKey 1, cmds ]
-
-                    BrowserView ->
-                        cmds
-                )
+            FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
             ( { model | time = time }
@@ -3014,26 +2905,7 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( { model | startupData = startupData }
-                |> (if startupData.pwaStatus /= model.startupData.pwaStatus then
-                        -- pwaStatus determines how UrlChanged messages are handled so it's worth
-                        -- noting in the routing log if it changes mid-session.
-                        FrontendExtra.addRoutingLog
-                            ("GotStartupData: pwaStatus changed to "
-                                ++ (case startupData.pwaStatus of
-                                        InstalledPwa ->
-                                            "installed PWA"
-
-                                        BrowserView ->
-                                            "browser view"
-                                   )
-                            )
-
-                    else
-                        identity
-                   )
-            , checkAppVersion False
-            )
+            ( { model | startupData = startupData }, checkAppVersion False )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model
@@ -3084,23 +2956,12 @@ updateLoaded msg model =
             )
 
         GotServiceWorkerMessage url ->
-            let
-                model2 : LoadedFrontend
-                model2 =
-                    FrontendExtra.addRoutingLog
-                        ("GotServiceWorkerMessage (notification clicked): " ++ url)
-                        model
-            in
             case Url.fromString url of
                 Just url2 ->
-                    FrontendExtra.routePush model2 (Route.decode url2)
+                    FrontendExtra.routePush model (Route.decode url2)
 
                 Nothing ->
-                    ( FrontendExtra.addRoutingLog
-                        "GotServiceWorkerMessage: message isn't a valid url, ignored"
-                        model2
-                    , Command.none
-                    )
+                    ( model, Command.none )
 
         VisualViewportResized _ ->
             ( model, Command.none )
@@ -4568,17 +4429,6 @@ updateLoaded msg model =
             ( model, Ports.loadServiceWorkerData )
 
         GotServiceWorkerData serviceWorkerData ->
-            let
-                debugData : String
-                debugData =
-                    "Routing log (oldest first):\n"
-                        ++ (List.reverse model.routingLog
-                                |> List.map (\{ time, entry } -> Iso8601.fromTime time ++ " " ++ entry)
-                                |> String.join "\n"
-                           )
-                        ++ "\n\nService worker data:\n"
-                        ++ serviceWorkerData
-            in
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
@@ -4586,7 +4436,7 @@ updateLoaded msg model =
                             Maybe.map
                                 (\userOptions ->
                                     { userOptions
-                                        | debugData = Just { data = debugData, loadedAt = model.time }
+                                        | debugData = Just { data = serviceWorkerData, loadedAt = model.time }
                                     }
                                 )
                                 loggedIn.userOptions

@@ -4633,7 +4633,7 @@ letterValueInput : Bool -> Char -> String -> Element SetupMsg
 letterValueInput isReadonly char value =
     Ui.row
         [ Ui.spacing 4, Ui.width Ui.shrink ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.family [ Ui.Font.monospace ] ] (Ui.text (String.fromChar char))
+        [ Ui.el [ Ui.Font.bold, MyUi.monospace ] (Ui.text (String.fromChar char))
         , Go.numberInput
             { htmlId = "wsg_letterValue_" ++ String.fromChar char
             , width = 44
@@ -4655,7 +4655,7 @@ lettersInput isReadonly value =
         , Go.inputBackgroundColor isReadonly
         , Html.Attributes.style "font-size" "inherit"
         , Html.Attributes.style "color" "black"
-        , Html.Attributes.style "font-family" "monospace"
+        , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
         , Html.Attributes.style "width" "100%"
         , Html.Attributes.style "height" "100px"
 

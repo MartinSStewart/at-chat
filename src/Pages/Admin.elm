@@ -62,7 +62,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameSwedishStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -274,7 +274,8 @@ type alias InitAdminData =
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
     , sessions : SeqDict SessionIdHash UserSession
-    , wordSpellingGameSwedish : WordSpellingGameSwedishStatus
+    , wordSpellingGameEnglish : WordSpellingGameStatus
+    , wordSpellingGameSwedish : WordSpellingGameStatus
     }
 
 
@@ -2306,23 +2307,25 @@ wordSpellingGameSwedishSection isMobile user adminData =
         isMobile
         user.expandedSections
         WordSpellingGameSwedishSection
-        [ Ui.text
-            ("Status: "
-                ++ (case adminData.wordSpellingGameSwedish of
-                        WordSpellingGameSwedishStatus_NotLoaded ->
-                            "Not loaded"
-
-                        WordSpellingGameSwedishStatus_Loading ->
-                            "Loading..."
-
-                        WordSpellingGameSwedishStatus_Error error ->
-                            "Failed to load: " ++ Log.httpErrorToString error
-
-                        WordSpellingGameSwedishStatus_Loaded ->
-                            "Loaded"
-                   )
-            )
+        [ Ui.text ("English: " ++ wordSpellingGameStatusText adminData.wordSpellingGameEnglish)
+        , Ui.text ("Swedish: " ++ wordSpellingGameStatusText adminData.wordSpellingGameSwedish)
         ]
+
+
+wordSpellingGameStatusText : WordSpellingGameStatus -> String
+wordSpellingGameStatusText status =
+    case status of
+        WordSpellingGameStatus_NotLoaded ->
+            "Not loaded"
+
+        WordSpellingGameStatus_Loading ->
+            "Loading..."
+
+        WordSpellingGameStatus_Error error ->
+            "Failed to load: " ++ Log.httpErrorToString error
+
+        WordSpellingGameStatus_Loaded ->
+            "Loaded"
 
 
 voiceChatSection : Bool -> AdminData -> Model -> BackendUser -> Element Msg
