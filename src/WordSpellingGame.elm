@@ -361,7 +361,7 @@ type alias Player =
     { userId : Id UserId
     , tray : IdArray LetterId LetterOrWildcard
     , score : Int
-    , premove : Maybe ( PlacedWord, IsValid )
+    , premove : Maybe ( PlacedWord, PlacementResult, IsValid )
     }
 
 
@@ -512,6 +512,115 @@ fullTrayBonusScore setup placedWord =
         0
 
 
+handlePlaceWord :
+    Time.Posix
+    -> ValidatedSetup
+    -> PlacedWord
+    -> ( SeqDict ( Int, Int ) LetterOrWildcard, PlacementResult )
+    -> ToBeFilledInByBackend IsValid
+    -> Player
+    -> Shared
+    -> Shared
+handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
+    let
+        animatedPlacement : Maybe AnimatedPlacement
+        animatedPlacement =
+            Just { startTime = time, cells = result.placedCells, isValid = isValid }
+
+        remainingTray : List LetterOrWildcard
+        remainingTray =
+            List.foldl
+                removeFromTray
+                (IdArray.toList player.tray)
+                (List.Nonempty.toList placedWord.letters)
+
+        tray : IdArray LetterId LetterOrWildcard
+        tray =
+            case isValid of
+                FilledInByBackend IsNotValid ->
+                    -- The placed letters return to the player's tray instead
+                    -- of going back in the bag, and nothing new is drawn.
+                    -- They're appended after the kept letters so they land in
+                    -- the tray slots the placement freed up (the local tile
+                    -- model refilled those slots on submit).
+                    remainingTray
+                        ++ List.Nonempty.toList placedWord.letters
+                        |> IdArray.fromList
+
+                _ ->
+                    let
+                        drawn : List LetterOrWildcard
+                        drawn =
+                            case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
+                                Just drawCount ->
+                                    getLetters
+                                        drawCount
+                                        setup
+                                        board
+                                        (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
+                                            |> List.Nonempty.toList
+                                        )
+                                        shared.turnCount
+
+                                Nothing ->
+                                    []
+                    in
+                    remainingTray ++ drawn |> IdArray.fromList
+
+        shared2 : Shared
+        shared2 =
+            { shared
+                | board =
+                    case isValid of
+                        FilledInByBackend IsNotValid ->
+                            shared.board
+
+                        _ ->
+                            board
+                , players =
+                    NonemptyExtra.set
+                        shared.turnCount
+                        { player
+                            | tray = tray
+                            , score =
+                                case isValid of
+                                    FilledInByBackend IsNotValid ->
+                                        player.score
+
+                                    _ ->
+                                        player.score + result.score + fullTrayBonusScore setup placedWord
+                        }
+                        shared.players
+                , lastPlacement = animatedPlacement
+                , passingStartedAt =
+                    if tray == IdArray.empty then
+                        case shared.passingStartedAt of
+                            Nothing ->
+                                Just shared.turnCount
+
+                            Just _ ->
+                                shared.passingStartedAt
+
+                    else
+                        Nothing
+            }
+    in
+    case isValid of
+        FilledInByBackend IsNotValid ->
+            case OneOrGreater.decrement shared2.attemptsLeft of
+                Just attemptsLeft ->
+                    { shared2 | attemptsLeft = attemptsLeft }
+
+                Nothing ->
+                    incrementTurnCount time setup shared2
+
+        FilledInByBackend IsValid ->
+            incrementTurnCount time setup shared2
+
+        EmptyPlaceholder ->
+            shared2
+
+
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
     case action.change of
@@ -520,103 +629,7 @@ updateAction setup action shared =
                 ( Nothing, Just player, JoinedAndItsTheirTurn ) ->
                     case placeWord setup shared.board placedWord of
                         Just result ->
-                            let
-                                animatedPlacement : Maybe AnimatedPlacement
-                                animatedPlacement =
-                                    Just { startTime = action.time, cells = result.placedCells, isValid = isValid }
-
-                                remainingTray : List LetterOrWildcard
-                                remainingTray =
-                                    List.foldl
-                                        removeFromTray
-                                        (IdArray.toList player.tray)
-                                        (List.Nonempty.toList placedWord.letters)
-
-                                tray : IdArray LetterId LetterOrWildcard
-                                tray =
-                                    case isValid of
-                                        FilledInByBackend IsNotValid ->
-                                            -- The placed letters return to the player's tray instead
-                                            -- of going back in the bag, and nothing new is drawn.
-                                            -- They're appended after the kept letters so they land in
-                                            -- the tray slots the placement freed up (the local tile
-                                            -- model refilled those slots on submit).
-                                            remainingTray
-                                                ++ List.Nonempty.toList placedWord.letters
-                                                |> IdArray.fromList
-
-                                        _ ->
-                                            let
-                                                drawn : List LetterOrWildcard
-                                                drawn =
-                                                    case OneOrGreater.fromInt (OneOrGreater.toInt setup.traySize - List.length remainingTray) of
-                                                        Just drawCount ->
-                                                            getLetters
-                                                                drawCount
-                                                                setup
-                                                                result.board
-                                                                (NonemptyExtra.set shared.turnCount { player | tray = IdArray.fromList remainingTray } shared.players
-                                                                    |> List.Nonempty.toList
-                                                                )
-                                                                shared.turnCount
-
-                                                        Nothing ->
-                                                            []
-                                            in
-                                            remainingTray ++ drawn |> IdArray.fromList
-
-                                shared2 : Shared
-                                shared2 =
-                                    { shared
-                                        | board =
-                                            case isValid of
-                                                FilledInByBackend IsNotValid ->
-                                                    shared.board
-
-                                                _ ->
-                                                    result.board
-                                        , players =
-                                            NonemptyExtra.set
-                                                shared.turnCount
-                                                { player
-                                                    | tray = tray
-                                                    , score =
-                                                        case isValid of
-                                                            FilledInByBackend IsNotValid ->
-                                                                player.score
-
-                                                            _ ->
-                                                                player.score + result.score + fullTrayBonusScore setup placedWord
-                                                }
-                                                shared.players
-                                        , lastPlacement = animatedPlacement
-                                        , passingStartedAt =
-                                            if tray == IdArray.empty then
-                                                case shared.passingStartedAt of
-                                                    Nothing ->
-                                                        Just shared.turnCount
-
-                                                    Just _ ->
-                                                        shared.passingStartedAt
-
-                                            else
-                                                Nothing
-                                    }
-                            in
-                            case isValid of
-                                FilledInByBackend IsNotValid ->
-                                    case OneOrGreater.decrement shared2.attemptsLeft of
-                                        Just attemptsLeft ->
-                                            { shared2 | attemptsLeft = attemptsLeft }
-
-                                        Nothing ->
-                                            incrementTurnCount setup shared2
-
-                                FilledInByBackend IsValid ->
-                                    incrementTurnCount setup shared2
-
-                                EmptyPlaceholder ->
-                                    shared2
+                            handlePlaceWord action.time setup placedWord result isValid player shared
 
                         Nothing ->
                             shared
@@ -654,7 +667,7 @@ updateAction setup action shared =
                                         shared.players
                                 , passingStartedAt = Nothing
                             }
-                                |> incrementTurnCount setup
+                                |> incrementTurnCount action.time setup
 
                         ShouldPass ->
                             { shared
@@ -666,10 +679,10 @@ updateAction setup action shared =
                                         Just _ ->
                                             shared.passingStartedAt
                             }
-                                |> incrementTurnCount setup
+                                |> incrementTurnCount action.time setup
 
                         ShouldEndGame ->
-                            incrementTurnCount setup shared
+                            incrementTurnCount action.time setup shared
 
                 _ ->
                     shared
@@ -690,8 +703,8 @@ updateAction setup action shared =
                 shared
 
         Premove placedWord isValid ->
-            case ( getWinner shared, isPlayerTurn action.userId shared ) of
-                ( Nothing, Joined ) ->
+            case ( getWinner shared, isPlayerTurn action.userId shared, placeWord setup shared.board placedWord ) of
+                ( Nothing, Joined, Just ( _, result ) ) ->
                     { shared
                         | players =
                             List.Nonempty.map
@@ -701,6 +714,7 @@ updateAction setup action shared =
                                             | premove =
                                                 Just
                                                     ( placedWord
+                                                    , result
                                                     , case isValid of
                                                         FilledInByBackend isValid2 ->
                                                             isValid2
@@ -720,9 +734,47 @@ updateAction setup action shared =
                     shared
 
 
-incrementTurnCount : ValidatedSetup -> Shared -> Shared
-incrementTurnCount setup shared =
-    { shared | turnCount = shared.turnCount + 1, attemptsLeft = setup.placeWordAttempts }
+incrementTurnCount : Time.Posix -> ValidatedSetup -> Shared -> Shared
+incrementTurnCount time setup shared =
+    let
+        turnCount =
+            shared.turnCount + 1
+
+        nextPlayer =
+            List.Nonempty.get turnCount shared.players
+
+        nextPlayer2 =
+            { nextPlayer | premove = Nothing }
+
+        shared2 =
+            { shared
+                | turnCount = turnCount
+                , attemptsLeft = setup.placeWordAttempts
+                , players = NonemptyExtra.set turnCount nextPlayer2 shared.players
+            }
+    in
+    case nextPlayer.premove of
+        Just ( premove, expected, isValid ) ->
+            case placeWord setup shared.board premove of
+                Just ( board, result ) ->
+                    if result == expected then
+                        handlePlaceWord
+                            time
+                            setup
+                            premove
+                            ( board, result )
+                            (FilledInByBackend isValid)
+                            nextPlayer2
+                            shared2
+
+                    else
+                        shared2
+
+                Nothing ->
+                    shared2
+
+        Nothing ->
+            shared2
 
 
 canJoin : Shared -> Bool
@@ -740,8 +792,7 @@ initPlayer userId board setup existingPlayers =
 
 
 type alias PlacementResult =
-    { board : SeqDict ( Int, Int ) LetterOrWildcard
-    , words : List { letters : List LetterOrWildcard, placedCount : Int }
+    { words : List { letters : List LetterOrWildcard, placedCount : Int }
     , score : Int
     , placedCells : List ( ( Int, Int ), LetterOrWildcard )
     }
@@ -758,7 +809,7 @@ The returned `words` are the formed words' tiles in order (upper case, like the 
 apply to the squares the new tiles land on; wildcards score zero).
 
 -}
-placeWord : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe PlacementResult
+placeWord : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Maybe ( SeqDict ( Int, Int ) LetterOrWildcard, PlacementResult )
 placeWord setup board placedWord =
     let
         ( dx, dy ) =
@@ -843,9 +894,8 @@ placeWord setup board placedWord =
                     )
                         ++ crossWords
             in
-            Just
-                { board = newBoard
-                , words =
+            ( newBoard
+            , { words =
                     List.map
                         (\wordCoords ->
                             { letters = wordString newBoard wordCoords
@@ -853,9 +903,11 @@ placeWord setup board placedWord =
                             }
                         )
                         allWords
-                , score = List.sum (List.map (wordScore setup newBoard placedSet) allWords)
-                , placedCells = placedCells
-                }
+              , score = List.sum (List.map (wordScore setup newBoard placedSet) allWords)
+              , placedCells = placedCells
+              }
+            )
+                |> Just
 
         Nothing ->
             Nothing
@@ -945,7 +997,7 @@ wordScore setup board placedSet cells =
 validatePlacement : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
 validatePlacement dictionary setup board placedWord =
     case placeWord setup board placedWord of
-        Just result ->
+        Just ( _, result ) ->
             if List.isEmpty result.words then
                 Err ()
 
@@ -1161,7 +1213,7 @@ updateGame time windowSize currentUserId setup shared msg model =
     case msg of
         PressedSubmitWord placement ->
             case placeWord setup shared.board placement of
-                Just result ->
+                Just ( _, result ) ->
                     let
                         -- The board cells this line actually consumes (its newly placed tiles).
                         lineCells : Set ( Int, Int )
@@ -3379,7 +3431,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 
                                     _ ->
                                         case placeWord setup shared2.board placedWord of
-                                            Just result ->
+                                            Just ( _, result ) ->
                                                 let
                                                     bonus : Int
                                                     bonus =
@@ -3551,7 +3603,7 @@ tileOwners setup actions =
                         ( ( Nothing, Just _ ), FilledInByBackend IsNotValid, _ ) ->
                             owners
 
-                        ( ( Nothing, Just _ ), _, Just result ) ->
+                        ( ( Nothing, Just _ ), _, Just ( _, result ) ) ->
                             List.foldl
                                 (\( cell, _ ) acc -> SeqDict.insert cell action.userId acc)
                                 owners

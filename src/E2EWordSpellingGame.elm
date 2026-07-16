@@ -864,10 +864,10 @@ checkGame expected shared =
 
             else
                 case ( expected.userHasPremove, userPlayer.premove ) of
-                    ( True, Just ( _, WordSpellingGame.IsValid ) ) ->
+                    ( True, Just ( _, _, WordSpellingGame.IsValid ) ) ->
                         Ok ()
 
-                    ( True, Just ( _, WordSpellingGame.IsNotValid ) ) ->
+                    ( True, Just ( _, _, WordSpellingGame.IsNotValid ) ) ->
                         Err "Expected the second player's premove to have passed backend validation"
 
                     ( True, Nothing ) ->
@@ -1154,7 +1154,7 @@ wordSpellingGamePremove normalConfig =
                       -- been affected and it must be cancelled instead of played: no tile appears
                       -- at (7,10), the user keeps their letters and score, and the turn passes to
                       -- them normally (turnCount 5 = player 1).
-                      dragTile 100 admin (trayTile 0) (boardCell 8 10)
+                      dragTile 100 admin (trayTile 2) (boardCell 8 10)
                     , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_10")
                     , T.checkState
                         1000
