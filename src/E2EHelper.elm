@@ -509,34 +509,52 @@ enableNotifications isMobile user =
         |> T.group
 
 
-checkNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-checkNotification body =
+checkNotification : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNotification title body =
     T.checkState
         100
         (\data ->
             case
-                List.filter
+                List.filterMap
                     (\request ->
                         case request.body of
                             T.JsonBody json ->
                                 case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
-                                        (pushNotification.body == body)
-                                            && (request.url == "http://localhost:3000/file/internal/push-notification")
+                                        if
+                                            (pushNotification.body == body)
+                                                && (request.url == "http://localhost:3000/file/internal/push-notification")
+                                        then
+                                            Just pushNotification
+
+                                        else
+                                            Nothing
 
                                     Err _ ->
-                                        False
+                                        Nothing
 
                             _ ->
-                                False
+                                Nothing
                     )
                     data.httpRequests
             of
                 _ :: _ :: _ ->
                     Err ("Multiple notifications found for \"" ++ body ++ "\"")
 
-                [ _ ] ->
-                    Ok ()
+                [ pushNotification ] ->
+                    if pushNotification.title == title then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Notification for \""
+                                ++ body
+                                ++ "\" has title \""
+                                ++ pushNotification.title
+                                ++ "\" but expected \""
+                                ++ title
+                                ++ "\""
+                            )
 
                 [] ->
                     Err ("Notification not found for \"" ++ body ++ "\"")
@@ -1456,7 +1474,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
                                     , enableNotifications False user
-                                    , checkNotification "Push notifications enabled"
+                                    , checkNotification "Success!" "Push notifications enabled"
                                     , admin.click 100 (Dom.id "guild_openChannel_0")
                                     , T.group (continueFunc admin user)
                                     ]

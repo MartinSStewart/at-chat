@@ -528,6 +528,10 @@ discordGuildMessageNotification :
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
+        senderData : Maybe DiscordUserData
+        senderData =
+            SeqDict.get sender model.discordUsers
+
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
         alwaysNotify =
             List.filter
@@ -580,51 +584,52 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                             ( sessions, cmds )
 
                         else
-                            case NonemptyDict.get discordUser.linkedTo model.users of
-                                Just user2 ->
-                                    notification
-                                        time
-                                        discordUser.linkedTo
-                                        (PersonName.toString user2.name)
-                                        user2.icon
-                                        (\userId3 ->
-                                            case SeqDict.get userId3 model.discordUsers of
-                                                Just user3 ->
-                                                    DiscordUserData.username user3
+                            notification
+                                time
+                                discordUser.linkedTo
+                                (case senderData of
+                                    Just user ->
+                                        DiscordUserData.username user
 
-                                                Nothing ->
-                                                    "<missing>"
-                                        )
-                                        (case message of
-                                            UserTextMessage message2 ->
-                                                RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
+                                    Nothing ->
+                                        "<missing>"
+                                )
+                                (Maybe.andThen DiscordUserData.icon senderData)
+                                (\userId3 ->
+                                    case SeqDict.get userId3 model.discordUsers of
+                                        Just user3 ->
+                                            DiscordUserData.username user3
 
-                                            UserJoinedMessage _ _ _ _ ->
-                                                "New user joined!"
+                                        Nothing ->
+                                            "<missing>"
+                                )
+                                (case message of
+                                    UserTextMessage message2 ->
+                                        RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
 
-                                            DeletedMessage _ ->
-                                                ""
+                                    UserJoinedMessage _ _ _ _ ->
+                                        "New user joined!"
 
-                                            CallStarted callStarted ->
-                                                LocalState.callStartedText callStarted.endedAt
+                                    DeletedMessage _ ->
+                                        ""
 
-                                            GameStarted gameStarted ->
-                                                LocalState.gameStartedText gameStarted.gameType
-                                        )
-                                        message
-                                        (DiscordGuildRoute
-                                            { currentDiscordUserId = userId2
-                                            , guildId = guildId
-                                            , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
-                                            }
-                                            |> Just
-                                        )
-                                        sessions
-                                        model
-                                        |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
+                                    CallStarted callStarted ->
+                                        LocalState.callStartedText callStarted.endedAt
 
-                                Nothing ->
-                                    ( sessions, cmds )
+                                    GameStarted gameStarted ->
+                                        LocalState.gameStartedText gameStarted.gameType
+                                )
+                                message
+                                (DiscordGuildRoute
+                                    { currentDiscordUserId = userId2
+                                    , guildId = guildId
+                                    , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
+                                    }
+                                    |> Just
+                                )
+                                sessions
+                                model
+                                |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
 
                     _ ->
                         ( sessions, cmds )
@@ -1174,13 +1179,13 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
                 ( model.sessions, [] )
 
             else
-                case NonemptyDict.get otherUserId model.users of
-                    Just otherUser ->
+                case NonemptyDict.get userId model.users of
+                    Just sender ->
                         notification
                             time
                             otherUserId
-                            (PersonName.toString otherUser.name)
-                            otherUser.icon
+                            (PersonName.toString sender.name)
+                            sender.icon
                             (\userId2 ->
                                 case NonemptyDict.get userId2 model.users of
                                     Just user ->
