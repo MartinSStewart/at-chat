@@ -528,6 +528,23 @@ discordGuildMessageNotification :
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute message members model =
     let
+        senderData : Maybe DiscordUserData
+        senderData =
+            SeqDict.get sender model.discordUsers
+
+        senderName : String
+        senderName =
+            case senderData of
+                Just user ->
+                    DiscordUserData.username user
+
+                Nothing ->
+                    "<missing>"
+
+        senderIcon : Maybe FileHash
+        senderIcon =
+            Maybe.andThen DiscordUserData.icon senderData
+
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
         alwaysNotify =
             List.filter
@@ -581,12 +598,12 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
 
                         else
                             case NonemptyDict.get discordUser.linkedTo model.users of
-                                Just user2 ->
+                                Just _ ->
                                     notification
                                         time
                                         discordUser.linkedTo
-                                        (PersonName.toString user2.name)
-                                        user2.icon
+                                        senderName
+                                        senderIcon
                                         (\userId3 ->
                                             case SeqDict.get userId3 model.discordUsers of
                                                 Just user3 ->

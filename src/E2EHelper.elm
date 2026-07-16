@@ -14,6 +14,7 @@ module E2EHelper exposing
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
+    , checkNotificationTitleAndBody
     , chromeDesktop
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
@@ -537,6 +538,61 @@ checkNotification body =
 
                 [ _ ] ->
                     Ok ()
+
+                [] ->
+                    Err ("Notification not found for \"" ++ body ++ "\"")
+        )
+
+
+{-| Like `checkNotification` but also checks the push notification's title. Exactly one
+push notification with the given body must have been sent, and its title must match.
+-}
+checkNotificationTitleAndBody : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNotificationTitleAndBody title body =
+    T.checkState
+        100
+        (\data ->
+            case
+                List.filterMap
+                    (\request ->
+                        case request.body of
+                            T.JsonBody json ->
+                                case Codec.decodeValue Broadcast.pushNotificationCodec json of
+                                    Ok pushNotification ->
+                                        if
+                                            (pushNotification.body == body)
+                                                && (request.url == "http://localhost:3000/file/internal/push-notification")
+                                        then
+                                            Just pushNotification
+
+                                        else
+                                            Nothing
+
+                                    Err _ ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                    )
+                    data.httpRequests
+            of
+                _ :: _ :: _ ->
+                    Err ("Multiple notifications found for \"" ++ body ++ "\"")
+
+                [ pushNotification ] ->
+                    if pushNotification.title == title then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Notification for \""
+                                ++ body
+                                ++ "\" has title \""
+                                ++ pushNotification.title
+                                ++ "\" but expected \""
+                                ++ title
+                                ++ "\""
+                            )
 
                 [] ->
                     Err ("Notification not found for \"" ++ body ++ "\"")

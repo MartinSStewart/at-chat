@@ -1128,6 +1128,33 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord guild message push notification has correct title and body"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ E2EHelper.enableNotifications False admin
+                        , E2EHelper.checkNotification "Push notifications enabled"
+
+                        -- The admin isn't viewing the Discord guild channel, so a message from
+                        -- at0232 mentioning them pushes a notification. The title is the Discord
+                        -- username of the sender and the body is the message text.
+                        , discordGuildMessage connection "<@184437096813953035> check the notification"
+                        , E2EHelper.checkNotificationTitleAndBody "at0232" "@at28727 check the notification"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No Discord DM push notification while viewing the channel"
         E2EHelper.startTime
         normalConfig
