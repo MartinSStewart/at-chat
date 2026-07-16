@@ -286,6 +286,56 @@ tests =
                         (placedWord ( 7, 4 ) False a [])
                         |> Result.map (\result -> List.map .letters result.words)
                         |> Expect.equal (Ok [ [ Wildcard, Letter a, Wildcard ] ])
+            , Test.test "two adjacent wildcards before a letter form a valid word (__C = ARC)" <|
+                \_ ->
+                    -- Wildcards at (6,4) and (7,4), then C placed at (8,4), forms "__C", which the
+                    -- word list accepts as "ARC" (first wildcard A, second wildcard R).
+                    let
+                        existing : SeqDict ( Int, Int ) LetterOrWildcard
+                        existing =
+                            SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 7, 4 ), Wildcard ) ]
+                    in
+                    WordSpellingGame.validatePlacement
+                        (Set.singleton "ARC")
+                        testSetup
+                        existing
+                        (placedWord ( 8, 4 ) False c [])
+                        |> Result.map (\result -> List.map .letters result.words)
+                        |> Expect.equal (Ok [ [ Wildcard, Wildcard, Letter c ] ])
+            , Test.test "__C matches ARC even when A and R are not tile letters in the distribution" <|
+                \_ ->
+                    -- The distribution only has C (plus wildcards), but a blank tile can stand for any
+                    -- letter, so "__C" must still validate as "ARC".
+                    let
+                        restrictedSetup : WordSpellingGame.ValidatedSetup
+                        restrictedSetup =
+                            case
+                                WordSpellingGame.validateSetup
+                                    (Id.fromInt 0)
+                                    (Time.millisToPosix 0)
+                                    { base | letters = "  C" }
+                            of
+                                Ok validated ->
+                                    validated
+
+                                Err _ ->
+                                    testSetup
+
+                        base : WordSpellingGame.SetupModel
+                        base =
+                            WordSpellingGame.initSetup
+
+                        existing : SeqDict ( Int, Int ) LetterOrWildcard
+                        existing =
+                            SeqDict.fromList [ ( ( 6, 4 ), Wildcard ), ( ( 7, 4 ), Wildcard ) ]
+                    in
+                    WordSpellingGame.validatePlacement
+                        (Set.singleton "ARC")
+                        restrictedSetup
+                        existing
+                        (placedWord ( 8, 4 ) False c [])
+                        |> Result.map (\result -> List.map .letters result.words)
+                        |> Expect.equal (Ok [ [ Wildcard, Wildcard, Letter c ] ])
             ]
         , Test.describe "validateSetup reads the letter distribution and values"
             [ Test.test "letters score the value chosen in the setup, whatever the alphabet" <|

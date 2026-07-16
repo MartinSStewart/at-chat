@@ -920,7 +920,7 @@ validatePlacement dictionary setup board placedWord =
                     (\word ->
                         -- We don't allow words with more than two wildcards for performance/RAM reasons
                         if List.Extra.count (\cell -> cell == Wildcard) word.letters <= wildcardMax then
-                            bruteForceMatch (distributionLetters setup) dictionary word.letters
+                            bruteForceMatch (wildcardCandidateLetters setup) dictionary word.letters
 
                         else
                             False
@@ -936,21 +936,42 @@ validatePlacement dictionary setup board placedWord =
             Err ()
 
 
-{-| The distinct letters present in the game's letter distribution: the only letters a wildcard
-can stand for.
+{-| The letters a wildcard (blank tile) may stand for. A blank isn't limited to the letters that
+happen to be in the bag: like a real Scrabble blank it can be any letter of the game's alphabet, so
+e.g. "\_\_C" validates as "ARC" even when A and R were removed from the distribution. Any extra
+letters a custom distribution introduced are included too, so those tiles remain reachable.
 -}
-distributionLetters : ValidatedSetup -> List Letter
-distributionLetters setup =
+wildcardCandidateLetters : ValidatedSetup -> List Letter
+wildcardCandidateLetters setup =
     List.filterMap
         (\letterOrWildcard ->
             case letterOrWildcard of
-                Letter letter ->
-                    Just letter
+                Letter (LetterChar char) ->
+                    Just char
 
                 Wildcard ->
                     Nothing
         )
         (NonemptyDict.keys setup.letters |> List.Nonempty.toList)
+        |> List.foldl Set.insert (alphabet setup.language)
+        |> Set.toList
+        |> List.map LetterChar
+
+
+{-| The letters of a language's alphabet, matching the letters used by its word list. These are the
+letters a blank tile can stand for, regardless of which tiles the game's distribution includes.
+-}
+alphabet : Language -> Set Char
+alphabet language =
+    (case language of
+        English ->
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+        Swedish ->
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ"
+    )
+        |> String.toList
+        |> Set.fromList
 
 
 {-| Try every letter for each wildcard, building the candidate string from left to right and
