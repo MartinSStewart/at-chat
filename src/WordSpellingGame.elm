@@ -516,8 +516,8 @@ updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
     case action.change of
         PlaceWord placedWord isValid ->
-            case ( getWinner shared, getPlayer action.userId shared ) of
-                ( Nothing, Just player ) ->
+            case ( getWinner shared, getPlayer action.userId shared, isPlayerTurn action.userId shared ) of
+                ( Nothing, Just player, JoinedAndItsTheirTurn ) ->
                     case placeWord setup shared.board placedWord of
                         Just result ->
                             let
@@ -690,8 +690,8 @@ updateAction setup action shared =
                 shared
 
         Premove placedWord isValid ->
-            case getWinner shared of
-                Nothing ->
+            case ( getWinner shared, isPlayerTurn action.userId shared ) of
+                ( Nothing, Joined ) ->
                     { shared
                         | players =
                             List.Nonempty.map
@@ -716,7 +716,7 @@ updateAction setup action shared =
                                 shared.players
                     }
 
-                Just _ ->
+                _ ->
                     shared
 
 
@@ -1329,7 +1329,7 @@ updateGame time windowSize currentUserId setup shared msg model =
         PressedSubmitPremove placement ->
             case placeWord setup shared.board placement of
                 Just result ->
-                    ( model, Just (PlaceWord placement EmptyPlaceholder) )
+                    ( model, Just (Premove placement EmptyPlaceholder) )
 
                 Nothing ->
                     ( model, Nothing )
@@ -3896,15 +3896,25 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                         model
 
                 ( NotDragging, Nothing, Joined ) ->
-                    submitLineButtons
-                        "wsg_submitPremove_"
-                        (Ui.rgb 98 43 227)
-                        PressedSubmitPremove
-                        boardTranslate
-                        zoomedCellSize
-                        currentUserId
-                        shared
-                        model
+                    case getPlayer currentUserId shared of
+                        Just player ->
+                            case player.premove of
+                                Just _ ->
+                                    []
+
+                                Nothing ->
+                                    submitLineButtons
+                                        "wsg_submitPremove_"
+                                        (Ui.rgb 98 43 227)
+                                        PressedSubmitPremove
+                                        boardTranslate
+                                        zoomedCellSize
+                                        currentUserId
+                                        shared
+                                        model
+
+                        Nothing ->
+                            []
 
                 _ ->
                     []
