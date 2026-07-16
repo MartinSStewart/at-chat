@@ -2370,8 +2370,8 @@ trayIndexAtPosition setup windowSize coord trayLength =
 
 
 getPlayer : Id UserId -> Shared -> Maybe Player
-getPlayer userId gameState =
-    List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList gameState.players)
+getPlayer userId shared =
+    List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList shared.players)
 
 
 dragStart : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
@@ -3703,6 +3703,10 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         animatingCellSet =
             animatingCells currentTime shared
 
+        maybePlayer : Maybe Player
+        maybePlayer =
+            getPlayer currentUserId shared
+
         boardTiles : List (Ui.Attribute GameMsg)
         boardTiles =
             SeqDict.foldl
@@ -3717,7 +3721,13 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             p =
                                 project boardTranslate zoomedCellSize x y
                         in
-                        boardTileInFront setup (Set.member ( x, y ) highlightedCells) p.size p.pos letter :: list
+                        boardTileInFront
+                            setup
+                            (Set.member ( x, y ) highlightedCells)
+                            p.size
+                            p.pos
+                            letter
+                            :: list
                 )
                 []
                 shared.board
@@ -3805,7 +3815,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
             List.map2
                 Tuple.pair
                 (Array.toList model.tiles)
-                (case getPlayer currentUserId shared of
+                (case maybePlayer of
                     Just player ->
                         IdArray.toList player.tray
 
@@ -3827,6 +3837,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                     setup
                                     currentTime
                                     tile.createdAt
+                                    False
                                     zoomedCellSize
                                     (Coord.xy
                                         (Coord.xRaw center - zoomedCellSize // 2)
@@ -3844,6 +3855,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                             setup
                                             currentTime
                                             tile.createdAt
+                                            False
                                             (trayTileSize setup.traySize windowSize |> round)
                                             (animatedTrayTilePos setup windowSize currentTime trayIndex shiftAnimation)
                                             letter
@@ -3856,7 +3868,28 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                             p =
                                                 project boardTranslate zoomedCellSize x y
                                         in
-                                        ( tileInFront setup currentTime tile.createdAt p.size p.pos letter :: boardAcc
+                                        ( tileInFront
+                                            setup
+                                            currentTime
+                                            tile.createdAt
+                                            (case maybePlayer of
+                                                Just player ->
+                                                    case player.premove of
+                                                        Just ( _, result, _ ) ->
+                                                            List.any
+                                                                (\( ( xA, yA ), _ ) -> xA == x && yA == y)
+                                                                (Debug.log "result.placedCells" result.placedCells)
+
+                                                        Nothing ->
+                                                            False
+
+                                                Nothing ->
+                                                    False
+                                            )
+                                            p.size
+                                            p.pos
+                                            letter
+                                            :: boardAcc
                                         , trayAcc
                                         )
                     )
@@ -3948,7 +3981,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                         model
 
                 ( NotDragging, Nothing, Joined ) ->
-                    case getPlayer currentUserId shared of
+                    case maybePlayer of
                         Just player ->
                             case player.premove of
                                 Just _ ->
@@ -3957,7 +3990,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                 Nothing ->
                                     submitLineButtons
                                         "wsg_submitPremove_"
-                                        (Ui.rgb 98 43 227)
+                                        premoveColor
                                         PressedSubmitPremove
                                         boardTranslate
                                         zoomedCellSize
@@ -4181,6 +4214,11 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         boardLayer
 
 
+premoveColor : Ui.Color
+premoveColor =
+    Ui.rgb 98 43 227
+
+
 submitLineButtons :
     String
     -> Ui.Color
@@ -4247,8 +4285,8 @@ project boardTranslate zoomedCellSize x y =
     }
 
 
-tileInFront : ValidatedSetup -> Time.Posix -> Time.Posix -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
-tileInFront setup currentTime createdAt cellSize2 offset letterOrWildcard =
+tileInFront : ValidatedSetup -> Time.Posix -> Time.Posix -> Bool -> Int -> Coord CssPixels -> LetterOrWildcard -> Ui.Attribute GameMsg
+tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcard =
     let
         fade : { opacity : Float, drift : Float }
         fade =
@@ -4256,7 +4294,13 @@ tileInFront setup currentTime createdAt cellSize2 offset letterOrWildcard =
     in
     Ui.inFront
         (Ui.el
-            [ Ui.background (Ui.rgb 240 220 130)
+            [ Ui.background
+                (if premove then
+                    premoveColor
+
+                 else
+                    Ui.rgb 240 220 130
+                )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
             , Ui.contentCenterX
@@ -4268,7 +4312,13 @@ tileInFront setup currentTime createdAt cellSize2 offset letterOrWildcard =
                 , y = Coord.yRaw offset - round (fade.drift * tileFadeDrift * toFloat cellSize2)
                 , z = 0
                 }
-            , Ui.Font.color (Ui.rgb 0 0 0)
+            , Ui.Font.color
+                (if premove then
+                    MyUi.white
+
+                 else
+                    Ui.rgb 0 0 0
+                )
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
             , tileScoreView setup cellSize2 letterOrWildcard
