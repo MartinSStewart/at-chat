@@ -521,19 +521,14 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
                         let
                             char =
                                 if String.length loginCode > index then
-                                    case String.slice index (index + 1) loginCode |> String.uncons of
-                                        Just ( head, _ ) ->
-                                            Html.div [ Html.Attributes.style "display" "flex" ] [ Icons.number 20 head ]
-                                                |> Ui.html
-                                                |> Ui.el
-                                                    [ Ui.width Ui.shrink
-                                                    , Ui.centerX
-                                                    , Ui.centerY
-                                                    , MyUi.noPointerEvents
-                                                    ]
-
-                                        Nothing ->
-                                            Ui.none
+                                    Ui.el
+                                        [ Ui.width Ui.shrink
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , inputFont
+                                        , MyUi.noPointerEvents
+                                        ]
+                                        (Ui.text (String.slice index (index + 1) loginCode))
 
                                 else
                                     Ui.none
