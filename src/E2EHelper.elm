@@ -37,11 +37,9 @@ module E2EHelper exposing
     , findImageMessage
     , firefoxDesktop
     , focusEvent
-    , getNotifications
     , handleInternalRequests
     , handleLogin
     , handleLoginFromLoginPage
-    , handleMobilePwaLogin
     , handlePortToJs
     , hasExactText
     , hasNotExactText
@@ -441,20 +439,6 @@ handleLogin userAgent emailAddress client =
         |> T.group
 
 
-handleMobilePwaLogin :
-    EmailAddress
-    -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-handleMobilePwaLogin emailAddress client =
-    [ T.andThen
-        10
-        (\data -> [ client.portEvent 10 "load_startup_data_from_js" (startupDataJsonWithInset data.time safariIphone 0 True) ])
-    , client.click 100 Pages.Home.loginButtonId
-    , handleLoginFromLoginPage emailAddress client
-    ]
-        |> T.group
-
-
 handleLoginFromLoginPage :
     EmailAddress
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
@@ -523,29 +507,6 @@ enableNotifications isMobile user =
     , user.click 100 (Dom.id "userOptions_closeUserOptions")
     ]
         |> T.group
-
-
-getNotifications : T.Data FrontendModel BackendModel -> List Broadcast.PushNotification
-getNotifications data =
-    List.filterMap
-        (\request ->
-            case request.body of
-                T.JsonBody json ->
-                    case Codec.decodeValue Broadcast.pushNotificationCodec json of
-                        Ok pushNotification ->
-                            if request.url == "http://localhost:3000/file/internal/push-notification" then
-                                Just pushNotification
-
-                            else
-                                Nothing
-
-                        Err _ ->
-                            Nothing
-
-                _ ->
-                    Nothing
-        )
-        data.httpRequests
 
 
 checkNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
