@@ -1110,7 +1110,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , E2EHelper.enableNotifications False admin
-                        , E2EHelper.checkNotification "Push notifications enabled"
+                        , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- The admin is viewing the Discord guild channel, so a message mentioning them should NOT push.
                         , discordGuildMessage connection "<@184437096813953035> while viewing"
@@ -1121,7 +1121,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                         -- Positive control: while the admin isn't viewing the channel a mention should push.
                         , discordGuildMessage connection "<@184437096813953035> while away"
-                        , E2EHelper.checkNotification "@at28727 while away"
+                        , E2EHelper.checkNotification "at0232" "@at28727 while away"
                         ]
                     )
                 ]
@@ -1142,13 +1142,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ E2EHelper.enableNotifications False admin
-                        , E2EHelper.checkNotification "Push notifications enabled"
+                        , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- The admin isn't viewing the Discord guild channel, so a message from
                         -- at0232 mentioning them pushes a notification. The title is the Discord
                         -- username of the sender and the body is the message text.
                         , discordGuildMessage connection "<@184437096813953035> check the notification"
-                        , E2EHelper.checkNotificationTitleAndBody "at0232" "@at28727 check the notification"
+                        , E2EHelper.checkNotification "at0232" "@at28727 check the notification"
                         ]
                     )
                 ]
@@ -1169,11 +1169,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         [ E2EHelper.enableNotifications False admin
-                        , E2EHelper.checkNotification "Push notifications enabled"
+                        , E2EHelper.checkNotification "Success!" "Push notifications enabled"
 
                         -- Positive control: while the admin isn't viewing the DM a message should push.
                         , discordDmMessage connection "Discord DM while away"
-                        , E2EHelper.checkNotification "Discord DM while away"
+                        , E2EHelper.checkNotification "capysuit" "Discord DM while away"
 
                         -- Open (and therefore view) the Discord DM channel.
                         , admin.click 100 (Dom.id "guildIcon_showFriends")

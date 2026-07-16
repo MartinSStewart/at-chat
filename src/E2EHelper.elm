@@ -14,7 +14,6 @@ module E2EHelper exposing
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
-    , checkNotificationTitleAndBody
     , chromeDesktop
     , clickSpoiler
     , connectFourUsersAndJoinNewGuild
@@ -510,45 +509,8 @@ enableNotifications isMobile user =
         |> T.group
 
 
-checkNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-checkNotification body =
-    T.checkState
-        100
-        (\data ->
-            case
-                List.filter
-                    (\request ->
-                        case request.body of
-                            T.JsonBody json ->
-                                case Codec.decodeValue Broadcast.pushNotificationCodec json of
-                                    Ok pushNotification ->
-                                        (pushNotification.body == body)
-                                            && (request.url == "http://localhost:3000/file/internal/push-notification")
-
-                                    Err _ ->
-                                        False
-
-                            _ ->
-                                False
-                    )
-                    data.httpRequests
-            of
-                _ :: _ :: _ ->
-                    Err ("Multiple notifications found for \"" ++ body ++ "\"")
-
-                [ _ ] ->
-                    Ok ()
-
-                [] ->
-                    Err ("Notification not found for \"" ++ body ++ "\"")
-        )
-
-
-{-| Like `checkNotification` but also checks the push notification's title. Exactly one
-push notification with the given body must have been sent, and its title must match.
--}
-checkNotificationTitleAndBody : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-checkNotificationTitleAndBody title body =
+checkNotification : String -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNotification title body =
     T.checkState
         100
         (\data ->
@@ -1512,7 +1474,7 @@ connectTwoUsersAndJoinNewGuild windowSize continueFunc =
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
                                     , enableNotifications False user
-                                    , checkNotification "Push notifications enabled"
+                                    , checkNotification "Success!" "Push notifications enabled"
                                     , admin.click 100 (Dom.id "guild_openChannel_0")
                                     , T.group (continueFunc admin user)
                                     ]

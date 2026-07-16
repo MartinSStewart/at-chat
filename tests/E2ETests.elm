@@ -1294,7 +1294,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
                 , E2EHelper.writeMessage admin 100 "Test"
-                , E2EHelper.checkNotification "Test"
+                , E2EHelper.checkNotification "AT" "Test"
                 , E2EHelper.writeMessage admin 100 "Test 2"
                 , user.click 100 (Dom.id "guild_openChannel_0")
                 , E2EHelper.writeMessage user 100 "I shouldn't get notified"
@@ -1507,7 +1507,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , E2EHelper.checkNotification "Lets move this to a thread..."
+                , E2EHelper.checkNotification "AT" "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , admin.click 100 (Dom.id "guild_openDm_2")
                 , E2EHelper.writeMessage admin 100 "Here's a DM to you"
@@ -1553,7 +1553,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Positive control: while the user isn't viewing the DM they should get a push notification.
                 , E2EHelper.writeMessage admin 100 "DM while away"
-                , E2EHelper.checkNotification "DM while away"
+                , E2EHelper.checkNotification "AT" "DM while away"
 
                 -- Now the user opens (and is therefore viewing) the DM channel.
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
@@ -1582,7 +1582,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Positive control: while the user isn't viewing the channel they should get a push notification.
                 , E2EHelper.writeMessage admin 100 "@Stevie Steve while away"
-                , E2EHelper.checkNotification "@Stevie Steve while away"
+                , E2EHelper.checkNotification "AT" "@Stevie Steve while away"
                 ]
             )
         ]
@@ -1602,7 +1602,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "wsg_advancedSection")
                 , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                 , admin.click 100 (Dom.id "wsg_start")
-                , E2EHelper.checkNotification "Word Spelling Game started"
+                , E2EHelper.checkNotification "AT" "Word Spelling Game started"
 
                 -- DM case: admin opens the DM with the other user and starts a Go match there. The user
                 -- isn't viewing the DM either, so starting the game should push a notification to them.
@@ -1610,7 +1610,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                 , admin.click 100 (Dom.id "go_start")
-                , E2EHelper.checkNotification "Go match started"
+                , E2EHelper.checkNotification "AT" "Go match started"
                 ]
             )
         ]
