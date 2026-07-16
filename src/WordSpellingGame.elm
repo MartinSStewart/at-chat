@@ -127,6 +127,26 @@ type alias GameData =
     }
 
 
+getTiles : Coord CssPixels -> ValidatedSetup -> Shared -> Array Tile -> Array Tile
+getTiles windowSize setup shared tiles =
+    Array.foldl
+        (\tile tiles2 ->
+            case tile.position of
+                TileInTray _ _ ->
+                    tiles2
+
+                TileOnBoard gridPos time ->
+                    case SeqDict.get gridPos shared.board of
+                        Just _ ->
+                            insertIntoTray time windowSize 0 Coord.origin setup tiles2
+
+                        Nothing ->
+                            tiles2
+        )
+        tiles
+        tiles
+
+
 type alias ZoomAnimation =
     { start : Time.Posix, from : ZoomState }
 
@@ -2452,7 +2472,10 @@ dragEnd currentTime windowSize newTouches setup shared model =
                 returnToTray : GameData
                 returnToTray =
                     if distanceToTray setup windowSize position (Array.length model.tiles) <= maxTraySnapDistance then
-                        insertIntoTray currentTime windowSize tileIndex position setup model
+                        { model
+                            | dragging = NotDragging
+                            , tiles = insertIntoTray currentTime windowSize tileIndex position setup model.tiles
+                        }
 
                     else
                         { model
@@ -2625,12 +2648,12 @@ trayDropSlot tileSize trayLeft centerX slotCount =
 {-| Drop the dragged tile into the tray slot nearest the cursor, shifting the tiles between that
 slot and the nearest empty slot over by one to make room.
 -}
-insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> ValidatedSetup -> GameData -> GameData
-insertIntoTray currentTime windowSize tileIndex position setup gameModel =
+insertIntoTray : Time.Posix -> Coord CssPixels -> Int -> Coord CssPixels -> ValidatedSetup -> Array Tile -> Array Tile
+insertIntoTray currentTime windowSize tileIndex position setup tiles =
     let
         slotCount : Int
         slotCount =
-            Array.length gameModel.tiles
+            Array.length tiles
 
         target : Int
         target =
@@ -2638,7 +2661,7 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
 
         occupied : Set Int
         occupied =
-            Array.toIndexedList gameModel.tiles
+            Array.toIndexedList tiles
                 |> List.filterMap
                     (\( index, tile ) ->
                         if index == tileIndex then
@@ -2705,35 +2728,31 @@ insertIntoTray currentTime windowSize tileIndex position setup gameModel =
                     ( Nothing, Nothing ) ->
                         identity
     in
-    { gameModel
-        | dragging = NotDragging
-        , tiles =
-            Array.indexedMap
-                (\index tile ->
-                    if index == tileIndex then
-                        -- The dropped tile appears straight at its slot (it was following the
-                        -- cursor, so there's no old tray slot to slide from).
-                        { tile | position = TileInTray (TrayIndex target) Nothing }
+    Array.indexedMap
+        (\index tile ->
+            if index == tileIndex then
+                -- The dropped tile appears straight at its slot (it was following the
+                -- cursor, so there's no old tray slot to slide from).
+                { tile | position = TileInTray (TrayIndex target) Nothing }
 
-                    else
-                        case tile.position of
-                            TileInTray (TrayIndex slot) _ ->
-                                let
-                                    newSlot : Int
-                                    newSlot =
-                                        slotMapping slot
-                                in
-                                if newSlot == slot then
-                                    tile
+            else
+                case tile.position of
+                    TileInTray (TrayIndex slot) _ ->
+                        let
+                            newSlot : Int
+                            newSlot =
+                                slotMapping slot
+                        in
+                        if newSlot == slot then
+                            tile
 
-                                else
-                                    { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
+                        else
+                            { tile | position = TileInTray (TrayIndex newSlot) (Just ( currentTime, slot )) }
 
-                            TileOnBoard _ _ ->
-                                tile
-                )
-                gameModel.tiles
-    }
+                    TileOnBoard _ _ ->
+                        tile
+        )
+        tiles
 
 
 type UserStatus
