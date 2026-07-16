@@ -1127,10 +1127,11 @@ wordSpellingGamePremove normalConfig =
                     )
                 , T.collapsableGroup
                     "Premove \"rotes\" is cancelled by a move that affects it"
-                    [ -- Playing DIRT refilled the user's tray to I S S (the bag is empty, so
-                      -- that's everything they have left). While AT is on turn, they premove the
-                      -- S below ROTE, extending it to ROTES.
-                      dragTile 100 user (trayTile 1) (boardCell 7 10)
+                    [ -- Playing DIRT left the user holding I S S (the bag is empty, so nothing
+                      -- was drawn) — the premoved tiles are gone and the remaining three tiles
+                      -- keep their tray slots 1..3, showing I, S, S. While AT is on turn, the
+                      -- user premoves the S in slot 2 below ROTE, extending it to ROTES.
+                      dragTile 100 user (trayTile 2) (boardCell 7 10)
                     , user.click 100 (Dom.id "wsg_submitPremove_h_7_10")
                     , T.checkState
                         1000

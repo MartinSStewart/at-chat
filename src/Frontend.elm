@@ -1623,6 +1623,7 @@ updateLoaded msg model =
                                                                 (Game.dragStart
                                                                     time
                                                                     model.windowSize
+                                                                    (Local.model loggedIn.localState).localUser.session.userId
                                                                     (Touch.removeSafeAreaTopInset
                                                                         model.startupData.safeAreaInsetTop
                                                                         startTouches
@@ -5829,6 +5830,7 @@ finalizeWordSpellingDrag time model loggedIn =
                                         (Game.dragEnd
                                             time
                                             model.windowSize
+                                            (Local.model loggedIn.localState).localUser.session.userId
                                             (Touch.removeSafeAreaTopInset
                                                 model.startupData.safeAreaInsetTop
                                                 dragging.touches

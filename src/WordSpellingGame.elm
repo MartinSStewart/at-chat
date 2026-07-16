@@ -127,24 +127,66 @@ type alias GameData =
     }
 
 
-getTiles : Coord CssPixels -> ValidatedSetup -> Shared -> Array Tile -> Array Tile
-getTiles windowSize setup shared tiles =
-    Array.foldl
-        (\tile tiles2 ->
+{-| The player's tiles, with any tile that was resting on a board cell another player's move has
+since covered moved back into the tray. `GameData.tiles` isn't rewritten when a move arrives from
+the server, so everything reading the tiles goes through this instead of using the raw array.
+
+When the tray also shrank underneath the tiles (a premove of ours played out, consuming letters
+without any local input), one covered tile per missing letter is removed outright instead of
+returned, keeping the array index-aligned with the player's tray letters (see `placedTiles`).
+
+-}
+getTiles : Coord CssPixels -> Id UserId -> ValidatedSetup -> Shared -> Array Tile -> Array Tile
+getTiles windowSize currentUserId setup shared tiles =
+    let
+        trayCount : Int
+        trayCount =
+            case getPlayer currentUserId shared of
+                Just player ->
+                    IdArray.length player.tray
+
+                Nothing ->
+                    Array.length tiles
+
+        isCovered : Tile -> Bool
+        isCovered tile =
             case tile.position of
                 TileInTray _ _ ->
-                    tiles2
+                    False
+
+                TileOnBoard gridPos _ ->
+                    SeqDict.member gridPos shared.board
+
+        tiles2 : Array Tile
+        tiles2 =
+            Array.foldl
+                (\tile ( toDrop, acc ) ->
+                    if toDrop > 0 && isCovered tile then
+                        ( toDrop - 1, acc )
+
+                    else
+                        ( toDrop, Array.push tile acc )
+                )
+                ( Array.length tiles - trayCount, Array.empty )
+                tiles
+                |> Tuple.second
+    in
+    List.foldl
+        (\( index, tile ) tiles3 ->
+            case tile.position of
+                TileInTray _ _ ->
+                    tiles3
 
                 TileOnBoard gridPos time ->
                     case SeqDict.get gridPos shared.board of
                         Just _ ->
-                            insertIntoTray time windowSize 0 Coord.origin setup tiles2
+                            insertIntoTray time windowSize index Coord.origin setup tiles3
 
                         Nothing ->
-                            tiles2
+                            tiles3
         )
-        tiles
-        tiles
+        tiles2
+        (Array.toIndexedList tiles2)
 
 
 type alias ZoomAnimation =
@@ -1229,7 +1271,14 @@ updateGame :
     -> GameMsg
     -> GameData
     -> ( GameData, Maybe Action )
-updateGame time windowSize currentUserId setup shared msg model =
+updateGame time windowSize currentUserId setup shared msg oldModel =
+    let
+        -- Tiles that another player's move covered belong back in the tray; work off (and store)
+        -- that corrected state so it can't disagree with what the view is showing.
+        model : GameData
+        model =
+            { oldModel | tiles = getTiles windowSize currentUserId setup shared oldModel.tiles }
+    in
     case msg of
         PressedSubmitWord placement ->
             case placeWord setup shared.board placement of
@@ -2394,20 +2443,26 @@ getPlayer userId shared =
     List.Extra.find (\player -> player.userId == userId) (List.Nonempty.toList shared.players)
 
 
-dragStart : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
-dragStart time windowSize touches setup gameModel =
+dragStart : Time.Posix -> Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
+dragStart time windowSize currentUserId touches setup shared gameModel =
     if gameModel.showSettings then
         -- The settings view covers the board, so a drag over where the board would be shouldn't
         -- move any tiles.
         gameModel
 
     else
-        dragStartHelper time windowSize touches setup gameModel
+        dragStartHelper time windowSize currentUserId touches setup shared gameModel
 
 
-dragStartHelper : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> GameData -> GameData
-dragStartHelper time windowSize touches setup gameModel =
+dragStartHelper : Time.Posix -> Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
+dragStartHelper time windowSize currentUserId touches setup shared oldModel =
     let
+        -- Tiles that another player's move covered belong back in the tray; find the touched
+        -- tile in (and store) that corrected state so the drag matches what the view is showing.
+        gameModel : GameData
+        gameModel =
+            { oldModel | tiles = getTiles windowSize currentUserId setup shared oldModel.tiles }
+
         touchPosition : Coord CssPixels
         touchPosition =
             Touch.touchCentroid touches
@@ -2460,8 +2515,15 @@ dragStartHelper time windowSize touches setup gameModel =
                     gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
-dragEnd currentTime windowSize newTouches setup shared model =
+dragEnd : Time.Posix -> Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
+dragEnd currentTime windowSize currentUserId newTouches setup shared oldModel =
+    let
+        -- Tiles that another player's move covered belong back in the tray; drop the dragged
+        -- tile into (and store) that corrected state so it can't land on a stale layout.
+        model : GameData
+        model =
+            { oldModel | tiles = getTiles windowSize currentUserId setup shared oldModel.tiles }
+    in
     (case model.dragging of
         Dragging tileIndex ->
             let
@@ -3031,8 +3093,14 @@ gameView :
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared model =
+gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared oldModel =
     let
+        -- Tiles that another player's move covered belong back in the tray; render that
+        -- corrected state instead of the raw stored tiles.
+        model : GameData
+        model =
+            { oldModel | tiles = getTiles windowSize localUser.session.userId setup shared oldModel.tiles }
+
         isMobile =
             MyUi.isMobileAlt windowSize
 

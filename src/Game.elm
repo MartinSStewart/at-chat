@@ -519,12 +519,13 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
 dragStart :
     Time.Posix
     -> Coord CssPixels
+    -> Id UserId
     -> NonemptyDict Int Touch
     -> Id ChannelMessageId
     -> MatchData
     -> Model
     -> Model
-dragStart time windowSize touches matchId (MatchData matchData) model =
+dragStart time windowSize currentUserId touches matchId (MatchData matchData) model =
     { model
         | startedGames =
             SeqDict.updateIfExists
@@ -539,10 +540,10 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
                                 _ ->
                                     game
 
-                        FrontendGameData_WordSpellingGame setup _ _ ->
+                        FrontendGameData_WordSpellingGame setup _ shared ->
                             case game of
                                 WordSpellingGame_Game game2 ->
-                                    WordSpellingGame.dragStart time windowSize touches setup game2
+                                    WordSpellingGame.dragStart time windowSize currentUserId touches setup shared game2
                                         |> WordSpellingGame_Game
 
                                 _ ->
@@ -555,12 +556,13 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
 dragEnd :
     Time.Posix
     -> Coord CssPixels
+    -> Id UserId
     -> NonemptyDict Int Touch
     -> Id ChannelMessageId
     -> MatchData
     -> Model
     -> Model
-dragEnd time windowSize touches matchId (MatchData matchData) model =
+dragEnd time windowSize currentUserId touches matchId (MatchData matchData) model =
     { model
         | startedGames =
             SeqDict.updateIfExists
@@ -581,6 +583,7 @@ dragEnd time windowSize touches matchId (MatchData matchData) model =
                                     WordSpellingGame.dragEnd
                                         time
                                         windowSize
+                                        currentUserId
                                         touches
                                         setup
                                         shared
