@@ -916,8 +916,8 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
         |> Just
 
 
-gameChangeFromServer : Time.Posix -> LocalChange -> Maybe Model -> Maybe Model
-gameChangeFromServer time gameChange maybeModel =
+gameChangeFromServer : Time.Posix -> Id UserId -> Maybe MatchData -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time currentUserId maybeMatch gameChange maybeModel =
     let
         model : Model
         model =
@@ -989,31 +989,48 @@ gameChangeFromServer time gameChange maybeModel =
                     }
 
                 WordSpellingGame.Action action ->
-                    case action.change of
-                        WordSpellingGame.PlaceWord placedWord _ ->
-                            { model
-                                | startedGames =
-                                    SeqDict.updateIfExists
-                                        matchId
-                                        (\game ->
-                                            case game of
-                                                WordSpellingGame_Game gameData ->
-                                                    WordSpellingGame_Game
-                                                        { gameData
-                                                            | lastWordPlaced =
-                                                                { time = time
-                                                                , letterCount = List.Nonempty.length placedWord.letters
-                                                                }
-                                                                    |> Just
-                                                        }
+                    { model
+                        | startedGames =
+                            SeqDict.updateIfExists
+                                matchId
+                                (\game ->
+                                    case game of
+                                        WordSpellingGame_Game gameData ->
+                                            (case action.change of
+                                                WordSpellingGame.PlaceWord placedWord _ ->
+                                                    { gameData
+                                                        | lastWordPlaced =
+                                                            { time = time
+                                                            , letterCount = List.Nonempty.length placedWord.letters
+                                                            }
+                                                                |> Just
+                                                    }
 
                                                 _ ->
-                                                    game
-                                        )
-                                        model.startedGames
-                            }
+                                                    gameData
+                                            )
+                                                |> (case maybeMatch of
+                                                        Just (MatchData match) ->
+                                                            case match.data of
+                                                                FrontendGameData_WordSpellingGame _ _ shared ->
+                                                                    -- Another player's action can play out this
+                                                                    -- player's premove, changing their tray without
+                                                                    -- any local input; put the tile model back in
+                                                                    -- sync with the tray when that happens.
+                                                                    WordSpellingGame.reconcileTiles time currentUserId shared
 
-                        _ ->
-                            model
+                                                                FrontendGameData_Go _ _ _ ->
+                                                                    identity
+
+                                                        Nothing ->
+                                                            identity
+                                                   )
+                                                |> WordSpellingGame_Game
+
+                                        _ ->
+                                            game
+                                )
+                                model.startedGames
+                    }
     )
         |> Just

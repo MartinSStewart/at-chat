@@ -6630,6 +6630,17 @@ updateLoadedFromBackend msg model =
                                         updatedGameModel =
                                             Game.gameChangeFromServer
                                                 model.time
+                                                local.localUser.session.userId
+                                                (case gameChange of
+                                                    Game.LocalChange_Go matchId2 _ ->
+                                                        FrontendExtra.getMatchData guildOrDmId matchId2 local
+
+                                                    Game.LocalChange_WordSpellingGame matchId2 _ ->
+                                                        FrontendExtra.getMatchData guildOrDmId matchId2 local
+
+                                                    Game.CreatePublicLink _ _ ->
+                                                        Nothing
+                                                )
                                                 gameChange
                                                 (SeqDict.get guildOrDmId loggedIn2.games)
                                     in

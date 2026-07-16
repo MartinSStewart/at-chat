@@ -47,6 +47,7 @@ module WordSpellingGame exposing
     , placeWord
     , placementConnects
     , pressedKey
+    , reconcileTiles
     , setupView
     , trayDropSlot
     , trayTouchCoord
@@ -282,6 +283,56 @@ pressedKey model =
     model
 
 
+{-| Bring the local tile model back in line with the player's tray after another player's action
+changed it indirectly. The only way that happens is a premove executing: the premoved letters
+leave the tray (and fresh ones are drawn) without the player doing anything locally, so the tiles
+they left resting on the board now sit on committed cells and no longer line up with the tray.
+When the tile count and the tray disagree, or a resting tile got buried under a committed one,
+start over with every tile back in the tray.
+-}
+reconcileTiles : Time.Posix -> Id UserId -> Shared -> GameData -> GameData
+reconcileTiles time currentUserId shared model =
+    case getPlayer currentUserId shared of
+        Just player ->
+            let
+                trayCount : Int
+                trayCount =
+                    IdArray.length player.tray
+
+                tileBuried : Bool
+                tileBuried =
+                    Array.toList model.tiles
+                        |> List.any
+                            (\tile ->
+                                case tile.position of
+                                    TileOnBoard cell _ ->
+                                        SeqDict.member cell shared.board
+
+                                    TileInTray _ _ ->
+                                        False
+                            )
+            in
+            if Array.length model.tiles /= trayCount || tileBuried then
+                { model
+                    | dragging = NotDragging
+                    , tiles =
+                        List.range 0 (trayCount - 1)
+                            |> List.map
+                                (\index ->
+                                    { position = TileInTray (TrayIndex index) Nothing
+                                    , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+                                    }
+                                )
+                            |> Array.fromList
+                }
+
+            else
+                model
+
+        Nothing ->
+            model
+
+
 initGame : Time.Posix -> ValidatedSetup -> GameData
 initGame time setup =
     let
@@ -514,6 +565,116 @@ fullTrayBonusScore setup placedWord =
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
 updateAction setup action shared =
+    applyAction setup action shared
+        |> cancelAffectedPremoves setup shared.board
+        |> applyPremove setup action.time
+
+
+{-| Drop any stored premove whose outcome the last action changed. A premove was validated by the
+backend against the board as it was when it was submitted, so once new tiles change where its
+letters would land or what words it would form, that validation no longer holds and the premove
+is cancelled rather than auto-played.
+-}
+cancelAffectedPremoves : ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> Shared -> Shared
+cancelAffectedPremoves setup oldBoard shared =
+    if shared.board == oldBoard then
+        shared
+
+    else
+        { shared
+            | players =
+                List.Nonempty.map
+                    (\player ->
+                        case player.premove of
+                            Just ( placedWord, _ ) ->
+                                if premoveOutcome setup oldBoard placedWord == premoveOutcome setup shared.board placedWord then
+                                    player
+
+                                else
+                                    { player | premove = Nothing }
+
+                            Nothing ->
+                                player
+                    )
+                    shared.players
+        }
+
+
+{-| Where a premove's letters would land and what words/score they would form on the given board
+(everything about the placement except the resulting board itself). Two equal outcomes mean the
+board change in between couldn't have affected the premove.
+-}
+premoveOutcome :
+    ValidatedSetup
+    -> SeqDict ( Int, Int ) LetterOrWildcard
+    -> PlacedWord
+    ->
+        Maybe
+            { placedCells : List ( ( Int, Int ), LetterOrWildcard )
+            , words : List { letters : List LetterOrWildcard, placedCount : Int }
+            , score : Int
+            }
+premoveOutcome setup board placedWord =
+    placeWord setup board placedWord
+        |> Maybe.map (\result -> { placedCells = result.placedCells, words = result.words, score = result.score })
+
+
+{-| If the player whose turn it now is premoved a word, play it right away. The premove is cleared
+first so the mutual recursion with `updateAction` consumes one premove per step (which also lets
+premoves chain: playing one hands the turn to the next player, whose premove then fires too).
+Premoves the backend marked invalid are discarded instead of burning a place-word attempt.
+-}
+applyPremove : ValidatedSetup -> Time.Posix -> Shared -> Shared
+applyPremove setup time shared =
+    case ( getWinner shared, currentTurnPlayer shared ) of
+        ( Nothing, Just player ) ->
+            case player.premove of
+                Just ( placedWord, isValid ) ->
+                    let
+                        shared2 : Shared
+                        shared2 =
+                            { shared
+                                | players =
+                                    List.Nonempty.map
+                                        (\player2 ->
+                                            if player2.userId == player.userId then
+                                                { player2 | premove = Nothing }
+
+                                            else
+                                                player2
+                                        )
+                                        shared.players
+                            }
+                    in
+                    case isValid of
+                        IsValid ->
+                            updateAction
+                                setup
+                                { userId = player.userId
+                                , time = time
+                                , change = PlaceWord placedWord (FilledInByBackend IsValid)
+                                }
+                                shared2
+
+                        IsNotValid ->
+                            shared2
+
+                Nothing ->
+                    shared
+
+        _ ->
+            shared
+
+
+currentTurnPlayer : Shared -> Maybe Player
+currentTurnPlayer shared =
+    List.Extra.getAt
+        (modBy (List.Nonempty.length shared.players) shared.turnCount)
+        (List.Nonempty.toList shared.players)
+
+
+applyAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
+applyAction setup action shared =
     case action.change of
         PlaceWord placedWord isValid ->
             case ( getWinner shared, getPlayer action.userId shared, isPlayerTurn action.userId shared ) of
