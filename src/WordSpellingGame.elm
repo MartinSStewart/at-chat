@@ -640,7 +640,7 @@ handlePlaceWord :
     -> ToBeFilledInByBackend IsValid
     -> Player
     -> Shared
-    -> Shared
+    -> ( Shared, List Description )
 handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
     let
         animatedPlacement : Maybe AnimatedPlacement
@@ -729,19 +729,29 @@ handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
         FilledInByBackend IsNotValid ->
             case OneOrGreater.decrement shared2.attemptsLeft of
                 Just attemptsLeft ->
-                    { shared2 | attemptsLeft = attemptsLeft }
+                    ( { shared2 | attemptsLeft = attemptsLeft }, [ Description_InvalidMove (Just attemptsLeft) ] )
 
                 Nothing ->
-                    incrementTurnCount time setup shared2
+                    incrementTurnCount (Description_InvalidMove Nothing) time setup shared2
 
         FilledInByBackend IsValid ->
-            incrementTurnCount time setup shared2
+            incrementTurnCount Description_PlacedWord time setup shared2
 
         EmptyPlaceholder ->
-            shared2
+            ( shared2, [] )
 
 
-updateAction : ValidatedSetup -> ActionWithTime -> Shared -> Shared
+type Description
+    = Description_PlacedWord
+    | Description_InvalidMove (Maybe OneOrGreater)
+    | Description_ReplacedTray
+    | Description_Passed
+    | Description_EndedGame
+    | Description_Joined
+    | Description_PremoveBlocked
+
+
+updateAction : ValidatedSetup -> ActionWithTime -> Shared -> ( Shared, List Description )
 updateAction setup action shared =
     case action.change of
         PlaceWord placedWord isValid ->
@@ -752,10 +762,10 @@ updateAction setup action shared =
                             handlePlaceWord action.time setup placedWord result isValid player shared
 
                         Nothing ->
-                            shared
+                            ( shared, [] )
 
                 _ ->
-                    shared
+                    ( shared, [] )
 
         ReplaceTrayOrPass ->
             case ( getWinner shared, getPlayer action.userId shared ) of
@@ -787,7 +797,7 @@ updateAction setup action shared =
                                         shared.players
                                 , passingStartedAt = Nothing
                             }
-                                |> incrementTurnCount action.time setup
+                                |> incrementTurnCount Description_ReplacedTray action.time setup
 
                         ShouldPass ->
                             { shared
@@ -799,17 +809,17 @@ updateAction setup action shared =
                                         Just _ ->
                                             shared.passingStartedAt
                             }
-                                |> incrementTurnCount action.time setup
+                                |> incrementTurnCount Description_Passed action.time setup
 
                         ShouldEndGame ->
-                            incrementTurnCount action.time setup shared
+                            incrementTurnCount Description_EndedGame action.time setup shared
 
                 _ ->
-                    shared
+                    ( shared, [] )
 
         JoinGame ->
             if canJoin shared then
-                { shared
+                ( { shared
                     | players =
                         List.Nonempty.append
                             shared.players
@@ -817,15 +827,17 @@ updateAction setup action shared =
                                 (initPlayer action.userId shared.board setup (List.Nonempty.toList shared.players))
                                 []
                             )
-                }
+                  }
+                , [ Description_Joined ]
+                )
 
             else
-                shared
+                ( shared, [] )
 
         Premove placedWord isValid ->
             case ( getWinner shared, isPlayerTurn action.userId shared, placeWord setup shared.board placedWord ) of
                 ( Nothing, Joined, Just ( _, result ) ) ->
-                    { shared
+                    ( { shared
                         | players =
                             List.Nonempty.map
                                 (\player ->
@@ -848,13 +860,15 @@ updateAction setup action shared =
                                         player
                                 )
                                 shared.players
-                    }
+                      }
+                    , []
+                    )
 
                 _ ->
-                    shared
+                    ( shared, [] )
 
         CancelPremove ->
-            { shared
+            ( { shared
                 | players =
                     List.Nonempty.map
                         (\player ->
@@ -865,11 +879,13 @@ updateAction setup action shared =
                                 player
                         )
                         shared.players
-            }
+              }
+            , []
+            )
 
 
-incrementTurnCount : Time.Posix -> ValidatedSetup -> Shared -> Shared
-incrementTurnCount time setup shared =
+incrementTurnCount : Description -> Time.Posix -> ValidatedSetup -> Shared -> ( Shared, List Description )
+incrementTurnCount description time setup shared =
     let
         turnCount =
             shared.turnCount + 1
@@ -900,15 +916,16 @@ incrementTurnCount time setup shared =
                             (FilledInByBackend isValid)
                             nextPlayer2
                             shared2
+                            |> Tuple.mapSecond (\a -> description :: a)
 
                     else
-                        shared2
+                        ( shared2, [ Description_PremoveBlocked ] )
 
                 Nothing ->
-                    shared2
+                    ( shared2, [] )
 
         Nothing ->
-            shared2
+            ( shared2, [] )
 
 
 canJoin : Shared -> Bool
@@ -3600,96 +3617,93 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             ]
 
 
+descriptionView : Description -> String
+descriptionView action =
+    case action.change of
+        Description_PlacedWord placedWord isValid ->
+            case isValid of
+                FilledInByBackend IsNotValid ->
+                    case OneOrGreater.decrement shared2.attemptsLeft of
+                        Just attemptsLeft ->
+                            ( []
+                            , "played an invalid word ("
+                                ++ (case OneOrGreater.toString attemptsLeft of
+                                        "1" ->
+                                            "1 attempt left)"
+
+                                        n ->
+                                            n ++ " attempts left)"
+                                   )
+                            )
+
+                        Nothing ->
+                            ( [], "played an invalid word (turn ended)" )
+
+                _ ->
+                    case placeWord setup shared2.board placedWord of
+                        Just ( _, result ) ->
+                            let
+                                bonus : Int
+                                bonus =
+                                    fullTrayBonusScore setup placedWord
+                            in
+                            ( []
+                            , "played "
+                                ++ headlineWord result.words
+                                ++ " (+"
+                                ++ String.fromInt (result.score + bonus)
+                                ++ (if bonus == 0 then
+                                        ""
+
+                                    else
+                                        ", bingo!"
+                                   )
+                                ++ ")"
+                            )
+
+                        Nothing ->
+                            ( [], "played a word" )
+
+        ReplaceTrayOrPass ->
+            { index = index
+            , userId = action.userId
+            , description =
+                case passBehavior setup shared2 of
+                    ShouldReplaceTray ->
+                        ( [], "swapped their tiles" )
+
+                    ShouldPass ->
+                        ( [], "passed" )
+
+                    ShouldEndGame ->
+                        ( [], "ended the game" )
+            }
+                :: acc
+
+        JoinGame ->
+            { index = index
+            , userId = action.userId
+            , description = ( [], "joined the game" )
+            }
+                :: acc
+
+
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
-        ( _, _, log ) =
+        log =
             Array.foldl
-                (\action ( index, shared2, acc ) ->
-                    ( index + 1
-                    , updateAction setup action shared2
-                    , case action.change of
-                        PlaceWord placedWord isValid ->
-                            { index = index
-                            , userId = action.userId
-                            , description =
-                                case isValid of
-                                    FilledInByBackend IsNotValid ->
-                                        case OneOrGreater.decrement shared2.attemptsLeft of
-                                            Just attemptsLeft ->
-                                                ( []
-                                                , "played an invalid word ("
-                                                    ++ (case OneOrGreater.toString attemptsLeft of
-                                                            "1" ->
-                                                                "1 attempt left)"
-
-                                                            n ->
-                                                                n ++ " attempts left)"
-                                                       )
-                                                )
-
-                                            Nothing ->
-                                                ( [], "played an invalid word (turn ended)" )
-
-                                    _ ->
-                                        case placeWord setup shared2.board placedWord of
-                                            Just ( _, result ) ->
-                                                let
-                                                    bonus : Int
-                                                    bonus =
-                                                        fullTrayBonusScore setup placedWord
-                                                in
-                                                ( []
-                                                , "played "
-                                                    ++ headlineWord result.words
-                                                    ++ " (+"
-                                                    ++ String.fromInt (result.score + bonus)
-                                                    ++ (if bonus == 0 then
-                                                            ""
-
-                                                        else
-                                                            ", bingo!"
-                                                       )
-                                                    ++ ")"
-                                                )
-
-                                            Nothing ->
-                                                ( [], "played a word" )
-                            }
-                                :: acc
-
-                        ReplaceTrayOrPass ->
-                            { index = index
-                            , userId = action.userId
-                            , description =
-                                case passBehavior setup shared2 of
-                                    ShouldReplaceTray ->
-                                        ( [], "swapped their tiles" )
-
-                                    ShouldPass ->
-                                        ( [], "passed" )
-
-                                    ShouldEndGame ->
-                                        ( [], "ended the game" )
-                            }
-                                :: acc
-
-                        JoinGame ->
-                            { index = index
-                            , userId = action.userId
-                            , description = ( [], "joined the game" )
-                            }
-                                :: acc
-
-                        Premove _ _ ->
-                            acc
-
-                        CancelPremove ->
-                            acc
-                    )
+                (\action ( shared2, acc ) ->
+                    let
+                        ( shared3, description ) =
+                            updateAction setup action shared2
+                    in
+                    ( shared3, description ++ acc )
                 )
-                ( 1, initShared setup, [] )
+                ( initShared setup, [] )
                 actions
+                |> Tuple.second
+                |> List.map descriptionView
 
         log2 : List (Element msg)
         log2 =
@@ -4370,7 +4384,19 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             [ Ui.move { x = buttonX, y = 0, z = 0 }
                             , Ui.width (Ui.px buttonSize)
                             , Ui.height (Ui.px buttonSize)
-                            , Ui.background MyUi.buttonBackground
+                            , Ui.background
+                                (case maybePlayer of
+                                    Just player ->
+                                        case player.premove of
+                                            Just _ ->
+                                                premoveColor
+
+                                            Nothing ->
+                                                MyUi.buttonBackground
+
+                                    Nothing ->
+                                        MyUi.buttonBackground
+                                )
                             , Ui.rounded (buttonSize // 5)
                             , Ui.borderColor (Ui.rgb 255 255 255)
                             , Ui.border 2
