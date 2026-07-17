@@ -678,8 +678,16 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
 
                     GameSelect ->
                         Ui.row
-                            [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
-                            (List.map gameSelectButton allGames)
+                            [ Ui.spacing 8
+                            , Ui.wrap
+                            , Ui.padding 8
+                            , if isMobile then
+                                Ui.centerX
+
+                              else
+                                Ui.alignLeft
+                            ]
+                            (List.map (gameSelectButton isMobile) allGames)
                 ]
 
 
@@ -742,17 +750,39 @@ gameToPreviewUrl game =
             "/word-spelling-game-preview.webp"
 
 
-gameSelectButton : GameType -> Element Msg
-gameSelectButton game =
+gameSelectButton : Bool -> GameType -> Element Msg
+gameSelectButton isMobile game =
     MyUi.elButton
         (Dom.id ("game_select_" ++ gameToString game))
         (PressedSelectGame game)
-        [ Ui.width (Ui.px 240)
-        , Ui.height (Ui.px 240)
+        [ Ui.width
+            (Ui.px
+                (if isMobile then
+                    170
+
+                 else
+                    240
+                )
+            )
+        , Ui.height
+            (Ui.px
+                (if isMobile then
+                    170
+
+                 else
+                    240
+                )
+            )
         , Ui.rounded 16
         , Ui.clip
         , Ui.contentCenterY
-        , Ui.Font.size 18
+        , Ui.Font.size
+            (if isMobile then
+                16
+
+             else
+                18
+            )
         , Ui.Font.center
         , Ui.Font.bold
         , gameToString game
@@ -763,7 +793,13 @@ gameSelectButton game =
                 , Ui.alignBottom
                 , Ui.background (Ui.rgba 0 0 0 0.7)
                 , Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 100, color = Ui.rgba 0 0 0 1 } ]
-                , Ui.heightMin 40
+                , Ui.heightMin
+                    (if isMobile then
+                        32
+
+                     else
+                        40
+                    )
                 ]
             |> Ui.inFront
         ]
