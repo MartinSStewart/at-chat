@@ -2929,6 +2929,31 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_EditGuildName guildId guildName ->
+                    BackendExtra.asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.editGuildName guildName guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_EditGuildName guildId guildName |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_DeleteGuild guildId ->
                     BackendExtra.asGuildOwner
                         model
@@ -6018,42 +6043,41 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
             case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_WordSpellingGame setup actions shared) ) ->
                     let
+                        placeWordHelper placed =
+                            case setup.language of
+                                English ->
+                                    case model.wordSpellingGameEnglish of
+                                        WordList_Loaded words ->
+                                            WordSpellingGame.validatePlacement
+                                                words
+                                                setup
+                                                shared.board
+                                                placed
+
+                                        _ ->
+                                            Err ()
+
+                                Swedish ->
+                                    case model.wordSpellingGameSwedish of
+                                        WordList_Loaded words ->
+                                            WordSpellingGame.validatePlacement
+                                                words
+                                                setup
+                                                shared.board
+                                                placed
+
+                                        _ ->
+                                            Err ()
+
                         action2 =
                             { action
                                 | time = time
                                 , change =
                                     case action.change of
                                         WordSpellingGame.PlaceWord placed _ ->
-                                            let
-                                                result =
-                                                    case setup.language of
-                                                        English ->
-                                                            case model.wordSpellingGameEnglish of
-                                                                WordList_Loaded words ->
-                                                                    WordSpellingGame.validatePlacement
-                                                                        words
-                                                                        setup
-                                                                        shared.board
-                                                                        placed
-
-                                                                _ ->
-                                                                    Err ()
-
-                                                        Swedish ->
-                                                            case model.wordSpellingGameSwedish of
-                                                                WordList_Loaded words ->
-                                                                    WordSpellingGame.validatePlacement
-                                                                        words
-                                                                        setup
-                                                                        shared.board
-                                                                        placed
-
-                                                                _ ->
-                                                                    Err ()
-                                            in
                                             WordSpellingGame.PlaceWord
                                                 placed
-                                                (case result of
+                                                (case placeWordHelper placed of
                                                     Ok _ ->
                                                         FilledInByBackend WordSpellingGame.IsValid
 
@@ -6065,6 +6089,20 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             action.change
 
                                         WordSpellingGame.JoinGame ->
+                                            action.change
+
+                                        WordSpellingGame.Premove placed _ ->
+                                            WordSpellingGame.Premove
+                                                placed
+                                                (case placeWordHelper placed of
+                                                    Ok _ ->
+                                                        FilledInByBackend WordSpellingGame.IsValid
+
+                                                    Err () ->
+                                                        FilledInByBackend WordSpellingGame.IsNotValid
+                                                )
+
+                                        WordSpellingGame.CancelPremove ->
                                             action.change
                             }
 
@@ -6082,7 +6120,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                     (Game.GameData_WordSpellingGame
                                         setup
                                         (Array.push action2 actions)
-                                        (WordSpellingGame.updateAction setup action2 shared)
+                                        (WordSpellingGame.updateAction setup action2 shared |> Tuple.first)
                                     )
                                     channel.games
                         }

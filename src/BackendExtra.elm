@@ -1665,6 +1665,9 @@ toBackendLog toBackend =
                 Local_DeleteChannel _ _ ->
                     ToBackendLog_Local_DeleteChannel
 
+                Local_EditGuildName _ _ ->
+                    ToBackendLog_Local_EditGuildName
+
                 Local_DeleteGuild _ ->
                     ToBackendLog_Local_DeleteGuild
 

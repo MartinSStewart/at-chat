@@ -1254,6 +1254,11 @@ guildSettingsForm model loggedIn local guildId guild =
         isOwner =
             MembersAndOwner.owner guild.membersAndOwner == local.localUser.session.userId
 
+        editGuildForm : EditGuildForm
+        editGuildForm =
+            SeqDict.get guildId loggedIn.editGuildForm
+                |> Maybe.withDefault (editGuildFormInit guild)
+
         guildIconEditor : ImageEditor.Model
         guildIconEditor =
             case loggedIn.guildIconEditor of
@@ -1276,6 +1281,11 @@ guildSettingsForm model loggedIn local guildId guild =
             , MyUi.scrollable (GuildColumn.canScroll model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile False (Ui.text "Guild settings") Nothing
+            , if isOwner then
+                editGuildNameSection guildId guild editGuildForm
+
+              else
+                Ui.none
             , if isOwner then
                 Ui.column
                     [ Ui.spacing 8, Ui.paddingXY 16 0 ]
@@ -1381,11 +1391,7 @@ guildSettingsForm model loggedIn local guildId guild =
                     ]
                 )
             , if isOwner then
-                deleteGuildSection guildId
-                    guild
-                    (SeqDict.get guildId loggedIn.editGuildForm
-                        |> Maybe.withDefault editGuildFormInit
-                    )
+                deleteGuildSection guildId guild editGuildForm
 
               else
                 Ui.none
@@ -1393,9 +1399,73 @@ guildSettingsForm model loggedIn local guildId guild =
         )
 
 
-editGuildFormInit : EditGuildForm
-editGuildFormInit =
-    { deleteConfirmation = "", showDeleteConfirmation = False }
+editGuildFormInit : FrontendGuild -> EditGuildForm
+editGuildFormInit guild =
+    { name = GuildName.toString guild.name
+    , deleteConfirmation = ""
+    , showDeleteConfirmation = False
+    , pressedSubmit = False
+    }
+
+
+editGuildNameSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg_
+editGuildNameSection guildId guild form =
+    let
+        nameLabel =
+            Ui.Input.label
+                "editGuildName"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Guild name")
+
+        hasChanges : Bool
+        hasChanges =
+            form.name /= GuildName.toString guild.name
+    in
+    Ui.column
+        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+        [ nameLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> EditGuildFormChanged guildId { form | name = text }
+            , text = form.name
+            , placeholder = Nothing
+            , label = nameLabel.id
+            }
+        , case ( form.pressedSubmit, GuildName.fromString form.name ) of
+            ( True, Err error ) ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            _ ->
+                Ui.none
+        , if hasChanges then
+            Ui.row
+                [ Ui.spacing 16 ]
+                [ MyUi.elButton
+                    (Dom.id "guild_resetEditGuild")
+                    (PressedResetEditGuildChanges guildId)
+                    [ Ui.paddingXY 16 8
+                    , Ui.background MyUi.cancelButtonBackground
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 8
+                    , Ui.Font.color MyUi.buttonFontColor
+                    , Ui.Font.bold
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    ]
+                    (Ui.text "Reset")
+                , submitButton
+                    (Dom.id "guild_submitEditGuild")
+                    (PressedSubmitEditGuildChanges guildId form)
+                    "Save changes"
+                ]
+
+          else
+            Ui.none
+        ]
 
 
 deleteGuildSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg_

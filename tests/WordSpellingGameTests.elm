@@ -122,7 +122,7 @@ tests =
                 \_ ->
                     -- C(3) A(1) T(1) on plain cells, no multipliers.
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "the main word plus every perpendicular cross word" <|
                 \_ ->
@@ -134,21 +134,21 @@ tests =
                             board [ ( ( 6, 5 ), a ), ( ( 7, 5 ), a ), ( ( 8, 5 ), a ) ]
                     in
                     WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
                         -- main "CAT" = 3+1+1 = 5, "CA" = 3+1 = 4, "AA" = 1+1 = 2, "TA" = 1+1 = 2
                         |> Expect.equal (Just ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "double-letter squares multiply only the placed letter" <|
                 \_ ->
                     -- (6,2) and (8,2) are double-letter squares, (7,2) is plain.
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 6, 2 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
                         -- C 3*2 + A 1 + T 1*2 = 9
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 9 ))
             , Test.test "the centre square doubles the whole word" <|
                 \_ ->
                     -- (7,7) is the centre square (double word).
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 7, 7 ) False c [ a, t ])
-                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
                         -- (3+1+1) * 2 = 10
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 10 ))
             , Test.test "letters laid out skip over existing tiles" <|
@@ -160,7 +160,7 @@ tests =
                             board [ ( ( 7, 4 ), a ) ]
                     in
                     WordSpellingGame.placeWord testSetup existing (placedWord ( 6, 4 ) False c [ t ])
-                        |> Maybe.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
                         -- C 3 (placed) + A 1 (existing) + T 1 (placed) = 5
                         |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "running off the edge of the board is rejected" <|
@@ -186,7 +186,7 @@ tests =
                                 ]
                     in
                     WordSpellingGame.placeWord testSetup existing (placedWord ( 10, 3 ) True t [ o ])
-                        |> Maybe.map .words
+                        |> Maybe.map (Tuple.second >> .words)
                         |> Expect.equal
                             (Just
                                 [ { letters = word [ t, o ], placedCount = 2 }
@@ -360,7 +360,7 @@ tests =
                                 validated
                                 SeqDict.empty
                                 (placedWord ( 6, 4 ) False (LetterChar 'Å') [ LetterChar 'Å' ])
-                                |> Maybe.map .score
+                                |> Maybe.map (Tuple.second >> .score)
                                 |> Expect.equal (Just 14)
 
                         Err error ->

@@ -12,6 +12,7 @@ import Effect.Time as Time
 import FrontendExtra
 import Game
 import Id exposing (ChannelMessageId, Id)
+import IdArray
 import Json.Encode
 import List.Nonempty
 import Message
@@ -186,6 +187,7 @@ tests normalConfig =
                     ]
                 )
             ]
+        , wordSpellingGamePremove normalConfig
         , E2EHelper.startTest
             "Check user can't join after first round"
             E2EHelper.startTime
@@ -757,7 +759,7 @@ tests normalConfig =
                                             [ Test.Html.Selector.exactText "AT"
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
-                                            , Test.Html.Selector.text "Past moves"
+                                            , Test.Html.Selector.text "Moves"
                                             , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )
@@ -789,6 +791,96 @@ dmChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameDat
 dmChannelGames backend =
     SeqDict.values backend.dmChannels
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
+
+
+{-| The shared state of the single word spelling game running in a DM channel.
+-}
+dmWordSpellingShared : BackendModel -> Result String WordSpellingGame.Shared
+dmWordSpellingShared backend =
+    case dmChannelGames backend of
+        [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+            Ok shared
+
+        _ ->
+            Err "Expected one word spelling game in a DM channel"
+
+
+{-| Assert the shared state of a word spelling game between AT (the match creator, always the
+first player) and one other player: whose turn it is, which cells are and aren't committed to the
+board, and the second player's score, tray size and stored premove (which, when expected, must
+also have passed backend validation).
+-}
+checkGame :
+    { turnCount : Int
+    , boardSize : Int
+    , committedCells : List ( Int, Int )
+    , emptyCells : List ( Int, Int )
+    , userScore : Int
+    , userTraySize : Int
+    , userHasPremove : Bool
+    }
+    -> WordSpellingGame.Shared
+    -> Result String ()
+checkGame expected shared =
+    case List.Nonempty.toList shared.players of
+        [ _, userPlayer ] ->
+            if shared.turnCount /= expected.turnCount then
+                Err
+                    ("Expected turnCount "
+                        ++ String.fromInt expected.turnCount
+                        ++ " but got "
+                        ++ String.fromInt shared.turnCount
+                    )
+
+            else if SeqDict.size shared.board /= expected.boardSize then
+                Err
+                    ("Expected "
+                        ++ String.fromInt expected.boardSize
+                        ++ " tiles on the board but got "
+                        ++ String.fromInt (SeqDict.size shared.board)
+                    )
+
+            else if List.any (\cell -> not (SeqDict.member cell shared.board)) expected.committedCells then
+                Err "A cell that should hold a committed tile is empty"
+
+            else if List.any (\cell -> SeqDict.member cell shared.board) expected.emptyCells then
+                Err "A cell that should be empty holds a committed tile"
+
+            else if userPlayer.score /= expected.userScore then
+                Err
+                    ("Expected the second player to have "
+                        ++ String.fromInt expected.userScore
+                        ++ " points but got "
+                        ++ String.fromInt userPlayer.score
+                    )
+
+            else if IdArray.length userPlayer.tray /= expected.userTraySize then
+                Err
+                    ("Expected the second player to hold "
+                        ++ String.fromInt expected.userTraySize
+                        ++ " letters but got "
+                        ++ String.fromInt (IdArray.length userPlayer.tray)
+                    )
+
+            else
+                case ( expected.userHasPremove, userPlayer.premove ) of
+                    ( True, Just ( _, _, WordSpellingGame.IsValid ) ) ->
+                        Ok ()
+
+                    ( True, Just ( _, _, WordSpellingGame.IsNotValid ) ) ->
+                        Err "Expected the second player's premove to have passed backend validation"
+
+                    ( True, Nothing ) ->
+                        Err "Expected the second player to have a stored premove"
+
+                    ( False, Just _ ) ->
+                        Err "Expected the second player to have no stored premove"
+
+                    ( False, Nothing ) ->
+                        Ok ()
+
+        _ ->
+            Err "Expected exactly two players"
 
 
 {-| Assert the current turn and the number of place-word attempts left for the single word spelling
@@ -880,3 +972,209 @@ checkPopCount expected model =
 
     else
         Err ("Expected " ++ String.fromInt expected ++ " pop sounds but found " ++ String.fromInt actual)
+
+
+wordSpellingGamePremove :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+wordSpellingGamePremove normalConfig =
+    E2EHelper.startTest
+        "Word spelling premove"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.tallDesktopWindow
+            (\admin user ->
+                let
+                    pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                    pointerEvent ( x, y ) =
+                        Json.Encode.object
+                            [ ( "timeStamp", Json.Encode.float 0 )
+                            , ( "pointerId", Json.Encode.int 0 )
+                            , ( "clientX", Json.Encode.float x )
+                            , ( "clientY", Json.Encode.float y )
+                            ]
+
+                    pointerUpEvent : Json.Encode.Value
+                    pointerUpEvent =
+                        Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                    dragTile delay tab from to =
+                        T.group
+                            [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                            , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                            ]
+
+                    -- On a 1000px-wide desktop window the board sits at (258, 98) with 30px
+                    -- cells (see WordSpellingGame.boardX / boardY / cellSize), and the tray
+                    -- is directly below it.
+                    trayTile : Float -> ( Float, Float )
+                    trayTile index =
+                        ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                    boardCell : Int -> Int -> ( Float, Float )
+                    boardCell cx cy =
+                        ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                in
+                [ -- The headless test never loads /pop.mp3, so tell each client's audio system the
+                  -- load succeeded (requestId 0 is the pop sound, the only sound the app loads). Once
+                  -- popSound is Ok, FrontendExtra.audio actually schedules the pops we assert on below.
+                  admin.portEvent 0 "audioPortFromJs" popLoadedEvent
+                , user.portEvent 0 "audioPortFromJs" popLoadedEvent
+
+                -- Admin creates a Word Spelling Game match in the DM with the other user.
+                , admin.click 100 (Dom.id "guild_openDm_2")
+                , admin.click 100 (Dom.id "guild_openGamesTab")
+                , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+
+                -- Cancel from the setup screen returns to the game select view.
+                , admin.click 100 (Dom.id "wsg_cancel")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_start" ])
+                , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                , admin.click 100 (Dom.id "wsg_advancedSection")
+                , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
+                , admin.click 100 (Dom.id "wsg_start")
+                , T.collapsableGroup
+                    "Clear placed tiles"
+                    [ -- Admin drags one tile onto the board: 7 fade-in pops for the held tiles plus
+                      -- 1 placement pop for the tile now resting on the board.
+                      dragTile 100 admin (trayTile 3) (boardCell 6 7)
+                    , admin.checkModel 100 (checkPopCount 8)
+                    , -- The clear button only appears while the player has tiles on the board.
+                      -- Clicking it returns every placed tile to the tray, so the placement pop is
+                      -- gone and only the 7 fade-in pops remain.
+                      admin.click 100 (Dom.id "wordSpellingGame_clearBoard")
+                    , admin.checkModel 100 (checkPopCount 7)
+                    ]
+                , -- Admin's fresh tray is "A O A L D O M" in slots 0..6, so LOAD is slots 3,1,0,4.
+                  -- It covers the centre square (7,7) and scores double for the whole word: 10.
+                  T.collapsableGroup
+                    "Place \"load\""
+                    [ dragTile 100 admin (trayTile 3) (boardCell 6 7)
+                    , dragTile 100 admin (trayTile 1) (boardCell 7 7)
+                    , dragTile 100 admin (trayTile 0) (boardCell 8 7)
+                    , dragTile 100 admin (trayTile 4) (boardCell 9 7)
+                    , -- Admin is holding all 7 tray tiles (each schedules a fade-in pop) with 4 of
+                      -- them placed on the board (each schedules a placement pop): 7 + 4 = 11 pops.
+                      admin.checkModel 100 (checkPopCount 11)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+                    , -- After committing LOAD, admin's board is clear and the tray is refilled back to
+                      -- 7 tiles, so only the 7 fade-in pops remain (a mover doesn't animate its own word).
+                      admin.checkModel 100 (checkPopCount 7)
+                    , admin.snapshotView 5000 { name = "Place \"load\"" }
+                    , user.snapshotView 0 { name = "Place \"load\"" }
+                    ]
+
+                -- The other user opens the same match and joins it.
+                , user.click 2000 (Dom.id "guild_openDm_0")
+                , user.click 100 (Dom.id "guild_openGamesTab")
+                , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                , T.collapsableGroup
+                    "Place \"rot\""
+                    [ user.checkModel 100 (checkPopCount 11)
+                    , dragTile 100 user (trayTile 4) (boardCell 7 6)
+                    , dragTile 100 user (trayTile 3) (boardCell 7 8)
+                    , user.click 100 (Dom.id "wordSpellingGame_submitLine_v_7_6")
+                    , admin.snapshotView 5000 { name = "Place \"rot\"" }
+                    , user.snapshotView 0 { name = "Place \"rot\"" }
+                    ]
+                , T.collapsableGroup
+                    "Premove \"dirt\""
+                    [ dragTile 100 user (trayTile 0) (boardCell 9 8)
+                    , dragTile 100 user (trayTile 5) (boardCell 9 9)
+                    , dragTile 100 user (trayTile 6) (boardCell 9 10)
+                    , user.click 100 (Dom.id "wsg_submitPremove_v_9_8")
+                    , user.snapshotView 5000 { name = "Place \"dirt\"" }
+                    ]
+                , T.collapsableGroup
+                    "Place \"rote\""
+                    [ dragTile 100 admin (trayTile 1) (boardCell 7 9)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_9")
+                    ]
+                , -- Handing the turn to the user plays their premoved DIRT right away: the word is
+                  -- committed to the board, the premove is cleared, and the turn passes straight
+                  -- back to AT (turnCount 4 with two players = player 0, the match creator).
+                  T.checkState
+                    1000
+                    (\state ->
+                        dmWordSpellingShared state.backend
+                            |> Result.andThen
+                                (checkGame
+                                    { turnCount = 4
+                                    , boardSize = 10
+                                    , committedCells = [ ( 9, 8 ), ( 9, 9 ), ( 9, 10 ) ]
+                                    , emptyCells = []
+                                    , userScore = 10
+                                    , userTraySize = 3
+                                    , userHasPremove = False
+                                    }
+                                )
+                    )
+                , -- Both clients show it's AT's turn again (AT is on 14 points: 10 for LOAD plus
+                  -- 4 for ROTE).
+                  admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                    )
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT", Test.Html.Selector.exactText "'s turn (14)" ]
+                    )
+                , T.collapsableGroup
+                    "Premove \"rotes\" is cancelled by a move that affects it"
+                    [ -- Playing DIRT left the user holding I S S (the bag is empty, so nothing
+                      -- was drawn) — the premoved tiles are gone and the remaining three tiles
+                      -- keep their tray slots 1..3, showing I, S, S. While AT is on turn, the
+                      -- user premoves the S in slot 2 below ROTE, extending it to ROTES.
+                      dragTile 100 user (trayTile 2) (boardCell 7 10)
+                    , user.click 100 (Dom.id "wsg_submitPremove_h_7_10")
+                    , T.checkState
+                        1000
+                        (\state ->
+                            dmWordSpellingShared state.backend
+                                |> Result.andThen
+                                    (checkGame
+                                        { turnCount = 4
+                                        , boardSize = 10
+                                        , committedCells = []
+                                        , emptyCells = [ ( 7, 10 ) ]
+                                        , userScore = 10
+                                        , userTraySize = 3
+                                        , userHasPremove = True
+                                        }
+                                    )
+                        )
+                    , -- Admin plays their A left of DIRT's T, spelling AT. The new tile lands
+                      -- right next to the premoved S's cell, so the S would now also spell SAT —
+                      -- a word the backend never validated — meaning the premove's outcome has
+                      -- been affected and it must be cancelled instead of played: no tile appears
+                      -- at (7,10), the user keeps their letters and score, and the turn passes to
+                      -- them normally (turnCount 5 = player 1).
+                      dragTile 100 admin (trayTile 2) (boardCell 8 10)
+                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_10")
+                    , T.checkState
+                        1000
+                        (\state ->
+                            dmWordSpellingShared state.backend
+                                |> Result.andThen
+                                    (checkGame
+                                        { turnCount = 5
+                                        , boardSize = 11
+                                        , committedCells = [ ( 8, 10 ) ]
+                                        , emptyCells = [ ( 7, 10 ) ]
+                                        , userScore = 10
+                                        , userTraySize = 3
+                                        , userHasPremove = False
+                                        }
+                                    )
+                        )
+                    , user.snapshotView 100 { name = "Premove cancelled" }
+                    ]
+                ]
+            )
+        ]

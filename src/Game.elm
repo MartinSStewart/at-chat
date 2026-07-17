@@ -16,7 +16,6 @@ module Game exposing
     , dragStart
     , gameChangeFromServer
     , gameToString
-    , hasPendingTurn
     , initMatchData
     , initModel
     , insideBoard
@@ -46,7 +45,6 @@ import NonemptyDict exposing (NonemptyDict)
 import Scroll
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Font
@@ -219,12 +217,13 @@ wordSpellingScrollPosition matchId model =
 
 routeRequest :
     Time.Posix
+    -> Id UserId
     -> GuildOrDmId
     -> Id ChannelMessageId
     -> SeqDict (Id ChannelMessageId) MatchData
     -> SeqDict GuildOrDmId Model
     -> SeqDict GuildOrDmId Model
-routeRequest time guildOrDmId matchId matchData models =
+routeRequest time currentUserId guildOrDmId matchId matchData models =
     case SeqDict.get matchId matchData of
         Just (MatchData matchData2) ->
             SeqDict.update
@@ -251,7 +250,7 @@ routeRequest time guildOrDmId matchId matchData models =
                                         model.startedGames
                             }
 
-                        FrontendGameData_WordSpellingGame setup _ _ ->
+                        FrontendGameData_WordSpellingGame setup _ shared ->
                             { model
                                 | startedGames =
                                     SeqDict.update
@@ -262,7 +261,9 @@ routeRequest time guildOrDmId matchId matchData models =
                                                     maybeGame
 
                                                 Nothing ->
-                                                    WordSpellingGame.initGame time setup |> WordSpellingGame_Game |> Just
+                                                    WordSpellingGame.initGame time currentUserId setup shared
+                                                        |> WordSpellingGame_Game
+                                                        |> Just
                                         )
                                         model.startedGames
                             }
@@ -287,36 +288,9 @@ addWordSpellingGameAction action (MatchData match) =
                     FrontendGameData_WordSpellingGame
                         setup
                         (Array.push action actions)
-                        (WordSpellingGame.updateAction setup action cache)
+                        (WordSpellingGame.updateAction setup action cache |> Tuple.first)
     }
         |> MatchData
-
-
-hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
-hasPendingTurn userId matches =
-    SeqDict.foldl
-        (\matchId (MatchData match) set ->
-            case match.data of
-                FrontendGameData_Go setup _ cache ->
-                    if Go.isLocalUsersTurn userId setup cache then
-                        SeqSet.insert matchId set
-
-                    else
-                        set
-
-                FrontendGameData_WordSpellingGame _ _ cache ->
-                    case WordSpellingGame.isPlayerTurn userId cache of
-                        WordSpellingGame.NotJoined ->
-                            set
-
-                        WordSpellingGame.Joined ->
-                            set
-
-                        WordSpellingGame.JoinedAndItsTheirTurn ->
-                            SeqSet.insert matchId set
-        )
-        SeqSet.empty
-        matches
 
 
 type LocalChange
@@ -519,12 +493,13 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
 dragStart :
     Time.Posix
     -> Coord CssPixels
+    -> Id UserId
     -> NonemptyDict Int Touch
     -> Id ChannelMessageId
     -> MatchData
     -> Model
     -> Model
-dragStart time windowSize touches matchId (MatchData matchData) model =
+dragStart time windowSize currentUserId touches matchId (MatchData matchData) model =
     { model
         | startedGames =
             SeqDict.updateIfExists
@@ -539,10 +514,10 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
                                 _ ->
                                     game
 
-                        FrontendGameData_WordSpellingGame setup _ _ ->
+                        FrontendGameData_WordSpellingGame setup _ shared ->
                             case game of
                                 WordSpellingGame_Game game2 ->
-                                    WordSpellingGame.dragStart time windowSize touches setup game2
+                                    WordSpellingGame.dragStart time windowSize currentUserId touches setup shared game2
                                         |> WordSpellingGame_Game
 
                                 _ ->
@@ -555,43 +530,60 @@ dragStart time windowSize touches matchId (MatchData matchData) model =
 dragEnd :
     Time.Posix
     -> Coord CssPixels
+    -> Id UserId
     -> NonemptyDict Int Touch
     -> Id ChannelMessageId
     -> MatchData
     -> Model
-    -> Model
-dragEnd time windowSize touches matchId (MatchData matchData) model =
-    { model
-        | startedGames =
-            SeqDict.updateIfExists
-                matchId
-                (\game ->
+    -> ( Model, Maybe LocalChange )
+dragEnd time windowSize currentUserId touches matchId (MatchData matchData) model =
+    case SeqDict.get matchId model.startedGames of
+        Just game ->
+            let
+                ( game4, outMsg ) =
                     case matchData.data of
                         FrontendGameData_Go _ _ _ ->
-                            case game of
+                            ( case game of
                                 GoModel_Game game2 ->
                                     Go.dragEnd game2 |> GoModel_Game
 
                                 _ ->
                                     game
+                            , Nothing
+                            )
 
                         FrontendGameData_WordSpellingGame setup _ shared ->
                             case game of
                                 WordSpellingGame_Game game2 ->
-                                    WordSpellingGame.dragEnd
-                                        time
-                                        windowSize
-                                        touches
-                                        setup
-                                        shared
-                                        game2
-                                        |> WordSpellingGame_Game
+                                    let
+                                        ( game3, shouldEndPremove ) =
+                                            WordSpellingGame.dragEnd
+                                                time
+                                                windowSize
+                                                currentUserId
+                                                touches
+                                                setup
+                                                shared
+                                                game2
+                                    in
+                                    ( WordSpellingGame_Game game3
+                                    , if shouldEndPremove then
+                                        { userId = currentUserId, time = time, change = WordSpellingGame.CancelPremove }
+                                            |> WordSpellingGame.Action
+                                            |> LocalChange_WordSpellingGame matchId
+                                            |> Just
+
+                                      else
+                                        Nothing
+                                    )
 
                                 _ ->
-                                    game
-                )
-                model.startedGames
-    }
+                                    ( game, Nothing )
+            in
+            ( { model | startedGames = SeqDict.insert matchId game4 model.startedGames }, outMsg )
+
+        Nothing ->
+            ( model, Nothing )
 
 
 view :
@@ -686,8 +678,16 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
 
                     GameSelect ->
                         Ui.row
-                            [ Ui.spacing 8, Ui.wrap, Ui.padding 8 ]
-                            (List.map gameSelectButton allGames)
+                            [ Ui.spacing 8
+                            , Ui.wrap
+                            , Ui.padding 8
+                            , if isMobile then
+                                Ui.centerX
+
+                              else
+                                Ui.alignLeft
+                            ]
+                            (List.map (gameSelectButton isMobile) allGames)
                 ]
 
 
@@ -750,17 +750,39 @@ gameToPreviewUrl game =
             "/word-spelling-game-preview.webp"
 
 
-gameSelectButton : GameType -> Element Msg
-gameSelectButton game =
+gameSelectButton : Bool -> GameType -> Element Msg
+gameSelectButton isMobile game =
     MyUi.elButton
         (Dom.id ("game_select_" ++ gameToString game))
         (PressedSelectGame game)
-        [ Ui.width (Ui.px 240)
-        , Ui.height (Ui.px 240)
+        [ Ui.width
+            (Ui.px
+                (if isMobile then
+                    170
+
+                 else
+                    240
+                )
+            )
+        , Ui.height
+            (Ui.px
+                (if isMobile then
+                    170
+
+                 else
+                    240
+                )
+            )
         , Ui.rounded 16
         , Ui.clip
         , Ui.contentCenterY
-        , Ui.Font.size 18
+        , Ui.Font.size
+            (if isMobile then
+                16
+
+             else
+                18
+            )
         , Ui.Font.center
         , Ui.Font.bold
         , gameToString game
@@ -771,7 +793,13 @@ gameSelectButton game =
                 , Ui.alignBottom
                 , Ui.background (Ui.rgba 0 0 0 0.7)
                 , Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 100, color = Ui.rgba 0 0 0 1 } ]
-                , Ui.heightMin 40
+                , Ui.heightMin
+                    (if isMobile then
+                        32
+
+                     else
+                        40
+                    )
                 ]
             |> Ui.inFront
         ]
@@ -916,8 +944,8 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
         |> Just
 
 
-gameChangeFromServer : Time.Posix -> LocalChange -> Maybe Model -> Maybe Model
-gameChangeFromServer time gameChange maybeModel =
+gameChangeFromServer : Time.Posix -> Id UserId -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time currentUserId gameChange maybeModel =
     let
         model : Model
         model =
@@ -984,7 +1012,14 @@ gameChangeFromServer time gameChange maybeModel =
                         | startedGames =
                             SeqDict.insert
                                 matchId
-                                (WordSpellingGame_Game (WordSpellingGame.initGame serverTime setup))
+                                (WordSpellingGame_Game
+                                    (WordSpellingGame.initGame
+                                        serverTime
+                                        currentUserId
+                                        setup
+                                        (WordSpellingGame.initShared setup)
+                                    )
+                                )
                                 model.startedGames
                     }
 

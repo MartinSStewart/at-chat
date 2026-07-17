@@ -27,6 +27,7 @@ import Env
 import Expect
 import FileStatus
 import Frontend
+import GuildName
 import Html.Attributes
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import IdArray
@@ -91,7 +92,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     E2EHelper.httpBasic currentRequest.url 200 emojiJson
 
                 [ "http:", "", "localhost:8000", "NWL2023.txt" ] ->
-                    E2EHelper.httpBasic currentRequest.url 200 "AA\nDATE\nNOSE\nLOAD\nROT\n"
+                    E2EHelper.httpBasic currentRequest.url 200 "AA\nAT\nDATE\nDIRT\nNOSE\nLOAD\nROT\nROTE\nROTES\n"
 
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
                     E2EHelper.mockCloudflareSfu rest httpRequests
@@ -2348,11 +2349,36 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 in
                 [ E2EHelper.writeMessage admin 100 "hello world"
                 , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+
+                -- The owner renames the guild and both users see the new name
+                , admin.input 100 (Dom.id "editGuildName") "Renamed guild!"
+                , admin.snapshotView 100 { name = "Guild settings with pending guild rename" }
+                , admin.click 100 (Dom.id "guild_submitEditGuild")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Renamed guild!" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Renamed guild!" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , admin.snapshotView 100 { name = "Guild settings after guild rename" }
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case SeqDict.get guildId backend.guilds of
+                            Just guild ->
+                                if GuildName.toString guild.name == "Renamed guild!" then
+                                    Ok ()
+
+                                else
+                                    Err ("Guild name should have been renamed, got: " ++ GuildName.toString guild.name)
+
+                            Nothing ->
+                                Err "Guild is missing from the backend"
+                    )
+
+                -- Deleting the guild requires confirming with the renamed guild name
                 , admin.click 100 (Dom.id "guild_deleteGuild")
                 , admin.checkView
                     100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "Type \"My new guild!\" to confirm deletion" ]
+                        [ Test.Html.Selector.exactText "Type \"Renamed guild!\" to confirm deletion" ]
                     )
                 , admin.input 100 (Dom.id "deleteGuildConfirmation") "wrong-name"
                 , admin.click 100 (Dom.id "guild_deleteGuild")
@@ -2365,10 +2391,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         else
                             Err "Wrong confirmation text should not delete the guild"
                     )
-                , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "Renamed guild!"
                 , admin.click 100 (Dom.id "guild_deleteGuild")
-                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
-                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Renamed guild!" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Renamed guild!" ])
                 , T.checkBackend
                     100
                     (\backend ->

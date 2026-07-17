@@ -75,6 +75,7 @@ module LocalState exposing
     , drawingHandleChangeNoThreadBackend
     , drawingHandleDateDivider
     , editChannel
+    , editGuildName
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
     , editMessageHelper
@@ -1231,6 +1232,11 @@ editChannel :
     -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName, description : ChannelDescription } }
 editChannel channelName channelDescription channelId guild =
     updateChannel (\channel -> { channel | name = channelName, description = channelDescription }) channelId guild
+
+
+editGuildName : GuildName -> { a | name : GuildName } -> { a | name : GuildName }
+editGuildName guildName guild =
+    { guild | name = guildName }
 
 
 deleteChannel : Time.Posix -> Id UserId -> Id ChannelId -> BackendGuild -> BackendGuild

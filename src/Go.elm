@@ -31,7 +31,6 @@ module Go exposing
     , initGame
     , initSetup
     , inputBackgroundColor
-    , isLocalUsersTurn
     , joinedUser
     , numberInput
     , pressedKey

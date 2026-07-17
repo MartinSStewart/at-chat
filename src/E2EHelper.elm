@@ -2398,6 +2398,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteChannel _ _ ->
                     True
 
+                Local_EditGuildName _ _ ->
+                    True
+
                 Local_DeleteGuild _ ->
                     True
 
@@ -2547,6 +2550,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_DeleteChannel _ _ ->
+                            True
+
+                        Types.Server_EditGuildName _ _ ->
                             True
 
                         Types.Server_DeleteGuild _ ->
@@ -2866,6 +2872,7 @@ allAttackerLocalChanges =
     , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
+    , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) EmptyPlaceholder

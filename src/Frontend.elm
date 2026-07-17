@@ -1055,6 +1055,40 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedResetEditGuildChanges guildId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitEditGuildChanges guildId form ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case GuildName.fromString form.name of
+                        Ok guildName ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_EditGuildName guildId guildName |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                                }
+                                Command.none
+
+                        Err _ ->
+                            ( { loggedIn
+                                | editGuildForm =
+                                    SeqDict.insert guildId { form | pressedSubmit = True } loggedIn.editGuildForm
+                              }
+                            , Command.none
+                            )
+                )
+                model
+
         PressedDeleteGuild guildId ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
@@ -1623,6 +1657,7 @@ updateLoaded msg model =
                                                                 (Game.dragStart
                                                                     time
                                                                     model.windowSize
+                                                                    (Local.model loggedIn.localState).localUser.session.userId
                                                                     (Touch.removeSafeAreaTopInset
                                                                         model.startupData.safeAreaInsetTop
                                                                         startTouches
@@ -2046,7 +2081,7 @@ updateLoaded msg model =
                                         outMsgs
 
                                 ( model2, effectCmd ) =
-                                    handleWordSpellingGameOutMsgs outMsgs { model | loginStatus = LoggedIn loggedIn2 }
+                                    handleGameOutMsgs outMsgs { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ localChangeCmd, Command.batch (List.reverse effectCmd) ] )
 
@@ -5820,29 +5855,35 @@ finalizeWordSpellingDrag time model loggedIn =
         Dragging dragging ->
             case dragging.target of
                 Drag_Game ->
-                    ( case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
+                    case FrontendExtra.currentGame (Local.model loggedIn.localState) model of
                         Just { guildOrDmId, matchId, match } ->
-                            { loggedIn
-                                | games =
-                                    SeqDict.updateIfExists
-                                        guildOrDmId
-                                        (Game.dragEnd
-                                            time
-                                            model.windowSize
-                                            (Touch.removeSafeAreaTopInset
-                                                model.startupData.safeAreaInsetTop
-                                                dragging.touches
-                                            )
-                                            matchId
-                                            match
-                                        )
-                                        loggedIn.games
-                            }
+                            case SeqDict.get guildOrDmId loggedIn.games of
+                                Just game ->
+                                    let
+                                        ( game2, outMsg ) =
+                                            Game.dragEnd
+                                                time
+                                                model.windowSize
+                                                (Local.model loggedIn.localState).localUser.session.userId
+                                                (Touch.removeSafeAreaTopInset
+                                                    model.startupData.safeAreaInsetTop
+                                                    dragging.touches
+                                                )
+                                                matchId
+                                                match
+                                                game
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Maybe.map (Local_Game guildOrDmId) outMsg)
+                                        { loggedIn | games = SeqDict.insert guildOrDmId game2 loggedIn.games }
+                                        Command.none
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
 
                         Nothing ->
-                            loggedIn
-                    , Command.none
-                    )
+                            ( loggedIn, Command.none )
 
                 _ ->
                     ( loggedIn, Command.none )
@@ -6630,6 +6671,7 @@ updateLoadedFromBackend msg model =
                                         updatedGameModel =
                                             Game.gameChangeFromServer
                                                 model.time
+                                                local.localUser.session.userId
                                                 gameChange
                                                 (SeqDict.get guildOrDmId loggedIn2.games)
                                     in
@@ -7169,11 +7211,11 @@ routeToInitialDataRequest route =
             InitialLoadRequested_None
 
 
-handleWordSpellingGameOutMsgs :
+handleGameOutMsgs :
     List Game.OutMsg
     -> LoadedFrontend
     -> ( LoadedFrontend, List (Command FrontendOnly ToBackend FrontendMsg_) )
-handleWordSpellingGameOutMsgs outMsgs model =
+handleGameOutMsgs outMsgs model =
     List.foldl
         (\outMsg ( model2, cmds ) ->
             case outMsg of

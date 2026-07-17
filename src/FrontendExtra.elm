@@ -139,6 +139,9 @@ pendingChangesText localChange =
         Local_DeleteChannel _ _ ->
             "Deleted channel"
 
+        Local_EditGuildName _ _ ->
+            "Edited guild name"
+
         Local_DeleteGuild _ ->
             "Deleted guild"
 
@@ -1830,6 +1833,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
+                                                local.localUser.session.userId
                                                 guildOrDmId2
                                                 messageId
                                                 dmChannel.games
@@ -1846,6 +1850,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
                                         | games =
                                             Game.routeRequest
                                                 model3.time
+                                                local.localUser.session.userId
                                                 guildOrDmId2
                                                 messageId
                                                 channel.games
@@ -1974,6 +1979,12 @@ isPressMsg msg =
 
         EditGuildFormChanged _ _ ->
             False
+
+        PressedResetEditGuildChanges _ ->
+            True
+
+        PressedSubmitEditGuildChanges _ _ ->
+            True
 
         PressedDeleteGuild _ ->
             True
@@ -2658,6 +2669,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.deleteChannelFrontend channelId)
+                                local.guilds
+                    }
+
+                Local_EditGuildName guildId guildName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.editGuildName guildName)
                                 local.guilds
                     }
 
@@ -3698,6 +3718,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.deleteChannelFrontend channelId)
+                                local.guilds
+                    }
+
+                Server_EditGuildName guildId guildName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.editGuildName guildName)
                                 local.guilds
                     }
 
