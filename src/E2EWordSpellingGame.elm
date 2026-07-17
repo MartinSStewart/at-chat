@@ -759,7 +759,7 @@ tests normalConfig =
                                             [ Test.Html.Selector.exactText "AT"
                                             , Test.Html.Selector.exactText "Stevie Steve"
                                             , Test.Html.Selector.exactText "Joe"
-                                            , Test.Html.Selector.text "Past moves"
+                                            , Test.Html.Selector.text "Moves"
                                             , Test.Html.Selector.text "played AA (+8)"
                                             ]
                                         )

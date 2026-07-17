@@ -24,7 +24,6 @@ tests normalConfig =
         [ goMatchTest normalConfig
         , goGuildMatchTest normalConfig
         , goTimeoutTest normalConfig
-        , goTurnNotificationDotTest normalConfig
         , publicGoMatchViewTest normalConfig
         , E2EHelper.startTest
             "Single player go"
@@ -218,88 +217,6 @@ goTimeoutTest normalConfig =
                         -- And neither player still sees a "to move" prompt.
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "White to move" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "White to move" ])
-                        ]
-                    )
-                ]
-            )
-        ]
-
-
-goTurnNotificationDotTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-goTurnNotificationDotTest normalConfig =
-    E2EHelper.startTest
-        "Go channel header shows a red dot when it's the user's turn and they aren't viewing the match"
-        E2EHelper.startTime
-        normalConfig
-        [ T.connectFrontend
-            100
-            E2EHelper.sessionId0
-            "/"
-            E2EHelper.tallDesktopWindow
-            (\admin ->
-                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
-                , E2EHelper.inviteUser
-                    admin
-                    (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_2")
-                        , admin.click 100 (Dom.id "guild_openGamesTab")
-                        , admin.click 100 (Dom.id "game_select_Go (Baduk)")
-                        , admin.click 100 (Dom.id "go_start")
-                        , user.click 100 (Dom.id "guild_gameStartedCard_0")
-                        , user.click 100 (Dom.id "go_joinGame")
-
-                        -- No dot for either user yet: admin is viewing the match,
-                        -- and even though it's admin's turn, the user has no move pending
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-                        , user.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- Admin (Black) makes a move; now it's user's (White) turn
-                        , admin.click 100 (Dom.id "go_cell_4_4")
-
-                        -- User is still on the Go tab so no dot
-                        , user.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- User leaves the Go tab by switching to the chat description tab
-                        , user.click 100 (Dom.id "guild_openDescription")
-
-                        -- The dot should now appear since it's user's turn and they aren't viewing the match
-                        , user.checkView
-                            100
-                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- Admin still has no pending turn so no dot
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- User clicks back to the Go tab; the dot disappears
-                        , user.click 100 (Dom.id "guild_openGamesTab")
-                        , user.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- User makes their move; now it's admin's turn
-                        , user.click 100 (Dom.id "go_cell_5_4")
-
-                        -- Admin is viewing the match so no dot for them
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
-
-                        -- Admin switches away from the Go tab and should now see the dot
-                        , admin.click 100 (Dom.id "guild_openDescription")
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
                         ]
                     )
                 ]

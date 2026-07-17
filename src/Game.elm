@@ -288,7 +288,7 @@ addWordSpellingGameAction action (MatchData match) =
                     FrontendGameData_WordSpellingGame
                         setup
                         (Array.push action actions)
-                        (WordSpellingGame.updateAction setup action cache)
+                        (WordSpellingGame.updateAction setup action cache |> Tuple.first)
     }
         |> MatchData
 

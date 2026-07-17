@@ -729,26 +729,50 @@ handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
         FilledInByBackend IsNotValid ->
             case OneOrGreater.decrement shared2.attemptsLeft of
                 Just attemptsLeft ->
-                    ( { shared2 | attemptsLeft = attemptsLeft }, [ Description_InvalidMove (Just attemptsLeft) ] )
+                    ( { shared2 | attemptsLeft = attemptsLeft }
+                    , [ Description_InvalidMove player.userId (Just attemptsLeft) ]
+                    )
 
                 Nothing ->
-                    incrementTurnCount (Description_InvalidMove Nothing) time setup shared2
+                    incrementTurnCount (Description_InvalidMove player.userId Nothing) time setup shared2
 
         FilledInByBackend IsValid ->
-            incrementTurnCount Description_PlacedWord time setup shared2
+            incrementTurnCount (placedWordDescription setup player placedWord result) time setup shared2
 
         EmptyPlaceholder ->
-            ( shared2, [] )
+            -- The move hasn't been validated by the backend yet, but it's described optimistically
+            -- so the mover sees it in the log right away (mirrored by the board update above).
+            ( shared2, [ placedWordDescription setup player placedWord result ] )
 
 
+placedWordDescription : ValidatedSetup -> Player -> PlacedWord -> PlacementResult -> Description
+placedWordDescription setup player placedWord result =
+    let
+        bonus : Int
+        bonus =
+            fullTrayBonusScore setup placedWord
+    in
+    Description_PlacedWord
+        player.userId
+        { word = headlineWord result.words
+        , points = result.score + bonus
+        , isBingo = bonus /= 0
+        , placedCells = List.map Tuple.first result.placedCells
+        }
+
+
+{-| One entry of the Moves log, carrying who did it and everything the view needs to describe it
+(see `descriptionView`). A single action can produce several entries: ending a turn can play out
+the next player's premove (or fail to), which gets its own entry attributed to the premover.
+-}
 type Description
-    = Description_PlacedWord
-    | Description_InvalidMove (Maybe OneOrGreater)
-    | Description_ReplacedTray
-    | Description_Passed
-    | Description_EndedGame
-    | Description_Joined
-    | Description_PremoveBlocked
+    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ) }
+    | Description_InvalidMove (Id UserId) (Maybe OneOrGreater)
+    | Description_ReplacedTray (Id UserId)
+    | Description_Passed (Id UserId)
+    | Description_EndedGame (Id UserId)
+    | Description_Joined (Id UserId)
+    | Description_PremoveBlocked (Id UserId) String
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> ( Shared, List Description )
@@ -797,7 +821,7 @@ updateAction setup action shared =
                                         shared.players
                                 , passingStartedAt = Nothing
                             }
-                                |> incrementTurnCount Description_ReplacedTray action.time setup
+                                |> incrementTurnCount (Description_ReplacedTray action.userId) action.time setup
 
                         ShouldPass ->
                             { shared
@@ -809,10 +833,10 @@ updateAction setup action shared =
                                         Just _ ->
                                             shared.passingStartedAt
                             }
-                                |> incrementTurnCount Description_Passed action.time setup
+                                |> incrementTurnCount (Description_Passed action.userId) action.time setup
 
                         ShouldEndGame ->
-                            incrementTurnCount Description_EndedGame action.time setup shared
+                            incrementTurnCount (Description_EndedGame action.userId) action.time setup shared
 
                 _ ->
                     ( shared, [] )
@@ -828,7 +852,7 @@ updateAction setup action shared =
                                 []
                             )
                   }
-                , [ Description_Joined ]
+                , [ Description_Joined action.userId ]
                 )
 
             else
@@ -919,13 +943,17 @@ incrementTurnCount description time setup shared =
                             |> Tuple.mapSecond (\a -> description :: a)
 
                     else
-                        ( shared2, [ Description_PremoveBlocked ] )
+                        ( shared2
+                        , [ description, Description_PremoveBlocked nextPlayer.userId (headlineWord expected.words) ]
+                        )
 
                 Nothing ->
-                    ( shared2, [] )
+                    ( shared2
+                    , [ description, Description_PremoveBlocked nextPlayer.userId (headlineWord expected.words) ]
+                    )
 
         Nothing ->
-            ( shared2, [] )
+            ( shared2, [ description ] )
 
 
 canJoin : Shared -> Bool
@@ -3618,92 +3646,98 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
 
 
 descriptionView : Description -> String
-descriptionView action =
-    case action.change of
-        Description_PlacedWord placedWord isValid ->
-            case isValid of
-                FilledInByBackend IsNotValid ->
-                    case OneOrGreater.decrement shared2.attemptsLeft of
-                        Just attemptsLeft ->
-                            ( []
-                            , "played an invalid word ("
-                                ++ (case OneOrGreater.toString attemptsLeft of
-                                        "1" ->
-                                            "1 attempt left)"
+descriptionView description =
+    case description of
+        Description_PlacedWord _ { word, points, isBingo } ->
+            "played "
+                ++ word
+                ++ " (+"
+                ++ String.fromInt points
+                ++ (if isBingo then
+                        ", bingo!"
 
-                                        n ->
-                                            n ++ " attempts left)"
-                                   )
-                            )
+                    else
+                        ""
+                   )
+                ++ ")"
 
-                        Nothing ->
-                            ( [], "played an invalid word (turn ended)" )
+        Description_InvalidMove _ maybeAttemptsLeft ->
+            case maybeAttemptsLeft of
+                Just attemptsLeft ->
+                    "played an invalid word ("
+                        ++ (case OneOrGreater.toString attemptsLeft of
+                                "1" ->
+                                    "1 attempt left)"
 
-                _ ->
-                    case placeWord setup shared2.board placedWord of
-                        Just ( _, result ) ->
-                            let
-                                bonus : Int
-                                bonus =
-                                    fullTrayBonusScore setup placedWord
-                            in
-                            ( []
-                            , "played "
-                                ++ headlineWord result.words
-                                ++ " (+"
-                                ++ String.fromInt (result.score + bonus)
-                                ++ (if bonus == 0 then
-                                        ""
+                                n ->
+                                    n ++ " attempts left)"
+                           )
 
-                                    else
-                                        ", bingo!"
-                                   )
-                                ++ ")"
-                            )
+                Nothing ->
+                    "played an invalid word (turn ended)"
 
-                        Nothing ->
-                            ( [], "played a word" )
+        Description_ReplacedTray _ ->
+            "swapped their tiles"
 
-        ReplaceTrayOrPass ->
-            { index = index
-            , userId = action.userId
-            , description =
-                case passBehavior setup shared2 of
-                    ShouldReplaceTray ->
-                        ( [], "swapped their tiles" )
+        Description_Passed _ ->
+            "passed"
 
-                    ShouldPass ->
-                        ( [], "passed" )
+        Description_EndedGame _ ->
+            "ended the game"
 
-                    ShouldEndGame ->
-                        ( [], "ended the game" )
-            }
-                :: acc
+        Description_Joined _ ->
+            "joined the game"
 
-        JoinGame ->
-            { index = index
-            , userId = action.userId
-            , description = ( [], "joined the game" )
-            }
-                :: acc
+        Description_PremoveBlocked _ word ->
+            "couldn't premove " ++ word ++ " (the board changed)"
+
+
+{-| The player a Moves log entry is about — for a premove playing out (or being blocked) that's
+the premover, not the player whose move ended the turn.
+-}
+descriptionUserId : Description -> Id UserId
+descriptionUserId description =
+    case description of
+        Description_PlacedWord userId _ ->
+            userId
+
+        Description_InvalidMove userId _ ->
+            userId
+
+        Description_ReplacedTray userId ->
+            userId
+
+        Description_Passed userId ->
+            userId
+
+        Description_EndedGame userId ->
+            userId
+
+        Description_Joined userId ->
+            userId
+
+        Description_PremoveBlocked userId _ ->
+            userId
 
 
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
+        -- Every Moves log entry, most recent first (an action's own entries stay in order: the
+        -- block is reversed before being consed on).
+        log : List Description
         log =
             Array.foldl
                 (\action ( shared2, acc ) ->
                     let
-                        ( shared3, description ) =
+                        ( shared3, descriptions ) =
                             updateAction setup action shared2
                     in
-                    ( shared3, description ++ acc )
+                    ( shared3, List.reverse descriptions ++ acc )
                 )
                 ( initShared setup, [] )
                 actions
                 |> Tuple.second
-                |> List.map descriptionView
 
         log2 : List (Element msg)
         log2 =
@@ -3730,12 +3764,12 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                 Nothing ->
                     []
             )
-                ++ List.map
-                    (\entry ->
+                ++ List.indexedMap
+                    (\index description ->
                         let
                             name : String
                             name =
-                                case User.getUser entry.userId localUser of
+                                case User.getUser (descriptionUserId description) localUser of
                                     Just user ->
                                         PersonName.toString user.name
 
@@ -3746,11 +3780,11 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
                             [ Ui.Prose.paragraph
                                 [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
-                                [ Ui.text (String.fromInt entry.index ++ ". ") ]
+                                [ Ui.text (String.fromInt (List.length log - index) ++ ". ") ]
                             , Ui.Prose.paragraph
                                 [ Ui.alignTop ]
                                 [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                                , Ui.text (" " ++ Tuple.second entry.description)
+                                , Ui.text (" " ++ descriptionView description)
                                 ]
                             ]
                     )
@@ -3833,33 +3867,35 @@ pastWordsContainerId =
     Dom.id "wsg_pastWords"
 
 
-{-| Replay the action list to work out which player placed each committed tile on the board. Only
-the cells a `PlaceWord` action actually adds (`placedCells`) are attributed, and only for placements
-that stuck (a placement rejected by the backend leaves the board unchanged, so it's skipped). Used to
-highlight one player's letters when their name is clicked (see `statusView`).
+{-| Replay the action list to work out which player placed each committed tile on the board. Each
+`Description_PlacedWord` an action produces attributes the cells it placed — that covers premoved
+words too, which get attributed to the premover (a placement rejected by the backend produces an
+invalid-move description instead, leaving the board unchanged, so it's skipped). Used to highlight
+one player's letters when their name is clicked (see `statusView`).
 -}
 tileOwners : ValidatedSetup -> Array ActionWithTime -> SeqDict ( Int, Int ) (Id UserId)
 tileOwners setup actions =
     Array.foldl
         (\action ( shared, owners ) ->
-            ( updateAction setup action shared
-            , case action.change of
-                PlaceWord placedWord isValid ->
-                    case ( ( getWinner shared, getPlayer action.userId shared ), isValid, placeWord setup shared.board placedWord ) of
-                        ( ( Nothing, Just _ ), FilledInByBackend IsNotValid, _ ) ->
-                            owners
-
-                        ( ( Nothing, Just _ ), _, Just ( _, result ) ) ->
+            let
+                ( shared2, descriptions ) =
+                    updateAction setup action shared
+            in
+            ( shared2
+            , List.foldl
+                (\description owners2 ->
+                    case description of
+                        Description_PlacedWord userId { placedCells } ->
                             List.foldl
-                                (\( cell, _ ) acc -> SeqDict.insert cell action.userId acc)
-                                owners
-                                result.placedCells
+                                (\cell acc -> SeqDict.insert cell userId acc)
+                                owners2
+                                placedCells
 
                         _ ->
-                            owners
-
-                _ ->
-                    owners
+                            owners2
+                )
+                owners
+                descriptions
             )
         )
         ( initShared setup, SeqDict.empty )

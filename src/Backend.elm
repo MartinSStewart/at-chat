@@ -6095,7 +6095,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                     (Game.GameData_WordSpellingGame
                                         setup
                                         (Array.push action2 actions)
-                                        (WordSpellingGame.updateAction setup action2 shared)
+                                        (WordSpellingGame.updateAction setup action2 shared |> Tuple.first)
                                     )
                                     channel.games
                         }
