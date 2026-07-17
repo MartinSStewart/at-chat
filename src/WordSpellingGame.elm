@@ -2599,7 +2599,15 @@ dragStartHelper time windowSize currentUserId touches setup shared oldModel =
                     gameModel
 
 
-dragEnd : Time.Posix -> Coord CssPixels -> Id UserId -> NonemptyDict Int Touch -> ValidatedSetup -> Shared -> GameData -> GameData
+dragEnd :
+    Time.Posix
+    -> Coord CssPixels
+    -> Id UserId
+    -> NonemptyDict Int Touch
+    -> ValidatedSetup
+    -> Shared
+    -> GameData
+    -> ( GameData, Bool )
 dragEnd currentTime windowSize currentUserId newTouches setup shared oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; drop the dragged
@@ -2608,22 +2616,40 @@ dragEnd currentTime windowSize currentUserId newTouches setup shared oldModel =
         model =
             { oldModel | tiles = getTiles windowSize currentUserId setup shared oldModel.tiles }
     in
-    (case model.dragging of
+    case model.dragging of
         Dragging tileIndex ->
             let
+                shouldEndPremove : Maybe ( Int, Int ) -> Bool
+                shouldEndPremove newPosition =
+                    case ( getPlayer currentUserId shared, Array.get tileIndex model.tiles ) of
+                        ( Just player, Just tile ) ->
+                            case ( player.premove, tile.position ) of
+                                ( Just ( _, result, _ ), TileOnBoard ( x, y ) _ ) ->
+                                    if List.any (\( ( xA, yA ), _ ) -> xA == x && yA == y) result.placedCells then
+                                        newPosition /= Just ( x, y )
+
+                                    else
+                                        False
+
+                                _ ->
+                                    False
+
+                        _ ->
+                            False
+
                 position : Coord CssPixels
                 position =
                     Touch.touchCentroid newTouches
 
-                returnToTray : GameData
+                returnToTray : ( GameData, Bool )
                 returnToTray =
-                    if distanceToTray setup windowSize position (Array.length model.tiles) <= maxTraySnapDistance then
+                    ( (if distanceToTray setup windowSize position (Array.length model.tiles) <= maxTraySnapDistance then
                         { model
                             | dragging = NotDragging
                             , tiles = insertIntoTray currentTime windowSize tileIndex position setup model.tiles
                         }
 
-                    else
+                       else
                         { model
                             | dragging = NotDragging
                             , tiles =
@@ -2632,6 +2658,10 @@ dragEnd currentTime windowSize currentUserId newTouches setup shared oldModel =
                                     (\tile -> { tile | position = TileInTray (firstOpenTrayIndex (Just tileIndex) model.tiles) Nothing })
                                     model.tiles
                         }
+                      )
+                        |> withZoomAnimation currentTime model
+                    , shouldEndPremove Nothing
+                    )
             in
             case boardCellAtPosition currentTime windowSize setup model position of
                 Just cell ->
@@ -2639,22 +2669,23 @@ dragEnd currentTime windowSize currentUserId newTouches setup shared oldModel =
                         returnToTray
 
                     else
-                        { model
+                        ( { model
                             | dragging = NotDragging
                             , tiles =
                                 Array.Extra.update
                                     tileIndex
                                     (\tile -> { tile | position = TileOnBoard cell currentTime })
                                     model.tiles
-                        }
+                          }
+                            |> withZoomAnimation currentTime model
+                        , shouldEndPremove (Just cell)
+                        )
 
                 Nothing ->
                     returnToTray
 
         NotDragging ->
-            model
-    )
-        |> withZoomAnimation currentTime model
+            ( model, False )
 
 
 {-| The tray slots currently occupied by tiles resting in the tray (board tiles don't count).
@@ -4079,7 +4110,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                                         Just ( _, result, _ ) ->
                                                             List.any
                                                                 (\( ( xA, yA ), _ ) -> xA == x && yA == y)
-                                                                (Debug.log "result.placedCells" result.placedCells)
+                                                                result.placedCells
 
                                                         Nothing ->
                                                             False

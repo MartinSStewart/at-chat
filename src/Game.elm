@@ -535,40 +535,55 @@ dragEnd :
     -> Id ChannelMessageId
     -> MatchData
     -> Model
-    -> Model
+    -> ( Model, Maybe LocalChange )
 dragEnd time windowSize currentUserId touches matchId (MatchData matchData) model =
-    { model
-        | startedGames =
-            SeqDict.updateIfExists
-                matchId
-                (\game ->
+    case SeqDict.get matchId model.startedGames of
+        Just game ->
+            let
+                ( game4, outMsg ) =
                     case matchData.data of
                         FrontendGameData_Go _ _ _ ->
-                            case game of
+                            ( case game of
                                 GoModel_Game game2 ->
                                     Go.dragEnd game2 |> GoModel_Game
 
                                 _ ->
                                     game
+                            , Nothing
+                            )
 
                         FrontendGameData_WordSpellingGame setup _ shared ->
                             case game of
                                 WordSpellingGame_Game game2 ->
-                                    WordSpellingGame.dragEnd
-                                        time
-                                        windowSize
-                                        currentUserId
-                                        touches
-                                        setup
-                                        shared
-                                        game2
-                                        |> WordSpellingGame_Game
+                                    let
+                                        ( game3, shouldEndPremove ) =
+                                            WordSpellingGame.dragEnd
+                                                time
+                                                windowSize
+                                                currentUserId
+                                                touches
+                                                setup
+                                                shared
+                                                game2
+                                    in
+                                    ( WordSpellingGame_Game game3
+                                    , if shouldEndPremove then
+                                        { userId = currentUserId, time = time, change = WordSpellingGame.CancelPremove }
+                                            |> WordSpellingGame.Action
+                                            |> LocalChange_WordSpellingGame matchId
+                                            |> Just
+
+                                      else
+                                        Nothing
+                                    )
 
                                 _ ->
-                                    game
-                )
-                model.startedGames
-    }
+                                    ( game, Nothing )
+            in
+            ( { model | startedGames = SeqDict.insert matchId game4 model.startedGames }, outMsg )
+
+        Nothing ->
+            ( model, Nothing )
 
 
 view :
