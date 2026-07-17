@@ -2,6 +2,7 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
+    , Description
     , Drag(..)
     , GameData
     , GameMsg(..)
@@ -253,9 +254,7 @@ type TrayIndex
 {-| OpaqueVariants
 -}
 type SetupMsg
-    = ChangedMainTimeInput String
-    | ChangedIncrementInput String
-    | ChangedTraySizeInput String
+    = ChangedTraySizeInput String
     | ChangedFullTrayBonusInput String
     | ChangedLettersInput String
     | ChangedLetterValue Char String
@@ -930,19 +929,19 @@ incrementTurnCount description time setup shared =
         nextPlayer =
             List.Nonempty.get turnCount shared.players
 
-        nextPlayer2 =
+        nextPlayerNoPremove =
             { nextPlayer | premove = Nothing }
 
         shared2 =
             { shared
                 | turnCount = turnCount
                 , attemptsLeft = setup.placeWordAttempts
-                , players = NonemptyExtra.set turnCount nextPlayer2 shared.players
+                , players = NonemptyExtra.set turnCount nextPlayerNoPremove shared.players
             }
     in
     case nextPlayer.premove of
         Just ( premove, expected, isValid ) ->
-            case placeWord setup shared.board premove of
+            case placeWord setup shared2.board premove of
                 Just ( board, result ) ->
                     if result == expected then
                         handlePlaceWord
@@ -952,7 +951,7 @@ incrementTurnCount description time setup shared =
                             True
                             ( board, result )
                             (FilledInByBackend isValid)
-                            nextPlayer2
+                            nextPlayerNoPremove
                             shared2
                             |> Tuple.mapSecond (\a -> description :: a)
 
@@ -1331,12 +1330,6 @@ updateSetup :
     -> ( SetupOrGame, Maybe ValidatedSetup )
 updateSetup time currentUserId msg setup =
     case msg of
-        ChangedMainTimeInput input ->
-            ( Setup { setup | mainTimeInput = input, error = Nothing }, Nothing )
-
-        ChangedIncrementInput input ->
-            ( Setup { setup | incrementInput = input, error = Nothing }, Nothing )
-
         ChangedTraySizeInput input ->
             ( { setup
                 | traySize = String.toInt (String.trim input) |> Maybe.withDefault setup.traySize
@@ -5230,31 +5223,6 @@ lettersInput isReadonly value =
         ]
         []
         |> Ui.html
-
-
-timeInput : Bool -> String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
-timeInput isReadonly htmlId label value onChange =
-    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
-        [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
-        , Html.input
-            [ Html.Attributes.id htmlId
-            , Html.Attributes.type_ "number"
-            , Html.Attributes.min "0"
-            , Html.Attributes.step "1"
-            , Html.Attributes.value value
-            , Html.Attributes.disabled isReadonly
-            , Go.inputBackgroundColor isReadonly
-            , Html.Attributes.style "color" "black"
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "width" "70px"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-            , Html.Attributes.style "border-radius" "4px"
-            , Html.Events.onInput onChange
-            ]
-            []
-            |> Ui.html
-        ]
 
 
 defaultLetters : Language -> String
