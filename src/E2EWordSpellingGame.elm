@@ -1038,7 +1038,7 @@ checkGame expected shared =
 
             else
                 case ( expected.userHasPremove, userPlayer.premove ) of
-                    ( True, Just ( _, _, WordSpellingGame.IsValid ) ) ->
+                    ( True, Just ( _, _, WordSpellingGame.IsValid _ ) ) ->
                         Ok ()
 
                     ( True, Just ( _, _, WordSpellingGame.IsNotValid ) ) ->

@@ -786,17 +786,17 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                 Nothing ->
                     incrementTurnCount (Description_InvalidMove player.userId Nothing) time setup shared2
 
-        FilledInByBackend IsValid ->
-            incrementTurnCount (placedWordDescription setup player placedWord result isPremove) time setup shared2
+        FilledInByBackend (IsValid wildcardMatches) ->
+            incrementTurnCount (placedWordDescription setup player placedWord result isPremove wildcardMatches) time setup shared2
 
         EmptyPlaceholder ->
             -- The move hasn't been validated by the backend yet, but it's described optimistically
             -- so the mover sees it in the log right away (mirrored by the board update above).
-            ( shared2, [ placedWordDescription setup player placedWord result isPremove ] )
+            ( shared2, [ placedWordDescription setup player placedWord result isPremove Set.empty ] )
 
 
-placedWordDescription : ValidatedSetup -> Player -> PlacedWord -> PlacementResult -> Bool -> Description
-placedWordDescription setup player placedWord result isPremove =
+placedWordDescription : ValidatedSetup -> Player -> PlacedWord -> PlacementResult -> Bool -> Set String -> Description
+placedWordDescription setup player placedWord result isPremove wildcardMatches =
     let
         bonus : Int
         bonus =
@@ -809,6 +809,7 @@ placedWordDescription setup player placedWord result isPremove =
         , isBingo = bonus /= 0
         , placedCells = List.map Tuple.first result.placedCells
         , isPremove = isPremove
+        , wildcardMatches = wildcardMatches
         }
 
 
@@ -817,7 +818,7 @@ placedWordDescription setup player placedWord result isPremove =
 the next player's premove (or fail to), which gets its own entry attributed to the premover.
 -}
 type Description
-    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ), isPremove : Bool }
+    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ), isPremove : Bool, wildcardMatches : Set String }
     | Description_InvalidMove (Id UserId) (Maybe OneOrGreater)
     | Description_ReplacedTray (Id UserId)
     | Description_Passed (Id UserId)
@@ -1175,7 +1176,7 @@ lineWord board ( dirX, dirY ) cell =
 
 {-| The tiles (letters and wildcards) forming the word at the given cells, in order. Wildcards are
 kept as `Wildcard` rather than resolved to a letter, since the tile on the board doesn't record
-which letter the player meant; `wordIsValid` tries every letter for them when checking the word.
+which letter the player meant; `bruteForceMatch` tries every letter for them when checking the word.
 -}
 wordString : SeqDict ( Int, Int ) LetterOrWildcard -> List ( Int, Int ) -> List LetterOrWildcard
 wordString board cells =
@@ -1225,26 +1226,42 @@ wordScore setup board placedSet cells =
     letterSum * wordMultiplier
 
 
-validatePlacement : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () PlacementResult
+{-| Check that every word a placement forms is in the word list. Alongside the placement result,
+a successful validation returns the headline word's valid wildcard fill-ins (see
+`bruteForceMatch`), which travel back to the clients inside `IsValid` so the Moves log can resolve
+the wildcards when looking up the word's dictionary definition.
+-}
+validatePlacement : Set String -> ValidatedSetup -> SeqDict ( Int, Int ) LetterOrWildcard -> PlacedWord -> Result () ( PlacementResult, Set String )
 validatePlacement dictionary setup board placedWord =
     case placeWord setup board placedWord of
         Just ( _, result ) ->
+            let
+                wordMatches : List ( { letters : List LetterOrWildcard, placedCount : Int }, Set String )
+                wordMatches =
+                    List.map
+                        (\word ->
+                            ( word
+                            , -- We don't allow words with more than two wildcards for performance/RAM reasons
+                              if List.Extra.count (\cell -> cell == Wildcard) word.letters <= wildcardMax then
+                                bruteForceMatch (wildcardCandidateLetters setup) dictionary word.letters
+
+                              else
+                                Set.empty
+                            )
+                        )
+                        result.words
+            in
             if List.isEmpty result.words then
                 Err ()
 
-            else if
-                List.all
-                    (\word ->
-                        -- We don't allow words with more than two wildcards for performance/RAM reasons
-                        if List.Extra.count (\cell -> cell == Wildcard) word.letters <= wildcardMax then
-                            bruteForceMatch (wildcardCandidateLetters setup) dictionary word.letters
-
-                        else
-                            False
-                    )
-                    result.words
-            then
-                Ok result
+            else if List.all (\( _, matches ) -> not (Set.isEmpty matches)) wordMatches then
+                ( result
+                , List.sortBy (\( word, _ ) -> headlineOrder word) wordMatches
+                    |> List.head
+                    |> Maybe.map Tuple.second
+                    |> Maybe.withDefault Set.empty
+                )
+                    |> Ok
 
             else
                 Err ()
@@ -1291,27 +1308,42 @@ alphabet language =
         |> Set.fromList
 
 
-{-| Try every letter for each wildcard, building the candidate string from left to right and
-stopping as soon as one is in the word list. With no wildcards this is a single `Set.member` lookup.
-Only used when there are few wildcards (see `maxBruteForceWildcards`), so this does at most n^k
-lookups for small `k`.
+{-| Try every letter for each wildcard, building the candidate string from left to right, and
+collect every way of filling in the wildcards (in order) that lands on a word in the word list:
+H\_P returns a set with "O", "I", etc, and \_OL\_ returns a set with "BT", "DT", etc. An empty set
+means no fill-in works, i.e. the word is invalid; a valid word with no wildcards returns a set
+holding just the empty string. Only used when there are few wildcards (see `wildcardMax`), so this
+does at most n^k lookups for small `k`.
 -}
-bruteForceMatch : List Letter -> Set String -> List LetterOrWildcard -> Bool
+bruteForceMatch : List Letter -> Set String -> List LetterOrWildcard -> Set String
 bruteForceMatch candidateLetters wordList word =
     let
-        search : List LetterOrWildcard -> String -> Bool
-        search remaining prefix =
+        search : List LetterOrWildcard -> String -> String -> Set String -> Set String
+        search remaining prefix wildcardLetters matches =
             case remaining of
                 [] ->
-                    Set.member prefix wordList
+                    if Set.member prefix wordList then
+                        Set.insert wildcardLetters matches
+
+                    else
+                        matches
 
                 (Letter (LetterChar letter)) :: rest ->
-                    search rest (prefix ++ String.fromChar letter)
+                    search rest (prefix ++ String.fromChar letter) wildcardLetters matches
 
                 Wildcard :: rest ->
-                    List.any (\(LetterChar letter) -> search rest (prefix ++ String.fromChar letter)) candidateLetters
+                    List.foldl
+                        (\(LetterChar letter) matches2 ->
+                            search
+                                rest
+                                (prefix ++ String.fromChar letter)
+                                (wildcardLetters ++ String.fromChar letter)
+                                matches2
+                        )
+                        matches
+                        candidateLetters
     in
-    search word ""
+    search word "" "" Set.empty
 
 
 letterScoreMultiplier : ( Int, Int ) -> Int
@@ -1706,7 +1738,7 @@ becomes one entry, along with the board cell next to which its submit button is 
 A player can end up with several placed runs at once (e.g. tiles that cross, or a stray tile left
 elsewhere); each valid run gets its own button, and submitting one returns the other placed tiles to
 the tray (see `updateGame`). Whether the formed words are real dictionary words is still decided on
-the backend (see `wordIsValid`).
+the backend (see `bruteForceMatch`).
 
 -}
 submittableLines : Id UserId -> Shared -> GameData -> List { placedWord : PlacedWord, buttonCell : ( Int, Int ) }
@@ -1997,7 +2029,7 @@ orthogonalNeighbors ( x, y ) =
 
 {-| Pull the tiles (letters and wildcards) out of the placed cells in order, failing only if there
 are no tiles. Wildcards are kept as `Wildcard`; the letter they stand for is worked out later when
-the word is checked against the dictionary (see `wordIsValid`).
+the word is checked against the dictionary (see `bruteForceMatch`).
 -}
 nonemptyLetters : List ( ( Int, Int ), LetterOrWildcard ) -> Maybe (Nonempty LetterOrWildcard)
 nonemptyLetters list =
@@ -3953,12 +3985,14 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 ]
                         in
                         case description of
-                            Description_PlacedWord _ { word } ->
+                            Description_PlacedWord _ { word, wildcardMatches } ->
                                 -- A placed word is clickable: hovering highlights the row and clicking
                                 -- looks up its dictionary definition (see `PressedWordDefinition`).
+                                -- Any wildcards are resolved to the first fill-in the backend found
+                                -- valid, so the looked-up word is a real dictionary word.
                                 MyUi.rowButton
                                     (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
-                                    (PressedWordDefinition word)
+                                    (PressedWordDefinition (resolveWildcards wildcardMatches word))
                                     [ Ui.Font.color MyUi.font3
                                     , Ui.spacing 8
                                     , Ui.paddingXY 4 6
@@ -4271,10 +4305,45 @@ longer word wins.
 headlineWord : List { letters : List LetterOrWildcard, placedCount : Int } -> String
 headlineWord words =
     words
-        |> List.sortBy (\word -> ( negate word.placedCount, negate (List.length word.letters) ))
+        |> List.sortBy headlineOrder
         |> List.head
         |> Maybe.map (\a -> a.letters |> letterOrWildcardsToString)
         |> Maybe.withDefault "a word"
+
+
+{-| The sort key that puts a placement's headline word first. Shared between `headlineWord` and
+`validatePlacement` so the wildcard fill-ins stored in `IsValid` belong to the same word the Moves
+log displays.
+-}
+headlineOrder : { letters : List LetterOrWildcard, placedCount : Int } -> ( Int, Int )
+headlineOrder word =
+    ( negate word.placedCount, negate (List.length word.letters) )
+
+
+{-| Fill in the underscores of a rendered word (see `letterOrWildcardsToString`) with the first of
+the word's valid wildcard fill-ins, so e.g. "H\_P" with matches { "O", "I" } becomes "HOP". When
+there are no fill-ins to draw from (backend validation hasn't arrived yet) the word is returned
+unchanged.
+-}
+resolveWildcards : Set String -> String -> String
+resolveWildcards wildcardMatches word =
+    case Set.toList wildcardMatches of
+        firstMatch :: _ ->
+            String.foldl
+                (\char ( remaining, resolved ) ->
+                    case ( char, remaining ) of
+                        ( '_', fillIn :: rest ) ->
+                            ( rest, resolved ++ String.fromChar fillIn )
+
+                        _ ->
+                            ( remaining, resolved ++ String.fromChar char )
+                )
+                ( String.toList firstMatch, "" )
+                word
+                |> Tuple.second
+
+        [] ->
+            word
 
 
 {-| Render placed tiles as uppercase text, showing a wildcard as an underscore since the board
