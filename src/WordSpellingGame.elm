@@ -3,6 +3,7 @@ module WordSpellingGame exposing
     , ActionWithTime
     , AnimatedPlacement
     , Description
+    , DictEntry
     , Drag(..)
     , GameData
     , GameMsg(..)
@@ -32,6 +33,8 @@ module WordSpellingGame exposing
     , audio
     , boardTouchCoord
     , boardY
+    , definitionApiUrl
+    , definitionDecoder
     , dragEnd
     , dragStart
     , fullTrayBonusScore
@@ -79,6 +82,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import IdArray exposing (IdArray)
+import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -95,6 +99,7 @@ import Set exposing (Set)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Accessibility
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Gradient
@@ -124,6 +129,36 @@ type alias GameData =
     , showSettings : Bool
     , highlightedPlayer : Maybe (Id UserId)
     , scrollPosition : ScrollPosition
+    , -- The dictionary definition popup opened by clicking a played word in the Moves log. Shown in
+      -- a column to the right of the status view on wide screens, or overlaid on the board otherwise
+      -- (see `gameView`).
+      wordDefinition : WordDefinition
+    }
+
+
+{-| The state of the word-definition popup. `WordDefinition_None` when nothing is open; otherwise
+the word that was clicked together with how far its lookup has got.
+-}
+type WordDefinition
+    = WordDefinition_None
+    | WordDefinition_Open String WordDefinitionData
+
+
+type WordDefinitionData
+    = WordDefinition_Loading
+      -- Swedish has no dictionary API wired up, so a clicked Swedish word just says so.
+    | WordDefinition_SwedishUnsupported
+      -- The lookup failed or the word wasn't in the dictionary (the API answers 404 for unknown
+      -- words, which arrives here as an error).
+    | WordDefinition_NotFound
+    | WordDefinition_Loaded (List DictEntry)
+
+
+{-| One part-of-speech grouping from a dictionary lookup, with its definitions in order.
+-}
+type alias DictEntry =
+    { partOfSpeech : String
+    , definitions : List String
     }
 
 
@@ -279,6 +314,9 @@ type GameMsg
     | MouseExitPlayerRow (Id UserId)
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
+    | PressedWordDefinition String
+    | PressedCloseWordDefinition
+    | GotWordDefinition String (Result Http.Error (List DictEntry))
 
 
 type alias SetupModel =
@@ -422,6 +460,7 @@ initGame time currentUserId setup shared =
     , showSettings = False
     , highlightedPlayer = Nothing
     , scrollPosition = ScrolledToBottom
+    , wordDefinition = WordDefinition_None
     }
 
 
@@ -1388,6 +1427,10 @@ updateSetup time currentUserId msg setup =
             )
 
 
+{-| Updates a game in response to a `GameMsg`. Alongside the new state it returns any `Action` to
+broadcast to the other players, and a `Maybe String` naming an English word whose dictionary
+definition the frontend should go fetch (see `Frontend.handleGameOutMsgs`).
+-}
 updateGame :
     Time.Posix
     -> Coord CssPixels
@@ -1396,7 +1439,7 @@ updateGame :
     -> Shared
     -> GameMsg
     -> GameData
-    -> ( GameData, Maybe Action )
+    -> ( GameData, Maybe Action, Maybe String )
 updateGame time windowSize currentUserId setup shared msg oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; work off (and store)
@@ -1466,13 +1509,14 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
                                     (List.range 0 (newTileCount - 1))
                         }
                     , Just (PlaceWord placement EmptyPlaceholder)
+                    , Nothing
                     )
 
                 Nothing ->
-                    ( model, Nothing )
+                    ( model, Nothing, Nothing )
 
         PressedJoinGame ->
-            ( model, Just JoinGame )
+            ( model, Just JoinGame, Nothing )
 
         PressedReplaceTrayOrPass ->
             let
@@ -1500,6 +1544,7 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
                         |> Array.fromList
               }
             , Just ReplaceTrayOrPass
+            , Nothing
             )
 
         PressedClearBoard ->
@@ -1541,10 +1586,11 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
 
                 Nothing ->
                     Nothing
+            , Nothing
             )
 
         PressedToggleSettings ->
-            ( { model | showSettings = not model.showSettings }, Nothing )
+            ( { model | showSettings = not model.showSettings }, Nothing, Nothing )
 
         PressedPlayerRow userId ->
             ( if MyUi.isMobileAlt windowSize then
@@ -1560,10 +1606,11 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
               else
                 model
             , Nothing
+            , Nothing
             )
 
         MouseEnterPlayerRow userId ->
-            ( { model | highlightedPlayer = Just userId }, Nothing )
+            ( { model | highlightedPlayer = Just userId }, Nothing, Nothing )
 
         MouseExitPlayerRow userId ->
             ( { model
@@ -1575,21 +1622,58 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
                         model.highlightedPlayer
               }
             , Nothing
+            , Nothing
             )
 
         UserScrolledPastMoves position ->
             -- Track how far the Past moves list is scrolled so new moves only auto-scroll to the
             -- bottom when the player was already there (mirrors the conversation view; the scroll
             -- command itself is issued from Frontend).
-            ( { model | scrollPosition = position }, Nothing )
+            ( { model | scrollPosition = position }, Nothing, Nothing )
 
         PressedSubmitPremove placement ->
             case placeWord setup shared.board placement of
                 Just _ ->
-                    ( model, Just (Premove placement EmptyPlaceholder) )
+                    ( model, Just (Premove placement EmptyPlaceholder), Nothing )
 
                 Nothing ->
-                    ( model, Nothing )
+                    ( model, Nothing, Nothing )
+
+        PressedWordDefinition word ->
+            case setup.language of
+                English ->
+                    -- Kick off the dictionary lookup: show a loading popup and ask the frontend to
+                    -- fetch the definition (the third tuple element).
+                    ( { model | wordDefinition = WordDefinition_Open word WordDefinition_Loading }
+                    , Nothing
+                    , Just word
+                    )
+
+                Swedish ->
+                    ( { model | wordDefinition = WordDefinition_Open word WordDefinition_SwedishUnsupported }
+                    , Nothing
+                    , Nothing
+                    )
+
+        PressedCloseWordDefinition ->
+            ( { model | wordDefinition = WordDefinition_None }, Nothing, Nothing )
+
+        GotWordDefinition word result ->
+            -- Only apply the response if the popup is still waiting on this exact word, so a slow
+            -- reply for a word the player has since closed or replaced can't clobber the popup.
+            ( case model.wordDefinition of
+                WordDefinition_Open openWord WordDefinition_Loading ->
+                    if openWord == word then
+                        { model | wordDefinition = WordDefinition_Open word (definitionResultToData result) }
+
+                    else
+                        model
+
+                _ ->
+                    model
+            , Nothing
+            , Nothing
+            )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -2642,7 +2726,13 @@ dragStartHelper time windowSize currentUserId touches setup shared oldModel =
                             trayList
                     of
                         Just tileIndex ->
-                            { gameModel | dragging = Dragging tileIndex, highlightedPlayer = Nothing }
+                            -- Grabbing a tray tile also dismisses the word-definition popup, so the
+                            -- overlay version doesn't sit on top of the board while the player plays.
+                            { gameModel
+                                | dragging = Dragging tileIndex
+                                , highlightedPlayer = Nothing
+                                , wordDefinition = WordDefinition_None
+                            }
 
                         Nothing ->
                             gameModel
@@ -3329,6 +3419,35 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             (setupView windowSize True (validatedToSetupModel setup) |> Ui.map (\_ -> PressedToggleSettings))
 
     else
+        let
+            boardPx : Int
+            boardPx =
+                cellSize setup.traySize windowSize * gridSize
+
+            wideEnough : Bool
+            wideEnough =
+                wideEnoughForDefinitionColumn windowSize
+
+            -- The definition popup contents, if a word is currently open. On wide screens it becomes
+            -- an extra column to the right of the status view; otherwise it's overlaid on the board.
+            definition : Maybe ( String, WordDefinitionData )
+            definition =
+                case model.wordDefinition of
+                    WordDefinition_None ->
+                        Nothing
+
+                    WordDefinition_Open word data ->
+                        Just ( word, data )
+
+            overlayAttr : Ui.Attribute GameMsg
+            overlayAttr =
+                case ( wideEnough, definition ) of
+                    ( False, Just ( word, data ) ) ->
+                        Ui.inFront (wordDefinitionOverlay boardPx word data)
+
+                    _ ->
+                        Ui.noAttr
+        in
         (if isMobile then
             Ui.column
 
@@ -3343,10 +3462,19 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , MyUi.htmlStyle "user-select" "none"
             , settingsButton
             , Ui.contentTop
+            , overlayAttr
             ]
-            [ boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model
-            , statusView windowSize isPersonalDm localUser setup actions shared model
-            ]
+            ([ boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model
+             , statusView windowSize isPersonalDm localUser setup actions shared model
+             ]
+                ++ (case ( wideEnough, definition ) of
+                        ( True, Just ( word, data ) ) ->
+                            [ wordDefinitionColumn windowSize setup word data ]
+
+                        _ ->
+                            []
+                   )
+            )
 
 
 playerRowHeight : number
@@ -3749,7 +3877,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                 actions
                 |> Tuple.second
 
-        log2 : List (Element msg)
+        log2 : List (Element GameMsg)
         log2 =
             (case getWinner shared of
                 Just ( _, gameEndReason ) ->
@@ -3813,18 +3941,43 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 
                                     Nothing ->
                                         "<missing>"
-                        in
-                        Ui.row
-                            [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
-                            [ Ui.Prose.paragraph
-                                [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
-                                [ Ui.text (String.fromInt (List.length log - index) ++ ". ") ]
-                            , Ui.Prose.paragraph
-                                [ Ui.alignTop ]
-                                [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                                , Ui.text (descriptionToString description)
+
+                            moveNumber : Int
+                            moveNumber =
+                                List.length log - index
+
+                            rowContent : List (Element GameMsg)
+                            rowContent =
+                                [ Ui.Prose.paragraph
+                                    [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
+                                    [ Ui.text (String.fromInt moveNumber ++ ". ") ]
+                                , Ui.Prose.paragraph
+                                    [ Ui.alignTop ]
+                                    [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                                    , Ui.text (descriptionToString description)
+                                    ]
                                 ]
-                            ]
+                        in
+                        case description of
+                            Description_PlacedWord _ { word } ->
+                                -- A placed word is clickable: hovering highlights the row and clicking
+                                -- looks up its dictionary definition (see `PressedWordDefinition`).
+                                MyUi.rowButton
+                                    (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
+                                    (PressedWordDefinition word)
+                                    [ Ui.Font.color MyUi.font3
+                                    , Ui.spacing 8
+                                    , Ui.paddingXY 4 6
+                                    , Ui.rounded 4
+                                    , MyUi.htmlStyle "cursor" "pointer"
+                                    , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                    ]
+                                    rowContent
+
+                            _ ->
+                                Ui.row
+                                    [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 4 6 ]
+                                    rowContent
                     )
                     log
 
@@ -3903,6 +4056,151 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 pastWordsContainerId : Dom.HtmlId
 pastWordsContainerId =
     Dom.id "wsg_pastWords"
+
+
+{-| The width of the word-definition column shown to the right of the status view on wide screens.
+-}
+wordDefinitionColumnWidth : number
+wordDefinitionColumnWidth =
+    300
+
+
+{-| Whether the window is wide enough to show the word definition in its own column beside the
+status view. Below this the definition is overlaid on the board instead. Mobile always overlays.
+-}
+wideEnoughForDefinitionColumn : Coord CssPixels -> Bool
+wideEnoughForDefinitionColumn windowSize =
+    not (MyUi.isMobileAlt windowSize) && Coord.xRaw windowSize >= 1300
+
+
+{-| The word definition shown as a column to the right of the status view (wide screens).
+-}
+wordDefinitionColumn : Coord CssPixels -> ValidatedSetup -> String -> WordDefinitionData -> Element GameMsg
+wordDefinitionColumn windowSize setup word data =
+    Ui.column
+        [ Ui.id (Dom.idToString wordDefinitionContainerId)
+        , Ui.width (Ui.px wordDefinitionColumnWidth)
+        , Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
+        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+        , Ui.borderColor MyUi.border2
+        , Ui.background MyUi.background1
+        , MyUi.noShrinking
+        , Ui.clip
+        ]
+        [ wordDefinitionHeader word
+        , Ui.el
+            [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8 ]
+            (wordDefinitionBody word data)
+        ]
+
+
+{-| The word definition overlaid on top of the board (narrow screens). It only covers the board
+square, not the tray below it, so the player can still grab a tile — which dismisses the popup
+(see `dragStartHelper`). A close button dismisses it too.
+-}
+wordDefinitionOverlay : Int -> String -> WordDefinitionData -> Element GameMsg
+wordDefinitionOverlay boardPx word data =
+    Ui.el
+        [ Ui.id (Dom.idToString wordDefinitionContainerId)
+        , Ui.width (Ui.px boardPx)
+        , Ui.height (Ui.px boardPx)
+        , Ui.background (Ui.rgba 0 0 0 0.6)
+        , Ui.padding 12
+        ]
+        (Ui.column
+            [ Ui.background MyUi.background1
+            , Ui.rounded 8
+            , Ui.border 1
+            , Ui.borderColor MyUi.border2
+            , Ui.width Ui.fill
+            , Ui.height Ui.fill
+            , Ui.clip
+            ]
+            [ wordDefinitionHeader word
+            , Ui.el
+                [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8 ]
+                (wordDefinitionBody word data)
+            ]
+        )
+
+
+wordDefinitionContainerId : Dom.HtmlId
+wordDefinitionContainerId =
+    Dom.id "wsg_wordDefinition"
+
+
+{-| The title bar of a word definition popup: the word plus a close button.
+-}
+wordDefinitionHeader : String -> Element GameMsg
+wordDefinitionHeader word =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.paddingWith { left = 16, right = 8, top = 8, bottom = 8 }
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , Ui.Font.color MyUi.font1
+        ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.fill ] (Ui.text word)
+        , MyUi.elButton
+            (Dom.id "wsg_closeWordDefinition")
+            PressedCloseWordDefinition
+            [ Ui.width (Ui.px 28)
+            , Ui.height (Ui.px 28)
+            , Ui.alignRight
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , Ui.rounded 4
+            , Ui.Font.color MyUi.font1
+            , Ui.Accessibility.description "Close word definition"
+            , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+            ]
+            (Ui.text "✕")
+        ]
+
+
+{-| The body of a word definition popup, which depends on how far the lookup has got.
+-}
+wordDefinitionBody : String -> WordDefinitionData -> Element GameMsg
+wordDefinitionBody word data =
+    case data of
+        WordDefinition_Loading ->
+            Ui.el
+                [ Ui.Font.color MyUi.font3, Ui.Font.italic ]
+                (Ui.text "Loading definition…")
+
+        WordDefinition_SwedishUnsupported ->
+            Ui.Prose.paragraph
+                [ Ui.Font.color MyUi.font3 ]
+                [ Ui.text "Swedish dictionary definitions not supported" ]
+
+        WordDefinition_NotFound ->
+            Ui.Prose.paragraph
+                [ Ui.Font.color MyUi.font3 ]
+                [ Ui.text ("No definition found for \"" ++ word ++ "\".") ]
+
+        WordDefinition_Loaded entries ->
+            Ui.column
+                [ Ui.spacing 16, Ui.width Ui.fill ]
+                (List.map wordDefinitionEntryView entries)
+
+
+wordDefinitionEntryView : DictEntry -> Element GameMsg
+wordDefinitionEntryView entry =
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.fill ]
+        (Ui.el
+            [ Ui.Font.bold, Ui.Font.italic, Ui.Font.color MyUi.font1 ]
+            (Ui.text entry.partOfSpeech)
+            :: List.indexedMap
+                (\index def ->
+                    Ui.Prose.paragraph
+                        [ Ui.Font.color MyUi.font3, Ui.spacing 2 ]
+                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (String.fromInt (index + 1) ++ ". "))
+                        , Ui.text def
+                        ]
+                )
+                entry.definitions
+        )
 
 
 {-| Replay the action list to work out which player placed each committed tile on the board. Each
@@ -5475,3 +5773,48 @@ parseWordList result =
 
         Err error ->
             WordList_Error error
+
+
+{-| The Free Dictionary API endpoint for an English word. Words are placed uppercase, so this
+lowercases before building the URL. The response has no CORS restrictions, so the frontend can
+call it directly (see `Frontend.handleGameOutMsgs`).
+-}
+definitionApiUrl : String -> String
+definitionApiUrl word =
+    "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ String.toLower word
+
+
+{-| Decode the Free Dictionary API response into a flat list of part-of-speech groupings. The API
+returns a list of entries, each with a `meanings` array; the meanings across every entry are
+concatenated so callers get one list of `DictEntry`.
+-}
+definitionDecoder : Json.Decode.Decoder (List DictEntry)
+definitionDecoder =
+    Json.Decode.list
+        (Json.Decode.field "meanings" (Json.Decode.list dictEntryDecoder))
+        |> Json.Decode.map List.concat
+
+
+dictEntryDecoder : Json.Decode.Decoder DictEntry
+dictEntryDecoder =
+    Json.Decode.map2 DictEntry
+        (Json.Decode.field "partOfSpeech" Json.Decode.string)
+        (Json.Decode.field "definitions"
+            (Json.Decode.list (Json.Decode.field "definition" Json.Decode.string))
+        )
+
+
+{-| Turn a dictionary API response into popup state. Any error (including the 404 the API returns
+for a word it doesn't know), or a successful-but-empty response, becomes "not found".
+-}
+definitionResultToData : Result Http.Error (List DictEntry) -> WordDefinitionData
+definitionResultToData result =
+    case result of
+        Ok (entry :: rest) ->
+            WordDefinition_Loaded (entry :: rest)
+
+        Ok [] ->
+            WordDefinition_NotFound
+
+        Err _ ->
+            WordDefinition_NotFound

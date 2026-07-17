@@ -94,6 +94,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ "http:", "", "localhost:8000", "NWL2023.txt" ] ->
                     E2EHelper.httpBasic currentRequest.url 200 "AA\nAT\nDATE\nDIRT\nNOSE\nLOAD\nROT\nROTE\nROTES\n"
 
+                "https:" :: "" :: "api.dictionaryapi.dev" :: "api" :: "v2" :: "entries" :: "en" :: _ ->
+                    -- The Word Spelling Game looks up dictionary definitions for played words. Return
+                    -- a canned response (the real API answers with this shape) for any English word.
+                    E2EHelper.httpBasic
+                        currentRequest.url
+                        200
+                        """[{"word":"load","phonetic":"/ləʊd/","meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A burden; a weight to be carried."},{"definition":"The amount of work to be done by a person or machine."}]},{"partOfSpeech":"verb","definitions":[{"definition":"To put a load on or in a means of conveyance."}]}]}]"""
+
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
                     E2EHelper.mockCloudflareSfu rest httpRequests
 
