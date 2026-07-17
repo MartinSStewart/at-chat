@@ -586,11 +586,16 @@ shuffle list =
         Random.independentSeed
 
 
+type GameEndReason
+    = EveryonePassed
+    | OutOfLetters (Id UserId)
+
+
 {-| The game is over either when every player has passed in turn, or as soon as any player has no
 letters left. An empty tray means the bag is empty too: trays are refilled from the bag after every
 placement, so a tray can only end up empty once there was nothing left to draw.
 -}
-getWinner : Shared -> Maybe (Nonempty (Id UserId))
+getWinner : Shared -> Maybe ( Nonempty (Id UserId), GameEndReason )
 getWinner shared =
     let
         everyonePassed : Bool
@@ -602,21 +607,27 @@ getWinner shared =
                 Nothing ->
                     False
 
-        someoneOutOfLetters : Bool
+        someoneOutOfLetters : Maybe Player
         someoneOutOfLetters =
-            List.Nonempty.any (\player -> IdArray.isEmpty player.tray) shared.players
-    in
-    if everyonePassed || someoneOutOfLetters then
-        let
-            player =
-                NonemptyExtra.maximumBy .score shared.players
-        in
-        List.Nonempty.filter (\a -> a.score == player.score) player shared.players
-            |> List.Nonempty.map .userId
-            |> Just
+            List.Extra.find (\player -> IdArray.isEmpty player.tray) (List.Nonempty.toList shared.players)
 
-    else
-        Nothing
+        getHighestScorers () =
+            let
+                player =
+                    NonemptyExtra.maximumBy .score shared.players
+            in
+            List.Nonempty.filter (\a -> a.score == player.score) player shared.players |> List.Nonempty.map .userId
+    in
+    case someoneOutOfLetters of
+        Just outOfLetters ->
+            Just ( getHighestScorers (), OutOfLetters outOfLetters.userId )
+
+        Nothing ->
+            if everyonePassed then
+                Just ( getHighestScorers (), EveryonePassed )
+
+            else
+                Nothing
 
 
 {-| The extra points awarded for placing a word that empties a full tray in one move (a "bingo").
@@ -636,12 +647,13 @@ handlePlaceWord :
     Time.Posix
     -> ValidatedSetup
     -> PlacedWord
+    -> Bool
     -> ( SeqDict ( Int, Int ) LetterOrWildcard, PlacementResult )
     -> ToBeFilledInByBackend IsValid
     -> Player
     -> Shared
     -> ( Shared, List Description )
-handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
+handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player shared =
     let
         animatedPlacement : Maybe AnimatedPlacement
         animatedPlacement =
@@ -737,16 +749,16 @@ handlePlaceWord time setup placedWord ( board, result ) isValid player shared =
                     incrementTurnCount (Description_InvalidMove player.userId Nothing) time setup shared2
 
         FilledInByBackend IsValid ->
-            incrementTurnCount (placedWordDescription setup player placedWord result) time setup shared2
+            incrementTurnCount (placedWordDescription setup player placedWord result isPremove) time setup shared2
 
         EmptyPlaceholder ->
             -- The move hasn't been validated by the backend yet, but it's described optimistically
             -- so the mover sees it in the log right away (mirrored by the board update above).
-            ( shared2, [ placedWordDescription setup player placedWord result ] )
+            ( shared2, [ placedWordDescription setup player placedWord result isPremove ] )
 
 
-placedWordDescription : ValidatedSetup -> Player -> PlacedWord -> PlacementResult -> Description
-placedWordDescription setup player placedWord result =
+placedWordDescription : ValidatedSetup -> Player -> PlacedWord -> PlacementResult -> Bool -> Description
+placedWordDescription setup player placedWord result isPremove =
     let
         bonus : Int
         bonus =
@@ -758,6 +770,7 @@ placedWordDescription setup player placedWord result =
         , points = result.score + bonus
         , isBingo = bonus /= 0
         , placedCells = List.map Tuple.first result.placedCells
+        , isPremove = isPremove
         }
 
 
@@ -766,13 +779,13 @@ placedWordDescription setup player placedWord result =
 the next player's premove (or fail to), which gets its own entry attributed to the premover.
 -}
 type Description
-    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ) }
+    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ), isPremove : Bool }
     | Description_InvalidMove (Id UserId) (Maybe OneOrGreater)
     | Description_ReplacedTray (Id UserId)
     | Description_Passed (Id UserId)
     | Description_EndedGame (Id UserId)
     | Description_Joined (Id UserId)
-    | Description_PremoveBlocked (Id UserId) String
+    | Description_PremoveBlocked (Id UserId)
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> Shared -> ( Shared, List Description )
@@ -783,7 +796,7 @@ updateAction setup action shared =
                 ( Nothing, Just player, JoinedAndItsTheirTurn ) ->
                     case placeWord setup shared.board placedWord of
                         Just result ->
-                            handlePlaceWord action.time setup placedWord result isValid player shared
+                            handlePlaceWord action.time setup placedWord False result isValid player shared
 
                         Nothing ->
                             ( shared, [] )
@@ -936,6 +949,7 @@ incrementTurnCount description time setup shared =
                             time
                             setup
                             premove
+                            True
                             ( board, result )
                             (FilledInByBackend isValid)
                             nextPlayer2
@@ -944,12 +958,12 @@ incrementTurnCount description time setup shared =
 
                     else
                         ( shared2
-                        , [ description, Description_PremoveBlocked nextPlayer.userId (headlineWord expected.words) ]
+                        , [ description, Description_PremoveBlocked nextPlayer.userId ]
                         )
 
                 Nothing ->
                     ( shared2
-                    , [ description, Description_PremoveBlocked nextPlayer.userId (headlineWord expected.words) ]
+                    , [ description, Description_PremoveBlocked nextPlayer.userId ]
                     )
 
         Nothing ->
@@ -3270,16 +3284,16 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
         highlightedCells =
             case model.highlightedPlayer of
                 Just userId ->
-                    tileOwners setup actions
-                        |> SeqDict.foldl
-                            (\cell owner acc ->
-                                if owner == userId then
-                                    Set.insert cell acc
+                    SeqDict.foldl
+                        (\cell owner acc ->
+                            if owner == userId then
+                                Set.insert cell acc
 
-                                else
-                                    acc
-                            )
-                            Set.empty
+                            else
+                                acc
+                        )
+                        Set.empty
+                        (tileOwners setup actions)
 
                 Nothing ->
                     Set.empty
@@ -3548,7 +3562,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             [ Ui.column
                 [ Ui.centerY ]
                 (case winners of
-                    Just winners2 ->
+                    Just ( winners2, _ ) ->
                         leaderboardView isMobile model.highlightedPlayer winners2 shared localUser
 
                     Nothing ->
@@ -3618,7 +3632,7 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             , Ui.column
                 [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 16 }, Ui.spacing playerRowSpacing ]
                 (case winners of
-                    Just winners2 ->
+                    Just ( winners2, _ ) ->
                         leaderboardView isMobile model.highlightedPlayer winners2 shared localUser
 
                     Nothing ->
@@ -3645,11 +3659,16 @@ statusView windowSize isPersonalDm localUser setup actions shared model =
             ]
 
 
-descriptionView : Description -> String
-descriptionView description =
+descriptionToString : Description -> String
+descriptionToString description =
     case description of
-        Description_PlacedWord _ { word, points, isBingo } ->
-            "played "
+        Description_PlacedWord _ { word, points, isBingo, isPremove } ->
+            (if isPremove then
+                " premoved "
+
+             else
+                " played "
+            )
                 ++ word
                 ++ " (+"
                 ++ String.fromInt points
@@ -3664,7 +3683,7 @@ descriptionView description =
         Description_InvalidMove _ maybeAttemptsLeft ->
             case maybeAttemptsLeft of
                 Just attemptsLeft ->
-                    "played an invalid word ("
+                    " played an invalid word ("
                         ++ (case OneOrGreater.toString attemptsLeft of
                                 "1" ->
                                     "1 attempt left)"
@@ -3674,22 +3693,22 @@ descriptionView description =
                            )
 
                 Nothing ->
-                    "played an invalid word (turn ended)"
+                    " played an invalid word (turn ended)"
 
         Description_ReplacedTray _ ->
-            "swapped their tiles"
+            " swapped their tiles"
 
         Description_Passed _ ->
-            "passed"
+            " passed"
 
         Description_EndedGame _ ->
-            "ended the game"
+            " passed"
 
         Description_Joined _ ->
-            "joined the game"
+            " joined the game"
 
-        Description_PremoveBlocked _ word ->
-            "couldn't premove " ++ word ++ " (the board changed)"
+        Description_PremoveBlocked _ ->
+            "'s premove got blocked"
 
 
 {-| The player a Moves log entry is about — for a premove playing out (or being blocked) that's
@@ -3716,15 +3735,13 @@ descriptionUserId description =
         Description_Joined userId ->
             userId
 
-        Description_PremoveBlocked userId _ ->
+        Description_PremoveBlocked userId ->
             userId
 
 
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
-        -- Every Moves log entry, most recent first (an action's own entries stay in order: the
-        -- block is reversed before being consed on).
         log : List Description
         log =
             Array.foldl
@@ -3741,28 +3758,56 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 
         log2 : List (Element msg)
         log2 =
-            (case getPlayer localUser.session.userId shared of
-                Just player ->
-                    case player.premove of
-                        Just ( _, result, _ ) ->
-                            [ Ui.text
-                                ("You'll automatically try placing \""
-                                    ++ headlineWord result.words
-                                    ++ "\" when it's your turn."
-                                )
-                                |> Ui.el
-                                    [ Ui.background premoveColor
-                                    , Ui.Font.color MyUi.white
-                                    , Ui.paddingXY 2 0
-                                    , Ui.width Ui.shrink
+            (case getWinner shared of
+                Just ( _, gameEndReason ) ->
+                    [ Ui.Prose.paragraph
+                        [ Ui.alignTop
+                        , Ui.paddingWith { left = 0, right = 0, top = 14, bottom = 6 }
+                        , Ui.Font.color MyUi.font3
+                        ]
+                        (case gameEndReason of
+                            EveryonePassed ->
+                                [ Ui.text "Everyone passed and the game has ended!" ]
+
+                            OutOfLetters userId ->
+                                [ Ui.el [ Ui.Font.bold ]
+                                    (Ui.text
+                                        (case User.getUser userId localUser of
+                                            Just user ->
+                                                PersonName.toString user.name
+
+                                            Nothing ->
+                                                "<missing>"
+                                        )
+                                    )
+                                , Ui.text " ran out of letters and the game has ended!"
+                                ]
+                        )
+                    ]
+
+                Nothing ->
+                    case getPlayer localUser.session.userId shared of
+                        Just player ->
+                            case player.premove of
+                                Just ( _, result, _ ) ->
+                                    [ Ui.text
+                                        ("You'll automatically try placing \""
+                                            ++ headlineWord result.words
+                                            ++ "\" when it's your turn."
+                                        )
+                                        |> Ui.el
+                                            [ Ui.background premoveColor
+                                            , Ui.Font.color MyUi.white
+                                            , Ui.paddingXY 2 0
+                                            , Ui.width Ui.shrink
+                                            ]
                                     ]
-                            ]
+
+                                Nothing ->
+                                    []
 
                         Nothing ->
                             []
-
-                Nothing ->
-                    []
             )
                 ++ List.indexedMap
                     (\index description ->
@@ -3784,7 +3829,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             , Ui.Prose.paragraph
                                 [ Ui.alignTop ]
                                 [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                                , Ui.text (" " ++ descriptionView description)
+                                , Ui.text (descriptionToString description)
                                 ]
                             ]
                     )
