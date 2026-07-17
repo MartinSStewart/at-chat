@@ -3406,6 +3406,12 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
                     [ Ui.width (Ui.px 40)
                     , Ui.padding 8
                     , Ui.alignRight
+                    , case ( wideEnoughForDefinitionColumn windowSize, model.wordDefinition ) of
+                        ( True, WordDefinition_Open _ _ ) ->
+                            Ui.move { x = -wordDefinitionColumnWidth, y = 0, z = 0 }
+
+                        _ ->
+                            Ui.noAttr
                     , Ui.Font.color MyUi.font1
                     , Ui.Accessibility.description "Game settings"
                     ]
@@ -3428,21 +3434,10 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             wideEnough =
                 wideEnoughForDefinitionColumn windowSize
 
-            -- The definition popup contents, if a word is currently open. On wide screens it becomes
-            -- an extra column to the right of the status view; otherwise it's overlaid on the board.
-            definition : Maybe ( String, WordDefinitionData )
-            definition =
-                case model.wordDefinition of
-                    WordDefinition_None ->
-                        Nothing
-
-                    WordDefinition_Open word data ->
-                        Just ( word, data )
-
             overlayAttr : Ui.Attribute GameMsg
             overlayAttr =
-                case ( wideEnough, definition ) of
-                    ( False, Just ( word, data ) ) ->
+                case ( wideEnough, model.wordDefinition ) of
+                    ( False, WordDefinition_Open word data ) ->
                         Ui.inFront (wordDefinitionOverlay boardPx word data)
 
                     _ ->
@@ -3459,7 +3454,6 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border2
             , MyUi.noShrinking
-            , MyUi.htmlStyle "user-select" "none"
             , settingsButton
             , Ui.contentTop
             , overlayAttr
@@ -3467,8 +3461,8 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             ([ boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
-                ++ (case ( wideEnough, definition ) of
-                        ( True, Just ( word, data ) ) ->
+                ++ (case ( wideEnough, model.wordDefinition ) of
+                        ( True, WordDefinition_Open word data ) ->
                             [ wordDefinitionColumn windowSize setup word data ]
 
                         _ ->
@@ -3969,8 +3963,9 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.spacing 8
                                     , Ui.paddingXY 4 6
                                     , Ui.rounded 4
+                                    , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
-                                    , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                    , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
                                     ]
                                     rowContent
 
@@ -4062,7 +4057,7 @@ pastWordsContainerId =
 -}
 wordDefinitionColumnWidth : number
 wordDefinitionColumnWidth =
-    300
+    400
 
 
 {-| Whether the window is wide enough to show the word definition in its own column beside the
@@ -4070,7 +4065,7 @@ status view. Below this the definition is overlaid on the board instead. Mobile 
 -}
 wideEnoughForDefinitionColumn : Coord CssPixels -> Bool
 wideEnoughForDefinitionColumn windowSize =
-    not (MyUi.isMobileAlt windowSize) && Coord.xRaw windowSize >= 1300
+    not (MyUi.isMobileAlt windowSize) && Coord.xRaw windowSize >= (1200 + wordDefinitionColumnWidth)
 
 
 {-| The word definition shown as a column to the right of the status view (wide screens).
@@ -4082,14 +4077,14 @@ wordDefinitionColumn windowSize setup word data =
         , Ui.width (Ui.px wordDefinitionColumnWidth)
         , Ui.height (Ui.px (tabBodyHeight windowSize setup.traySize))
         , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
-        , Ui.borderColor MyUi.border2
+        , Ui.borderColor MyUi.border1
         , Ui.background MyUi.background1
         , MyUi.noShrinking
         , Ui.clip
         ]
         [ wordDefinitionHeader word
         , Ui.el
-            [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8 ]
+            [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8, Ui.heightMin 0 ]
             (wordDefinitionBody word data)
         ]
 
@@ -4104,21 +4099,23 @@ wordDefinitionOverlay boardPx word data =
         [ Ui.id (Dom.idToString wordDefinitionContainerId)
         , Ui.width (Ui.px boardPx)
         , Ui.height (Ui.px boardPx)
-        , Ui.background (Ui.rgba 0 0 0 0.6)
+        , Ui.background (Ui.rgba 0 0 0 0.4)
         , Ui.padding 12
+        , Ui.heightMin 0
         ]
         (Ui.column
-            [ Ui.background MyUi.background1
+            [ Ui.background (Ui.rgba 14 20 40 0.85)
             , Ui.rounded 8
             , Ui.border 1
-            , Ui.borderColor MyUi.border2
+            , Ui.borderColor MyUi.border1
             , Ui.width Ui.fill
             , Ui.height Ui.fill
             , Ui.clip
+            , Ui.heightMin 0
             ]
             [ wordDefinitionHeader word
             , Ui.el
-                [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8 ]
+                [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8, Ui.heightMin 0 ]
                 (wordDefinitionBody word data)
             ]
         )
@@ -4135,26 +4132,30 @@ wordDefinitionHeader : String -> Element GameMsg
 wordDefinitionHeader word =
     Ui.row
         [ Ui.spacing 8
-        , Ui.paddingWith { left = 16, right = 8, top = 8, bottom = 8 }
+        , Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
+        , Ui.borderColor MyUi.border1
         , Ui.Font.color MyUi.font1
+        , Ui.height (Ui.px 42)
+        , MyUi.noShrinking
+        , Ui.contentCenterY
+        , Ui.background MyUi.background1
         ]
         [ Ui.el [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.fill ] (Ui.text word)
         , MyUi.elButton
             (Dom.id "wsg_closeWordDefinition")
             PressedCloseWordDefinition
-            [ Ui.width (Ui.px 28)
-            , Ui.height (Ui.px 28)
+            [ Ui.width (Ui.px 42)
+            , Ui.height Ui.fill
             , Ui.alignRight
             , Ui.contentCenterX
             , Ui.contentCenterY
             , Ui.rounded 4
-            , Ui.Font.color MyUi.font1
+            , Ui.Font.color MyUi.font3
             , Ui.Accessibility.description "Close word definition"
-            , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+            , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
             ]
-            (Ui.text "✕")
+            (Ui.html Icons.x)
         ]
 
 
@@ -4165,37 +4166,61 @@ wordDefinitionBody word data =
     case data of
         WordDefinition_Loading ->
             Ui.el
-                [ Ui.Font.color MyUi.font3, Ui.Font.italic ]
-                (Ui.text "Loading definition…")
+                [ Ui.Font.color MyUi.font3
+                , Ui.Font.italic
+                , Ui.Anim.intro (Ui.Anim.ms 200) { start = [ Ui.Anim.opacity 0 ], to = [ Ui.Anim.opacity 1 ] }
+                ]
+                (Ui.text "Loading definition...")
 
         WordDefinition_SwedishUnsupported ->
-            Ui.Prose.paragraph
+            Ui.el
                 [ Ui.Font.color MyUi.font3 ]
-                [ Ui.text "Swedish dictionary definitions not supported" ]
+                (Ui.text "Swedish dictionary definitions not supported")
 
         WordDefinition_NotFound ->
-            Ui.Prose.paragraph
+            Ui.el
                 [ Ui.Font.color MyUi.font3 ]
-                [ Ui.text ("No definition found for \"" ++ word ++ "\".") ]
+                (Ui.text ("No definition found for \"" ++ word ++ "\"."))
 
         WordDefinition_Loaded entries ->
             Ui.column
-                [ Ui.spacing 16, Ui.width Ui.fill ]
-                (List.map wordDefinitionEntryView entries)
+                [ Ui.spacing 16, Ui.height Ui.fill ]
+                (List.map wordDefinitionEntryView entries
+                    ++ [ Ui.Prose.paragraph
+                            [ Ui.alignBottom
+                            , Ui.Font.size 14
+                            , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 16 }
+                            , Ui.Font.color MyUi.font3
+                            ]
+                            [ Ui.text "Dictionary provided by "
+                            , Ui.el
+                                [ Ui.linkNewTab "https://dictionaryapi.dev/", Ui.Font.noWrap ]
+                                (Ui.text "https://dictionaryapi.dev/")
+                            ]
+                       ]
+                )
 
 
 wordDefinitionEntryView : DictEntry -> Element GameMsg
 wordDefinitionEntryView entry =
+    let
+        shouldNumber =
+            List.length entry.definitions > 1
+    in
     Ui.column
-        [ Ui.spacing 4, Ui.width Ui.fill ]
-        (Ui.el
-            [ Ui.Font.bold, Ui.Font.italic, Ui.Font.color MyUi.font1 ]
-            (Ui.text entry.partOfSpeech)
+        [ Ui.spacing 6, Ui.width Ui.fill ]
+        (Ui.el [ Ui.Font.bold, Ui.Font.italic, Ui.Font.color MyUi.font3 ] (Ui.text entry.partOfSpeech)
             :: List.indexedMap
                 (\index def ->
-                    Ui.Prose.paragraph
-                        [ Ui.Font.color MyUi.font3, Ui.spacing 2 ]
-                        [ Ui.el [ Ui.Font.bold, Ui.width Ui.shrink ] (Ui.text (String.fromInt (index + 1) ++ ". "))
+                    Ui.row
+                        [ Ui.spacing 8, Ui.contentTop ]
+                        [ if shouldNumber then
+                            Ui.el
+                                [ Ui.Font.bold, Ui.width Ui.shrink, MyUi.noShrinking ]
+                                (Ui.text (String.fromInt (index + 1) ++ "."))
+
+                          else
+                            Ui.none
                         , Ui.text def
                         ]
                 )
@@ -4840,6 +4865,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         , Ui.height (Ui.px (boardPx + trayHeight2))
         , Ui.pointer
         , trayLayer
+        , MyUi.htmlStyle "user-select" "none"
         ]
         boardLayer
 
