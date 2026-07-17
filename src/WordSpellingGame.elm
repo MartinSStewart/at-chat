@@ -478,7 +478,7 @@ type Action
 
 
 type IsValid
-    = IsValid
+    = IsValid (Set String)
     | IsNotValid
 
 
