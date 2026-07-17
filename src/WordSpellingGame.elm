@@ -343,21 +343,79 @@ pressedKey model =
     model
 
 
-initGame : Time.Posix -> ValidatedSetup -> GameData
-initGame time setup =
+initGame : Time.Posix -> Id UserId -> ValidatedSetup -> Shared -> GameData
+initGame time currentUserId setup shared =
     let
         list =
             List.range 0 (OneOrGreater.toInt setup.traySize - 1)
+
+        maybePlayer : Maybe Player
+        maybePlayer =
+            getPlayer currentUserId shared
+
+        letters : IdArray LetterId LetterOrWildcard
+        letters =
+            case maybePlayer of
+                Just player ->
+                    player.tray
+
+                Nothing ->
+                    IdArray.empty
     in
     { selectedCell = Nothing
     , tiles =
-        List.map
-            (\index ->
-                { position = TileInTray (TrayIndex index) Nothing
-                , createdAt = Duration.addTo time (Duration.seconds (0.2 * toFloat index))
-                }
+        List.foldl
+            (\index ( list2, premoveTiles ) ->
+                let
+                    createdAt =
+                        Duration.addTo time (Duration.seconds (0.2 * toFloat index))
+
+                    trayTile =
+                        ( { position = TileInTray (TrayIndex index) Nothing
+                          , createdAt = createdAt
+                          }
+                            :: list2
+                        , premoveTiles
+                        )
+                in
+                case IdArray.get (Id.fromInt index) letters of
+                    Just letter ->
+                        case List.Extra.findIndex (\( _, tile ) -> tile == letter) premoveTiles of
+                            Just tileIndex ->
+                                case List.Extra.getAt tileIndex premoveTiles of
+                                    Just ( position, _ ) ->
+                                        ( { position = TileOnBoard position createdAt
+                                          , createdAt = createdAt
+                                          }
+                                            :: list2
+                                        , List.Extra.removeAt tileIndex premoveTiles
+                                        )
+
+                                    Nothing ->
+                                        trayTile
+
+                            Nothing ->
+                                trayTile
+
+                    Nothing ->
+                        trayTile
+            )
+            ( []
+            , case maybePlayer of
+                Just player ->
+                    case player.premove of
+                        Just ( _, result, _ ) ->
+                            result.placedCells
+
+                        Nothing ->
+                            []
+
+                Nothing ->
+                    []
             )
             list
+            |> Tuple.first
+            |> List.reverse
             |> Array.fromList
     , dragging = NotDragging
     , zoomAnimation = { start = time, from = zoomedOutState }
@@ -378,6 +436,7 @@ type Action
     | ReplaceTrayOrPass
     | JoinGame
     | Premove PlacedWord (ToBeFilledInByBackend IsValid)
+    | CancelPremove
 
 
 type IsValid
@@ -793,6 +852,20 @@ updateAction setup action shared =
 
                 _ ->
                     shared
+
+        CancelPremove ->
+            { shared
+                | players =
+                    List.Nonempty.map
+                        (\player ->
+                            if player.userId == action.userId then
+                                { player | premove = Nothing }
+
+                            else
+                                player
+                        )
+                        shared.players
+            }
 
 
 incrementTurnCount : Time.Posix -> ValidatedSetup -> Shared -> Shared
@@ -1242,7 +1315,9 @@ updateSetup time currentUserId msg setup =
         PressedStartGame ->
             case validateSetup currentUserId time setup of
                 Ok validated ->
-                    ( initGame time validated |> Game, Just validated )
+                    ( initGame time currentUserId validated (initShared validated) |> Game
+                    , Just validated
+                    )
 
                 Err error ->
                     ( Setup { setup | error = Just error }, Nothing )
@@ -1403,7 +1478,17 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
                         model.tiles
                         |> Tuple.first
               }
-            , Nothing
+            , case getPlayer currentUserId shared of
+                Just player ->
+                    case player.premove of
+                        Just _ ->
+                            Just CancelPremove
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
             )
 
         PressedToggleSettings ->
@@ -3567,43 +3652,73 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
 
                         Premove _ _ ->
                             acc
+
+                        CancelPremove ->
+                            acc
                     )
                 )
                 ( 1, initShared setup, [] )
                 actions
 
+        log2 : List (Element msg)
+        log2 =
+            (case getPlayer localUser.session.userId shared of
+                Just player ->
+                    case player.premove of
+                        Just ( _, result, _ ) ->
+                            [ Ui.text
+                                ("You'll automatically try placing \""
+                                    ++ headlineWord result.words
+                                    ++ "\" when it's your turn."
+                                )
+                                |> Ui.el
+                                    [ Ui.background premoveColor
+                                    , Ui.Font.color MyUi.white
+                                    , Ui.paddingXY 2 0
+                                    , Ui.width Ui.shrink
+                                    ]
+                            ]
+
+                        Nothing ->
+                            []
+
+                Nothing ->
+                    []
+            )
+                ++ List.map
+                    (\entry ->
+                        let
+                            name : String
+                            name =
+                                case User.getUser entry.userId localUser of
+                                    Just user ->
+                                        PersonName.toString user.name
+
+                                    Nothing ->
+                                        "<missing>"
+                        in
+                        Ui.row
+                            [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
+                            [ Ui.Prose.paragraph
+                                [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
+                                [ Ui.text (String.fromInt entry.index ++ ". ") ]
+                            , Ui.Prose.paragraph
+                                [ Ui.alignTop ]
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text name)
+                                , Ui.text (" " ++ Tuple.second entry.description)
+                                ]
+                            ]
+                    )
+                    log
+
         playerCount =
             List.Nonempty.length shared.players
     in
-    (if List.isEmpty log then
+    (if List.isEmpty log2 then
         [ Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "No moves made yet...") ]
 
      else
-        List.map
-            (\entry ->
-                let
-                    name : String
-                    name =
-                        case User.getUser entry.userId localUser of
-                            Just user ->
-                                PersonName.toString user.name
-
-                            Nothing ->
-                                "<missing>"
-                in
-                Ui.row
-                    [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 0 6 ]
-                    [ Ui.Prose.paragraph
-                        [ Ui.Font.color MyUi.font3, MyUi.noShrinking, Ui.alignTop, Ui.width Ui.shrink ]
-                        [ Ui.text (String.fromInt entry.index ++ ". ") ]
-                    , Ui.Prose.paragraph
-                        [ Ui.alignTop ]
-                        [ Ui.el [ Ui.Font.bold ] (Ui.text name)
-                        , Ui.text (" " ++ Tuple.second entry.description)
-                        ]
-                    ]
-            )
-            (List.reverse log)
+        List.reverse log2
     )
         |> Ui.column
             [ Ui.id (Dom.idToString pastWordsContainerId)
@@ -3638,7 +3753,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.Gradient.px 0 MyUi.background1, Ui.Gradient.percent 100 (Ui.rgba 0 0 0 0) ]
                             ]
                         ]
-                        (Ui.text "Past moves")
+                        (Ui.text "Moves")
                     )
                 )
             , case scrollPosition of
@@ -4792,14 +4907,14 @@ setupView windowSize isReadonly setup =
                 )
             , padding
             ]
-            [ setupSection
-                (Ui.text "Time control")
-                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-                    [ timeInput isReadonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
-                    , timeInput isReadonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
-                    ]
-                )
-            , if isReadonly then
+            [ --setupSection
+              --    (Ui.text "Time control")
+              --    (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+              --        [ timeInput isReadonly "wsg_mainTimeInput" "Main time (minutes)" setup.mainTimeInput ChangedMainTimeInput
+              --        , timeInput isReadonly "wsg_incrementInput" "Increment (seconds)" setup.incrementInput ChangedIncrementInput
+              --        ]
+              --    )
+              if isReadonly then
                 setupSection (Ui.text "Dictionary") (Ui.text (languageToString setup.language))
 
               else

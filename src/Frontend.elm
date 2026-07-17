@@ -6632,6 +6632,7 @@ updateLoadedFromBackend msg model =
                                         updatedGameModel =
                                             Game.gameChangeFromServer
                                                 model.time
+                                                local.localUser.session.userId
                                                 gameChange
                                                 (SeqDict.get guildOrDmId loggedIn2.games)
                                     in

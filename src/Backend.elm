@@ -6076,6 +6076,9 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                                     Err () ->
                                                         FilledInByBackend WordSpellingGame.IsNotValid
                                                 )
+
+                                        WordSpellingGame.CancelPremove ->
+                                            action.change
                             }
 
                         localMsg2 : Game.LocalChange

@@ -217,12 +217,13 @@ wordSpellingScrollPosition matchId model =
 
 routeRequest :
     Time.Posix
+    -> Id UserId
     -> GuildOrDmId
     -> Id ChannelMessageId
     -> SeqDict (Id ChannelMessageId) MatchData
     -> SeqDict GuildOrDmId Model
     -> SeqDict GuildOrDmId Model
-routeRequest time guildOrDmId matchId matchData models =
+routeRequest time currentUserId guildOrDmId matchId matchData models =
     case SeqDict.get matchId matchData of
         Just (MatchData matchData2) ->
             SeqDict.update
@@ -249,7 +250,7 @@ routeRequest time guildOrDmId matchId matchData models =
                                         model.startedGames
                             }
 
-                        FrontendGameData_WordSpellingGame setup _ _ ->
+                        FrontendGameData_WordSpellingGame setup _ shared ->
                             { model
                                 | startedGames =
                                     SeqDict.update
@@ -260,7 +261,9 @@ routeRequest time guildOrDmId matchId matchData models =
                                                     maybeGame
 
                                                 Nothing ->
-                                                    WordSpellingGame.initGame time setup |> WordSpellingGame_Game |> Just
+                                                    WordSpellingGame.initGame time currentUserId setup shared
+                                                        |> WordSpellingGame_Game
+                                                        |> Just
                                         )
                                         model.startedGames
                             }
@@ -890,8 +893,8 @@ pressedKey matchId key (MatchData matchData) maybeGameModel =
         |> Just
 
 
-gameChangeFromServer : Time.Posix -> LocalChange -> Maybe Model -> Maybe Model
-gameChangeFromServer time gameChange maybeModel =
+gameChangeFromServer : Time.Posix -> Id UserId -> LocalChange -> Maybe Model -> Maybe Model
+gameChangeFromServer time currentUserId gameChange maybeModel =
     let
         model : Model
         model =
@@ -958,7 +961,14 @@ gameChangeFromServer time gameChange maybeModel =
                         | startedGames =
                             SeqDict.insert
                                 matchId
-                                (WordSpellingGame_Game (WordSpellingGame.initGame serverTime setup))
+                                (WordSpellingGame_Game
+                                    (WordSpellingGame.initGame
+                                        serverTime
+                                        currentUserId
+                                        setup
+                                        (WordSpellingGame.initShared setup)
+                                    )
+                                )
                                 model.startedGames
                     }
 

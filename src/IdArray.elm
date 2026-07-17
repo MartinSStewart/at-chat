@@ -3,6 +3,7 @@ module IdArray exposing
     , empty
     , foldl
     , foldr
+    , foldrWithId
     , fromList
     , get
     , initialize
@@ -47,6 +48,15 @@ foldl foldFunc startingValue (IdArray array) =
 foldr : (a -> b -> b) -> b -> IdArray k a -> b
 foldr foldFunc startingValue (IdArray array) =
     Array.foldr foldFunc startingValue array
+
+
+foldrWithId : (Id k -> a -> b -> b) -> b -> IdArray k a -> b
+foldrWithId foldFunc startingValue (IdArray array) =
+    Array.foldr
+        (\value ( index, a ) -> ( index - 1, foldFunc (Id.fromInt index) value a ))
+        ( Array.length array, startingValue )
+        array
+        |> Tuple.second
 
 
 empty : IdArray k a
