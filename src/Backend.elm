@@ -2929,6 +2929,31 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_EditGuildName guildId guildName ->
+                    BackendExtra.asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.editGuildName guildName guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_EditGuildName guildId guildName |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_DeleteGuild guildId ->
                     BackendExtra.asGuildOwner
                         model

@@ -1055,6 +1055,40 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedResetEditGuildChanges guildId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitEditGuildChanges guildId form ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case GuildName.fromString form.name of
+                        Ok guildName ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_EditGuildName guildId guildName |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                                }
+                                Command.none
+
+                        Err _ ->
+                            ( { loggedIn
+                                | editGuildForm =
+                                    SeqDict.insert guildId { form | pressedSubmit = True } loggedIn.editGuildForm
+                              }
+                            , Command.none
+                            )
+                )
+                model
+
         PressedDeleteGuild guildId ->
             case model.loginStatus of
                 LoggedIn loggedIn ->

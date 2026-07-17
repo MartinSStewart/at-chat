@@ -466,6 +466,8 @@ type FrontendMsg_
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
     | EditGuildFormChanged (Id GuildId) EditGuildForm
+    | PressedResetEditGuildChanges (Id GuildId)
+    | PressedSubmitEditGuildChanges (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
@@ -599,8 +601,10 @@ type alias EditChannelForm =
 
 
 type alias EditGuildForm =
-    { deleteConfirmation : String
+    { name : String
+    , deleteConfirmation : String
     , showDeleteConfirmation : Bool
+    , pressedSubmit : Bool
     }
 
 
@@ -831,6 +835,7 @@ type ServerChange
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Server_EditGuildName (Id GuildId) GuildName
     | Server_DeleteGuild (Id GuildId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
     | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
@@ -913,6 +918,7 @@ type LocalChange
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Local_EditGuildName (Id GuildId) GuildName
     | Local_DeleteGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
