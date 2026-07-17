@@ -12,6 +12,45 @@ A text chat app similar to Discord
 
 After you've finished a feature, make sure to run elm-review and elm-test!
 
+## How do I send ToBackend messages directly? (app-cli)
+
+`app-cli` is a REPL that lets a user or bot send `Types.ToBackend` messages
+straight to the backend, without going through the frontend UI.
+
+1. Start `lamdera live` and open http://localhost:8000 in a browser tab (in
+   `lamdera live` the backend runs inside the leader browser tab, so one must
+   stay open).
+2. In another terminal run `npm run app-cli`.
+3. Type an Elm expression of type `Types.ToBackend` at the prompt, e.g.
+
+   ```
+   > CheckLoginRequest InitialLoadRequested_None
+   ```
+
+4. The expression is pasted into a temporary `Platform.worker` module which is
+   compiled with `lamdera make`. The worker serializes the value with the
+   generated `Types.w3_encode_ToBackend` wire encoder, and the CLI sends the
+   bytes to the backend over the same websocket protocol the browser uses.
+   `ToFrontend` responses are decoded with `Types.w3_decode_ToFrontend` and
+   printed with `Debug.toString`:
+
+   ```
+   > CheckLoginRequest InitialLoadRequested_None
+   CheckLoginResponse (Err ())
+   ```
+
+`Types` is imported with `exposing (..)` and every module in `src/` is imported
+qualified (so you can write `Id.fromInt 1`, `InitialLoadRequested_None`, etc).
+Type `help` in the REPL for the extra commands (adding imports, reprinting the
+last response, choosing a session id, and so on). Useful flags:
+
+- `--session <sid>` acts as a specific browser session. Copy the `sid` cookie
+  from your browser's dev tools to reuse a logged-in session.
+- `--url <url>` connects to a different websocket (default
+  `ws://localhost:8000/_w`).
+
+The temporary modules live in `elm-stuff/app-cli/` (gitignored).
+
 ## How do I run the rust server locally? (for file hosting and Discord integration)
 
 Run `npm run rust-server` in the root folder
