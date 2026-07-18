@@ -13,6 +13,7 @@ module WordSpellingGame exposing
     , LetterId
     , LetterOrWildcard(..)
     , LocalChange(..)
+    , OpenWordDefinition
     , PlacedWord
     , PlacementResult
     , Player
@@ -26,6 +27,7 @@ module WordSpellingGame exposing
     , UserStatus(..)
     , ValidatedSetup
     , WordDefinition(..)
+    , WordDefinitionData
     , WordList(..)
     , ZoomAnimation
     , ZoomState
