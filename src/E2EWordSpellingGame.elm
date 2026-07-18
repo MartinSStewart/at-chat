@@ -357,6 +357,9 @@ tests normalConfig =
                             , Test.Html.Selector.exactText ": 0"
                             ]
                         )
+                    , -- Both players were viewing the game when it ended, so neither may get a
+                      -- game-over push notification.
+                      E2EHelper.checkNoNotification "AT played AA (+4). The game has ended. AT won with 4 points!"
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
                     , T.connectFrontend
                         100
@@ -766,6 +769,123 @@ tests normalConfig =
                                         )
                                     , userB.snapshotView 100 { name = "userB's perspective" }
                                     , watcher.snapshotView 100 { name = "Spectator's perspective" }
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Expected one word spelling game in the guild channel") ]
+                        )
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Turn notifications in a DM match"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    -- `user` has push notifications enabled (see connectTwoUsersAndJoinNewGuild).
+                    [ -- Admin creates a Word Spelling Game match in the DM with the other user.
+                      admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the match, joins it, and then navigates away.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                    , user.click 100 (Dom.id "guildIcon_showFriends")
+
+                    -- Admin swaps their tiles, passing the turn to the user. The user isn't
+                    -- viewing the game so they get a push notification about their turn that
+                    -- includes what the admin just did.
+                    , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+
+                    -- The user comes back to the game and swaps their own tiles, then admin swaps
+                    -- again so it's the user's turn once more. This time the user is viewing the
+                    -- game, so no new notification may be sent. checkNotification fails when more
+                    -- than one notification matches the body, so passing again proves only the
+                    -- original notification exists.
+                    , user.click 100 (Dom.id "guild_friendLabel_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Turn and game-end notifications in a guild channel match"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectFourUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin userA userB watcher ->
+                    [ -- Give everyone except the admin push notifications. (Three "Push
+                      -- notifications enabled" pushes are sent, so that body can't be asserted
+                      -- with checkNotification here.)
+                      E2EHelper.enableNotifications False userA
+                    , E2EHelper.enableNotifications False userB
+                    , E2EHelper.enableNotifications False watcher
+
+                    -- Admin creates a match with a 2-tile tray and a bag of exactly six A tiles:
+                    -- the three players drain the bag when joining, so every turn is a pass and
+                    -- the third pass in a row ends the game.
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
+                    , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AAAAAA"
+                    , admin.click 100 (Dom.id "wsg_start")
+                    , T.andThen
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( matchId, _ ) ] ->
+                                    [ -- The second and third members open the match from its
+                                      -- message card and join it. The fourth member never joins.
+                                      userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                                    -- Everyone but the admin navigates away from the game.
+                                    , userA.click 100 (Dom.id "guildIcon_showFriends")
+                                    , userB.click 100 (Dom.id "guildIcon_showFriends")
+                                    , watcher.click 100 (Dom.id "guildIcon_showFriends")
+
+                                    -- Admin passes, so it's the second player's turn. Both joined
+                                    -- players are away, but only the player whose turn it now is
+                                    -- gets notified: checkNotification fails if the body matches
+                                    -- more than one notification, so it also proves the third
+                                    -- player wasn't notified with the same text.
+                                    , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Your turn!" "AT passed. It's your turn in the Word Spelling Game."
+
+                                    -- The second player comes back, passes, and leaves again. Now
+                                    -- the third player (still away) gets their turn notification.
+                                    , userA.click 100 (Dom.id "guild_openGuild_1")
+                                    , userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Your turn!" "Stevie Steve passed. It's your turn in the Word Spelling Game."
+                                    , userA.click 100 (Dom.id "guildIcon_showFriends")
+
+                                    -- The third player comes back and passes, which ends the game
+                                    -- (everyone passed in turn). Every *player* should be told the
+                                    -- game ended, but only the second player is both away and a
+                                    -- player: the admin is viewing the game, the third player just
+                                    -- made the final move, and the watcher never joined. So
+                                    -- exactly one game-over notification must exist.
+                                    , userB.click 100 (Dom.id "guild_openGuild_1")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Game over" "Joe passed. The game has ended. AT and Stevie Steve and Joe tied with 0 points!"
                                     ]
 
                                 _ ->

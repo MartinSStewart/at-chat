@@ -6123,9 +6123,8 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                 matchId
                                 (WordSpellingGame.Action action2)
 
-                        shared2 : WordSpellingGame.Shared
-                        shared2 =
-                            WordSpellingGame.updateAction setup action2 shared |> Tuple.first
+                        ( shared2, descriptions ) =
+                            WordSpellingGame.updateAction setup action2 shared
 
                         notificationRoute : Route
                         notificationRoute =
@@ -6146,15 +6145,40 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
                                         }
 
+                        userToString : Id UserId -> String
+                        userToString userId =
+                            case NonemptyDict.get userId model.users of
+                                Just user ->
+                                    PersonName.toString user.name
+
+                                Nothing ->
+                                    "<unknown>"
+
                         ( userSessions2, notificationCmds ) =
                             List.foldl
-                                (\{ userId, pushNotificationText, emailText, emailHtml } ( userSessions, cmds ) ->
+                                (\{ userId, title, pushNotificationText, emailText, emailHtml } ( userSessions, cmds ) ->
                                     let
+                                        -- A DM channel is identified by the *other* user, so
+                                        -- when checking what the notified user is viewing we
+                                        -- need the DM as seen from their side.
+                                        guildOrDmIdForRecipient : GuildOrDmId
+                                        guildOrDmIdForRecipient =
+                                            case guildOrDmId of
+                                                GuildOrDmId_Guild _ _ ->
+                                                    guildOrDmId
+
+                                                GuildOrDmId_Dm otherUserId ->
+                                                    if userId == otherUserId then
+                                                        GuildOrDmId_Dm session.userId
+
+                                                    else
+                                                        guildOrDmId
+
                                         alreadyViewing : Bool
                                         alreadyViewing =
                                             List.any
                                                 (\connection ->
-                                                    UserSession.isViewingGame guildOrDmId matchId connection.currentlyViewing
+                                                    UserSession.isViewingGame guildOrDmIdForRecipient matchId connection.currentlyViewing
                                                 )
                                                 (Broadcast.userGetAllConnections userId model)
                                     in
@@ -6165,7 +6189,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         Broadcast.notificationAlt
                                             time
                                             userId
-                                            (NonemptyString 'Y' "our turn!")
+                                            title
                                             (Env.domain ++ "/word-spelling-game-preview.webp")
                                             pushNotificationText
                                             emailText
@@ -6176,7 +6200,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             |> Tuple.mapSecond (\a -> a ++ cmds)
                                 )
                                 ( model.sessions, [] )
-                                (WordSpellingGame.nextTurnNotifications notificationRoute shared2)
+                                (WordSpellingGame.nextTurnNotifications userToString notificationRoute shared descriptions shared2)
                     in
                     ( setChannel
                         { channel

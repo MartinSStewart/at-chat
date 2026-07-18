@@ -2,7 +2,7 @@ module WordSpellingGame exposing
     ( Action(..)
     , ActionWithTime
     , AnimatedPlacement
-    , Description
+    , Description(..)
     , DictEntry
     , Drag(..)
     , GameData
@@ -80,6 +80,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Effect.Time as Time
 import Email.Html
+import Email.Html.Attributes
 import Env
 import Go exposing (TimeControl)
 import Html
@@ -103,6 +104,7 @@ import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Set exposing (Set)
+import String.Nonempty exposing (NonemptyString(..))
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Accessibility
@@ -648,23 +650,218 @@ type GameEndReason
     | OutOfLetters (Id UserId)
 
 
-nextTurnNotifications : Route -> Shared -> List { userId : Id UserId, pushNotificationText : String, emailText : String, emailHtml : Email.Html.Html }
-nextTurnNotifications route shared =
+{-| Who to notify after an action was applied to the game, and with what content. If the action
+ended the game every player is notified; otherwise only the player whose turn it now is gets a
+notification, prefixed with what the previous player did (taken from the action's Moves log
+entries). Nobody is notified for actions that don't move the turn along (joining, premoves, an
+invalid move with attempts left).
+-}
+nextTurnNotifications :
+    (Id UserId -> String)
+    -> Route
+    -> Shared
+    -> List Description
+    -> Shared
+    -> List { userId : Id UserId, title : NonemptyString, pushNotificationText : String, emailText : String, emailHtml : Email.Html.Html }
+nextTurnNotifications userToString route previousShared descriptions shared =
     let
-        player =
-            List.Nonempty.get shared.turnCount shared.players
+        link : String
+        link =
+            Env.domain ++ Route.encode route
+
+        previousActionsText : String
+        previousActionsText =
+            List.map
+                (\description -> userToString (descriptionUserId description) ++ descriptionToString description)
+                descriptions
+                |> String.join ". "
+
+        notificationFor :
+            NonemptyString
+            -> String
+            -> Id UserId
+            -> { userId : Id UserId, title : NonemptyString, pushNotificationText : String, emailText : String, emailHtml : Email.Html.Html }
+        notificationFor title text userId =
+            { userId = userId
+            , title = title
+            , pushNotificationText = text
+            , emailText = text ++ "\n\nOpen " ++ link ++ " to view the game."
+            , emailHtml = notificationEmailHtml text link shared
+            }
     in
-    case getWinner shared of
-        Just _ ->
-            Debug.todo ""
+    case ( getWinner previousShared, getWinner shared ) of
+        ( Just _, _ ) ->
+            -- The game was already over before this action so there's nothing to notify about.
+            []
+
+        ( Nothing, Just ( winners, _ ) ) ->
+            let
+                winnerScore : Int
+                winnerScore =
+                    NonemptyExtra.maximumBy .score shared.players |> .score
+
+                winnersText : String
+                winnersText =
+                    (case List.Nonempty.toList winners of
+                        [ winner ] ->
+                            userToString winner ++ " won with "
+
+                        winners2 ->
+                            String.join " and " (List.map userToString winners2) ++ " tied with "
+                    )
+                        ++ String.fromInt winnerScore
+                        ++ " points!"
+            in
+            List.map
+                (\player ->
+                    notificationFor
+                        (NonemptyString 'G' "ame over")
+                        (addSentence previousActionsText ("The game has ended. " ++ winnersText))
+                        player.userId
+                )
+                (List.Nonempty.toList shared.players)
+
+        ( Nothing, Nothing ) ->
+            if shared.turnCount == previousShared.turnCount then
+                -- The turn didn't move on to another player so it's nobody's "your turn" moment.
+                []
+
+            else
+                [ notificationFor
+                    (NonemptyString 'Y' "our turn!")
+                    (addSentence previousActionsText "It's your turn in the Word Spelling Game.")
+                    (List.Nonempty.get shared.turnCount shared.players).userId
+                ]
+
+
+addSentence : String -> String -> String
+addSentence first second =
+    if first == "" then
+        second
+
+    else
+        first ++ ". " ++ second
+
+
+notificationEmailHtml : String -> String -> Shared -> Email.Html.Html
+notificationEmailHtml text link shared =
+    Email.Html.div
+        [ Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif" ]
+        [ Email.Html.div
+            [ Email.Html.Attributes.fontSize "15px"
+            , Email.Html.Attributes.paddingBottom "12px"
+            ]
+            [ Email.Html.text text ]
+        , emailBoardView shared
+        , Email.Html.div
+            [ Email.Html.Attributes.paddingTop "20px" ]
+            [ Email.Html.b
+                []
+                [ Email.Html.a
+                    [ Email.Html.Attributes.href link
+                    , Email.Html.Attributes.backgroundColor "#407ab2"
+                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.fontSize "14px"
+                    , Email.Html.Attributes.padding "4px 8px"
+                    , Email.Html.Attributes.borderRadius "4px"
+                    , Email.Html.Attributes.style "text-decoration" "none"
+                    , Email.Html.Attributes.style "display" "inline-block"
+                    ]
+                    [ Email.Html.text "Open game" ]
+                ]
+            ]
+        ]
+
+
+{-| The board rendered as a plain table so it shows up in email clients, which only support a
+small subset of CSS. The cells of the most recent placement use the same brighter gold as
+freshly placed tiles in the app, so the notified player can see at a glance what just happened.
+-}
+emailBoardView : Shared -> Email.Html.Html
+emailBoardView shared =
+    let
+        lastPlaced : Set ( Int, Int )
+        lastPlaced =
+            case shared.lastPlacement of
+                Just placement ->
+                    List.map Tuple.first placement.cells |> Set.fromList
+
+                Nothing ->
+                    Set.empty
+    in
+    Email.Html.table
+        [ Email.Html.Attributes.attribute "cellspacing" "0"
+        , Email.Html.Attributes.attribute "cellpadding" "0"
+        , Email.Html.Attributes.style "border-collapse" "collapse"
+        ]
+        (List.map
+            (\y ->
+                Email.Html.tr
+                    []
+                    (List.map
+                        (\x -> emailBoardCellView shared.board lastPlaced ( x, y ))
+                        (List.range 0 (gridSize - 1))
+                    )
+            )
+            (List.range 0 (gridSize - 1))
+        )
+
+
+emailBoardCellView : SeqDict ( Int, Int ) LetterOrWildcard -> Set ( Int, Int ) -> ( Int, Int ) -> Email.Html.Html
+emailBoardCellView board lastPlaced position =
+    let
+        cell : List Email.Html.Attribute -> String -> Email.Html.Html
+        cell attributes label =
+            Email.Html.td
+                ([ Email.Html.Attributes.width "22px"
+                 , Email.Html.Attributes.height "22px"
+                 , Email.Html.Attributes.textAlign "center"
+                 , Email.Html.Attributes.border "1px solid #cccccc"
+                 , Email.Html.Attributes.style "font-weight" "bold"
+                 ]
+                    ++ attributes
+                )
+                [ Email.Html.text label ]
+    in
+    case SeqDict.get position board of
+        Just letterOrWildcard ->
+            cell
+                [ Email.Html.Attributes.backgroundColor
+                    (if Set.member position lastPlaced then
+                        -- Fresh tile gold (see tileInFront).
+                        "#f0dc82"
+
+                     else
+                        -- Committed tile gold (see boardTileInFront).
+                        "#baab67"
+                    )
+                , Email.Html.Attributes.color "#000000"
+                , Email.Html.Attributes.fontSize "14px"
+                ]
+                (letterOrWildcardText letterOrWildcard)
 
         Nothing ->
-            [ { userId = player.userId
-              , pushNotificationText = "It's your turn in the Word Spelling Game"
-              , emailText = "It's your turn in the Word Spelling Game " ++ Env.domain ++ Route.encode route
-              , emailHtml = Debug.todo ""
-              }
-            ]
+            case SeqDict.get position bonusCells of
+                Just bonus ->
+                    cell
+                        [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle (bonusCellColor bonus))
+                        , Email.Html.Attributes.color
+                            (bonusCellColor bonus |> Color.Manipulate.darken 0.3 |> MyUi.colorToStyle)
+                        , Email.Html.Attributes.fontSize
+                            (case bonus of
+                                CenterCell ->
+                                    "14px"
+
+                                _ ->
+                                    "9px"
+                            )
+                        ]
+                        (bonusCellLabel bonus)
+
+                Nothing ->
+                    cell
+                        [ Email.Html.Attributes.backgroundColor "#fafafa" ]
+                        "\u{00A0}"
 
 
 {-| The game is over either when every player has passed in turn, or as soon as any player has no

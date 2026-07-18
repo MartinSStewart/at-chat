@@ -4,11 +4,14 @@ import Duration
 import Effect.Time as Time
 import Expect
 import Id
+import IdArray
 import List.Nonempty exposing (Nonempty(..))
 import NonemptyDict
 import OneOrGreater
+import Route
 import SeqDict exposing (SeqDict)
 import Set
+import String.Nonempty exposing (NonemptyString)
 import Test exposing (Test)
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (IsValid(..), Letter(..), LetterOrWildcard(..), PlacedWord)
@@ -522,4 +525,123 @@ tests =
                     WordSpellingGame.animatedTilePlacement False 100000 (FilledInByBackend IsNotValid) 3 0
                         |> Expect.equal Nothing
             ]
+        , Test.describe "nextTurnNotifications decides who hears about a move"
+            [ Test.test "only the next player is notified when the turn moves on" <|
+                \_ ->
+                    WordSpellingGame.nextTurnNotifications
+                        notifUserName
+                        Route.HomePageRoute
+                        (notifShared 0 notifPlayers)
+                        [ WordSpellingGame.Description_ReplacedTray (Id.fromInt 0) ]
+                        (notifShared 1 notifPlayers)
+                        |> List.map notifSummary
+                        |> Expect.equal
+                            [ ( Id.fromInt 1
+                              , "Your turn!"
+                              , "Alice swapped their tiles. It's your turn in the Word Spelling Game."
+                              )
+                            ]
+            , Test.test "every player is notified when the game ends" <|
+                \_ ->
+                    let
+                        -- The first player's tray is empty after the move, which ends the game
+                        -- (see getWinner) with them as the highest scorer.
+                        gameOver : Nonempty WordSpellingGame.Player
+                        gameOver =
+                            List.Nonempty.map
+                                (\player ->
+                                    if player.userId == Id.fromInt 0 then
+                                        { player | tray = IdArray.empty, score = 9 }
+
+                                    else
+                                        player
+                                )
+                                notifPlayers
+                    in
+                    WordSpellingGame.nextTurnNotifications
+                        notifUserName
+                        Route.HomePageRoute
+                        (notifShared 2 notifPlayers)
+                        [ WordSpellingGame.Description_PlacedWord
+                            (Id.fromInt 0)
+                            { word = "CAT", points = 9, isBingo = False, placedCells = [], isPremove = False, wildcardMatches = Set.empty }
+                        ]
+                        (notifShared 3 gameOver)
+                        |> List.map notifSummary
+                        |> Expect.equal
+                            (List.map
+                                (\userId ->
+                                    ( Id.fromInt userId
+                                    , "Game over"
+                                    , "Alice played CAT (+9). The game has ended. Alice won with 9 points!"
+                                    )
+                                )
+                                [ 0, 1, 2 ]
+                            )
+            , Test.test "nobody is notified when the turn doesn't move on" <|
+                \_ ->
+                    WordSpellingGame.nextTurnNotifications
+                        notifUserName
+                        Route.HomePageRoute
+                        (notifShared 0 notifPlayers)
+                        [ WordSpellingGame.Description_Joined (Id.fromInt 2) ]
+                        (notifShared 0 notifPlayers)
+                        |> Expect.equal []
+            , Test.test "nobody is notified for moves after the game already ended" <|
+                \_ ->
+                    let
+                        alreadyOver : Nonempty WordSpellingGame.Player
+                        alreadyOver =
+                            List.Nonempty.map (\player -> { player | tray = IdArray.empty }) notifPlayers
+                    in
+                    WordSpellingGame.nextTurnNotifications
+                        notifUserName
+                        Route.HomePageRoute
+                        (notifShared 3 alreadyOver)
+                        []
+                        (notifShared 3 alreadyOver)
+                        |> Expect.equal []
+            ]
         ]
+
+
+{-| Three players with ids 0, 1, 2 who all still hold a tile.
+-}
+notifPlayers : Nonempty WordSpellingGame.Player
+notifPlayers =
+    Nonempty
+        { userId = Id.fromInt 0, tray = IdArray.fromList [ Letter a ], score = 0, premove = Nothing }
+        [ { userId = Id.fromInt 1, tray = IdArray.fromList [ Letter a ], score = 0, premove = Nothing }
+        , { userId = Id.fromInt 2, tray = IdArray.fromList [ Letter a ], score = 0, premove = Nothing }
+        ]
+
+
+notifShared : Int -> Nonempty WordSpellingGame.Player -> WordSpellingGame.Shared
+notifShared turnCount players =
+    { board = SeqDict.empty
+    , players = players
+    , turnCount = turnCount
+    , passingStartedAt = Nothing
+    , lastPlacement = Nothing
+    , attemptsLeft = OneOrGreater.one
+    }
+
+
+notifUserName : Id.Id Id.UserId -> String
+notifUserName userId =
+    if userId == Id.fromInt 0 then
+        "Alice"
+
+    else if userId == Id.fromInt 1 then
+        "Bob"
+
+    else
+        "Carol"
+
+
+notifSummary : { a | userId : Id.Id Id.UserId, title : NonemptyString, pushNotificationText : String } -> ( Id.Id Id.UserId, String, String )
+notifSummary notification =
+    ( notification.userId
+    , String.Nonempty.toString notification.title
+    , notification.pushNotificationText
+    )
