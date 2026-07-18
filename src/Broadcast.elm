@@ -9,6 +9,7 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
+    , notificationAlt
     , notificationEmailContent
     , notificationEmailSubject
     , pushNotification
@@ -47,7 +48,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -474,9 +475,12 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
                     isViewing =
                         List.any
                             (\connection ->
-                                case connection.currentlyViewing of
-                                    Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), viewingThreadRoute ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
+                                case ( connection.currentlyViewing, threadRoute ) of
+                                    ( UserSession.Viewing_Channel viewingGuildId viewingChannelId _, NoThread ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId
+
+                                    ( UserSession.Viewing_ChannelThread viewingGuildId viewingChannelId viewingThreadId, ViewThread threadId ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
 
                                     _ ->
                                         False
@@ -571,9 +575,12 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                             isViewing =
                                 List.any
                                     (\connection ->
-                                        case connection.currentlyViewing of
-                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ viewingGuildId viewingChannelId), viewingThreadRoute ) ->
-                                                viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
+                                        case ( connection.currentlyViewing, threadRoute ) of
+                                            ( UserSession.Viewing_DiscordChannel viewingGuildId viewingChannelId _, NoThread ) ->
+                                                viewingGuildId == guildId && viewingChannelId == channelId
+
+                                            ( UserSession.Viewing_DiscordChannelThread viewingGuildId viewingChannelId _ viewingThreadId, ViewThread threadId ) ->
+                                                viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadId == threadId
 
                                             _ ->
                                                 False
@@ -673,7 +680,7 @@ notification :
             , postmarkApiKey : Postmark.ApiKey
         }
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-notification time userToNotify senderName senderIcon userToString plainText message navigateTo sessions model =
+notification time userToNotify title senderIcon userToString plainText message navigateTo sessions model =
     let
         -- Email notifications are a user setting (not a session setting like push
         -- notifications) so we send at most one email per notification, regardless
@@ -684,7 +691,7 @@ notification time userToNotify senderName senderIcon userToString plainText mess
                 Just user ->
                     case user.emailNotifications of
                         NotifyMeWhenMentioned ->
-                            [ notificationEmail time user.email senderName userToString plainText message model.postmarkApiKey ]
+                            [ messageNotificationEmail time user.email title userToString plainText message model.postmarkApiKey ]
 
                         NeverNotifyMe ->
                             []
@@ -705,7 +712,7 @@ notification time userToNotify senderName senderIcon userToString plainText mess
                             sessionId
                             session.userId
                             time
-                            senderName
+                            title
                             plainText
                             (case senderIcon of
                                 Just icon ->
@@ -730,10 +737,85 @@ notification time userToNotify senderName senderIcon userToString plainText mess
         sessions
 
 
+notificationAlt :
+    Time.Posix
+    -> Id UserId
+    -> NonemptyString
+    -> String
+    -> String
+    -> String
+    -> Email.Html.Html
+    -> Maybe Route
+    -> SeqDict SessionId UserSession
+    ->
+        { a
+            | serverSecret : SecretId ServerSecret
+            , privateVapidKey : PrivateVapidKey
+            , users : NonemptyDict.NonemptyDict (Id UserId) BackendUser
+            , postmarkApiKey : Postmark.ApiKey
+        }
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+notificationAlt time userToNotify title icon pushNotificationText emailText emailHtml navigateTo sessions model =
+    let
+        emailCmds : List (Command BackendOnly toMsg BackendMsg)
+        emailCmds =
+            case NonemptyDict.get userToNotify model.users of
+                Just user ->
+                    case user.emailNotifications of
+                        NotifyMeWhenMentioned ->
+                            [ Postmark.sendEmail
+                                (SentNotificationEmail time user.email)
+                                model.postmarkApiKey
+                                { from = { name = "", email = notificationEmailFrom }
+                                , to = List.Nonempty.fromElement { name = "", email = user.email }
+                                , subject = title
+                                , body = Postmark.BodyBoth emailHtml emailText
+                                , messageStream = "outbound"
+                                }
+                            ]
+
+                        NeverNotifyMe ->
+                            []
+
+                Nothing ->
+                    []
+    in
+    SeqDict.foldl
+        (\sessionId session ( sessions2, cmds ) ->
+            if session.userId == userToNotify then
+                case ( session.notificationMode, session.pushSubscription ) of
+                    ( PushNotifications, Subscribed pushSubscription _ ) ->
+                        ( SeqDict.insert
+                            sessionId
+                            { session | pushSubscription = Subscribed pushSubscription time }
+                            sessions2
+                        , pushNotification
+                            sessionId
+                            session.userId
+                            time
+                            (String.Nonempty.toString title)
+                            pushNotificationText
+                            icon
+                            navigateTo
+                            pushSubscription
+                            model
+                            :: cmds
+                        )
+
+                    _ ->
+                        ( sessions2, cmds )
+
+            else
+                ( sessions2, cmds )
+        )
+        ( sessions, emailCmds )
+        sessions
+
+
 {-| Send an email notifying a user that they were mentioned or sent a message.
 Sent when the user has enabled email notifications in their settings.
 -}
-notificationEmail :
+messageNotificationEmail :
     Time.Posix
     -> EmailAddress
     -> String
@@ -742,7 +824,7 @@ notificationEmail :
     -> Message messageId userId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-notificationEmail time email senderName userToString plainText message postmarkApiKey =
+messageNotificationEmail time email senderName userToString plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
@@ -844,8 +926,8 @@ isViewingDiscordDm channelId userId2 model =
     List.any
         (\connection ->
             case connection.currentlyViewing of
-                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
-                    data.channelId == channelId
+                UserSession.Viewing_DiscordDm _ channelIdB ->
+                    channelIdB == channelId
 
                 _ ->
                     False
@@ -1152,22 +1234,16 @@ broadcastDm :
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
 broadcastDm changeId time clientId userId otherUserId text message threadRouteWithReplyTo attachedFiles stickers model =
     let
-        threadRouteNoReply : ThreadRoute
-        threadRouteNoReply =
-            case threadRouteWithReplyTo of
-                NoThreadWithMaybeMessage _ ->
-                    NoThread
-
-                ViewThreadWithMaybeMessage threadId _ ->
-                    ViewThread threadId
-
         isViewing : Bool
         isViewing =
             List.any
                 (\connection ->
-                    case connection.currentlyViewing of
-                        Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), viewingThreadRoute ) ->
-                            viewingUserId == userId && viewingThreadRoute == threadRouteNoReply
+                    case ( connection.currentlyViewing, threadRouteWithReplyTo ) of
+                        ( UserSession.Viewing_Dm viewingUserId _, NoThreadWithMaybeMessage _ ) ->
+                            viewingUserId == userId
+
+                        ( UserSession.Viewing_DmThread viewingUserId threadIdA, ViewThreadWithMaybeMessage threadIdB _ ) ->
+                            viewingUserId == userId && threadIdA == threadIdB
 
                         _ ->
                             False
@@ -1259,7 +1335,7 @@ gameStartedDmNotification time senderId otherUserId gameType model =
             List.any
                 (\connection ->
                     case connection.currentlyViewing of
-                        Just ( GuildOrDmId (GuildOrDmId_Dm viewingUserId), NoThread ) ->
+                        UserSession.Viewing_Dm viewingUserId _ ->
                             viewingUserId == senderId
 
                         _ ->
@@ -1353,7 +1429,7 @@ gameStartedGuildNotification time sender guildId channelId gameType members mode
                         List.any
                             (\connection ->
                                 case connection.currentlyViewing of
-                                    Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), NoThread ) ->
+                                    UserSession.Viewing_Channel viewingGuildId viewingChannelId _ ->
                                         viewingGuildId == guildId && viewingChannelId == channelId
 
                                     _ ->

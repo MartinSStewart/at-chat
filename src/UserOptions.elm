@@ -9,7 +9,6 @@ import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
-import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import LocalState exposing (AdminStatus(..), LocalState)
@@ -52,11 +51,7 @@ domainWhitelistToString domains =
         |> String.join ", "
 
 
-viewConnectedDevice :
-    SessionIdHash
-    -> Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
-    -> UserAgent
-    -> Element FrontendMsg_
+viewConnectedDevice : SessionIdHash -> Maybe (SeqDict ClientId UserSession.Viewing) -> UserAgent -> Element FrontendMsg_
 viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
     let
         browserText : String

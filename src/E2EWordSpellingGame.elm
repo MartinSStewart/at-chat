@@ -22,6 +22,7 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import UserSession
 import WordSpellingGame
 
 
@@ -356,6 +357,9 @@ tests normalConfig =
                             , Test.Html.Selector.exactText ": 0"
                             ]
                         )
+                    , -- Both players were viewing the game when it ended, so neither may get a
+                      -- game-over push notification.
+                      E2EHelper.checkNoNotification "AT played AA (+4). The game has ended. AT won with 4 points!"
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
                     , T.connectFrontend
                         100
@@ -364,7 +368,7 @@ tests normalConfig =
                             (Route.DmRoute
                                 { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
                                 , threadRoute = Route.NoThreadWithFriends Nothing HideMembersTab
-                                , tab = Just (Route.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
+                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
                                 }
                             )
                         )
@@ -765,6 +769,240 @@ tests normalConfig =
                                         )
                                     , userB.snapshotView 100 { name = "userB's perspective" }
                                     , watcher.snapshotView 100 { name = "Spectator's perspective" }
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Expected one word spelling game in the guild channel") ]
+                        )
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Turn notifications in a DM match"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectTwoUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin user ->
+                    -- `user` has push notifications enabled (see connectTwoUsersAndJoinNewGuild).
+                    [ -- Admin creates a Word Spelling Game match in the DM with the other user.
+                      admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
+                    , admin.click 100 (Dom.id "wsg_start")
+
+                    -- The other user opens the match, joins it, and then navigates away.
+                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_joinGame")
+                    , user.click 100 (Dom.id "guildIcon_showFriends")
+
+                    -- Admin swaps their tiles, passing the turn to the user. The user isn't
+                    -- viewing the game so they get a push notification about their turn that
+                    -- includes what the admin just did.
+                    , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+
+                    -- The user comes back to the game and swaps their own tiles, then admin swaps
+                    -- again so it's the user's turn once more. This time the user is viewing the
+                    -- game, so no new notification may be sent. checkNotification fails when more
+                    -- than one notification matches the body, so passing again proves only the
+                    -- original notification exists.
+                    , user.click 100 (Dom.id "guild_friendLabel_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
+                    , user.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , admin.click 100 (Dom.id "wordSpellingGame_replaceTray")
+                    , E2EHelper.checkNotification "Your turn!" "AT swapped their tiles. It's your turn in the Word Spelling Game."
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "Turn and game-end notifications in a guild channel match"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectFourUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin userA userB watcher ->
+                    [ -- Give everyone except the admin push notifications. (Three "Push
+                      -- notifications enabled" pushes are sent, so that body can't be asserted
+                      -- with checkNotification here.)
+                      E2EHelper.enableNotifications False userA
+                    , E2EHelper.enableNotifications False userB
+                    , E2EHelper.enableNotifications False watcher
+
+                    -- Admin creates a match with a 2-tile tray and a bag of exactly six A tiles:
+                    -- the three players drain the bag when joining, so every turn is a pass and
+                    -- the third pass in a row ends the game.
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
+                    , admin.input 100 (Dom.id "wsg_traySizeInput") "2"
+                    , admin.input 100 (Dom.id "wsg_lettersInput") "AAAAAA"
+                    , admin.click 100 (Dom.id "wsg_start")
+                    , T.andThen
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( matchId, _ ) ] ->
+                                    [ -- The second and third members open the match from its
+                                      -- message card and join it. The fourth member never joins.
+                                      userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                                    -- Everyone but the admin navigates away from the game.
+                                    , userA.click 100 (Dom.id "guildIcon_showFriends")
+                                    , userB.click 100 (Dom.id "guildIcon_showFriends")
+                                    , watcher.click 100 (Dom.id "guildIcon_showFriends")
+
+                                    -- Admin passes, so it's the second player's turn. Both joined
+                                    -- players are away, but only the player whose turn it now is
+                                    -- gets notified: checkNotification fails if the body matches
+                                    -- more than one notification, so it also proves the third
+                                    -- player wasn't notified with the same text.
+                                    , admin.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Your turn!" "AT passed. It's your turn in the Word Spelling Game."
+
+                                    -- The second player comes back, passes, and leaves again. Now
+                                    -- the third player (still away) gets their turn notification.
+                                    , userA.click 100 (Dom.id "guild_openGuild_1")
+                                    , userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Your turn!" "Stevie Steve passed. It's your turn in the Word Spelling Game."
+                                    , userA.click 100 (Dom.id "guildIcon_showFriends")
+
+                                    -- The third player comes back and passes, which ends the game
+                                    -- (everyone passed in turn). Every *player* should be told the
+                                    -- game ended, but only the second player is both away and a
+                                    -- player: the admin is viewing the game, the third player just
+                                    -- made the final move, and the watcher never joined. So
+                                    -- exactly one game-over notification must exist.
+                                    , userB.click 100 (Dom.id "guild_openGuild_1")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_passOrEndTurn")
+                                    , E2EHelper.checkNotification "Game over" "Joe passed. The game has ended. AT and Stevie Steve and Joe tied with 0 points!"
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Expected one word spelling game in the guild channel") ]
+                        )
+                    ]
+                )
+            ]
+        , E2EHelper.startTest
+            "A successful premove notifies the player after the premover"
+            E2EHelper.startTime
+            normalConfig
+            [ E2EHelper.connectFourUsersAndJoinNewGuild
+                E2EHelper.tallDesktopWindow
+                (\admin userA userB _ ->
+                    let
+                        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+                        pointerEvent ( x, y ) =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 0 )
+                                , ( "pointerId", Json.Encode.int 0 )
+                                , ( "clientX", Json.Encode.float x )
+                                , ( "clientY", Json.Encode.float y )
+                                ]
+
+                        pointerUpEvent : Json.Encode.Value
+                        pointerUpEvent =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+                        dragTile delay tab from to =
+                            T.group
+                                [ tab.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                                , tab.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                                ]
+
+                        -- Same board geometry as the other desktop guild-channel tests.
+                        trayTile : Float -> ( Float, Float )
+                        trayTile index =
+                            ( 283 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+                        boardCell : Int -> Int -> ( Float, Float )
+                        boardCell cx cy =
+                            ( toFloat (273 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+                    in
+                    [ -- The admin (the player after the premover in turn order) and the third
+                      -- player (the premover) get push notifications; the second player acts and
+                      -- stays viewing, so they need none.
+                      E2EHelper.enableNotifications False admin
+                    , E2EHelper.enableNotifications False userB
+
+                    -- Admin creates a match where every tile is an "a" worth 2 points, so trays
+                    -- are predictable and AA is always a valid word.
+                    , admin.click 100 (Dom.id "guild_openGamesTab")
+                    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+                    , admin.click 100 (Dom.id "wsg_advancedSection")
+                    , admin.input 100 (Dom.id "wsg_lettersInput") (String.repeat 40 "A")
+                    , admin.input 100 (Dom.id "wsg_letterValue_A") "2"
+                    , admin.click 100 (Dom.id "wsg_start")
+                    , T.andThen
+                        100
+                        (\state ->
+                            case guildChannelGames state.backend of
+                                [ ( matchId, _ ) ] ->
+                                    [ -- The second and third members join, making the turn order
+                                      -- admin, Stevie Steve, Joe.
+                                      userA.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userA.click 100 (Dom.id "wordSpellingGame_joinGame")
+                                    , userB.click 100 (Dom.id ("guild_gameStartedCard_" ++ Id.toString matchId))
+                                    , userB.click 100 (Dom.id "wordSpellingGame_joinGame")
+
+                                    -- Admin opens with AA across the centre: (2+2) doubled = 8.
+                                    -- Now it's the second player's turn.
+                                    , dragTile 100 admin (trayTile 0) (boardCell 7 7)
+                                    , dragTile 100 admin (trayTile 1) (boardCell 8 7)
+                                    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_7_7")
+
+                                    -- While the second player is on turn, the third player premoves
+                                    -- AA at (6,6)-(7,6), hanging off the centre AA. The second
+                                    -- player's move won't touch any word it forms, so the premove
+                                    -- will play out unchanged. Premover and admin then both leave.
+                                    , dragTile 100 userB (trayTile 0) (boardCell 6 6)
+                                    , dragTile 100 userB (trayTile 1) (boardCell 7 6)
+                                    , userB.click 100 (Dom.id "wsg_submitPremove_h_6_6")
+                                    , userB.click 100 (Dom.id "guildIcon_showFriends")
+                                    , admin.click 100 (Dom.id "guildIcon_showFriends")
+
+                                    -- The second player plays AA one step down-right of the centre
+                                    -- AA. That ends their turn, which plays the third player's
+                                    -- premove right away and hands the turn straight on to the
+                                    -- admin. Only the admin — not the premover, who is also away
+                                    -- with push enabled — may be notified, and the notification
+                                    -- describes both the move and the premove that played out:
+                                    -- checkNotification fails if the body matches more than one
+                                    -- notification.
+                                    , dragTile 100 userA (trayTile 0) (boardCell 8 8)
+                                    , dragTile 100 userA (trayTile 1) (boardCell 9 8)
+                                    , userA.click 100 (Dom.id "wordSpellingGame_submitLine_h_8_8")
+                                    , T.checkState
+                                        1000
+                                        (\state2 ->
+                                            case guildChannelGames state2.backend of
+                                                [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
+                                                    if shared.turnCount /= 3 then
+                                                        Err
+                                                            ("Expected the premove to have played and the turn to be the admin's (turnCount 3), but turnCount is "
+                                                                ++ String.fromInt shared.turnCount
+                                                            )
+
+                                                    else
+                                                        Ok ()
+
+                                                _ ->
+                                                    Err "Expected one word spelling game in the guild channel"
+                                        )
+                                    , E2EHelper.checkNotification "Your turn!" "Stevie Steve played AA (+12). Joe premoved AA (+10). It's your turn in the Word Spelling Game."
                                     ]
 
                                 _ ->
@@ -1323,6 +1561,9 @@ wordSpellingGamePremove normalConfig =
                                         }
                                     )
                         )
+                    , -- With the premove stored, the user navigates away from the game so a
+                      -- push notification about the blocked premove can be observed.
+                      user.click 100 (Dom.id "guildIcon_showFriends")
                     , -- Admin plays their A left of DIRT's T, spelling AT. The new tile lands
                       -- right next to the premoved S's cell, so the S would now also spell SAT —
                       -- a word the backend never validated — meaning the premove's outcome has
@@ -1347,6 +1588,13 @@ wordSpellingGamePremove normalConfig =
                                         }
                                     )
                         )
+                    , -- The turn is the premover's now, and they're away, so they get a push
+                      -- notification that mentions their premove was blocked.
+                      E2EHelper.checkNotification "Your turn!" "AT played AT (+2). Stevie Steve's premove got blocked. It's your turn in the Word Spelling Game."
+                    , -- The user comes back to the game for the snapshot.
+                      user.click 100 (Dom.id "guild_friendLabel_0")
+                    , user.click 100 (Dom.id "guild_openGamesTab")
+                    , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.snapshotView 100 { name = "Premove cancelled" }
                     ]
                 ]

@@ -66,10 +66,12 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
+import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -371,7 +373,7 @@ update msg model =
                         { lastRequest = NoRequestsMade
                         , call = NotInCall
                         , remoteCallData = Call.defaultRemoteCallData
-                        , currentlyViewing = Nothing
+                        , currentlyViewing = UserSession.Viewing_None
                         }
                         model.connections
               }
@@ -2342,7 +2344,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             userId =
                                 Id.nextId (NonemptyDict.toSeqDict model.users)
 
-                            currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                            currentlyViewing : UserSession.Viewing
                             currentlyViewing =
                                 BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
 
@@ -2406,7 +2408,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
                                     let
-                                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                                        currentlyViewing : UserSession.Viewing
                                         currentlyViewing =
                                             BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
@@ -4239,7 +4241,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                        currentlyViewing : UserSession.Viewing
                         currentlyViewing =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -4259,7 +4261,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
                         getNewUsers connection guildId guild =
                             case connection.currentlyViewing of
-                                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ previousGuildId _), _ ) ->
+                                UserSession.Viewing_DiscordChannel previousGuildId _ _ ->
+                                    if guildId == previousGuildId then
+                                        SeqDict.empty
+
+                                    else
+                                        getNewUsersHelper guild
+
+                                UserSession.Viewing_DiscordChannelThread previousGuildId _ _ _ ->
                                     if guildId == previousGuildId then
                                         SeqDict.empty
 
@@ -4287,7 +4296,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                     in
                     case viewing of
-                        ViewDm otherUserId _ ->
+                        ViewDm otherUserId tab _ ->
                             BackendExtra.asDmUser
                                 model
                                 sessionId
@@ -4309,7 +4318,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.connections
                                       }
                                     , Command.batch
-                                        [ ViewDm otherUserId (loadMessagesHelper dmChannel |> FilledInByBackend)
+                                        [ ViewDm otherUserId tab (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4390,7 +4399,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewChannel guildId channelId _ ->
+                        ViewChannel guildId channelId tab _ ->
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
@@ -4417,6 +4426,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 [ ViewChannel
                                                     guildId
                                                     channelId
+                                                    tab
                                                     (loadMessagesHelper channel |> FilledInByBackend)
                                                     |> Local_CurrentlyViewing
                                                     |> LocalChangeResponse changeId
@@ -6043,6 +6053,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
             case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_WordSpellingGame setup actions shared) ) ->
                     let
+                        placeWordHelper : WordSpellingGame.PlacedWord -> Result () ( WordSpellingGame.PlacementResult, Set String )
                         placeWordHelper placed =
                             case setup.language of
                                 English ->
@@ -6069,6 +6080,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         _ ->
                                             Err ()
 
+                        action2 : WordSpellingGame.ActionWithTime
                         action2 =
                             { action
                                 | time = time
@@ -6111,25 +6123,101 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                             Game.LocalChange_WordSpellingGame
                                 matchId
                                 (WordSpellingGame.Action action2)
+
+                        ( sharedNext, descriptions ) =
+                            WordSpellingGame.updateAction setup action2 shared
+
+                        notificationRoute : Route
+                        notificationRoute =
+                            case guildOrDmId of
+                                GuildOrDmId_Guild guildId channelId ->
+                                    Route.GuildRoute
+                                        guildId
+                                        (Route.ChannelRoute
+                                            channelId
+                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
+                                        )
+
+                                GuildOrDmId_Dm otherUserId ->
+                                    Route.DmRoute
+                                        { channelId = DmChannelId.fromUserIds session.userId otherUserId
+                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
+                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        }
+
+                        userToString : Id UserId -> String
+                        userToString userId =
+                            case NonemptyDict.get userId model.users of
+                                Just user ->
+                                    PersonName.toString user.name
+
+                                Nothing ->
+                                    "<unknown>"
+
+                        ( userSessions2, notificationCmds ) =
+                            List.foldl
+                                (\{ userId, title, pushNotificationText, emailText, emailHtml } ( userSessions, cmds ) ->
+                                    let
+                                        -- A DM channel is identified by the *other* user, so
+                                        -- when checking what the notified user is viewing we
+                                        -- need the DM as seen from their side.
+                                        guildOrDmIdForRecipient : GuildOrDmId
+                                        guildOrDmIdForRecipient =
+                                            case guildOrDmId of
+                                                GuildOrDmId_Guild _ _ ->
+                                                    guildOrDmId
+
+                                                GuildOrDmId_Dm otherUserId ->
+                                                    if userId == otherUserId then
+                                                        GuildOrDmId_Dm session.userId
+
+                                                    else
+                                                        guildOrDmId
+
+                                        alreadyViewing : Bool
+                                        alreadyViewing =
+                                            List.any
+                                                (\connection ->
+                                                    UserSession.isViewingGame guildOrDmIdForRecipient matchId connection.currentlyViewing
+                                                )
+                                                (Broadcast.userGetAllConnections userId model)
+                                    in
+                                    if alreadyViewing then
+                                        ( userSessions, cmds )
+
+                                    else
+                                        Broadcast.notificationAlt
+                                            time
+                                            userId
+                                            title
+                                            (Env.domain ++ "/word-spelling-game-preview.webp")
+                                            pushNotificationText
+                                            emailText
+                                            emailHtml
+                                            (Just notificationRoute)
+                                            userSessions
+                                            model
+                                            |> Tuple.mapSecond (\a -> a ++ cmds)
+                                )
+                                ( model.sessions, [] )
+                                (WordSpellingGame.nextTurnNotifications userToString notificationRoute shared descriptions sharedNext)
                     in
                     ( setChannel
                         { channel
                             | games =
                                 SeqDict.insert
                                     matchId
-                                    (Game.GameData_WordSpellingGame
-                                        setup
-                                        (Array.push action2 actions)
-                                        (WordSpellingGame.updateAction setup action2 shared |> Tuple.first)
-                                    )
+                                    (Game.GameData_WordSpellingGame setup (Array.push action2 actions) sharedNext)
                                     channel.games
                         }
-                        model
+                        { model | sessions = userSessions2 }
                     , Command.batch
                         [ Local_Game guildOrDmId localMsg2
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , broadcast localMsg2 model
+                        , Command.batch notificationCmds
                         ]
                     )
 

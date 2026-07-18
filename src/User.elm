@@ -573,7 +573,7 @@ discordUserDataToFrontendUser discordUserData =
 
 type alias LocalUser =
     { session : UserSession
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+    , currentlyViewing : UserSession.Viewing
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , discordUsers : LinkedAndOtherDiscordUsers

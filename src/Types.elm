@@ -108,7 +108,7 @@ import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (ChannelHeaderTab, Route)
+import Route exposing (Route)
 import Scroll exposing (ScrollPosition)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -126,7 +126,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
 import WordSpellingGame exposing (WordList)
 
 
@@ -615,9 +615,10 @@ type alias NewGuildForm =
 
 
 type InitialLoadRequest
-    = InitialLoadRequested_Guild (Id GuildId) (Id ChannelId) ThreadRoute
-    | InitialLoadRequested_Dm DmChannelId ThreadRoute
-    | InitialLoadRequested_Discord DiscordGuildOrDmId ThreadRoute
+    = InitialLoadRequested_Guild (Id GuildId) (Id ChannelId) ThreadRoute (Maybe ChannelHeaderTab)
+    | InitialLoadRequested_Dm DmChannelId ThreadRoute (Maybe ChannelHeaderTab)
+    | InitialLoadRequested_DiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
+    | InitialLoadRequested_DiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | InitialLoadRequested_Admin (Maybe (Id PageId))
     | InitialLoadRequested_None
 
@@ -799,7 +800,7 @@ type ToFrontend
 
 type alias LoginData =
     { session : UserSession
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+    , currentlyViewing : UserSession.Viewing
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
@@ -874,7 +875,7 @@ type ServerChange
     | Server_PushNotificationFailed SubscribeData Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing SessionIdHash ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash ClientId UserSession.Viewing
     | Server_ClientDisconnected SessionIdHash ClientId
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser

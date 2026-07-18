@@ -69,13 +69,13 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Route exposing (ChannelHeaderTab(..), Route(..))
+import Route exposing (Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
 import User exposing (LocalUser)
-import UserSession exposing (ToBeFilledInByBackend)
+import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
 
 
 type LocalChange
