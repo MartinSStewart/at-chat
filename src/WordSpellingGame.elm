@@ -4229,9 +4229,19 @@ wordDefinitionHeader open =
         , Ui.background MyUi.background1
         ]
         [ Ui.el
-            [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.shrink ]
+            [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.shrink, MyUi.monospace, Ui.Font.letterSpacing 1.5 ]
             (Ui.text (currentDefinitionWord open))
         , if wordCount > 1 then
+            let
+                total =
+                    String.fromInt wordCount
+
+                current =
+                    String.fromInt (open.index + 1)
+
+                diff =
+                    String.length total - String.length current
+            in
             Ui.row
                 [ Ui.width Ui.shrink, Ui.contentCenterY ]
                 [ wordDefinitionArrow
@@ -4239,9 +4249,11 @@ wordDefinitionHeader open =
                     PressedPreviousWordDefinition
                     "Previous word"
                     (Icons.arrowLeft 16)
-                , Ui.el
+                , Ui.row
                     [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.width Ui.shrink, Ui.Font.noWrap ]
-                    (Ui.text (String.fromInt (open.index + 1) ++ "/" ++ String.fromInt wordCount))
+                    [ Ui.el [ Ui.opacity 0.5 ] (Ui.text (String.repeat diff "0"))
+                    , Ui.text (current ++ "/" ++ total)
+                    ]
                 , wordDefinitionArrow
                     (Dom.id "wsg_nextWordDefinition")
                     PressedNextWordDefinition
@@ -4307,27 +4319,33 @@ wordDefinitionBody word data =
                 (Ui.text "Swedish dictionary definitions not supported")
 
         WordDefinition_NotFound ->
-            Ui.el
-                [ Ui.Font.color MyUi.font3 ]
-                (Ui.text ("No definition found for \"" ++ word ++ "\"."))
+            Ui.column
+                [ Ui.Font.color MyUi.font3, Ui.height Ui.fill ]
+                [ Ui.text ("No definition found for \"" ++ word ++ "\".")
+                , definitionCredits
+                ]
 
         WordDefinition_Loaded entries ->
             Ui.column
                 [ Ui.spacing 16, Ui.height Ui.fill ]
                 (List.map wordDefinitionEntryView entries
-                    ++ [ Ui.Prose.paragraph
-                            [ Ui.alignBottom
-                            , Ui.Font.size 14
-                            , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 16 }
-                            , Ui.Font.color MyUi.font3
-                            ]
-                            [ Ui.text "Dictionary provided by "
-                            , Ui.el
-                                [ Ui.linkNewTab "https://dictionaryapi.dev/", Ui.Font.noWrap ]
-                                (Ui.text "https://dictionaryapi.dev/")
-                            ]
+                    ++ [ definitionCredits
                        ]
                 )
+
+
+definitionCredits =
+    Ui.Prose.paragraph
+        [ Ui.alignBottom
+        , Ui.Font.size 14
+        , Ui.paddingWith { left = 0, right = 0, top = 24, bottom = 16 }
+        , Ui.Font.color MyUi.font3
+        ]
+        [ Ui.text "Dictionary provided by "
+        , Ui.el
+            [ Ui.linkNewTab "https://dictionaryapi.dev/", Ui.Font.noWrap ]
+            (Ui.text "https://dictionaryapi.dev/")
+        ]
 
 
 wordDefinitionEntryView : DictEntry -> Element GameMsg
