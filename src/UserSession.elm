@@ -11,6 +11,7 @@ module UserSession exposing
     , Viewing(..)
     , init
     , isViewing
+    , isViewingGame
     , setViewingToCurrentlyViewing
     , toFrontend
     )
@@ -153,6 +154,40 @@ isViewing guildOrDmId threadRoute viewing =
             guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId) && viewingThreadId == threadId
 
         _ ->
+            False
+
+
+isViewingGame : GuildOrDmId -> Id ChannelMessageId -> Viewing -> Bool
+isViewingGame guildOrDmId matchId viewing =
+    case viewing of
+        Viewing_None ->
+            False
+
+        Viewing_Dm id (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
+            isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
+
+        Viewing_Dm id _ ->
+            False
+
+        Viewing_DmThread id _ ->
+            False
+
+        Viewing_DiscordDm id _ ->
+            False
+
+        Viewing_Channel _ _ (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
+            isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
+
+        Viewing_Channel id _ _ ->
+            False
+
+        Viewing_ChannelThread id _ _ ->
+            False
+
+        Viewing_DiscordChannel id _ _ ->
+            False
+
+        Viewing_DiscordChannelThread id _ _ _ ->
             False
 
 

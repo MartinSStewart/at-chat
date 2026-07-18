@@ -9,6 +9,8 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
+    , notification
+    , notificationAlt
     , notificationEmailContent
     , notificationEmailSubject
     , pushNotification
@@ -68,7 +70,7 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Unsafe
-import Url
+import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
@@ -679,7 +681,7 @@ notification :
             , postmarkApiKey : Postmark.ApiKey
         }
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-notification time userToNotify senderName senderIcon userToString plainText message navigateTo sessions model =
+notification time userToNotify title senderIcon userToString plainText message navigateTo sessions model =
     let
         -- Email notifications are a user setting (not a session setting like push
         -- notifications) so we send at most one email per notification, regardless
@@ -690,7 +692,7 @@ notification time userToNotify senderName senderIcon userToString plainText mess
                 Just user ->
                     case user.emailNotifications of
                         NotifyMeWhenMentioned ->
-                            [ notificationEmail time user.email senderName userToString plainText message model.postmarkApiKey ]
+                            [ messageNotificationEmail time user.email title userToString plainText message model.postmarkApiKey ]
 
                         NeverNotifyMe ->
                             []
@@ -711,7 +713,7 @@ notification time userToNotify senderName senderIcon userToString plainText mess
                             sessionId
                             session.userId
                             time
-                            senderName
+                            title
                             plainText
                             (case senderIcon of
                                 Just icon ->
@@ -736,10 +738,84 @@ notification time userToNotify senderName senderIcon userToString plainText mess
         sessions
 
 
+notificationAlt :
+    Time.Posix
+    -> Id UserId
+    -> NonemptyString
+    -> String
+    -> String
+    -> Email.Html.Html
+    -> Maybe Route
+    -> SeqDict SessionId UserSession
+    ->
+        { a
+            | serverSecret : SecretId ServerSecret
+            , privateVapidKey : PrivateVapidKey
+            , users : NonemptyDict.NonemptyDict (Id UserId) BackendUser
+            , postmarkApiKey : Postmark.ApiKey
+        }
+    -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
+notificationAlt time userToNotify title icon plainText html navigateTo sessions model =
+    let
+        emailCmds : List (Command BackendOnly toMsg BackendMsg)
+        emailCmds =
+            case NonemptyDict.get userToNotify model.users of
+                Just user ->
+                    case user.emailNotifications of
+                        NotifyMeWhenMentioned ->
+                            [ Postmark.sendEmail
+                                (SentNotificationEmail time user.email)
+                                model.postmarkApiKey
+                                { from = { name = "", email = notificationEmailFrom }
+                                , to = List.Nonempty.fromElement { name = "", email = user.email }
+                                , subject = title
+                                , body = Postmark.BodyBoth html plainText
+                                , messageStream = "outbound"
+                                }
+                            ]
+
+                        NeverNotifyMe ->
+                            []
+
+                Nothing ->
+                    []
+    in
+    SeqDict.foldl
+        (\sessionId session ( sessions2, cmds ) ->
+            if session.userId == userToNotify then
+                case ( session.notificationMode, session.pushSubscription ) of
+                    ( PushNotifications, Subscribed pushSubscription _ ) ->
+                        ( SeqDict.insert
+                            sessionId
+                            { session | pushSubscription = Subscribed pushSubscription time }
+                            sessions2
+                        , pushNotification
+                            sessionId
+                            session.userId
+                            time
+                            (String.Nonempty.toString title)
+                            plainText
+                            icon
+                            navigateTo
+                            pushSubscription
+                            model
+                            :: cmds
+                        )
+
+                    _ ->
+                        ( sessions2, cmds )
+
+            else
+                ( sessions2, cmds )
+        )
+        ( sessions, emailCmds )
+        sessions
+
+
 {-| Send an email notifying a user that they were mentioned or sent a message.
 Sent when the user has enabled email notifications in their settings.
 -}
-notificationEmail :
+messageNotificationEmail :
     Time.Posix
     -> EmailAddress
     -> String
@@ -748,7 +824,7 @@ notificationEmail :
     -> Message messageId userId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-notificationEmail time email senderName userToString plainText message postmarkApiKey =
+messageNotificationEmail time email senderName userToString plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail

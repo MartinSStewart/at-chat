@@ -48,6 +48,7 @@ module WordSpellingGame exposing
     , insideBoard
     , isAnimating
     , isZoomAnimating
+    , nextTurnNotifications
     , parseWordList
     , pastWordsContainerId
     , placeWord
@@ -78,6 +79,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Effect.Time as Time
+import Email.Html
 import Go exposing (TimeControl)
 import Html
 import Html.Attributes
@@ -642,6 +644,24 @@ shuffle list =
 type GameEndReason
     = EveryonePassed
     | OutOfLetters (Id UserId)
+
+
+nextTurnNotifications : Shared -> List { userId : Id UserId, textMessage : String, htmlMessage : Email.Html.Html }
+nextTurnNotifications shared =
+    let
+        player =
+            List.Nonempty.get shared.turnCount shared.players
+    in
+    case getWinner shared of
+        Just _ ->
+            Debug.todo ""
+
+        Nothing ->
+            [ { userId = player.userId
+              , textMessage = "It's your turn in the Word Spelling Game"
+              , htmlMessage = Debug.todo ""
+              }
+            ]
 
 
 {-| The game is over either when every player has passed in turn, or as soon as any player has no

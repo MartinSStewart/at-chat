@@ -66,13 +66,15 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
+import Route
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
@@ -6051,6 +6053,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
             case ( action.userId == session.userId, SeqDict.get matchId channel.games ) of
                 ( True, Just (Game.GameData_WordSpellingGame setup actions shared) ) ->
                     let
+                        placeWordHelper : WordSpellingGame.PlacedWord -> Result () ( WordSpellingGame.PlacementResult, Set String )
                         placeWordHelper placed =
                             case setup.language of
                                 English ->
@@ -6119,25 +6122,75 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                             Game.LocalChange_WordSpellingGame
                                 matchId
                                 (WordSpellingGame.Action action2)
+
+                        shared2 : WordSpellingGame.Shared
+                        shared2 =
+                            WordSpellingGame.updateAction setup action2 shared |> Tuple.first
+
+                        ( userSessions2, notificationCmds ) =
+                            List.foldl
+                                (\{ userId, textMessage, htmlMessage } ( userSessions, cmds ) ->
+                                    let
+                                        alreadyViewing : Bool
+                                        alreadyViewing =
+                                            List.any
+                                                (\connection ->
+                                                    UserSession.isViewingGame guildOrDmId matchId connection.currentlyViewing
+                                                )
+                                                (Broadcast.userGetAllConnections userId model)
+                                    in
+                                    if alreadyViewing then
+                                        ( userSessions, cmds )
+
+                                    else
+                                        Broadcast.notificationAlt
+                                            time
+                                            userId
+                                            (NonemptyString 'Y' "our turn!")
+                                            (Env.domain ++ "/word-spelling-game-preview.webp")
+                                            textMessage
+                                            htmlMessage
+                                            (case guildOrDmId of
+                                                GuildOrDmId_Guild guildId channelId ->
+                                                    Route.GuildRoute
+                                                        guildId
+                                                        (Route.ChannelRoute
+                                                            channelId
+                                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
+                                                        )
+                                                        |> Just
+
+                                                GuildOrDmId_Dm otherUserId ->
+                                                    Route.DmRoute
+                                                        { channelId = DmChannelId.fromUserIds userId otherUserId
+                                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
+                                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                                        }
+                                                        |> Just
+                                            )
+                                            userSessions
+                                            model
+                                            |> Tuple.mapSecond (\a -> a ++ cmds)
+                                )
+                                ( model.sessions, [] )
+                                (WordSpellingGame.nextTurnNotifications shared2)
                     in
                     ( setChannel
                         { channel
                             | games =
                                 SeqDict.insert
                                     matchId
-                                    (Game.GameData_WordSpellingGame
-                                        setup
-                                        (Array.push action2 actions)
-                                        (WordSpellingGame.updateAction setup action2 shared |> Tuple.first)
-                                    )
+                                    (Game.GameData_WordSpellingGame setup (Array.push action2 actions) shared2)
                                     channel.games
                         }
-                        model
+                        { model | sessions = userSessions2 }
                     , Command.batch
                         [ Local_Game guildOrDmId localMsg2
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , broadcast localMsg2 model
+                        , Command.batch notificationCmds
                         ]
                     )
 
