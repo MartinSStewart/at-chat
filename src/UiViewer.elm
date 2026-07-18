@@ -28,8 +28,10 @@ import MyUi
 import OneOrGreater
 import Postmark
 import RichText exposing (Domain, EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
+import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Set
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Time
@@ -37,6 +39,8 @@ import Ui
 import Ui.Font
 import Unsafe
 import Url
+import UserSession exposing (ToBeFilledInByBackend(..))
+import WordSpellingGame exposing (Letter(..), LetterOrWildcard(..))
 
 
 main : Html ()
@@ -57,6 +61,7 @@ main =
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
                 , Ui.html loginEmail
                 , Ui.html notificationEmail
+                , Ui.html wordSpellingGameEmail
                 ]
             , Ui.column
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
@@ -368,6 +373,90 @@ notificationEmail =
             "Stevie Steve"
             message
         )
+
+
+wordSpellingGameEmail : Html msg
+wordSpellingGameEmail =
+    case WordSpellingGame.validateSetup (Id.fromInt 0) (Time.millisToPosix 0) WordSpellingGame.initSetup of
+        Ok setup ->
+            let
+                sharedA : WordSpellingGame.Shared
+                sharedA =
+                    WordSpellingGame.initShared setup
+
+                ( sharedB, _ ) =
+                    WordSpellingGame.updateAction
+                        setup
+                        { userId = Id.fromInt 0
+                        , change =
+                            WordSpellingGame.PlaceWord
+                                { start = ( 7, 7 )
+                                , isVertical = False
+                                , letters =
+                                    Nonempty
+                                        (Letter (LetterChar 'H'))
+                                        [ Letter (LetterChar 'E')
+                                        , Letter (LetterChar 'Y')
+                                        ]
+                                }
+                                (FilledInByBackend (WordSpellingGame.IsValid Set.empty))
+                        , time = Time.millisToPosix 0
+                        }
+                        sharedA
+
+                ( sharedC, _ ) =
+                    WordSpellingGame.updateAction
+                        setup
+                        { userId = Id.fromInt 1
+                        , change =
+                            WordSpellingGame.JoinGame
+                        , time = Time.millisToPosix 0
+                        }
+                        sharedB
+
+                ( sharedD, descriptionD ) =
+                    WordSpellingGame.updateAction
+                        setup
+                        { userId = Id.fromInt 1
+                        , change =
+                            WordSpellingGame.PlaceWord
+                                { start = ( 9, 8 )
+                                , isVertical = True
+                                , letters =
+                                    Nonempty
+                                        (Letter (LetterChar 'O'))
+                                        [ Letter (LetterChar 'U')
+                                        ]
+                                }
+                                (FilledInByBackend (WordSpellingGame.IsValid Set.empty))
+                        , time = Time.millisToPosix 0
+                        }
+                        sharedC
+
+                result =
+                    WordSpellingGame.nextTurnNotifications
+                        (\id -> "AT" ++ Id.toString id)
+                        (Route.GuildRoute
+                            (Id.fromInt 0)
+                            (Route.ChannelRoute
+                                (Id.fromInt 0)
+                                (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                (Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0))))
+                            )
+                        )
+                        sharedC
+                        descriptionD
+                        sharedD
+            in
+            case result of
+                head :: _ ->
+                    emailView head.title head.emailHtml
+
+                [] ->
+                    Html.text "Failed to generate notification"
+
+        Err error ->
+            Html.text "Failed to generate notification"
 
 
 exampleUrl : Url.Url

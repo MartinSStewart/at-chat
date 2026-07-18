@@ -836,7 +836,7 @@ emailBoardCellView board lastPlaced position =
                         "#baab67"
                     )
                 , Email.Html.Attributes.color "#000000"
-                , Email.Html.Attributes.fontSize "14px"
+                , Email.Html.Attributes.fontSize "16px"
                 ]
                 (letterOrWildcardText letterOrWildcard)
 
