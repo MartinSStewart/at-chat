@@ -554,7 +554,7 @@ type FrontendMsg_
         , otherUserId : Discord.Id Discord.UserId
         }
     | TypedDiscordLinkBookmarklet
-    | GotVersionNumber Bool (Result Http.Error Int)
+    | GotVersionNumber Bool (Result () Int)
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String

@@ -132,7 +132,13 @@ checkAppVersion : Bool -> Command FrontendOnly toMsg FrontendMsg_
 checkAppVersion reloadOnNewVersion =
     Http.get
         { url = "/_i"
-        , expect = Http.expectJson (GotVersionNumber reloadOnNewVersion) (Json.Decode.field "v" Json.Decode.int)
+        , expect =
+            Http.expectJson
+                (\result ->
+                    -- The error isn't interesting and in lamdera live it's going to load the entire bundle and try printing that as an error in the console
+                    Result.mapError (\_ -> ()) result |> GotVersionNumber reloadOnNewVersion
+                )
+                (Json.Decode.field "v" Json.Decode.int)
         }
 
 
