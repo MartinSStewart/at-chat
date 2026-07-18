@@ -1130,13 +1130,13 @@ logout model =
 
 isViewing : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Bool
 isViewing guildOrDmId threadRoute local =
-    let
-        a =
-            Just ( guildOrDmId, threadRoute )
-    in
-    (local.localUser.currentlyViewing == a)
+    UserSession.isViewing guildOrDmId threadRoute local.localUser.currentlyViewing
         || List.any
-            (\otherSession -> SeqDict.values otherSession.currentlyViewing |> List.member a)
+            (\otherSession ->
+                List.any
+                    (UserSession.isViewing guildOrDmId threadRoute)
+                    (SeqDict.values otherSession.currentlyViewing)
+            )
             (SeqDict.values local.otherSessions)
 
 

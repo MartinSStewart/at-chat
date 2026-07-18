@@ -64,7 +64,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
-import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -87,7 +87,7 @@ import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserOptions
-import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
 import WordSpellingGame
 
@@ -6313,7 +6313,7 @@ updateLoadedFromBackend msg model =
 
                         Local_CurrentlyViewing viewing ->
                             case viewing of
-                                ViewChannel guildId channelId _ ->
+                                ViewChannel guildId channelId _ _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
@@ -6325,7 +6325,7 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDm otherUserId _ ->
+                                ViewDm otherUserId _ _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
@@ -7159,7 +7159,7 @@ errorPage model text =
 routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
             InitialLoadRequested_Guild
                 guildId
                 channelId
@@ -7170,8 +7170,9 @@ routeToInitialDataRequest route =
                     NoThreadWithFriends _ _ ->
                         NoThread
                 )
+                tab
 
-        DmRoute { channelId, threadRoute } ->
+        DmRoute { channelId, threadRoute, tab } ->
             InitialLoadRequested_Dm
                 channelId
                 (case threadRoute of
@@ -7181,12 +7182,15 @@ routeToInitialDataRequest route =
                     NoThreadWithFriends _ _ ->
                         NoThread
                 )
+                tab
 
         DiscordGuildRoute data ->
             case data.channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute _ ->
-                    InitialLoadRequested_Discord
-                        (DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId)
+                    InitialLoadRequested_DiscordGuild
+                        data.currentDiscordUserId
+                        data.guildId
+                        channelId
                         (case threadRoute of
                             ViewThreadWithFriends threadMessageId _ _ ->
                                 ViewThread threadMessageId
@@ -7199,9 +7203,7 @@ routeToInitialDataRequest route =
                     InitialLoadRequested_None
 
         DiscordDmRoute data ->
-            InitialLoadRequested_Discord
-                (DiscordGuildOrDmId_Dm { currentUserId = data.currentDiscordUserId, channelId = data.channelId })
-                NoThread
+            InitialLoadRequested_DiscordDm data.currentDiscordUserId data.channelId
 
         AdminRoute { highlightLog } ->
             InitialLoadRequested_Admin

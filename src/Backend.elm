@@ -371,7 +371,7 @@ update msg model =
                         { lastRequest = NoRequestsMade
                         , call = NotInCall
                         , remoteCallData = Call.defaultRemoteCallData
-                        , currentlyViewing = Nothing
+                        , currentlyViewing = UserSession.Viewing_None
                         }
                         model.connections
               }
@@ -2342,7 +2342,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             userId =
                                 Id.nextId (NonemptyDict.toSeqDict model.users)
 
-                            currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                            currentlyViewing : UserSession.Viewing
                             currentlyViewing =
                                 BackendExtra.requestedForToGuildOrDmId session.userId requestMessagesFor
 
@@ -2406,7 +2406,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
                                     let
-                                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                                        currentlyViewing : UserSession.Viewing
                                         currentlyViewing =
                                             BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
@@ -4239,7 +4239,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                        currentlyViewing : UserSession.Viewing
                         currentlyViewing =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -4259,7 +4259,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
                         getNewUsers connection guildId guild =
                             case connection.currentlyViewing of
-                                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ previousGuildId _), _ ) ->
+                                UserSession.Viewing_DiscordChannel previousGuildId _ _ ->
+                                    if guildId == previousGuildId then
+                                        SeqDict.empty
+
+                                    else
+                                        getNewUsersHelper guild
+
+                                UserSession.Viewing_DiscordChannelThread previousGuildId _ _ _ ->
                                     if guildId == previousGuildId then
                                         SeqDict.empty
 
@@ -4287,7 +4294,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                     in
                     case viewing of
-                        ViewDm otherUserId _ ->
+                        ViewDm otherUserId tab _ ->
                             BackendExtra.asDmUser
                                 model
                                 sessionId
@@ -4309,7 +4316,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.connections
                                       }
                                     , Command.batch
-                                        [ ViewDm otherUserId (loadMessagesHelper dmChannel |> FilledInByBackend)
+                                        [ ViewDm otherUserId tab (loadMessagesHelper dmChannel |> FilledInByBackend)
                                             |> Local_CurrentlyViewing
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
@@ -4390,7 +4397,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewChannel guildId channelId _ ->
+                        ViewChannel guildId channelId tab _ ->
                             BackendExtra.asGuildMember
                                 model
                                 sessionId
@@ -4417,6 +4424,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 [ ViewChannel
                                                     guildId
                                                     channelId
+                                                    tab
                                                     (loadMessagesHelper channel |> FilledInByBackend)
                                                     |> Local_CurrentlyViewing
                                                     |> LocalChangeResponse changeId

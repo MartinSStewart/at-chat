@@ -10,6 +10,7 @@ module UserSession exposing
     , ViewDiscordGuildData
     , Viewing(..)
     , init
+    , isViewing
     , setViewingToCurrentlyViewing
     , toFrontend
     )
@@ -125,6 +126,34 @@ setViewingToCurrentlyViewing viewing =
 
         StopViewingChannel ->
             Viewing_None
+
+
+isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
+isViewing guildOrDmId threadRoute viewing =
+    case ( viewing, threadRoute ) of
+        ( Viewing_Dm viewingUserId _, NoThread ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm viewingUserId)
+
+        ( Viewing_DmThread viewingUserId viewingThreadId, ViewThread threadId ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Dm viewingUserId) && viewingThreadId == threadId
+
+        ( Viewing_DiscordDm currentUserId channelId, NoThread ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId })
+
+        ( Viewing_Channel guildId channelId _, NoThread ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+
+        ( Viewing_ChannelThread guildId channelId viewingThreadId, ViewThread threadId ) ->
+            guildOrDmId == GuildOrDmId (GuildOrDmId_Guild guildId channelId) && viewingThreadId == threadId
+
+        ( Viewing_DiscordChannel guildId channelId discordUserId, NoThread ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId)
+
+        ( Viewing_DiscordChannelThread guildId channelId discordUserId viewingThreadId, ViewThread threadId ) ->
+            guildOrDmId == DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId) && viewingThreadId == threadId
+
+        _ ->
+            False
 
 
 type ToBeFilledInByBackend a

@@ -22,6 +22,7 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import UserSession
 import WordSpellingGame
 
 
@@ -364,7 +365,7 @@ tests normalConfig =
                             (Route.DmRoute
                                 { channelId = DmChannelId.fromUserIds (Id.fromInt 2) Broadcast.adminUserId
                                 , threadRoute = Route.NoThreadWithFriends Nothing HideMembersTab
-                                , tab = Just (Route.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
+                                , tab = Just (UserSession.ChannelHeaderTab_Games (Just (Id.fromInt 0)))
                                 }
                             )
                         )

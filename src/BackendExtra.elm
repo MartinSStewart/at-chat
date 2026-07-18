@@ -1233,7 +1233,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 isViewing =
                                     List.any
                                         (\connection ->
-                                            connection.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
+                                            UserSession.isViewing (GuildOrDmId guildOrDmId) threadRouteNoReply connection.currentlyViewing
                                         )
                                         (Broadcast.userGetAllConnections userId2 model)
                             in

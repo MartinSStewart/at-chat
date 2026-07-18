@@ -1278,7 +1278,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                         Broadcast.userGetAllConnections data.linkedTo model2
                                                                             |> List.any
                                                                                 (\connection ->
-                                                                                    connection.currentlyViewing == Just ( DiscordGuildOrDmId guildOrDmId, threadRouteNoReply )
+                                                                                    UserSession.isViewing (DiscordGuildOrDmId guildOrDmId) threadRouteNoReply connection.currentlyViewing
                                                                                 )
                                                                 in
                                                                 if isViewing then
