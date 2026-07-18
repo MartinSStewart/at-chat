@@ -3617,7 +3617,12 @@ changeUpdate localMsg local =
                                                                     threadRouteWithRepliedTo
                                                                     text
                                                                     channel
-                                                                    |> SeqSet.member discordUserId
+                                                                    |> SeqSet.intersect
+                                                                        (SeqDict.keys (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
+                                                                            |> SeqSet.fromList
+                                                                        )
+                                                                    |> SeqSet.isEmpty
+                                                                    |> not
                                                                )
                                                     then
                                                         User.addDiscordDirectMention
