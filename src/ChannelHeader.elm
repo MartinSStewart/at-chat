@@ -29,7 +29,7 @@ import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
-import Route exposing (ChannelHeaderTab(..), ChannelRoute(..), DiscordChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Thread
@@ -41,6 +41,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import User exposing (LocalUser)
+import UserSession exposing (ChannelHeaderTab(..))
 
 
 channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_

@@ -1,6 +1,5 @@
 module Route exposing
-    ( ChannelHeaderTab(..)
-    , ChannelRoute(..)
+    ( ChannelRoute(..)
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
@@ -33,6 +32,7 @@ import Slack
 import Url exposing (Url)
 import Url.Builder
 import User
+import UserSession exposing (ChannelHeaderTab(..))
 
 
 type Route
@@ -66,13 +66,6 @@ type alias DiscordDmRouteData =
 
 type alias DmRouteData =
     { channelId : DmChannelId, threadRoute : ThreadRouteWithFriends, tab : Maybe ChannelHeaderTab }
-
-
-type ChannelHeaderTab
-    = ChannelHeaderTab_VoiceChat
-    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
-    | ChannelHeaderTab_ChannelDescription
-    | ChannelHeaderTab_Draw
 
 
 type alias DiscordGuildRouteData =

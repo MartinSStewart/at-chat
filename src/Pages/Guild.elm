@@ -85,7 +85,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import User exposing (FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
-import UserSession exposing (DiscordFrontendUser)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -1956,7 +1956,7 @@ maybeRepliedTo message channel =
 
 drawingIsSelectingAnchor : LoggedIn2 -> LoadedFrontend -> Bool
 drawingIsSelectingAnchor loggedIn model =
-    loggedIn.drawingMode == Drawing.NoSelectedAnchor && Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw
+    loggedIn.drawingMode == Drawing.NoSelectedAnchor && Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw
 
 
 discordConversationViewHelper :
@@ -3067,7 +3067,7 @@ drawing.
 -}
 drawingModeAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingModeAttributes route drawingMode =
-    if Route.toChannelHeaderTab route == Just Route.ChannelHeaderTab_Draw then
+    if Route.toChannelHeaderTab route == Just ChannelHeaderTab_Draw then
         case drawingMode of
             Drawing.NoSelectedAnchor ->
                 []
@@ -3093,7 +3093,7 @@ selected anchor is magnified for more precise drawing.
 drawingZoomAttributes : Route -> Drawing.Model -> List (Ui.Attribute FrontendMsg_)
 drawingZoomAttributes route drawingMode =
     case ( Route.toChannelHeaderTab route, drawingMode ) of
-        ( Just Route.ChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
+        ( Just ChannelHeaderTab_Draw, Drawing.SelectedAnchor selected ) ->
             case ( selected.zoom /= 1, Drawing.zoomCssOrigin selected ) of
                 ( True, Just ( originX, originY ) ) ->
                     [ MyUi.htmlStyle "transform" ("scale(" ++ String.fromFloat selected.zoom ++ ")")

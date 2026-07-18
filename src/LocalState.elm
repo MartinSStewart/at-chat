@@ -169,7 +169,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab, FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -591,7 +591,7 @@ type alias ConnectionData =
     { lastRequest : LastRequest
     , call : CallStatus
     , remoteCallData : Call.RemoteCallData
-    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+    , currentlyViewing : UserSession.Viewing
     }
 
 
@@ -2472,10 +2472,10 @@ routeToViewing route local =
         GuildRoute guildId channelRoute ->
             if SeqDict.member guildId local.guilds then
                 case channelRoute of
-                    ChannelRoute channelId threadRoute _ ->
+                    ChannelRoute channelId threadRoute tab ->
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
-                                ViewChannel guildId channelId EmptyPlaceholder
+                                ViewChannel guildId channelId tab EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewChannelThread guildId channelId threadId EmptyPlaceholder
@@ -2518,13 +2518,13 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DmRoute { channelId, threadRoute } ->
+        DmRoute { channelId, threadRoute, tab } ->
             case DmChannelId.otherUserId local.localUser.session.userId channelId of
                 Just otherUserId ->
                     if SeqDict.member otherUserId local.dmChannels then
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
-                                ViewDm otherUserId EmptyPlaceholder
+                                ViewDm otherUserId tab EmptyPlaceholder
 
                             ViewThreadWithFriends threadId _ _ ->
                                 ViewDmThread otherUserId threadId EmptyPlaceholder

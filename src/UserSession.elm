@@ -1,5 +1,6 @@
 module UserSession exposing
-    ( DiscordFrontendUser
+    ( ChannelHeaderTab(..)
+    , DiscordFrontendUser
     , FrontendUserSession
     , NotificationMode(..)
     , PushSubscription(..)
@@ -7,6 +8,7 @@ module UserSession exposing
     , ToBeFilledInByBackend(..)
     , UserSession
     , ViewDiscordGuildData
+    , Viewing(..)
     , init
     , setViewingToCurrentlyViewing
     , toFrontend
@@ -38,9 +40,16 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    , currentlyViewing : SeqDict ClientId Viewing
     , userAgent : UserAgent
     }
+
+
+type ChannelHeaderTab
+    = ChannelHeaderTab_VoiceChat
+    | ChannelHeaderTab_Games (Maybe (Id ChannelMessageId))
+    | ChannelHeaderTab_ChannelDescription
+    | ChannelHeaderTab_Draw
 
 
 type PushSubscription
@@ -57,14 +66,25 @@ type NotificationMode
 
 
 type SetViewing
-    = ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    = ViewDm (Id UserId) (Maybe ChannelHeaderTab) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | ViewDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
-    | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewChannel (Id GuildId) (Id ChannelId) (Maybe ChannelHeaderTab) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
+
+
+type Viewing
+    = Viewing_Dm (Id UserId) (Maybe ChannelHeaderTab)
+    | Viewing_DmThread (Id UserId) (Id ChannelMessageId)
+    | Viewing_DiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | Viewing_Channel (Id GuildId) (Id ChannelId) (Maybe ChannelHeaderTab)
+    | Viewing_ChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId)
+    | Viewing_DiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId)
+    | Viewing_DiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId)
+    | Viewing_None
 
 
 type alias ViewDiscordGuildData messageId =
@@ -79,32 +99,32 @@ type alias DiscordFrontendUser =
     }
 
 
-setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+setViewingToCurrentlyViewing : SetViewing -> Viewing
 setViewingToCurrentlyViewing viewing =
     case viewing of
-        ViewDm otherUserId _ ->
-            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, NoThread )
+        ViewDm otherUserId tab _ ->
+            Viewing_Dm otherUserId tab
 
         ViewDmThread otherUserId threadId _ ->
-            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, ViewThread threadId )
+            Viewing_DmThread otherUserId threadId
 
         ViewDiscordDm currentUserId channelId _ ->
-            Just ( DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId } |> DiscordGuildOrDmId, NoThread )
+            Viewing_DiscordDm currentUserId channelId
 
-        ViewChannel guildId channelId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, NoThread )
+        ViewChannel guildId channelId tab _ ->
+            Viewing_Channel guildId channelId tab
 
         ViewChannelThread guildId channelId threadId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, ViewThread threadId )
+            Viewing_ChannelThread guildId channelId threadId
 
         ViewDiscordChannel guildId channelId discordUserId _ ->
-            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, NoThread )
+            Viewing_DiscordChannel guildId channelId discordUserId
 
         ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
-            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, ViewThread threadId )
+            Viewing_DiscordChannelThread guildId channelId discordUserId threadId
 
         StopViewingChannel ->
-            Nothing
+            Viewing_None
 
 
 type ToBeFilledInByBackend a
@@ -123,7 +143,7 @@ init time sessionId userId userAgent =
     }
 
 
-toFrontend : Id UserId -> SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )) -> UserSession -> Maybe FrontendUserSession
+toFrontend : Id UserId -> SeqDict ClientId Viewing -> UserSession -> Maybe FrontendUserSession
 toFrontend currentUserId currentlyViewing userSession =
     if currentUserId == userSession.userId then
         { notificationMode = userSession.notificationMode

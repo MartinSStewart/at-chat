@@ -75,6 +75,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (RichText)
+import Route
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -87,7 +88,7 @@ import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, 
 import Unsafe
 import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (DiscordFrontendUser, UserSession)
+import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, UserSession)
 import VisibleMessages
 import WordSpellingGame exposing (WordList(..))
 
@@ -262,28 +263,46 @@ isLoginTooOld pendingLogin time =
         && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
 
 
-requestedForToGuildOrDmId : Id UserId -> InitialLoadRequest -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+requestedForToGuildOrDmId : Id UserId -> InitialLoadRequest -> UserSession.Viewing
 requestedForToGuildOrDmId userId requestMessagesFor =
     case requestMessagesFor of
         InitialLoadRequested_None ->
-            Nothing
+            UserSession.Viewing_None
 
-        InitialLoadRequested_Discord guildOrDmId threadRoute ->
-            Just ( DiscordGuildOrDmId guildOrDmId, threadRoute )
+        InitialLoadRequested_DiscordGuild discordUserId guildId channelId threadRoute ->
+            case threadRoute of
+                NoThread ->
+                    UserSession.Viewing_DiscordChannel guildId channelId discordUserId
+
+                ViewThread threadId ->
+                    UserSession.Viewing_DiscordChannelThread guildId channelId discordUserId threadId
+
+        InitialLoadRequested_DiscordDm discordUserId channelId ->
+            UserSession.Viewing_DiscordDm discordUserId channelId
 
         InitialLoadRequested_Admin _ ->
-            Nothing
+            UserSession.Viewing_None
 
-        InitialLoadRequested_Guild guildId channelId threadRoute ->
-            Just ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadRoute )
+        InitialLoadRequested_Guild guildId channelId threadRoute tab ->
+            case threadRoute of
+                NoThread ->
+                    UserSession.Viewing_Channel guildId channelId tab
 
-        InitialLoadRequested_Dm dmChannelId threadRoute ->
+                ViewThread threadId ->
+                    UserSession.Viewing_ChannelThread guildId channelId threadId
+
+        InitialLoadRequested_Dm dmChannelId threadRoute tab ->
             case DmChannelId.otherUserId userId dmChannelId of
                 Just otherUserId ->
-                    Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadRoute )
+                    case threadRoute of
+                        NoThread ->
+                            UserSession.Viewing_Dm otherUserId tab
+
+                        ViewThread threadId ->
+                            UserSession.Viewing_DmThread otherUserId threadId
 
                 Nothing ->
-                    Nothing
+                    UserSession.Viewing_None
 
 
 loginWithToken :
@@ -325,7 +344,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
 
                         ( Just user, Nothing ) ->
                             let
-                                currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                                currentlyViewing : UserSession.Viewing
                                 currentlyViewing =
                                     requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor
 
@@ -461,7 +480,7 @@ validateAttachedFiles uploadedFiles dict =
 getLoginData :
     SessionId
     -> ClientId
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+    -> UserSession.Viewing
     -> UserSession
     -> BackendUser
     -> InitialLoadRequest
@@ -483,13 +502,16 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                 InitialLoadRequested_None ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Guild _ _ _ ->
+                InitialLoadRequested_Guild _ _ _ _ ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Dm _ _ ->
+                InitialLoadRequested_Dm _ _ _ ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Discord _ _ ->
+                InitialLoadRequested_DiscordGuild _ _ _ threadRoute ->
+                    IsAdminButNoData
+
+                InitialLoadRequested_DiscordDm _ _ ->
                     IsAdminButNoData
 
         else
@@ -501,7 +523,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             (\guildId guild ->
                 LocalState.guildToFrontendForUser
                     (case requestMessagesFor of
-                        InitialLoadRequested_Guild guildIdB channelId threadRoute ->
+                        InitialLoadRequested_Guild guildIdB channelId threadRoute _ ->
                             if guildId == guildIdB then
                                 Just ( channelId, threadRoute )
 
@@ -520,7 +542,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             (\guildId guild ->
                 discordGuildToFrontendForUser
                     (case requestMessagesFor of
-                        InitialLoadRequested_Discord (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId) threadRoute ->
+                        InitialLoadRequested_DiscordGuild _ requestedGuildId requestChannelId threadRoute ->
                             if requestedGuildId == guildId then
                                 Just ( requestChannelId, threadRoute )
 
@@ -539,8 +561,8 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             (\dmChannelId dmChannel ->
                 discordDmChannelToFrontend
                     (case requestMessagesFor of
-                        InitialLoadRequested_Discord (DiscordGuildOrDmId_Dm data) _ ->
-                            dmChannelId == data.channelId
+                        InitialLoadRequested_DiscordDm _ requestedChannelId ->
+                            dmChannelId == requestedChannelId
 
                         _ ->
                             False
@@ -557,7 +579,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
                                 (case requestMessagesFor of
-                                    InitialLoadRequested_Dm dmChannelIdB threadRoute ->
+                                    InitialLoadRequested_Dm dmChannelIdB threadRoute _ ->
                                         if dmChannelId == dmChannelIdB then
                                             Just threadRoute
 
@@ -597,7 +619,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             |> List.filterMap
                 (\( otherSessionId, otherSession ) ->
                     let
-                        connection : SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+                        connection : SeqDict ClientId UserSession.Viewing
                         connection =
                             case SeqDict.get otherSessionId model.connections of
                                 Just connections ->
@@ -752,11 +774,7 @@ discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
         Nothing
 
 
-getLinkedDiscordUsersAndOtherUsers :
-    Id UserId
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
-    -> BackendModel
-    -> LinkedAndOtherDiscordUsers
+getLinkedDiscordUsersAndOtherUsers : Id UserId -> UserSession.Viewing -> BackendModel -> LinkedAndOtherDiscordUsers
 getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
     let
         linkedUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
@@ -838,43 +856,56 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 )
                 SeqDict.empty
                 model.discordDmChannels
+
+        getDiscordGuild guildId =
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    if isGuildMember guild then
+                        List.foldl
+                            (\memberId dict2 ->
+                                case SeqDict.get memberId model.discordUsers of
+                                    Just discordUser ->
+                                        SeqDict.insert
+                                            memberId
+                                            (User.discordUserDataToFrontendUser discordUser)
+                                            dict2
+
+                                    Nothing ->
+                                        dict2
+                            )
+                            visibleDmUsers
+                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
+                    else
+                        visibleDmUsers
+
+                Nothing ->
+                    visibleDmUsers
     in
     LinkedAndOtherDiscordUsers.init
         (case currentlyViewing of
-            Just ( guildOrDmId, _ ) ->
-                case guildOrDmId of
-                    GuildOrDmId _ ->
-                        visibleDmUsers
+            UserSession.Viewing_Dm _ _ ->
+                visibleDmUsers
 
-                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
-                        case SeqDict.get guildId model.discordGuilds of
-                            Just guild ->
-                                if isGuildMember guild then
-                                    List.foldl
-                                        (\memberId dict2 ->
-                                            case SeqDict.get memberId model.discordUsers of
-                                                Just discordUser ->
-                                                    SeqDict.insert
-                                                        memberId
-                                                        (User.discordUserDataToFrontendUser discordUser)
-                                                        dict2
+            UserSession.Viewing_Channel _ _ _ ->
+                visibleDmUsers
 
-                                                Nothing ->
-                                                    dict2
-                                        )
-                                        visibleDmUsers
-                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+            UserSession.Viewing_DmThread _ _ ->
+                visibleDmUsers
 
-                                else
-                                    visibleDmUsers
+            UserSession.Viewing_ChannelThread _ _ _ ->
+                visibleDmUsers
 
-                            Nothing ->
-                                visibleDmUsers
+            UserSession.Viewing_DiscordChannel guildId _ _ ->
+                getDiscordGuild guildId
 
-                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
-                        visibleDmUsers
+            UserSession.Viewing_DiscordChannelThread guildId _ _ _ ->
+                getDiscordGuild guildId
 
-            Nothing ->
+            UserSession.Viewing_DiscordDm _ _ ->
+                visibleDmUsers
+
+            UserSession.Viewing_None ->
                 visibleDmUsers
         )
         linkedUsers

@@ -52,11 +52,7 @@ domainWhitelistToString domains =
         |> String.join ", "
 
 
-viewConnectedDevice :
-    SessionIdHash
-    -> Maybe (SeqDict ClientId (Maybe ( AnyGuildOrDmId, ThreadRoute )))
-    -> UserAgent
-    -> Element FrontendMsg_
+viewConnectedDevice : SessionIdHash -> Maybe (SeqDict ClientId UserSession.Viewing) -> UserAgent -> Element FrontendMsg_
 viewConnectedDevice sessionId otherCurrentlyViewing userAgent =
     let
         browserText : String

@@ -109,7 +109,7 @@ import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
-import UserSession exposing (DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (ChannelHeaderTab(..), DiscordFrontendUser, NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WordSpellingGame
 
@@ -509,7 +509,7 @@ disableTextSelect isMobile model =
     if isMobile then
         True
 
-    else if Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw then
+    else if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
         True
 
     else
@@ -1350,7 +1350,7 @@ enterSidebarRoute sameGuild previousRoute viewCmd model =
 
 enterChannelRoute :
     AnyGuildOrDmId
-    -> Maybe Route.ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> Bool
     -> Bool
@@ -1420,7 +1420,7 @@ routeRequest previousRoute newRoute model =
                             | drawingMode =
                                 -- Closing the draw tab (or navigating elsewhere) also
                                 -- deselects the drawing anchor
-                                if Route.toChannelHeaderTab newRoute == Just Route.ChannelHeaderTab_Draw then
+                                if Route.toChannelHeaderTab newRoute == Just ChannelHeaderTab_Draw then
                                     loggedIn.drawingMode
 
                                 else
@@ -1756,7 +1756,7 @@ currentGamesTab local route =
     case route of
         DmRoute dmRoute ->
             case ( dmRoute.tab, DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId ) of
-                ( Just (Route.ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
+                ( Just (ChannelHeaderTab_Games maybeMatchId), Just otherUserId ) ->
                     let
                         dmChannel : FrontendDmChannel
                         dmChannel =
@@ -1772,7 +1772,7 @@ currentGamesTab local route =
                 _ ->
                     Nothing
 
-        GuildRoute guildId (ChannelRoute channelId _ (Just (Route.ChannelHeaderTab_Games maybeMatchId))) ->
+        GuildRoute guildId (ChannelRoute channelId _ (Just (ChannelHeaderTab_Games maybeMatchId))) ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     Just
@@ -1814,7 +1814,7 @@ currentGame local model =
 routeRequestChannelHelper :
     Bool
     -> AnyGuildOrDmId
-    -> Maybe Route.ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
     -> ThreadRouteWithFriends
     -> LocalState
     -> LoggedIn2
@@ -1824,7 +1824,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
     ( case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
             case tab of
-                Just (Route.ChannelHeaderTab_Games (Just messageId)) ->
+                Just (ChannelHeaderTab_Games (Just messageId)) ->
                     case guildOrDmId2 of
                         GuildOrDmId_Dm otherUserId ->
                             case SeqDict.get otherUserId local.dmChannels of
@@ -1906,7 +1906,7 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
         -- Opening the games tab shows the Past moves list scrolled to the bottom. The sleep lets the
         -- list render first (its container may not be in the DOM yet on this frame).
         , case tab of
-            Just (Route.ChannelHeaderTab_Games _) ->
+            Just (ChannelHeaderTab_Games _) ->
                 Process.sleep Duration.millisecond
                     |> Task.andThen (\() -> Dom.setViewportOf WordSpellingGame.pastWordsContainerId 0 9999999)
                     |> Task.attempt (\_ -> SetScrollToBottom)
@@ -2842,7 +2842,7 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     case viewing of
-                        ViewDm otherUserId messagesLoaded ->
+                        ViewDm otherUserId tab messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -2893,7 +2893,7 @@ changeUpdate localMsg local =
                                         local.discordDmChannels
                             }
 
-                        ViewChannel guildId channelId messagesLoaded ->
+                        ViewChannel guildId channelId tab messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -5458,7 +5458,7 @@ handleEscapeKey model =
             ( { model | imageViewer = Nothing }, Command.none )
 
         Nothing ->
-            if Route.toChannelHeaderTab model.route == Just Route.ChannelHeaderTab_Draw then
+            if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw then
                 -- Closing the draw tab also disables the drawing mode (handled in routeRequest)
                 routePush model (Route.setChannelHeaderTab Nothing model.route)
 
