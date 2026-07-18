@@ -25,7 +25,7 @@ module WordSpellingGame exposing
     , TrayIndex(..)
     , UserStatus(..)
     , ValidatedSetup
-    , WordDefinition
+    , WordDefinition(..)
     , WordList(..)
     , ZoomAnimation
     , ZoomState
@@ -137,9 +137,7 @@ type alias GameData =
     }
 
 
-{-| The state of the word-definition popup. `WordDefinition_None` when nothing is open; otherwise
-the candidate words for the clicked Moves entry together with how far the lookup of the currently
-shown one has got.
+{-| OpaqueVariants
 -}
 type WordDefinition
     = WordDefinition_None
