@@ -7240,6 +7240,20 @@ handleGameOutMsgs outMsgs model =
 
                 Game.ScrollToBottom htmlId ->
                     ( model2, Scroll.toBottomOfChannel htmlId SetScrollToBottom :: cmds )
+
+                Game.FetchWordDefinition word ->
+                    ( model2
+                    , Http.get
+                        { url = WordSpellingGame.definitionApiUrl word
+                        , expect =
+                            Http.expectJson
+                                (\result ->
+                                    GameMsg (Game.WordSpellingGameMsg (WordSpellingGame.GotWordDefinition word result))
+                                )
+                                WordSpellingGame.decodeDefinition
+                        }
+                        :: cmds
+                    )
         )
         ( model, [] )
         outMsgs

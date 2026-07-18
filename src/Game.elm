@@ -304,6 +304,9 @@ type OutMsg
     | CopyText String
     | OutSelectMatch (Maybe (Id ChannelMessageId))
     | ScrollToBottom HtmlId
+      -- Fetch the dictionary definition for an English word the player clicked in a Word Spelling
+      -- Game's Moves log. The frontend issues the HTTP request (see `Frontend.handleGameOutMsgs`).
+    | FetchWordDefinition String
 
 
 update :
@@ -406,7 +409,7 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
                     case ( matchData.data, SeqDict.get matchId model.startedGames ) of
                         ( FrontendGameData_WordSpellingGame setup _ cache, Just (WordSpellingGame_Game game) ) ->
                             let
-                                ( game2, maybeAction ) =
+                                ( game2, maybeAction, maybeFetchDefinition ) =
                                     WordSpellingGame.updateGame
                                         time
                                         windowSize
@@ -417,7 +420,7 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
                                         game
                             in
                             ( { model | startedGames = SeqDict.insert matchId (WordSpellingGame_Game game2) model.startedGames }
-                            , case maybeAction of
+                            , (case maybeAction of
                                 Just action ->
                                     [ OutLocalChange
                                         (LocalChange_WordSpellingGame
@@ -429,6 +432,14 @@ update time windowSize currentUserId guildOrDmId msg newMatchId maybeMatch model
 
                                 Nothing ->
                                     []
+                              )
+                                ++ (case maybeFetchDefinition of
+                                        Just word ->
+                                            [ FetchWordDefinition word ]
+
+                                        Nothing ->
+                                            []
+                                   )
                             )
 
                         _ ->

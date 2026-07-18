@@ -6078,8 +6078,8 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             WordSpellingGame.PlaceWord
                                                 placed
                                                 (case placeWordHelper placed of
-                                                    Ok _ ->
-                                                        FilledInByBackend WordSpellingGame.IsValid
+                                                    Ok ( _, wildcardMatches ) ->
+                                                        FilledInByBackend (WordSpellingGame.IsValid wildcardMatches)
 
                                                     Err () ->
                                                         FilledInByBackend WordSpellingGame.IsNotValid
@@ -6095,8 +6095,8 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             WordSpellingGame.Premove
                                                 placed
                                                 (case placeWordHelper placed of
-                                                    Ok _ ->
-                                                        FilledInByBackend WordSpellingGame.IsValid
+                                                    Ok ( _, wildcardMatches ) ->
+                                                        FilledInByBackend (WordSpellingGame.IsValid wildcardMatches)
 
                                                     Err () ->
                                                         FilledInByBackend WordSpellingGame.IsNotValid

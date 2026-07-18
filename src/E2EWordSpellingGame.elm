@@ -773,6 +773,180 @@ tests normalConfig =
                     ]
                 )
             ]
+        , wordDefinitions normalConfig
+        ]
+
+
+{-| Clicking a played word in the Moves log looks up its dictionary definition. On a wide screen it
+appears in a column to the right of the status view; on a narrower one it overlays the board, with a
+close button, and is also dismissed when the player grabs a tray tile. This covers both layouts.
+-}
+wordDefinitions :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+wordDefinitions normalConfig =
+    T.testGroup
+        "Word definitions"
+        [ wordDefinitionColumnTest normalConfig
+        , wordDefinitionOverlayTest normalConfig
+        ]
+
+
+{-| Board/tray geometry helpers for a desktop window `boardXOffset` px from the viewport's left
+edge (i.e. its `channelAndGuildColumnWidth`). Cells are 30px and tray tiles 54px apart, as in the
+other desktop tests; only the horizontal offset changes with the window width.
+-}
+desktopTrayTile : Int -> Float -> ( Float, Float )
+desktopTrayTile boardXOffset index =
+    ( toFloat boardXOffset + 25 + index * 54, toFloat (WordSpellingGame.boardY + 15 * 30) )
+
+
+desktopBoardCell : Int -> Int -> Int -> ( Float, Float )
+desktopBoardCell boardXOffset cx cy =
+    ( toFloat (boardXOffset + 15 + cx * 30), toFloat (WordSpellingGame.boardY + cy * 30) )
+
+
+{-| Set up a solo Word Spelling Game and place "LOAD" through the centre square, leaving one
+`Description_PlacedWord` row in the Moves log to click. `boardXOffset` is the window's
+`channelAndGuildColumnWidth` (258 at 1000px wide, 338 at 1400px).
+-}
+placeLoadSolo :
+    Int
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+placeLoadSolo boardXOffset admin =
+    let
+        pointerEvent : ( Float, Float ) -> Json.Encode.Value
+        pointerEvent ( x, y ) =
+            Json.Encode.object
+                [ ( "timeStamp", Json.Encode.float 0 )
+                , ( "pointerId", Json.Encode.int 0 )
+                , ( "clientX", Json.Encode.float x )
+                , ( "clientY", Json.Encode.float y )
+                ]
+
+        pointerUpEvent : Json.Encode.Value
+        pointerUpEvent =
+            Json.Encode.object [ ( "timeStamp", Json.Encode.float 0 ) ]
+
+        dragTile delay from to =
+            T.group
+                [ admin.custom delay (Dom.id "elm-ui-root-id") "pointerdown" (pointerEvent from)
+                , admin.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                , admin.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerEvent to)
+                , admin.custom 100 (Dom.id "elm-ui-root-id") "pointerup" pointerUpEvent
+                ]
+    in
+    [ -- Admin creates a Word Spelling Game match in the DM and places LOAD solo (their fresh tray is
+      -- "A O A L D O M", so LOAD is slots 3,1,0,4 across the centre row).
+      admin.click 100 (Dom.id "guild_openDm_2")
+    , admin.click 100 (Dom.id "guild_openGamesTab")
+    , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
+    , admin.click 100 (Dom.id "wsg_advancedSection")
+    , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
+    , admin.click 100 (Dom.id "wsg_start")
+    , dragTile 100 (desktopTrayTile boardXOffset 3) (desktopBoardCell boardXOffset 6 7)
+    , dragTile 100 (desktopTrayTile boardXOffset 1) (desktopBoardCell boardXOffset 7 7)
+    , dragTile 100 (desktopTrayTile boardXOffset 0) (desktopBoardCell boardXOffset 8 7)
+    , dragTile 100 (desktopTrayTile boardXOffset 4) (desktopBoardCell boardXOffset 9 7)
+    , admin.click 100 (Dom.id "wordSpellingGame_submitLine_h_6_7")
+    , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "played LOAD (+10)" ])
+    ]
+
+
+{-| On a wide screen, clicking the played "LOAD" row shows its dictionary definition in a column to
+the right of the status view.
+-}
+wordDefinitionColumnTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+wordDefinitionColumnTest normalConfig =
+    E2EHelper.startTest
+        "Word definition in a right-hand column"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            -- 1400px is wide enough (>= 1300) for the definition column; at this width the board sits
+            -- 338px (channelAndGuildColumnWidth) from the left.
+            { width = 1400, height = 1300 }
+            (\admin _ ->
+                placeLoadSolo 338 admin
+                    ++ [ -- No definition column before a word is clicked.
+                         admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
+
+                       -- Clicking the move row opens the definition column and fetches the definition.
+                       , admin.click 100 (Dom.id "wsg_moveWord_1")
+                       , admin.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                       , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "noun"
+                                , Test.Html.Selector.text "A burden; a weight to be carried."
+                                , Test.Html.Selector.id "wsg_closeWordDefinition"
+                                ]
+                            )
+                       , admin.snapshotView 100 { name = "Word definition column" }
+
+                       -- The close button dismisses the column.
+                       , admin.click 100 (Dom.id "wsg_closeWordDefinition")
+                       , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                       ]
+            )
+        ]
+
+
+{-| On a narrower screen, clicking the played "LOAD" row overlays its definition on the board. The
+overlay has a close button and is also dismissed when the player interacts with their tray.
+-}
+wordDefinitionOverlayTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+wordDefinitionOverlayTest normalConfig =
+    let
+        pointerDown : ( Float, Float ) -> Json.Encode.Value
+        pointerDown ( x, y ) =
+            Json.Encode.object
+                [ ( "timeStamp", Json.Encode.float 0 )
+                , ( "pointerId", Json.Encode.int 0 )
+                , ( "clientX", Json.Encode.float x )
+                , ( "clientY", Json.Encode.float y )
+                ]
+    in
+    E2EHelper.startTest
+        "Word definition overlaid on the board"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            -- 1000px is below the 1300px column threshold, so the definition overlays the board. The
+            -- board sits 258px from the left here.
+            E2EHelper.tallDesktopWindow
+            (\admin _ ->
+                placeLoadSolo 258 admin
+                    ++ [ -- Clicking the move row overlays the definition on the board with a close button.
+                         admin.click 100 (Dom.id "wsg_moveWord_1")
+                       , admin.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                       , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "A burden; a weight to be carried."
+                                , Test.Html.Selector.id "wsg_closeWordDefinition"
+                                ]
+                            )
+                       , admin.snapshotView 100 { name = "Word definition overlay" }
+
+                       -- The close button dismisses the overlay.
+                       , admin.click 100 (Dom.id "wsg_closeWordDefinition")
+                       , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
+
+                       -- Re-open it, then grabbing a tray tile dismisses it. A drag is only recognised
+                       -- once the pointer moves after going down, so send both.
+                       , admin.click 100 (Dom.id "wsg_moveWord_1")
+                       , admin.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                       , admin.custom 100 (Dom.id "elm-ui-root-id") "pointerdown" (pointerDown (desktopTrayTile 258 0))
+                       , admin.custom 100 (Dom.id "elm-ui-root-id") "pointermove" (pointerDown (desktopTrayTile 258 0))
+                       , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                       ]
+            )
         ]
 
 
@@ -864,7 +1038,7 @@ checkGame expected shared =
 
             else
                 case ( expected.userHasPremove, userPlayer.premove ) of
-                    ( True, Just ( _, _, WordSpellingGame.IsValid ) ) ->
+                    ( True, Just ( _, _, WordSpellingGame.IsValid _ ) ) ->
                         Ok ()
 
                     ( True, Just ( _, _, WordSpellingGame.IsNotValid ) ) ->

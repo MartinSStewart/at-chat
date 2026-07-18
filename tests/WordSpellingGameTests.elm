@@ -202,7 +202,7 @@ tests =
                         testSetup
                         SeqDict.empty
                         (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Result.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Result.map (\( result, _ ) -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Ok ( [ word [ c, a, t ] ], 5 ))
             , Test.test "rejects a placement when the word does not exist" <|
                 \_ ->
@@ -224,7 +224,7 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ a, t ])
-                        |> Result.map (\result -> ( List.map .letters result.words, result.score ))
+                        |> Result.map (\( result, _ ) -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Ok ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
             , Test.test "rejects when a cross word does not exist even if the main word does" <|
                 \_ ->
@@ -254,8 +254,8 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 6, 4 ) False c [ t ])
-                        |> Result.map (\result -> List.map .letters result.words)
-                        |> Expect.equal (Ok [ [ Letter c, Wildcard, Letter t ] ])
+                        |> Result.map (\( result, matches ) -> ( List.map .letters result.words, matches ))
+                        |> Expect.equal (Ok ( [ [ Letter c, Wildcard, Letter t ] ], Set.singleton "A" ))
             , Test.test "a wildcard is rejected when no letter completes a word" <|
                 \_ ->
                     -- "c_t" has no completion in a word list that only contains "DOG".
@@ -284,8 +284,8 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 7, 4 ) False a [])
-                        |> Result.map (\result -> List.map .letters result.words)
-                        |> Expect.equal (Ok [ [ Wildcard, Letter a, Wildcard ] ])
+                        |> Result.map (\( result, matches ) -> ( List.map .letters result.words, matches ))
+                        |> Expect.equal (Ok ( [ [ Wildcard, Letter a, Wildcard ] ], Set.singleton "CT" ))
             , Test.test "two adjacent wildcards before a letter form a valid word (__C = ARC)" <|
                 \_ ->
                     -- Wildcards at (6,4) and (7,4), then C placed at (8,4), forms "__C", which the
@@ -300,8 +300,8 @@ tests =
                         testSetup
                         existing
                         (placedWord ( 8, 4 ) False c [])
-                        |> Result.map (\result -> List.map .letters result.words)
-                        |> Expect.equal (Ok [ [ Wildcard, Wildcard, Letter c ] ])
+                        |> Result.map (\( result, matches ) -> ( List.map .letters result.words, matches ))
+                        |> Expect.equal (Ok ( [ [ Wildcard, Wildcard, Letter c ] ], Set.singleton "AR" ))
             , Test.test "__C matches ARC even when A and R are not tile letters in the distribution" <|
                 \_ ->
                     -- The distribution only has C (plus wildcards), but a blank tile can stand for any
@@ -334,8 +334,24 @@ tests =
                         restrictedSetup
                         existing
                         (placedWord ( 8, 4 ) False c [])
-                        |> Result.map (\result -> List.map .letters result.words)
+                        |> Result.map (\( result, _ ) -> List.map .letters result.words)
                         |> Expect.equal (Ok [ [ Wildcard, Wildcard, Letter c ] ])
+            , Test.test "every valid wildcard fill-in is collected, not just the first" <|
+                \_ ->
+                    -- A wildcard sits between the placed C and T, and both "CAT" and "COT" are in
+                    -- the word list, so the returned fill-ins hold both A and O.
+                    let
+                        existing : SeqDict ( Int, Int ) LetterOrWildcard
+                        existing =
+                            SeqDict.fromList [ ( ( 7, 4 ), Wildcard ) ]
+                    in
+                    WordSpellingGame.validatePlacement
+                        (Set.fromList [ "CAT", "COT", "DOG" ])
+                        testSetup
+                        existing
+                        (placedWord ( 6, 4 ) False c [ t ])
+                        |> Result.map Tuple.second
+                        |> Expect.equal (Ok (Set.fromList [ "A", "O" ]))
             ]
         , Test.describe "validateSetup reads the letter distribution and values"
             [ Test.test "letters score the value chosen in the setup, whatever the alphabet" <|
