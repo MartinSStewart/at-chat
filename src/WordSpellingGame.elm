@@ -27,7 +27,7 @@ module WordSpellingGame exposing
     , UserStatus(..)
     , ValidatedSetup
     , WordDefinition(..)
-    , WordDefinitionData
+    , WordDefinitionData(..)
     , WordList(..)
     , ZoomAnimation
     , ZoomState
@@ -165,6 +165,8 @@ currentDefinitionWord open =
     List.Nonempty.get open.index open.words
 
 
+{-| OpaqueVariants
+-}
 type WordDefinitionData
     = WordDefinition_Loading
       -- Swedish has no dictionary API wired up, so a clicked Swedish word just says so.
