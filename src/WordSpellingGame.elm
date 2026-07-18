@@ -266,7 +266,7 @@ languageToString : Language -> String
 languageToString language =
     case language of
         English ->
-            "English (TWL06)"
+            "English (NWL23)"
 
         Swedish ->
             "Swedish (SAOl13)"
