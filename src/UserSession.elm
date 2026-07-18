@@ -163,31 +163,31 @@ isViewingGame guildOrDmId matchId viewing =
         Viewing_None ->
             False
 
-        Viewing_Dm id (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
+        Viewing_Dm _ (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
             isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
-        Viewing_Dm id _ ->
+        Viewing_Dm _ _ ->
             False
 
-        Viewing_DmThread id _ ->
+        Viewing_DmThread _ _ ->
             False
 
-        Viewing_DiscordDm id _ ->
+        Viewing_DiscordDm _ _ ->
             False
 
         Viewing_Channel _ _ (Just (ChannelHeaderTab_Games (Just viewingMatchId))) ->
             isViewing (GuildOrDmId guildOrDmId) NoThread viewing && (matchId == viewingMatchId)
 
-        Viewing_Channel id _ _ ->
+        Viewing_Channel _ _ _ ->
             False
 
-        Viewing_ChannelThread id _ _ ->
+        Viewing_ChannelThread _ _ _ ->
             False
 
-        Viewing_DiscordChannel id _ _ ->
+        Viewing_DiscordChannel _ _ _ ->
             False
 
-        Viewing_DiscordChannelThread id _ _ _ ->
+        Viewing_DiscordChannelThread _ _ _ _ ->
             False
 
 

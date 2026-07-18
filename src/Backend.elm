@@ -74,7 +74,7 @@ import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
-import String.Nonempty exposing (NonemptyString(..))
+import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
@@ -6080,6 +6080,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                         _ ->
                                             Err ()
 
+                        action2 : WordSpellingGame.ActionWithTime
                         action2 =
                             { action
                                 | time = time
@@ -6123,7 +6124,7 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                 matchId
                                 (WordSpellingGame.Action action2)
 
-                        ( shared2, descriptions ) =
+                        ( sharedNext, descriptions ) =
                             WordSpellingGame.updateAction setup action2 shared
 
                         notificationRoute : Route
@@ -6200,14 +6201,14 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             |> Tuple.mapSecond (\a -> a ++ cmds)
                                 )
                                 ( model.sessions, [] )
-                                (WordSpellingGame.nextTurnNotifications userToString notificationRoute shared descriptions shared2)
+                                (WordSpellingGame.nextTurnNotifications userToString notificationRoute shared descriptions sharedNext)
                     in
                     ( setChannel
                         { channel
                             | games =
                                 SeqDict.insert
                                     matchId
-                                    (Game.GameData_WordSpellingGame setup (Array.push action2 actions) shared2)
+                                    (Game.GameData_WordSpellingGame setup (Array.push action2 actions) sharedNext)
                                     channel.games
                         }
                         { model | sessions = userSessions2 }

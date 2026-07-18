@@ -455,7 +455,7 @@ wordSpellingGameEmail =
                 [] ->
                     Html.text "Failed to generate notification"
 
-        Err error ->
+        Err _ ->
             Html.text "Failed to generate notification"
 
 

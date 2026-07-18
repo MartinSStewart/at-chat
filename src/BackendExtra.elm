@@ -75,7 +75,6 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (RichText)
-import Route
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -88,7 +87,7 @@ import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, 
 import Unsafe
 import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (ChannelHeaderTab, DiscordFrontendUser, UserSession)
+import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
 import WordSpellingGame exposing (WordList(..))
 
@@ -508,7 +507,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                 InitialLoadRequested_Dm _ _ _ ->
                     IsAdminButNoData
 
-                InitialLoadRequested_DiscordGuild _ _ _ threadRoute ->
+                InitialLoadRequested_DiscordGuild _ _ _ _ ->
                     IsAdminButNoData
 
                 InitialLoadRequested_DiscordDm _ _ ->

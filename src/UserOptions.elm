@@ -9,7 +9,6 @@ import Effect.Lamdera exposing (ClientId)
 import EmailAddress
 import Env
 import Icons
-import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import LocalState exposing (AdminStatus(..), LocalState)

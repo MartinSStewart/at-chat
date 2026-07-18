@@ -2842,7 +2842,7 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     case viewing of
-                        ViewDm otherUserId tab messagesLoaded ->
+                        ViewDm otherUserId _ messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -2893,7 +2893,7 @@ changeUpdate localMsg local =
                                         local.discordDmChannels
                             }
 
-                        ViewChannel guildId channelId tab messagesLoaded ->
+                        ViewChannel guildId channelId _ messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser

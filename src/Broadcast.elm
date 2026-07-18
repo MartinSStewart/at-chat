@@ -9,7 +9,6 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
-    , notification
     , notificationAlt
     , notificationEmailContent
     , notificationEmailSubject
@@ -49,7 +48,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -70,7 +69,7 @@ import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Unsafe
-import Url exposing (Url)
+import Url
 import User exposing (BackendUser, EmailNotifications(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
