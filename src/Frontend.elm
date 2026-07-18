@@ -7250,7 +7250,7 @@ handleGameOutMsgs outMsgs model =
                                 (\result ->
                                     GameMsg (Game.WordSpellingGameMsg (WordSpellingGame.GotWordDefinition word result))
                                 )
-                                WordSpellingGame.definitionDecoder
+                                WordSpellingGame.decodeDefinition
                         }
                         :: cmds
                     )

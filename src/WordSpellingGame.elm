@@ -25,6 +25,7 @@ module WordSpellingGame exposing
     , TrayIndex(..)
     , UserStatus(..)
     , ValidatedSetup
+    , WordDefinition
     , WordList(..)
     , ZoomAnimation
     , ZoomState
@@ -33,8 +34,8 @@ module WordSpellingGame exposing
     , audio
     , boardTouchCoord
     , boardY
+    , decodeDefinition
     , definitionApiUrl
-    , definitionDecoder
     , dragEnd
     , dragStart
     , fullTrayBonusScore
@@ -315,8 +316,6 @@ type SetupMsg
     | PressedExpandAdvancedSettings
 
 
-{-| OpaqueVariants
--}
 type GameMsg
     = PressedSubmitWord PlacedWord
     | PressedJoinGame
@@ -4188,7 +4187,6 @@ wordDefinitionOverlay boardPx open data =
             , Ui.rounded 8
             , Ui.border 1
             , Ui.borderColor MyUi.border1
-            , Ui.width Ui.fill
             , Ui.height Ui.fill
             , Ui.clip
             , Ui.heightMin 0
@@ -4263,7 +4261,7 @@ wordDefinitionHeader open =
 
           else
             Ui.none
-        , Ui.el [ Ui.width Ui.fill ] Ui.none
+        , Ui.el [] Ui.none
         , MyUi.elButton
             (Dom.id "wsg_closeWordDefinition")
             PressedCloseWordDefinition
@@ -4334,6 +4332,7 @@ wordDefinitionBody word data =
                 )
 
 
+definitionCredits : Element msg
 definitionCredits =
     Ui.Prose.paragraph
         [ Ui.alignBottom
@@ -4355,7 +4354,7 @@ wordDefinitionEntryView entry =
             List.length entry.definitions > 1
     in
     Ui.column
-        [ Ui.spacing 6, Ui.width Ui.fill ]
+        [ Ui.spacing 6 ]
         (Ui.el [ Ui.Font.bold, Ui.Font.italic, Ui.Font.color MyUi.font3 ] (Ui.text entry.partOfSpeech)
             :: List.indexedMap
                 (\index def ->
@@ -6004,15 +6003,15 @@ definitionApiUrl word =
 returns a list of entries, each with a `meanings` array; the meanings across every entry are
 concatenated so callers get one list of `DictEntry`.
 -}
-definitionDecoder : Json.Decode.Decoder (List DictEntry)
-definitionDecoder =
+decodeDefinition : Json.Decode.Decoder (List DictEntry)
+decodeDefinition =
     Json.Decode.list
-        (Json.Decode.field "meanings" (Json.Decode.list dictEntryDecoder))
+        (Json.Decode.field "meanings" (Json.Decode.list decodeDictEntry))
         |> Json.Decode.map List.concat
 
 
-dictEntryDecoder : Json.Decode.Decoder DictEntry
-dictEntryDecoder =
+decodeDictEntry : Json.Decode.Decoder DictEntry
+decodeDictEntry =
     Json.Decode.map2 DictEntry
         (Json.Decode.field "partOfSpeech" Json.Decode.string)
         (Json.Decode.field "definitions"
