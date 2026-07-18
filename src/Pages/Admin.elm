@@ -96,7 +96,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser, LocalUser)
+import User exposing (AdminUiSection(..), BackendUser, EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
 
@@ -3813,7 +3813,7 @@ userTableView :
 userTableView timezone tableState users twoFactorAuthentication =
     Ui.Table.viewWithState
         tableAttributes
-        (userTableColumns timezone tableState twoFactorAuthentication)
+        (userTableColumns timezone tableState users twoFactorAuthentication)
         tableState.table
         (List.map
             (\( userId, user ) ->
@@ -4045,9 +4045,10 @@ userColumnToTitle userColumn =
 userTableColumns :
     Time.Zone
     -> UserTable
+    -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
     -> Ui.Table.Config Table.Model rowState ( UserTableId, EditedBackendUser ) Msg
-userTableColumns timezone tableState twoFactorAuthentication =
+userTableColumns timezone tableState users twoFactorAuthentication =
     Table.tableConfig
         (Dom.id "Admin_userTable")
         True
@@ -4170,6 +4171,35 @@ userTableColumns timezone tableState twoFactorAuthentication =
                                 case SeqDict.get userId twoFactorAuthentication of
                                     Just enabledAt ->
                                         Ui.text (MyUi.datestamp timezone enabledAt)
+
+                                    Nothing ->
+                                        Ui.none
+
+                            NewUserId _ ->
+                                Ui.none
+                        )
+          , sortBy = Nothing
+          }
+        , { title = "Email notifications"
+          , view =
+                \( userTableId, _ ) ->
+                    Ui.el
+                        [ cellBackgroundColor userTableId tableState
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 4
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        ]
+                        (case userTableId of
+                            ExistingUserId userId ->
+                                case NonemptyDict.get userId users of
+                                    Just user ->
+                                        case user.emailNotifications of
+                                            NeverNotifyMe ->
+                                                Ui.none
+
+                                            NotifyMeWhenMentioned ->
+                                                Ui.text "Enabled"
 
                                     Nothing ->
                                         Ui.none
