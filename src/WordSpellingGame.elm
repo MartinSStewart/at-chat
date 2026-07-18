@@ -80,6 +80,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Effect.Time as Time
 import Email.Html
+import Env
 import Go exposing (TimeControl)
 import Html
 import Html.Attributes
@@ -97,6 +98,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
 import Random
+import Route exposing (Route)
 import Scroll exposing (ScrollPosition(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -646,8 +648,8 @@ type GameEndReason
     | OutOfLetters (Id UserId)
 
 
-nextTurnNotifications : Shared -> List { userId : Id UserId, textMessage : String, htmlMessage : Email.Html.Html }
-nextTurnNotifications shared =
+nextTurnNotifications : Route -> Shared -> List { userId : Id UserId, pushNotificationText : String, emailText : String, emailHtml : Email.Html.Html }
+nextTurnNotifications route shared =
     let
         player =
             List.Nonempty.get shared.turnCount shared.players
@@ -658,8 +660,9 @@ nextTurnNotifications shared =
 
         Nothing ->
             [ { userId = player.userId
-              , textMessage = "It's your turn in the Word Spelling Game"
-              , htmlMessage = Debug.todo ""
+              , pushNotificationText = "It's your turn in the Word Spelling Game"
+              , emailText = "It's your turn in the Word Spelling Game " ++ Env.domain ++ Route.encode route
+              , emailHtml = Debug.todo ""
               }
             ]
 

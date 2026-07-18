@@ -66,7 +66,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import Route
+import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -6127,9 +6127,28 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                         shared2 =
                             WordSpellingGame.updateAction setup action2 shared |> Tuple.first
 
+                        notificationRoute : Route
+                        notificationRoute =
+                            case guildOrDmId of
+                                GuildOrDmId_Guild guildId channelId ->
+                                    Route.GuildRoute
+                                        guildId
+                                        (Route.ChannelRoute
+                                            channelId
+                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
+                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
+                                        )
+
+                                GuildOrDmId_Dm otherUserId ->
+                                    Route.DmRoute
+                                        { channelId = DmChannelId.fromUserIds session.userId otherUserId
+                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
+                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
+                                        }
+
                         ( userSessions2, notificationCmds ) =
                             List.foldl
-                                (\{ userId, textMessage, htmlMessage } ( userSessions, cmds ) ->
+                                (\{ userId, pushNotificationText, emailText, emailHtml } ( userSessions, cmds ) ->
                                     let
                                         alreadyViewing : Bool
                                         alreadyViewing =
@@ -6148,33 +6167,16 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
                                             userId
                                             (NonemptyString 'Y' "our turn!")
                                             (Env.domain ++ "/word-spelling-game-preview.webp")
-                                            textMessage
-                                            htmlMessage
-                                            (case guildOrDmId of
-                                                GuildOrDmId_Guild guildId channelId ->
-                                                    Route.GuildRoute
-                                                        guildId
-                                                        (Route.ChannelRoute
-                                                            channelId
-                                                            (Route.NoThreadWithFriends Nothing Route.HideMembersTab)
-                                                            (Just (UserSession.ChannelHeaderTab_Games (Just matchId)))
-                                                        )
-                                                        |> Just
-
-                                                GuildOrDmId_Dm otherUserId ->
-                                                    Route.DmRoute
-                                                        { channelId = DmChannelId.fromUserIds userId otherUserId
-                                                        , threadRoute = Route.NoThreadWithFriends Nothing Route.HideMembersTab
-                                                        , tab = Just (UserSession.ChannelHeaderTab_Games (Just matchId))
-                                                        }
-                                                        |> Just
-                                            )
+                                            pushNotificationText
+                                            emailText
+                                            emailHtml
+                                            (Just notificationRoute)
                                             userSessions
                                             model
                                             |> Tuple.mapSecond (\a -> a ++ cmds)
                                 )
                                 ( model.sessions, [] )
-                                (WordSpellingGame.nextTurnNotifications shared2)
+                                (WordSpellingGame.nextTurnNotifications notificationRoute shared2)
                     in
                     ( setChannel
                         { channel

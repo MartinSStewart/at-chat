@@ -744,6 +744,7 @@ notificationAlt :
     -> NonemptyString
     -> String
     -> String
+    -> String
     -> Email.Html.Html
     -> Maybe Route
     -> SeqDict SessionId UserSession
@@ -755,7 +756,7 @@ notificationAlt :
             , postmarkApiKey : Postmark.ApiKey
         }
     -> ( SeqDict SessionId UserSession, List (Command BackendOnly toMsg BackendMsg) )
-notificationAlt time userToNotify title icon plainText html navigateTo sessions model =
+notificationAlt time userToNotify title icon pushNotificationText emailText emailHtml navigateTo sessions model =
     let
         emailCmds : List (Command BackendOnly toMsg BackendMsg)
         emailCmds =
@@ -769,7 +770,7 @@ notificationAlt time userToNotify title icon plainText html navigateTo sessions 
                                 { from = { name = "", email = notificationEmailFrom }
                                 , to = List.Nonempty.fromElement { name = "", email = user.email }
                                 , subject = title
-                                , body = Postmark.BodyBoth html plainText
+                                , body = Postmark.BodyBoth emailHtml emailText
                                 , messageStream = "outbound"
                                 }
                             ]
@@ -794,7 +795,7 @@ notificationAlt time userToNotify title icon plainText html navigateTo sessions 
                             session.userId
                             time
                             (String.Nonempty.toString title)
-                            plainText
+                            pushNotificationText
                             icon
                             navigateTo
                             pushSubscription
