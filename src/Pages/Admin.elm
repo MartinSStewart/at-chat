@@ -4088,6 +4088,35 @@ userTableColumns timezone tableState twoFactorAuthentication =
                         )
           , sortBy = Nothing
           }
+        , { title = "Id"
+          , view =
+                \( userTableId, _ ) ->
+                    Ui.el
+                        [ Ui.paddingXY 8 4
+                        , Ui.Font.size 14
+                        , Ui.contentCenterY
+                        , cellBackgroundColor userTableId tableState
+                        , Ui.height Ui.fill
+                        ]
+                        (case userTableId of
+                            ExistingUserId userId ->
+                                Ui.text (Id.toString userId)
+
+                            NewUserId _ ->
+                                Ui.none
+                        )
+          , sortBy =
+                List.sortBy
+                    (\( userTableId, _ ) ->
+                        case userTableId of
+                            ExistingUserId userId ->
+                                ( 0, Id.toInt userId )
+
+                            NewUserId index ->
+                                ( 1, index )
+                    )
+                    |> Just
+          }
         , { title = userColumnToTitle NameColumn
           , view = tableCell False tableState NameColumn
           , sortBy = Just (List.sortBy (\( _, user ) -> user.name))
