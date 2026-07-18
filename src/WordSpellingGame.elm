@@ -137,11 +137,25 @@ type alias GameData =
 
 
 {-| The state of the word-definition popup. `WordDefinition_None` when nothing is open; otherwise
-the word that was clicked together with how far its lookup has got.
+the candidate words for the clicked Moves entry together with how far the lookup of the currently
+shown one has got.
 -}
 type WordDefinition
     = WordDefinition_None
-    | WordDefinition_Open String WordDefinitionData
+    | WordDefinition_Open OpenWordDefinition WordDefinitionData
+
+
+{-| The words an open definition popup can show: every dictionary word the clicked entry can stand
+for (a placement with wildcards can have several, see `definitionWords`), and which of them is
+currently shown. The header draws arrows to cycle through them when there's more than one.
+-}
+type alias OpenWordDefinition =
+    { words : Nonempty String, index : Int }
+
+
+currentDefinitionWord : OpenWordDefinition -> String
+currentDefinitionWord open =
+    List.Nonempty.get open.index open.words
 
 
 type WordDefinitionData
@@ -314,7 +328,9 @@ type GameMsg
     | MouseExitPlayerRow (Id UserId)
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
-    | PressedWordDefinition String
+    | PressedWordDefinition (Nonempty String)
+    | PressedPreviousWordDefinition
+    | PressedNextWordDefinition
     | PressedCloseWordDefinition
     | GotWordDefinition String (Result Http.Error (List DictEntry))
 
@@ -1671,32 +1687,26 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
                 Nothing ->
                     ( model, Nothing, Nothing )
 
-        PressedWordDefinition word ->
-            case setup.language of
-                English ->
-                    -- Kick off the dictionary lookup: show a loading popup and ask the frontend to
-                    -- fetch the definition (the third tuple element).
-                    ( { model | wordDefinition = WordDefinition_Open word WordDefinition_Loading }
-                    , Nothing
-                    , Just word
-                    )
+        PressedWordDefinition words ->
+            openWordDefinition { words = words, index = 0 } setup model
 
-                Swedish ->
-                    ( { model | wordDefinition = WordDefinition_Open word WordDefinition_SwedishUnsupported }
-                    , Nothing
-                    , Nothing
-                    )
+        PressedPreviousWordDefinition ->
+            cycleWordDefinition -1 setup model
+
+        PressedNextWordDefinition ->
+            cycleWordDefinition 1 setup model
 
         PressedCloseWordDefinition ->
             ( { model | wordDefinition = WordDefinition_None }, Nothing, Nothing )
 
         GotWordDefinition word result ->
             -- Only apply the response if the popup is still waiting on this exact word, so a slow
-            -- reply for a word the player has since closed or replaced can't clobber the popup.
+            -- reply for a word the player has since closed or replaced (or cycled away from) can't
+            -- clobber the popup.
             ( case model.wordDefinition of
-                WordDefinition_Open openWord WordDefinition_Loading ->
-                    if openWord == word then
-                        { model | wordDefinition = WordDefinition_Open word (definitionResultToData result) }
+                WordDefinition_Open open WordDefinition_Loading ->
+                    if currentDefinitionWord open == word then
+                        { model | wordDefinition = WordDefinition_Open open (definitionResultToData result) }
 
                     else
                         model
@@ -1706,6 +1716,42 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             , Nothing
             )
+
+
+{-| Show the definition popup for one of `open`'s candidate words: show a loading popup and ask
+the frontend to fetch the definition (the third tuple element). Swedish has no dictionary API
+wired up, so there the popup just says so.
+-}
+openWordDefinition : OpenWordDefinition -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+openWordDefinition open setup model =
+    case setup.language of
+        English ->
+            ( { model | wordDefinition = WordDefinition_Open open WordDefinition_Loading }
+            , Nothing
+            , Just (currentDefinitionWord open)
+            )
+
+        Swedish ->
+            ( { model | wordDefinition = WordDefinition_Open open WordDefinition_SwedishUnsupported }
+            , Nothing
+            , Nothing
+            )
+
+
+{-| Step the open definition popup to the previous (-1) or next (1) candidate word, wrapping
+around at both ends, and kick off the lookup of the newly shown word.
+-}
+cycleWordDefinition : Int -> ValidatedSetup -> GameData -> ( GameData, Maybe Action, Maybe String )
+cycleWordDefinition offset setup model =
+    case model.wordDefinition of
+        WordDefinition_Open open _ ->
+            openWordDefinition
+                { open | index = modBy (List.Nonempty.length open.words) (open.index + offset) }
+                setup
+                model
+
+        WordDefinition_None ->
+            ( model, Nothing, Nothing )
 
 
 {-| The tiles the local player has dragged onto the board this turn, paired with the letter each
@@ -3469,8 +3515,8 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             overlayAttr : Ui.Attribute GameMsg
             overlayAttr =
                 case ( wideEnough, model.wordDefinition ) of
-                    ( False, WordDefinition_Open word data ) ->
-                        Ui.inFront (wordDefinitionOverlay boardPx word data)
+                    ( False, WordDefinition_Open open data ) ->
+                        Ui.inFront (wordDefinitionOverlay boardPx open data)
 
                     _ ->
                         Ui.noAttr
@@ -3494,8 +3540,8 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
                 ++ (case ( wideEnough, model.wordDefinition ) of
-                        ( True, WordDefinition_Open word data ) ->
-                            [ wordDefinitionColumn windowSize setup word data ]
+                        ( True, WordDefinition_Open open data ) ->
+                            [ wordDefinitionColumn windowSize setup open data ]
 
                         _ ->
                             []
@@ -3988,11 +4034,11 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             Description_PlacedWord _ { word, wildcardMatches } ->
                                 -- A placed word is clickable: hovering highlights the row and clicking
                                 -- looks up its dictionary definition (see `PressedWordDefinition`).
-                                -- Any wildcards are resolved to the first fill-in the backend found
-                                -- valid, so the looked-up word is a real dictionary word.
+                                -- Any wildcards are resolved with the fill-ins the backend found
+                                -- valid, so the looked-up words are real dictionary words.
                                 MyUi.rowButton
                                     (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
-                                    (PressedWordDefinition (resolveWildcards wildcardMatches word))
+                                    (PressedWordDefinition (definitionWords wildcardMatches word))
                                     [ Ui.Font.color MyUi.font3
                                     , Ui.spacing 8
                                     , Ui.paddingXY 4 6
@@ -4104,8 +4150,8 @@ wideEnoughForDefinitionColumn windowSize =
 
 {-| The word definition shown as a column to the right of the status view (wide screens).
 -}
-wordDefinitionColumn : Coord CssPixels -> ValidatedSetup -> String -> WordDefinitionData -> Element GameMsg
-wordDefinitionColumn windowSize setup word data =
+wordDefinitionColumn : Coord CssPixels -> ValidatedSetup -> OpenWordDefinition -> WordDefinitionData -> Element GameMsg
+wordDefinitionColumn windowSize setup open data =
     Ui.column
         [ Ui.id (Dom.idToString wordDefinitionContainerId)
         , Ui.width (Ui.px wordDefinitionColumnWidth)
@@ -4116,10 +4162,10 @@ wordDefinitionColumn windowSize setup word data =
         , MyUi.noShrinking
         , Ui.clip
         ]
-        [ wordDefinitionHeader word
+        [ wordDefinitionHeader open
         , Ui.el
             [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8, Ui.heightMin 0 ]
-            (wordDefinitionBody word data)
+            (wordDefinitionBody (currentDefinitionWord open) data)
         ]
 
 
@@ -4127,8 +4173,8 @@ wordDefinitionColumn windowSize setup word data =
 square, not the tray below it, so the player can still grab a tile — which dismisses the popup
 (see `dragStartHelper`). A close button dismisses it too.
 -}
-wordDefinitionOverlay : Int -> String -> WordDefinitionData -> Element GameMsg
-wordDefinitionOverlay boardPx word data =
+wordDefinitionOverlay : Int -> OpenWordDefinition -> WordDefinitionData -> Element GameMsg
+wordDefinitionOverlay boardPx open data =
     Ui.el
         [ Ui.id (Dom.idToString wordDefinitionContainerId)
         , Ui.width (Ui.px boardPx)
@@ -4147,10 +4193,10 @@ wordDefinitionOverlay boardPx word data =
             , Ui.clip
             , Ui.heightMin 0
             ]
-            [ wordDefinitionHeader word
+            [ wordDefinitionHeader open
             , Ui.el
                 [ Ui.height Ui.fill, Ui.scrollable, Ui.paddingXY 16 8, Ui.heightMin 0 ]
-                (wordDefinitionBody word data)
+                (wordDefinitionBody (currentDefinitionWord open) data)
             ]
         )
 
@@ -4160,10 +4206,17 @@ wordDefinitionContainerId =
     Dom.id "wsg_wordDefinition"
 
 
-{-| The title bar of a word definition popup: the word plus a close button.
+{-| The title bar of a word definition popup: the currently shown word plus a close button. When
+the entry's wildcards allow several words, arrows cycle through them (wrapping around at both
+ends) with a "2/5"-style indicator of where in the list the shown word sits.
 -}
-wordDefinitionHeader : String -> Element GameMsg
-wordDefinitionHeader word =
+wordDefinitionHeader : OpenWordDefinition -> Element GameMsg
+wordDefinitionHeader open =
+    let
+        wordCount : Int
+        wordCount =
+            List.Nonempty.length open.words
+    in
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
@@ -4175,7 +4228,30 @@ wordDefinitionHeader word =
         , Ui.contentCenterY
         , Ui.background MyUi.background1
         ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.fill ] (Ui.text word)
+        [ Ui.el
+            [ Ui.Font.bold, Ui.Font.size 18, Ui.width Ui.shrink ]
+            (Ui.text (currentDefinitionWord open))
+        , if wordCount > 1 then
+            Ui.row
+                [ Ui.width Ui.shrink, Ui.contentCenterY ]
+                [ wordDefinitionArrow
+                    (Dom.id "wsg_previousWordDefinition")
+                    PressedPreviousWordDefinition
+                    "Previous word"
+                    (Icons.arrowLeft 16)
+                , Ui.el
+                    [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.width Ui.shrink, Ui.Font.noWrap ]
+                    (Ui.text (String.fromInt (open.index + 1) ++ "/" ++ String.fromInt wordCount))
+                , wordDefinitionArrow
+                    (Dom.id "wsg_nextWordDefinition")
+                    PressedNextWordDefinition
+                    "Next word"
+                    (Icons.arrowRight 16)
+                ]
+
+          else
+            Ui.none
+        , Ui.el [ Ui.width Ui.fill ] Ui.none
         , MyUi.elButton
             (Dom.id "wsg_closeWordDefinition")
             PressedCloseWordDefinition
@@ -4191,6 +4267,25 @@ wordDefinitionHeader word =
             ]
             (Ui.html Icons.x)
         ]
+
+
+{-| One of the arrow buttons that cycle the definition popup through its candidate words.
+-}
+wordDefinitionArrow : Dom.HtmlId -> GameMsg -> String -> Html.Html GameMsg -> Element GameMsg
+wordDefinitionArrow htmlId onPress label icon =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.width (Ui.px 32)
+        , Ui.height (Ui.px 42)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.rounded 4
+        , Ui.Font.color MyUi.font3
+        , Ui.Accessibility.description label
+        , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+        ]
+        (Ui.html icon)
 
 
 {-| The body of a word definition popup, which depends on how far the lookup has got.
@@ -4320,30 +4415,38 @@ headlineOrder word =
     ( negate word.placedCount, negate (List.length word.letters) )
 
 
-{-| Fill in the underscores of a rendered word (see `letterOrWildcardsToString`) with the first of
-the word's valid wildcard fill-ins, so e.g. "H\_P" with matches { "O", "I" } becomes "HOP". When
-there are no fill-ins to draw from (backend validation hasn't arrived yet) the word is returned
-unchanged.
+{-| Every dictionary word a Moves log entry can stand for: the rendered word (see
+`letterOrWildcardsToString`) with its underscores resolved by each of the valid wildcard fill-ins,
+so e.g. "H\_P" with matches { "O", "I" } gives HIP and HOP. When there are no fill-ins to draw
+from (backend validation hasn't arrived yet) the word is the only candidate, unchanged.
 -}
-resolveWildcards : Set String -> String -> String
-resolveWildcards wildcardMatches word =
-    case Set.toList wildcardMatches of
-        firstMatch :: _ ->
-            String.foldl
-                (\char ( remaining, resolved ) ->
-                    case ( char, remaining ) of
-                        ( '_', fillIn :: rest ) ->
-                            ( rest, resolved ++ String.fromChar fillIn )
-
-                        _ ->
-                            ( remaining, resolved ++ String.fromChar char )
-                )
-                ( String.toList firstMatch, "" )
-                word
-                |> Tuple.second
+definitionWords : Set String -> String -> Nonempty String
+definitionWords wildcardMatches word =
+    case List.map (\fillIns -> resolveWildcards fillIns word) (Set.toList wildcardMatches) of
+        first :: rest ->
+            Nonempty first rest
 
         [] ->
-            word
+            Nonempty word []
+
+
+{-| Fill in the underscores of a rendered word with one wildcard fill-in (one character per
+underscore, in order), so e.g. "H\_P" with "O" becomes "HOP".
+-}
+resolveWildcards : String -> String -> String
+resolveWildcards fillIns word =
+    String.foldl
+        (\char ( remaining, resolved ) ->
+            case ( char, remaining ) of
+                ( '_', fillIn :: rest ) ->
+                    ( rest, resolved ++ String.fromChar fillIn )
+
+                _ ->
+                    ( remaining, resolved ++ String.fromChar char )
+        )
+        ( String.toList fillIns, "" )
+        word
+        |> Tuple.second
 
 
 {-| Render placed tiles as uppercase text, showing a wildcard as an underscore since the board
