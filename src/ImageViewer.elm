@@ -808,7 +808,7 @@ closeButton =
         , Ui.paddingXY 16 16
         , Ui.Font.color MyUi.white
         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
-        , Ui.background (Ui.rgba 0 0 0 0.5)
+        , Ui.background MyUi.scrim
         ]
         (Ui.html Icons.x)
 
@@ -821,7 +821,7 @@ zoomButton htmlId onPress label =
         [ Ui.width (Ui.px 40)
         , Ui.height (Ui.px 40)
         , Ui.rounded 20
-        , Ui.background (Ui.rgba 0 0 0 0.5)
+        , Ui.background MyUi.scrim
         , Ui.Font.color MyUi.white
         , Ui.Font.size 24
         , Ui.contentCenterX

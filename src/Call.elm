@@ -1006,7 +1006,7 @@ green =
 
 red : Ui.Color
 red =
-    Ui.rgb 200 60 60
+    MyUi.dangerRed
 
 
 redBorder : Ui.Color

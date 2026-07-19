@@ -5883,7 +5883,7 @@ setupView windowSize isReadonly setup =
             ]
         , case setup.error of
             Just error ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50), padding ] (Ui.text error)
+                Ui.el [ Ui.Font.color MyUi.dangerRed, padding ] (Ui.text error)
 
             Nothing ->
                 Ui.none

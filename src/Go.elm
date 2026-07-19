@@ -1510,7 +1510,7 @@ setupView playingAgainstSelf windowSize model =
                 )
             , case model.error of
                 Just err ->
-                    Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
+                    Ui.el [ Ui.Font.color MyUi.dangerRed ] (Ui.text err)
 
                 Nothing ->
                     Ui.none
@@ -2132,7 +2132,7 @@ gameView currentTime windowSize localUser setup shared model =
             Ui.Lazy.lazy2 historyView shared model |> Ui.map SpectatorMsg
         , case model.lastError of
             Just err ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
+                Ui.el [ Ui.Font.color MyUi.dangerRed ] (Ui.text err)
 
             Nothing ->
                 Ui.none

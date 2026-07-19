@@ -332,7 +332,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
              , Html.Attributes.style "min-height" "100%"
              ]
                 ++ (if text == "" then
-                        [ Html.Attributes.style "color" "rgb(180,180,180)"
+                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
                         , Html.Attributes.style "white-space" "nowrap"
                         , Html.Attributes.style "text-overflow" "ellipsis"
                         , Html.Attributes.style "overflow" "hidden"
@@ -403,7 +403,7 @@ disabledTextarea placeholderText text attachedFiles local =
             , Html.Attributes.style "min-height" "100%"
             , Html.Attributes.style "color"
                 (if text == "" then
-                    "rgb(180,180,180)"
+                    (MyUi.colorToStyle MyUi.dimFont)
 
                  else
                     MyUi.colorToStyle MyUi.white

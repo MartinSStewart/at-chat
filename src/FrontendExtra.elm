@@ -1029,7 +1029,7 @@ externalLinkWarning domainWhitelist isMobile url =
     Ui.el
         [ Ui.behindContent
             (Ui.el
-                [ Ui.background (Ui.rgba 0 0 0 0.5)
+                [ Ui.background MyUi.scrim
                 , Ui.height Ui.fill
                 , Ui.Events.onClick PressedCloseExternalLinkWarning
                 ]

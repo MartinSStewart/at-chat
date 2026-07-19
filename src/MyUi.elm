@@ -24,11 +24,13 @@ module MyUi exposing
     , container
     , copyBox
     , css
+    , dangerRed
     , datestamp
     , datestampDate
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
+    , dimFont
     , disabledButtonBackground
     , elButton
     , emailAddress
@@ -68,8 +70,10 @@ module MyUi exposing
     , radioRowWithSeparators
     , replyToColor
     , rowButton
+    , scrim
     , scrollable
     , secondaryButton
+    , selectedHighlight
     , secondaryGray
     , secondaryGrayBorder
     , selectedTextBackground
@@ -85,6 +89,7 @@ module MyUi exposing
     , userLabelBackground
     , userLabelFontColor
     , userLabelHtml
+    , weakHoverHighlight
     , white
     , widthAttr
     )
@@ -1339,6 +1344,45 @@ errorColor =
 hoverHighlight : Ui.Color
 hoverHighlight =
     Ui.rgba 255 255 255 0.2
+
+
+{-| Weaker version of hoverHighlight, used when hovering rows that have no
+background of their own
+-}
+weakHoverHighlight : Ui.Color
+weakHoverHighlight =
+    Ui.rgba 255 255 255 0.1
+
+
+{-| Background for the currently selected item in a list of channels/rows
+-}
+selectedHighlight : Ui.Color
+selectedHighlight =
+    Ui.rgba 255 255 255 0.15
+
+
+{-| Dim gray for placeholder text and secondary metadata shown on dark
+backgrounds
+-}
+dimFont : Ui.Color
+dimFont =
+    Ui.rgb 180 180 180
+
+
+{-| Strong red for error text and dangerous state (mic muted, etc.). Icons.elm
+can't import this module so the mic slash in micOff hardcodes the same color.
+-}
+dangerRed : Ui.Color
+dangerRed =
+    Ui.rgb 200 60 60
+
+
+{-| Translucent black drawn behind modals or on top of images so overlaid
+content stays readable
+-}
+scrim : Ui.Color
+scrim =
+    Ui.rgba 0 0 0 0.5
 
 
 replyToColor : Ui.Color
