@@ -481,6 +481,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drawingMode = Drawing.init
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
+            , channelSearch = ""
             , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
             }
     in
@@ -4501,6 +4502,16 @@ updateLoaded msg model =
         PressedClearFriendsSearch ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn -> ( { loggedIn | friendsSearch = "" }, Command.none ))
+                model
+
+        TypedChannelSearch text ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | channelSearch = text }, Command.none ))
+                model
+
+        PressedClearChannelSearch ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
                 model
 
 

@@ -2347,6 +2347,12 @@ isPressMsg msg =
         PressedClearFriendsSearch ->
             True
 
+        TypedChannelSearch _ ->
+            False
+
+        PressedClearChannelSearch ->
+            True
+
         PressedExpandContainer _ ->
             True
 
