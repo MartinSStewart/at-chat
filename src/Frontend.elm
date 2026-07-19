@@ -5434,6 +5434,9 @@ setShowMembers showMembers model =
                             (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab)
                         )
 
+        GuildRoute _ _ ->
+            ( model, Command.none )
+
         DmRoute dmRoute ->
             case dmRoute.threadRoute of
                 NoThreadWithFriends a _ ->
@@ -5444,7 +5447,50 @@ setShowMembers showMembers model =
                         model
                         (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends threadId a showMembers })
 
-        _ ->
+        DiscordGuildRoute guildRoute ->
+            case guildRoute.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute tab ->
+                    (case threadRoute of
+                        NoThreadWithFriends a _ ->
+                            { guildRoute
+                                | channelRoute =
+                                    DiscordChannel_ChannelRoute channelId (NoThreadWithFriends a showMembers) tab
+                            }
+
+                        ViewThreadWithFriends threadId a _ ->
+                            { guildRoute
+                                | channelRoute =
+                                    DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab
+                            }
+                    )
+                        |> DiscordGuildRoute
+                        |> FrontendExtra.routePush model
+
+                _ ->
+                    ( model, Command.none )
+
+        DiscordDmRoute dmRoute ->
+            FrontendExtra.routePush model (DiscordDmRoute { dmRoute | showMembersTab = showMembers })
+
+        HomePageRoute ->
+            ( model, Command.none )
+
+        AdminRoute record ->
+            ( model, Command.none )
+
+        AiChatRoute ->
+            ( model, Command.none )
+
+        SlackOAuthRedirect result ->
+            ( model, Command.none )
+
+        TextEditorRoute ->
+            ( model, Command.none )
+
+        LinkDiscord result ->
+            ( model, Command.none )
+
+        PublicGoMatchRoute secretId ->
             ( model, Command.none )
 
 
