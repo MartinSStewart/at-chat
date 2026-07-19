@@ -1764,7 +1764,7 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
                      else
                         "7px 8px"
                     )
-                , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
                 , Html.Attributes.style "border-radius" "4px"
                 , Html.Attributes.style "font-size"
                     (if isMobile then
@@ -1773,8 +1773,8 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
                      else
                         "16px"
                     )
-                , Html.Attributes.style "background-color" "rgb(32,40,70)"
-                , Html.Attributes.style "color" "rgb(255,255,255)"
+                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
                 , Html.Attributes.style "cursor" "pointer"
                 , Html.Attributes.attribute "aria-label" labelText
                 ]

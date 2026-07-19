@@ -93,7 +93,7 @@ notificationView xOffset yOffset borderColor notification =
             Ui.noAttr
 
         NewMessage count ->
-            notificationHelper MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
+            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
 
         NewMessageForUser count ->
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
@@ -137,7 +137,7 @@ view mode guild =
                                 Ui.rounded (round (toFloat size * 8 / 50))
                         , MyUi.notoSans
                         , Ui.Font.weight 600
-                        , Ui.background (Ui.rgb 240 240 240)
+                        , Ui.background MyUi.secondaryGray
                         , Ui.border 1
                         , Ui.borderColor MyUi.secondaryGrayBorder
                         , Ui.centerX
@@ -289,7 +289,7 @@ addGuildButton htmlId isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.notoSans
         , Ui.Font.weight 600
-        , Ui.background (Ui.rgb 240 240 240)
+        , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
@@ -320,7 +320,7 @@ showFriendsButton isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.notoSans
         , Ui.Font.weight 600
-        , Ui.background (Ui.rgb 240 240 240)
+        , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then

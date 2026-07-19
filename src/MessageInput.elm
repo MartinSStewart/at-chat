@@ -339,7 +339,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                         ]
 
                     else
-                        [ Html.Attributes.style "color" "rgb(255,255,255)", Html.Attributes.style "white-space" "pre-wrap" ]
+                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white), Html.Attributes.style "white-space" "pre-wrap" ]
                    )
             )
             (case richText of
@@ -406,7 +406,7 @@ disabledTextarea placeholderText text attachedFiles local =
                     "rgb(180,180,180)"
 
                  else
-                    "rgb(255,255,255)"
+                    MyUi.colorToStyle MyUi.white
                 )
             ]
             (case String.Nonempty.fromString text of

@@ -8405,7 +8405,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         , Ui.Shadow.font
                             { offset = ( 0, 0 )
                             , blur = 3
-                            , color = Ui.rgb 0 0 0
+                            , color = MyUi.black
                             }
                         ]
                         (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
@@ -8421,7 +8421,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     , Ui.Shadow.font
                                         { offset = ( 0, 0 )
                                         , blur = 3
-                                        , color = Ui.rgb 0 0 0
+                                        , color = MyUi.black
                                         }
                                     ]
                                 |> Ui.inFront

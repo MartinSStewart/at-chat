@@ -1283,9 +1283,9 @@ emailNormalTextView text state =
 emailUserLabel : String -> Email.Html.Html
 emailUserLabel name =
     Email.Html.span
-        [ Email.Html.Attributes.backgroundColor "rgb(50,70,240)"
+        [ Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.userLabelBackground)
         , Email.Html.Attributes.padding "1px 1px 0 1px"
-        , Email.Html.Attributes.color "rgb(215,235,255)"
+        , Email.Html.Attributes.color (MyUi.colorToHex MyUi.userLabelFontColor)
         , Email.Html.Attributes.borderRadius "2px"
         , Email.Html.Attributes.style "white-space" "nowrap"
         ]
@@ -4214,7 +4214,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             ( index2 + String.length text
                             , Array.push
                                 (Html.span
-                                    [ Html.Attributes.style "color" "rgb(215,235,255)"
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.userLabelFontColor)
                                     , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
                                     , Html.Attributes.style "border-radius" "2px"
                                     ]
@@ -4399,7 +4399,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
                             [ Html.text text ]
                         )
@@ -4418,7 +4418,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
                             [ Html.text text ]
                         )

@@ -761,8 +761,8 @@ notificationEmailHtml text link shared =
                 []
                 [ Email.Html.a
                     [ Email.Html.Attributes.href link
-                    , Email.Html.Attributes.backgroundColor "#407ab2"
-                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
+                    , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
                     , Email.Html.Attributes.fontSize "14px"
                     , Email.Html.Attributes.padding "4px 8px"
                     , Email.Html.Attributes.borderRadius "4px"
@@ -4405,7 +4405,7 @@ wordDefinitionOverlay boardPx open data =
         , Ui.heightMin 0
         ]
         (Ui.column
-            [ Ui.background (Ui.rgba 14 20 40 0.85)
+            [ Ui.background (MyUi.colorWithAlpha 0.85 MyUi.background1)
             , Ui.rounded 8
             , Ui.border 1
             , Ui.borderColor MyUi.border1
@@ -5088,7 +5088,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                     , Ui.rounded (buttonSize // 6)
                     , Ui.contentCenterX
                     , Ui.contentCenterY
-                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.Font.color MyUi.white
                     , Ui.background MyUi.buttonBackground
                     , Ui.Font.center
                     , Ui.Font.bold
@@ -5206,11 +5206,11 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                         MyUi.buttonBackground
                                 )
                             , Ui.rounded (buttonSize // 5)
-                            , Ui.borderColor (Ui.rgb 255 255 255)
+                            , Ui.borderColor MyUi.white
                             , Ui.border 2
                             , Ui.contentCenterX
                             , Ui.contentCenterY
-                            , Ui.Font.color (Ui.rgb 255 255 255)
+                            , Ui.Font.color MyUi.white
                             ]
                             (Ui.html Icons.delete)
                         )
@@ -5329,11 +5329,11 @@ submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize curre
                     , Ui.height (Ui.px p.size)
                     , Ui.background color
                     , Ui.rounded (p.size // 4)
-                    , Ui.borderColor (Ui.rgb 255 255 255)
+                    , Ui.borderColor MyUi.white
                     , Ui.border 2
                     , Ui.contentCenterX
                     , Ui.contentCenterY
-                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.Font.color MyUi.white
                     ]
                     (Ui.html Icons.sendMessage)
                     |> Ui.inFront
@@ -5384,7 +5384,7 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                     MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
@@ -5417,7 +5417,7 @@ boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
                     MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , MyUi.noPointerEvents
             , tileScoreView setup cellSize2 letterOrWildcard
@@ -5468,10 +5468,10 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
             , Ui.Font.color
                 (if red then
-                    Ui.rgb 255 255 255
+                    MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , MyUi.noPointerEvents
             , tileScoreView setup cellSize2 letterOrWildcard

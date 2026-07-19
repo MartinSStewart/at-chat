@@ -1530,7 +1530,7 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                 , Ui.background MyUi.secondaryGray
                 , MyUi.focusEffect
                 , Ui.border 1
-                , Ui.Font.color (Ui.rgb 0 0 0)
+                , Ui.Font.color MyUi.black
                 , Ui.contentCenterX
                 , Ui.rounded 4
                 , Ui.paddingXY
@@ -1590,7 +1590,7 @@ sizeOptionView label status =
         [ Ui.el
             [ Ui.width (Ui.px 14)
             , Ui.height (Ui.px 14)
-            , Ui.background (Ui.rgb 255 255 255)
+            , Ui.background MyUi.white
             , Ui.rounded 7
             , Ui.borderColor
                 (case status of
@@ -1691,7 +1691,7 @@ inputBackgroundColor isReadonly =
     Html.Attributes.style
         "background-color"
         (if isReadonly then
-            "rgb(240,240,240)"
+            MyUi.colorToStyle MyUi.secondaryGray
 
          else
             "white"
