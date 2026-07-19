@@ -12,6 +12,7 @@ import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
 import Effect.Websocket as Websocket
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
@@ -226,6 +227,139 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
 
                                     _ ->
                                         Err "Backend loaded more than one custom emoji called \"newemoji\""
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Reaction with new custom emoji"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        let
+                            customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmojiData
+                            customEmojiNamed name data =
+                                SeqDict.values data.backend.customEmojis
+                                    |> List.filter (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name == name)
+
+                            lastMessageReactions :
+                                T.Data FrontendModel BackendModel
+                                -> Result String (List EmojiOrCustomEmoji)
+                            lastMessageReactions data =
+                                case SeqDict.get checkGuildVisibleMessageCountGuildId data.backend.discordGuilds of
+                                    Just guild ->
+                                        case SeqDict.get checkGuildVisibleMessageCountChannelId guild.channels of
+                                            Just channel ->
+                                                case IdArray.last channel.messages of
+                                                    Just message ->
+                                                        Message.reactionEmojis message |> SeqDict.keys |> Ok
+
+                                                    Nothing ->
+                                                        Err "The Discord guild channel has no messages"
+
+                                            Nothing ->
+                                                Err "The Discord guild channel is missing from the backend"
+
+                                    Nothing ->
+                                        Err "The Discord guild is missing from the backend"
+                        in
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-29T00:00:00.000000+00:00\",\"pinned\":false,\"nonce\":\"1500000000000000000\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1500000000000000001\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"React to this\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.checkState
+                            100
+                            (\data ->
+                                if List.isEmpty (customEmojiNamed "reactemoji" data) then
+                                    Ok ()
+
+                                else
+                                    Err "Backend already has the reaction's custom emoji loaded before the reaction was added"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_REACTION_ADD\",\"s\":5,\"op\":0,\"d\":{\"user_id\":\"161098476632014848\",\"message_id\":\"1500000000000000001\",\"emoji\":{\"id\":\"888159336168300600\",\"name\":\"reactemoji\"},\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"burst\":false}}"
+                        , T.checkState
+                            100
+                            (\data ->
+                                case lastMessageReactions data of
+                                    Ok [ EmojiOrCustomEmoji_CustomEmoji customEmojiId ] ->
+                                        case SeqDict.get customEmojiId data.backend.customEmojis of
+                                            Just customEmoji ->
+                                                if CustomEmoji.emojiNameToString customEmoji.name == "reactemoji" then
+                                                    case customEmoji.url of
+                                                        CustomEmoji.CustomEmojiInternal _ _ ->
+                                                            Ok ()
+
+                                                        CustomEmoji.CustomEmojiLoading ->
+                                                            Err "Backend registered the reaction's custom emoji but it is still in the loading state"
+
+                                                else
+                                                    Err
+                                                        ("The reaction points at the wrong custom emoji: "
+                                                            ++ CustomEmoji.emojiNameToString customEmoji.name
+                                                        )
+
+                                            Nothing ->
+                                                Err "The reaction's custom emoji id is missing from the backend customEmojis"
+
+                                    Ok [ EmojiOrCustomEmoji_Emoji _ ] ->
+                                        Err "The reaction was stored as a unicode emoji (the ❓ fallback) instead of a custom emoji"
+
+                                    Ok [] ->
+                                        Err "The reaction is missing from the message"
+
+                                    Ok _ ->
+                                        Err "Expected exactly one reaction on the message"
+
+                                    Err error ->
+                                        Err error
+                            )
+                        , T.checkState
+                            100
+                            (\data ->
+                                withAdminLocalState admin
+                                    data
+                                    (\local ->
+                                        case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
+                                            Just ( _, channel ) ->
+                                                case IdArray.last channel.messages of
+                                                    Just (Message.MessageLoaded message) ->
+                                                        case Message.reactionEmojis message |> SeqDict.keys of
+                                                            [ EmojiOrCustomEmoji_CustomEmoji _ ] ->
+                                                                Ok ()
+
+                                                            [ EmojiOrCustomEmoji_Emoji _ ] ->
+                                                                Err "The frontend received the reaction as a unicode emoji (the ❓ fallback) instead of a custom emoji"
+
+                                                            [] ->
+                                                                Err "The reaction is missing from the frontend's message"
+
+                                                            _ ->
+                                                                Err "Expected exactly one reaction on the frontend's message"
+
+                                                    Just Message.MessageUnloaded ->
+                                                        Err "The frontend's copy of the message is unloaded"
+
+                                                    Nothing ->
+                                                        Err "The Discord guild channel has no messages on the frontend"
+
+                                            Nothing ->
+                                                Err "The Discord guild channel is missing from the frontend"
+                                    )
                             )
                         ]
                     )
