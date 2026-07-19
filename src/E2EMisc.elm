@@ -224,7 +224,7 @@ channelSearchTest config =
                 , admin.checkView 100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId)
-                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels")
+                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Search channels")
                         ]
                     )
                 , admin.snapshotView 100 { name = "Channel search row in channel column" }
@@ -246,7 +246,7 @@ channelSearchTest config =
                     (Test.Html.Query.has
                         [ Test.Html.Selector.id "guild_openChannel_0"
                         , Test.Html.Selector.id "guild_openChannel_6"
-                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels")
+                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Search channels")
                         ]
                     )
                 ]

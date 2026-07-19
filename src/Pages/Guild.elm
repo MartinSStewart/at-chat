@@ -6722,7 +6722,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
             (Ui.html Icons.inviteUserIcon)
         ]
         (if showSearch then
-            channelSearchRow channelSearch
+            channelSearchRow isMobile channelSearch
 
          else
             Ui.none
@@ -6844,51 +6844,55 @@ channelColumnNoResults searchFilter channelRows =
 {-| Sits in its own row below the channel column header's bottom border. It is part of
 the fixed header area, not the scrollable channel list.
 -}
-channelSearchRow : String -> Element FrontendMsg_
-channelSearchRow channelSearch =
-    Ui.row
+channelSearchRow : Bool -> String -> Element FrontendMsg_
+channelSearchRow isMobile channelSearch =
+    Ui.el
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border1
         , MyUi.noShrinking
-        , Ui.paddingXY 8 6
         , Ui.spacing 4
-        ]
-        [ Ui.Input.text
-            [ Ui.id (Dom.idToString channelSearchInputId)
-            , Ui.background MyUi.inputBackground
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.border 1
-            , Ui.rounded 4
-            , Ui.paddingXY 8 4
-            , Ui.Font.color MyUi.font1
-            ]
-            { onChange = TypedChannelSearch
-            , text = channelSearch
-            , placeholder = Just "Filter channels"
-            , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
-            }
         , if channelSearch == "" then
             Ui.el
-                [ Ui.Font.color MyUi.font2
+                [ Ui.Font.color MyUi.font3
                 , Ui.width (Ui.px 32)
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
                 , Ui.paddingXY 6 0
+                , MyUi.noPointerEvents
+                , Ui.alignRight
                 ]
                 (Ui.html Icons.magnifyingGlass)
+                |> Ui.inFront
 
           else
             MyUi.elButton
                 (Dom.id "guild_clearChannelSearch")
                 PressedClearChannelSearch
-                [ Ui.Font.color MyUi.font2
+                [ Ui.Font.color MyUi.font3
                 , Ui.width (Ui.px 32)
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
                 , Ui.paddingXY 6 0
+                , Ui.background MyUi.inputBackground
+                , Ui.alignRight
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
                 ]
                 (Ui.html Icons.x)
+                |> Ui.inFront
         ]
+        (Ui.Input.text
+            [ Ui.id (Dom.idToString channelSearchInputId)
+            , Ui.background MyUi.inputBackground
+            , Ui.border 0
+            , Ui.paddingXY 8 8
+            , Ui.Font.color MyUi.font1
+            ]
+            { onChange = TypedChannelSearch
+            , text = channelSearch
+            , placeholder = Just "Search channels"
+            , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
+            }
+        )
 
 
 discordChannelColumn :
@@ -6958,7 +6962,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             (Ui.html Icons.inviteUserIcon)
         ]
         (if showSearch then
-            channelSearchRow channelSearch
+            channelSearchRow isMobile channelSearch
 
          else
             Ui.none
