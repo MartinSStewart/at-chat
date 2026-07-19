@@ -73,9 +73,9 @@ module MyUi exposing
     , scrim
     , scrollable
     , secondaryButton
-    , selectedHighlight
     , secondaryGray
     , secondaryGrayBorder
+    , selectedHighlight
     , selectedTextBackground
     , simpleButton
     , tabBackground

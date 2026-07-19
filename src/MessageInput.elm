@@ -403,7 +403,7 @@ disabledTextarea placeholderText text attachedFiles local =
             , Html.Attributes.style "min-height" "100%"
             , Html.Attributes.style "color"
                 (if text == "" then
-                    (MyUi.colorToStyle MyUi.dimFont)
+                    MyUi.colorToStyle MyUi.dimFont
 
                  else
                     MyUi.colorToStyle MyUi.white

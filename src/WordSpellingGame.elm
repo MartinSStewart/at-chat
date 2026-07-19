@@ -830,14 +830,12 @@ emailBoardCellView board lastPlaced position =
             cell
                 [ Email.Html.Attributes.backgroundColor
                     (if Set.member position lastPlaced then
-                        -- Fresh tile gold (see tileInFront).
-                        "#f0dc82"
+                        MyUi.colorToHex freshTileColor
 
                      else
-                        -- Committed tile gold (see boardTileInFront).
-                        "#baab67"
+                        MyUi.colorToHex committedTileColor
                     )
-                , Email.Html.Attributes.color "#000000"
+                , Email.Html.Attributes.color (MyUi.colorToHex MyUi.black)
                 , Email.Html.Attributes.fontSize "16px"
                 ]
                 (letterOrWildcardText letterOrWildcard)
@@ -862,7 +860,7 @@ emailBoardCellView board lastPlaced position =
 
                 Nothing ->
                     cell
-                        [ Email.Html.Attributes.backgroundColor "#fafafa" ]
+                        [ Email.Html.Attributes.backgroundColor (MyUi.colorToHex emptyCellColor) ]
                         "\u{00A0}"
 
 
@@ -3807,7 +3805,7 @@ playerRow localUser userId highlight isSelected suffix =
         , MyUi.htmlStyle
             "outline"
             (if isSelected then
-                "4px solid rgb(40, 90, 220)"
+                "4px solid " ++ MyUi.colorToStyle selectionBlue
 
              else
                 "0 solid rgba(0,0,0,0)"
@@ -3871,7 +3869,7 @@ mobilePlayerRow highlightedPlayer userId highlight user suffix =
         , Ui.border 2
         , Ui.borderColor
             (if highlightedPlayer == Just userId then
-                Ui.rgb 40 90 220
+                selectionBlue
 
              else
                 Ui.rgba 0 0 0 0
@@ -5281,6 +5279,34 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         boardLayer
 
 
+{-| Background of a tile placed this turn but not yet committed
+-}
+freshTileColor : Ui.Color
+freshTileColor =
+    Ui.rgb 240 220 130
+
+
+{-| Background of a tile from a previous turn
+-}
+committedTileColor : Ui.Color
+committedTileColor =
+    Ui.rgb 186 171 103
+
+
+{-| Background of an empty board cell with no bonus
+-}
+emptyCellColor : Ui.Color
+emptyCellColor =
+    Ui.rgb 250 250 250
+
+
+{-| Outline/border marking the selected or highlighted player
+-}
+selectionBlue : Ui.Color
+selectionBlue =
+    Ui.rgb 40 90 220
+
+
 premoveColor : Ui.Color
 premoveColor =
     Ui.rgb 98 43 227
@@ -5366,7 +5392,7 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                     premoveColor
 
                  else
-                    Ui.rgb 240 220 130
+                    freshTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5403,7 +5429,7 @@ boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
                     MyUi.replyToColor
 
                  else
-                    Ui.rgb 186 171 103
+                    committedTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5457,7 +5483,7 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
                     Ui.rgb 214 69 69
 
                  else
-                    Ui.rgb 186 171 103
+                    committedTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5554,7 +5580,7 @@ cellView cellSize2 position =
                 Ui.background (bonusCellColor specialCell)
 
             Nothing ->
-                Ui.background (Ui.rgb 250 250 250)
+                Ui.background emptyCellColor
         , Ui.width (Ui.px cellSize2)
         , Ui.height (Ui.px cellSize2)
 
