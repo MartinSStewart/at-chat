@@ -255,6 +255,7 @@ type alias LoggedIn2 =
     , drawingMode : Drawing.Model
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
+    , channelSearch : String
     , expandedUserOptions : SeqSet UserOptionSection
     }
 
@@ -582,6 +583,8 @@ type FrontendMsg_
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
     | TypedFriendsSearch String
     | PressedClearFriendsSearch
+    | TypedChannelSearch String
+    | PressedClearChannelSearch
 
 
 type alias NewChannelForm =

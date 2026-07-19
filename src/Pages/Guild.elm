@@ -3,6 +3,7 @@ module Pages.Guild exposing
     , HighlightMessage(..)
     , IsHovered(..)
     , channelMessageHtmlId
+    , channelSearchInputId
     , channelTextInputId
     , conversationContainerId
     , decodeMessageView
@@ -480,19 +481,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , Ui.Lazy.lazy6
-                                    (if canScroll2 then
-                                        channelColumnCanScrollMobile
-
-                                     else
-                                        channelColumnCannotScrollMobile
-                                    )
-                                    local.localUser
-                                    (nearestHour model.time)
-                                    guildId
-                                    guild
-                                    channelRoute
-                                    loggedIn.channelNameHover
+                                , channelColumnLazy True canScroll2 model loggedIn local.localUser guildId guild channelRoute
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -507,14 +496,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , Ui.Lazy.lazy6
-                                        channelColumnNotMobile
-                                        local.localUser
-                                        (nearestHour model.time)
-                                        guildId
-                                        guild
-                                        channelRoute
-                                        loggedIn.channelNameHover
+                                    , channelColumnLazy False True model loggedIn local.localUser guildId guild channelRoute
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -683,18 +665,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ GuildColumn.guildColumnLazy True model local
-                                , Ui.Lazy.lazy5
-                                    (if canScroll2 then
-                                        discordChannelColumnCanScrollMobile
-
-                                     else
-                                        discordChannelColumnCannotScrollMobile
-                                    )
-                                    (nearestHour model.time)
-                                    local.localUser
-                                    routeData
-                                    guild
-                                    loggedIn.channelNameHover
+                                , discordChannelColumnLazy True canScroll2 model loggedIn local.localUser routeData guild
                                 ]
                             , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
@@ -709,13 +680,7 @@ discordGuildView model routeData loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ GuildColumn.guildColumnLazy False model local
-                                    , Ui.Lazy.lazy5
-                                        discordChannelColumnNotMobile
-                                        (nearestHour model.time)
-                                        local.localUser
-                                        routeData
-                                        guild
-                                        loggedIn.channelNameHover
+                                    , discordChannelColumnLazy False True model loggedIn local.localUser routeData guild
                                     ]
                                 , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
@@ -6498,6 +6463,103 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
         |> Ui.html
 
 
+channelColumnLazy :
+    Bool
+    -> Bool
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> LocalUser
+    -> Id GuildId
+    -> FrontendGuild
+    -> ChannelRoute
+    -> Element FrontendMsg_
+channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild channelRoute =
+    let
+        searchHasFocus : Bool
+        searchHasFocus =
+            Maybe.map .htmlId loggedIn.textInputFocus == Just channelSearchInputId
+    in
+    if (loggedIn.channelSearch /= "") || searchHasFocus then
+        -- The search text changes too often for laziness to be worth it here
+        channelColumn
+            isMobile
+            (Time.millisToPosix (nearestHour model.time))
+            localUser
+            guildId
+            guild
+            channelRoute
+            loggedIn.channelNameHover
+            canScroll2
+            loggedIn.channelSearch
+            searchHasFocus
+
+    else
+        Ui.Lazy.lazy6
+            (if isMobile then
+                if canScroll2 then
+                    channelColumnCanScrollMobile
+
+                else
+                    channelColumnCannotScrollMobile
+
+             else
+                channelColumnNotMobile
+            )
+            localUser
+            (nearestHour model.time)
+            guildId
+            guild
+            channelRoute
+            loggedIn.channelNameHover
+
+
+discordChannelColumnLazy :
+    Bool
+    -> Bool
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> LocalUser
+    -> DiscordGuildRouteData
+    -> DiscordFrontendGuild
+    -> Element FrontendMsg_
+discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData guild =
+    let
+        searchHasFocus : Bool
+        searchHasFocus =
+            Maybe.map .htmlId loggedIn.textInputFocus == Just channelSearchInputId
+    in
+    if (loggedIn.channelSearch /= "") || searchHasFocus then
+        -- The search text changes too often for laziness to be worth it here
+        discordChannelColumn
+            isMobile
+            (Time.millisToPosix (nearestHour model.time))
+            localUser
+            routeData
+            guild
+            loggedIn.channelNameHover
+            canScroll2
+            loggedIn.channelSearch
+            searchHasFocus
+
+    else
+        Ui.Lazy.lazy5
+            (if isMobile then
+                if canScroll2 then
+                    discordChannelColumnCanScrollMobile
+
+                else
+                    discordChannelColumnCannotScrollMobile
+
+             else
+                discordChannelColumnNotMobile
+            )
+            (nearestHour model.time)
+            localUser
+            routeData
+            guild
+            loggedIn.channelNameHover
+
+
 channelColumnNotMobile :
     LocalUser
     -> Int
@@ -6507,7 +6569,7 @@ channelColumnNotMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnNotMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
+    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True "" False
 
 
 discordChannelColumnNotMobile :
@@ -6518,7 +6580,7 @@ discordChannelColumnNotMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnNotMobile time localUser routeData guild channelNameHover =
-    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild channelNameHover True
+    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild channelNameHover True "" False
 
 
 channelColumnCanScrollMobile :
@@ -6530,7 +6592,7 @@ channelColumnCanScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnCanScrollMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True "" False
 
 
 channelColumnCannotScrollMobile :
@@ -6542,7 +6604,7 @@ channelColumnCannotScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnCannotScrollMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False "" False
 
 
 discordChannelColumnCanScrollMobile :
@@ -6553,7 +6615,7 @@ discordChannelColumnCanScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnCanScrollMobile time localUser guildId guild channelNameHover =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover True
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover True "" False
 
 
 discordChannelColumnCannotScrollMobile :
@@ -6564,7 +6626,7 @@ discordChannelColumnCannotScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnCannotScrollMobile time localUser guildId guild channelNameHover =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover False
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover False "" False
 
 
 channelColumnContainer : List (Element msg) -> Element msg -> Element msg
@@ -6604,12 +6666,26 @@ channelColumn :
     -> ChannelRoute
     -> GuildChannelNameHover
     -> Bool
+    -> String
+    -> Bool
     -> Element FrontendMsg_
-channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 =
+channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 channelSearch searchHasFocus =
     let
         guildName : String
         guildName =
             GuildName.toString guild.name
+
+        showSearch : Bool
+        showSearch =
+            SeqDict.size guild.channels > channelSearchMinChannels
+
+        searchFilter : String
+        searchFilter =
+            if showSearch then
+                String.trim channelSearch |> String.toLower
+
+            else
+                ""
 
         directMentions : Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
@@ -6644,7 +6720,13 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                     Ui.none
     in
     channelColumnContainer
-        [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
+        [ (if showSearch then
+            channelSearchHeader channelSearch searchHasFocus
+
+           else
+            identity
+          )
+            (Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName))
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute)
@@ -6664,56 +6746,58 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
             , Ui.attrIf isMobile (Ui.height Ui.fill)
             , MyUi.bounceScroll isMobile
             ]
-            ((List.map
-                (\( channelId, channel ) ->
-                    let
-                        hasNotifications : ChannelNotificationType
-                        hasNotifications =
-                            GuildColumn.channelOrThreadHasNotifications
-                                directMentions
-                                (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+            ((SeqDict.toList guild.channels
+                |> List.filter (\( _, channel ) -> channelMatchesSearch searchFilter channel)
+                |> List.map
+                    (\( channelId, channel ) ->
+                        let
+                            hasNotifications : ChannelNotificationType
+                            hasNotifications =
+                                GuildColumn.channelOrThreadHasNotifications
+                                    directMentions
+                                    (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+                                    channelId
+                                    NoThread
+                                    (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
+                                    channel
+                        in
+                        ( channelSortName hasNotifications channel
+                        , Ui.column
+                            []
+                            [ channelColumnRow
+                                isMobile
+                                hasNotifications
+                                channelNameHover
+                                channelRoute
+                                guildId
                                 channelId
-                                NoThread
-                                (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
                                 channel
-                    in
-                    ( channelSortName hasNotifications channel
-                    , Ui.column
-                        []
-                        [ channelColumnRow
-                            isMobile
-                            hasNotifications
-                            channelNameHover
-                            channelRoute
-                            guildId
-                            channelId
-                            channel
-                        , channelColumnThreads
-                            isMobile
-                            time
-                            channelRoute
-                            directMentions
-                            localUser
-                            guildId
-                            channelId
-                            channel
-                            (case channelRoute of
-                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
-                                    if channelIdB == channelId then
-                                        SeqDict.insert threadMessageIndex Thread.frontendInit channel.threads
+                            , channelColumnThreads
+                                isMobile
+                                time
+                                channelRoute
+                                directMentions
+                                localUser
+                                guildId
+                                channelId
+                                channel
+                                (case channelRoute of
+                                    ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
+                                        if channelIdB == channelId then
+                                            SeqDict.insert threadMessageIndex Thread.frontendInit channel.threads
 
-                                    else
+                                        else
+                                            channel.threads
+
+                                    _ ->
                                         channel.threads
-
-                                _ ->
-                                    channel.threads
-                            )
-                        ]
+                                )
+                            ]
+                        )
                     )
-                )
-                (SeqDict.toList guild.channels)
                 |> List.sortBy Tuple.first
                 |> List.map Tuple.second
+                |> channelColumnNoResults searchFilter
              )
                 ++ [ newChannelButton ]
             )
@@ -6735,6 +6819,121 @@ channelSortName hasNotifications channel =
         ++ ChannelName.toString channel.name
 
 
+{-| The channel search input is only shown for guilds with more channels than this.
+-}
+channelSearchMinChannels : Int
+channelSearchMinChannels =
+    6
+
+
+channelSearchInputId : HtmlId
+channelSearchInputId =
+    Dom.id "guild_channelSearchInput"
+
+
+channelMatchesSearch : String -> { a | name : ChannelName } -> Bool
+channelMatchesSearch searchFilter channel =
+    (searchFilter == "")
+        || String.contains searchFilter (String.toLower (ChannelName.toString channel.name))
+
+
+channelColumnNoResults : String -> List (Element FrontendMsg_) -> List (Element FrontendMsg_)
+channelColumnNoResults searchFilter channelRows =
+    if (searchFilter /= "") && List.isEmpty channelRows then
+        [ Ui.Prose.paragraph
+            [ Ui.Font.italic
+            , Ui.Font.lineHeight 1.5
+            , Ui.Font.color MyUi.font2
+            , Ui.paddingXY 16 12
+            ]
+            [ Ui.text "No matching channels found" ]
+        ]
+
+    else
+        channelRows
+
+
+channelSearchHeader : String -> Bool -> Element FrontendMsg_ -> Element FrontendMsg_
+channelSearchHeader channelSearch searchHasFocus title =
+    let
+        searchIsVisible : Bool
+        searchIsVisible =
+            searchHasFocus || (channelSearch /= "")
+    in
+    Ui.el
+        [ Ui.height Ui.fill
+        , -- The search input is always in the DOM, invisible and covering the magnifying glass
+          -- icon so that clicking the icon focuses it. It has to stay in the DOM while hidden
+          -- because recreating it on press would drop the browser focus that reveals it.
+          Ui.inFront
+            (Ui.row
+                [ Ui.height Ui.fill ]
+                [ Ui.Input.text
+                    (Ui.id (Dom.idToString channelSearchInputId)
+                        :: (if searchIsVisible then
+                                [ Ui.background MyUi.background2
+                                , Ui.border 0
+                                , Ui.rounded 4
+                                , Ui.paddingXY 8 4
+                                , Ui.Font.color MyUi.font1
+                                , Ui.centerY
+                                ]
+
+                            else
+                                [ Ui.opacity 0
+                                , Ui.border 0
+                                , Ui.width (Ui.px 40)
+                                , Ui.alignRight
+                                , Ui.height Ui.fill
+                                , Ui.pointer
+                                ]
+                           )
+                    )
+                    { onChange = TypedChannelSearch
+                    , text = channelSearch
+                    , placeholder =
+                        if searchIsVisible then
+                            Just "Filter channels"
+
+                        else
+                            Nothing
+                    , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
+                    }
+                , if searchIsVisible then
+                    MyUi.elButton
+                        (Dom.id "guild_clearChannelSearch")
+                        PressedClearChannelSearch
+                        [ Ui.Font.color MyUi.font2
+                        , Ui.width (Ui.px 40)
+                        , Ui.paddingXY 8 0
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        ]
+                        (Ui.html Icons.x)
+
+                  else
+                    Ui.none
+                ]
+            )
+        ]
+        (Ui.row
+            [ Ui.height Ui.fill
+            , Ui.attrIf searchIsVisible (Ui.opacity 0)
+            ]
+            [ title
+            , Ui.el
+                [ Ui.Font.color MyUi.font2
+                , Ui.width (Ui.px 40)
+                , Ui.alignRight
+                , Ui.paddingXY 8 0
+                , Ui.height Ui.fill
+                , Ui.contentCenterY
+                ]
+                (Ui.html Icons.magnifyingGlass)
+            ]
+        )
+
+
 discordChannelColumn :
     Bool
     -> Time.Posix
@@ -6743,34 +6942,55 @@ discordChannelColumn :
     -> DiscordFrontendGuild
     -> GuildChannelNameHover
     -> Bool
+    -> String
+    -> Bool
     -> Element FrontendMsg_
-discordChannelColumn isMobile time localUser routeData guild channelNameHover canScroll2 =
+discordChannelColumn isMobile time localUser routeData guild channelNameHover canScroll2 channelSearch searchHasFocus =
     let
         guildName : String
         guildName =
             GuildName.toString guild.name
+
+        showSearch : Bool
+        showSearch =
+            SeqDict.size guild.channels > channelSearchMinChannels
+
+        searchFilter : String
+        searchFilter =
+            if showSearch then
+                String.trim channelSearch |> String.toLower
+
+            else
+                ""
 
         directMentions : Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
     channelColumnContainer
-        [ Ui.row
-            [ MyUi.hoverText guildName
-            , Ui.spacing 4
-            ]
-            [ Ui.el
-                [ Ui.background (Ui.rgb 88 101 242)
-                , Ui.rounded 99
-                , Ui.padding 3
-                , Ui.border 1
-                , Ui.borderColor MyUi.background1
-                , Ui.width Ui.shrink
-                , MyUi.noShrinking
+        [ (if showSearch then
+            channelSearchHeader channelSearch searchHasFocus
+
+           else
+            identity
+          )
+            (Ui.row
+                [ MyUi.hoverText guildName
+                , Ui.spacing 4
                 ]
-                (Ui.html Icons.discord)
-            , Ui.text guildName
-            ]
+                [ Ui.el
+                    [ Ui.background (Ui.rgb 88 101 242)
+                    , Ui.rounded 99
+                    , Ui.padding 3
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.background1
+                    , Ui.width Ui.shrink
+                    , MyUi.noShrinking
+                    ]
+                    (Ui.html Icons.discord)
+                , Ui.text guildName
+                ]
+            )
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
@@ -6795,54 +7015,56 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             , Ui.attrIf isMobile (Ui.height Ui.fill)
             , MyUi.bounceScroll isMobile
             ]
-            (List.map
-                (\( channelId, channel ) ->
-                    let
-                        hasNotifications : ChannelNotificationType
-                        hasNotifications =
-                            GuildColumn.channelOrThreadHasNotifications
-                                directMentions
-                                (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
+            (SeqDict.toList guild.channels
+                |> List.filter (\( _, channel ) -> channelMatchesSearch searchFilter channel)
+                |> List.map
+                    (\( channelId, channel ) ->
+                        let
+                            hasNotifications : ChannelNotificationType
+                            hasNotifications =
+                                GuildColumn.channelOrThreadHasNotifications
+                                    directMentions
+                                    (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
+                                    channelId
+                                    NoThread
+                                    (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
+                                    channel
+                        in
+                        ( channelSortName hasNotifications channel
+                        , Ui.column
+                            []
+                            [ discordChannelColumnRow
+                                isMobile
+                                hasNotifications
+                                channelNameHover
+                                routeData
                                 channelId
-                                NoThread
-                                (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
                                 channel
-                    in
-                    ( channelSortName hasNotifications channel
-                    , Ui.column
-                        []
-                        [ discordChannelColumnRow
-                            isMobile
-                            hasNotifications
-                            channelNameHover
-                            routeData
-                            channelId
-                            channel
-                        , discordChannelColumnThreads
-                            isMobile
-                            time
-                            routeData
-                            directMentions
-                            localUser
-                            channelId
-                            channel
-                            (case routeData.channelRoute of
-                                DiscordChannel_ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
-                                    if channelIdB == channelId then
-                                        SeqDict.insert threadMessageIndex Thread.discordFrontendInit channel.threads
+                            , discordChannelColumnThreads
+                                isMobile
+                                time
+                                routeData
+                                directMentions
+                                localUser
+                                channelId
+                                channel
+                                (case routeData.channelRoute of
+                                    DiscordChannel_ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
+                                        if channelIdB == channelId then
+                                            SeqDict.insert threadMessageIndex Thread.discordFrontendInit channel.threads
 
-                                    else
+                                        else
+                                            channel.threads
+
+                                    _ ->
                                         channel.threads
-
-                                _ ->
-                                    channel.threads
-                            )
-                        ]
+                                )
+                            ]
+                        )
                     )
-                )
-                (SeqDict.toList guild.channels)
                 |> List.sortBy Tuple.first
                 |> List.map Tuple.second
+                |> channelColumnNoResults searchFilter
             )
         )
 
