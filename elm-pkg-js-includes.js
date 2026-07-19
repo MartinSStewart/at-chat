@@ -7,6 +7,7 @@ const setFavicon = require('./elm-pkg-js/set-favicon.js');
 const cropImage = require('./elm-pkg-js/crop-image.js');
 const voiceChat = require('./elm-pkg-js/voice-chat.js');
 const audio = require('./elm-pkg-js/audio.js');
+const pinTextareaScroll = require('./elm-pkg-js/pin-textarea-scroll.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -17,4 +18,5 @@ exports.init = async function init(app) {
   cropImage.init(app);
   voiceChat.init(app);
   audio.init(app);
+  pinTextareaScroll.init(app);
 }

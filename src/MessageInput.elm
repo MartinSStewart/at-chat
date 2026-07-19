@@ -202,6 +202,18 @@ isPress msg =
             False
 
 
+{-| The textarea's text is hidden underneath the formatted text overlay so the two must line-break at exactly the same points, otherwise the overlay stops covering the textarea's (red) text. Browsers don't all use the same UA defaults for these properties on textareas, so set them explicitly to match what the overlay div gets. The data attribute lets JS (elm-pkg-js/pin-textarea-scroll.js) keep the textarea's internal scroll position pinned at 0 to match the overlay, which can't scroll (mobile browsers in particular will otherwise sometimes scroll the textarea to keep the caret in view, even though it has overflow hidden).
+-}
+overlayAlignmentAttributes : List (Html.Attribute msg)
+overlayAlignmentAttributes =
+    [ Html.Attributes.style "box-sizing" "content-box"
+    , Html.Attributes.style "white-space" "pre-wrap"
+    , Html.Attributes.style "overflow-wrap" "anywhere"
+    , Html.Attributes.style "word-break" "normal"
+    , Html.Attributes.attribute "data-pin-scroll" ""
+    ]
+
+
 textarea :
     Bool
     -> HtmlId
@@ -252,76 +264,78 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
         , RichText.bigEmojiFont
         ]
         [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "font-family" "inherit"
-            , Html.Attributes.style "line-height" "inherit"
-            , Html.Attributes.style "width" "calc(100% - 18px)"
-            , Html.Attributes.style "height" "100%"
-            , Dom.idToAttribute channelTextInputId
-            , Html.Attributes.style "background-color" "transparent"
-            , Html.Attributes.style "border" "0"
-            , Html.Attributes.style "resize" "none"
-            , Html.Attributes.style "overflow" "hidden"
-            , Html.Attributes.style "caret-color" "white"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "outline" "none"
-            , Html.Events.onClick PressedTextInput
-            , Html.Events.preventDefaultOn
-                "paste"
-                (Json.Decode.at
-                    [ "clipboardData", "files" ]
-                    (Json.Decode.Extra.collection File.decoder)
-                    |> Json.Decode.andThen
-                        (\list ->
-                            case List.Nonempty.fromList list of
-                                Just nonempty ->
-                                    Json.Decode.succeed ( OnPasteFiles nonempty, True )
+            (overlayAlignmentAttributes
+                ++ [ Html.Attributes.style "color" "rgba(255,0,0,1)"
+                   , Html.Attributes.style "position" "absolute"
+                   , Html.Attributes.style "font-size" "inherit"
+                   , Html.Attributes.style "font-family" "inherit"
+                   , Html.Attributes.style "line-height" "inherit"
+                   , Html.Attributes.style "width" "calc(100% - 18px)"
+                   , Html.Attributes.style "height" "100%"
+                   , Dom.idToAttribute channelTextInputId
+                   , Html.Attributes.style "background-color" "transparent"
+                   , Html.Attributes.style "border" "0"
+                   , Html.Attributes.style "resize" "none"
+                   , Html.Attributes.style "overflow" "hidden"
+                   , Html.Attributes.style "caret-color" "white"
+                   , Html.Attributes.style "padding" "8px"
+                   , Html.Attributes.style "outline" "none"
+                   , Html.Events.onClick PressedTextInput
+                   , Html.Events.preventDefaultOn
+                        "paste"
+                        (Json.Decode.at
+                            [ "clipboardData", "files" ]
+                            (Json.Decode.Extra.collection File.decoder)
+                            |> Json.Decode.andThen
+                                (\list ->
+                                    case List.Nonempty.fromList list of
+                                        Just nonempty ->
+                                            Json.Decode.succeed ( OnPasteFiles nonempty, True )
+
+                                        Nothing ->
+                                            Json.Decode.fail ""
+                                )
+                        )
+                   , case textInputFocus of
+                        Just textInputFocus2 ->
+                            case textInputFocus2.dropdown of
+                                Just { dropdownIndex } ->
+                                    Html.Events.preventDefaultOn
+                                        "keydown"
+                                        (Json.Decode.andThen
+                                            (\key ->
+                                                case key of
+                                                    "ArrowDown" ->
+                                                        Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex + 1), True )
+
+                                                    "ArrowUp" ->
+                                                        Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex - 1), True )
+
+                                                    "Enter" ->
+                                                        Json.Decode.succeed
+                                                            ( PressedDropdownItem dropdownIndex, True )
+
+                                                    "PageUp" ->
+                                                        Json.Decode.succeed ( TypedPageUp, True )
+
+                                                    "PageDown" ->
+                                                        Json.Decode.succeed ( TypedPageDown, True )
+
+                                                    _ ->
+                                                        Json.Decode.fail ""
+                                            )
+                                            (Json.Decode.field "key" Json.Decode.string)
+                                        )
 
                                 Nothing ->
-                                    Json.Decode.fail ""
-                        )
-                )
-            , case textInputFocus of
-                Just textInputFocus2 ->
-                    case textInputFocus2.dropdown of
-                        Just { dropdownIndex } ->
-                            Html.Events.preventDefaultOn
-                                "keydown"
-                                (Json.Decode.andThen
-                                    (\key ->
-                                        case key of
-                                            "ArrowDown" ->
-                                                Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex + 1), True )
-
-                                            "ArrowUp" ->
-                                                Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex - 1), True )
-
-                                            "Enter" ->
-                                                Json.Decode.succeed
-                                                    ( PressedDropdownItem dropdownIndex, True )
-
-                                            "PageUp" ->
-                                                Json.Decode.succeed ( TypedPageUp, True )
-
-                                            "PageDown" ->
-                                                Json.Decode.succeed ( TypedPageDown, True )
-
-                                            _ ->
-                                                Json.Decode.fail ""
-                                    )
-                                    (Json.Decode.field "key" Json.Decode.string)
-                                )
+                                    keyDownNoDropdown
 
                         Nothing ->
                             keyDownNoDropdown
-
-                Nothing ->
-                    keyDownNoDropdown
-            , Html.Events.onInput TypedMessage
-            , Html.Attributes.value text
-            ]
+                   , Html.Events.onInput TypedMessage
+                   , Html.Attributes.value text
+                   ]
+            )
             []
         , Html.div
             ([ Html.Attributes.style "pointer-events" "none"
@@ -375,23 +389,25 @@ disabledTextarea placeholderText text attachedFiles local =
         , Html.Attributes.style "height" "fit-content"
         ]
         [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "font-family" "inherit"
-            , Html.Attributes.style "line-height" "inherit"
-            , Html.Attributes.style "width" "calc(100% - 18px)"
-            , Html.Attributes.style "height" "100%"
-            , Html.Attributes.style "background-color" "transparent"
-            , Html.Attributes.style "border" "0"
-            , Html.Attributes.style "resize" "none"
-            , Html.Attributes.style "overflow" "hidden"
-            , Html.Attributes.style "caret-color" "white"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "outline" "none"
-            , Html.Attributes.value text
-            , Html.Attributes.disabled True
-            ]
+            (overlayAlignmentAttributes
+                ++ [ Html.Attributes.style "color" "rgba(255,0,0,1)"
+                   , Html.Attributes.style "position" "absolute"
+                   , Html.Attributes.style "font-size" "inherit"
+                   , Html.Attributes.style "font-family" "inherit"
+                   , Html.Attributes.style "line-height" "inherit"
+                   , Html.Attributes.style "width" "calc(100% - 18px)"
+                   , Html.Attributes.style "height" "100%"
+                   , Html.Attributes.style "background-color" "transparent"
+                   , Html.Attributes.style "border" "0"
+                   , Html.Attributes.style "resize" "none"
+                   , Html.Attributes.style "overflow" "hidden"
+                   , Html.Attributes.style "caret-color" "white"
+                   , Html.Attributes.style "padding" "8px"
+                   , Html.Attributes.style "outline" "none"
+                   , Html.Attributes.value text
+                   , Html.Attributes.disabled True
+                   ]
+            )
             []
         , Html.div
             [ Html.Attributes.style "pointer-events" "none"
