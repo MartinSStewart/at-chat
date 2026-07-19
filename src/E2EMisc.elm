@@ -204,7 +204,7 @@ channelSearchTest config =
                 , admin.input 100 (Dom.id "newGuildName") "My new guild!"
                 , admin.click 100 (Dom.id "guild_createGuildSubmit")
 
-                -- The search input only appears for guilds with more than 6 channels.
+                -- The search row only appears for guilds with more than 6 channels.
                 , admin.checkView 100
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId) ]
@@ -220,36 +220,27 @@ channelSearchTest config =
                     [ "alpha", "beta", "gamma", "delta", "epsilon", "zeta" ]
                     |> T.group
 
-                -- With 7 channels the search input exists, but it is transparent until it gets
-                -- focus, so its placeholder text is used to detect whether it is shown or not.
+                -- With 7 channels the search row appears below the header.
                 , admin.checkView 100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId) ]
+                        [ Test.Html.Selector.id (Dom.idToString Pages.Guild.channelSearchInputId)
+                        , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels")
+                        ]
                     )
-                , admin.checkView 100
-                    (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels") ]
-                    )
-                , focusSearchInput Pages.Guild.channelSearchInputId admin
-                , admin.checkView 100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels") ]
-                    )
-                , admin.snapshotView 100 { name = "Channel search input open" }
+                , admin.snapshotView 100 { name = "Channel search row in channel column" }
                 , admin.input 100 Pages.Guild.channelSearchInputId "zeta"
                 , admin.checkView 100
                     (Test.Html.Query.has [ Test.Html.Selector.id "guild_openChannel_6" ])
                 , admin.checkView 100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_0" ])
-                , admin.snapshotView 100 { name = "Channel search input filters channel column" }
+                , admin.snapshotView 100 { name = "Channel search row filters channel column" }
                 , admin.input 100 Pages.Guild.channelSearchInputId "does not match any channel"
                 , admin.checkView 100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_6" ])
                 , admin.checkView 100
                     (Test.Html.Query.has [ Test.Html.Selector.exactText "No matching channels found" ])
 
-                -- Clearing the text shows all channels again, and the input stays visible
-                -- because it still has focus.
+                -- Clearing the text shows all channels again.
                 , admin.click 100 (Dom.id "guild_clearChannelSearch")
                 , admin.checkView 100
                     (Test.Html.Query.has
@@ -257,13 +248,6 @@ channelSearchTest config =
                         , Test.Html.Selector.id "guild_openChannel_6"
                         , Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels")
                         ]
-                    )
-
-                -- Once the empty input loses focus it becomes transparent again.
-                , E2EHelper.focusEvent admin 100 Nothing Nothing
-                , admin.checkView 100
-                    (Test.Html.Query.hasNot
-                        [ Test.Html.Selector.attribute (Html.Attributes.placeholder "Filter channels") ]
                     )
                 ]
             )

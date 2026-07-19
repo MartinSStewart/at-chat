@@ -6474,12 +6474,7 @@ channelColumnLazy :
     -> ChannelRoute
     -> Element FrontendMsg_
 channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild channelRoute =
-    let
-        searchHasFocus : Bool
-        searchHasFocus =
-            Maybe.map .htmlId loggedIn.textInputFocus == Just channelSearchInputId
-    in
-    if (loggedIn.channelSearch /= "") || searchHasFocus then
+    if loggedIn.channelSearch /= "" then
         -- The search text changes too often for laziness to be worth it here
         channelColumn
             isMobile
@@ -6491,7 +6486,6 @@ channelColumnLazy isMobile canScroll2 model loggedIn localUser guildId guild cha
             loggedIn.channelNameHover
             canScroll2
             loggedIn.channelSearch
-            searchHasFocus
 
     else
         Ui.Lazy.lazy6
@@ -6523,12 +6517,7 @@ discordChannelColumnLazy :
     -> DiscordFrontendGuild
     -> Element FrontendMsg_
 discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData guild =
-    let
-        searchHasFocus : Bool
-        searchHasFocus =
-            Maybe.map .htmlId loggedIn.textInputFocus == Just channelSearchInputId
-    in
-    if (loggedIn.channelSearch /= "") || searchHasFocus then
+    if loggedIn.channelSearch /= "" then
         -- The search text changes too often for laziness to be worth it here
         discordChannelColumn
             isMobile
@@ -6539,7 +6528,6 @@ discordChannelColumnLazy isMobile canScroll2 model loggedIn localUser routeData 
             loggedIn.channelNameHover
             canScroll2
             loggedIn.channelSearch
-            searchHasFocus
 
     else
         Ui.Lazy.lazy5
@@ -6569,7 +6557,7 @@ channelColumnNotMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnNotMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True "" False
+    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True ""
 
 
 discordChannelColumnNotMobile :
@@ -6580,7 +6568,7 @@ discordChannelColumnNotMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnNotMobile time localUser routeData guild channelNameHover =
-    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild channelNameHover True "" False
+    discordChannelColumn False (Time.millisToPosix time) localUser routeData guild channelNameHover True ""
 
 
 channelColumnCanScrollMobile :
@@ -6592,7 +6580,7 @@ channelColumnCanScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnCanScrollMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True "" False
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True ""
 
 
 channelColumnCannotScrollMobile :
@@ -6604,7 +6592,7 @@ channelColumnCannotScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 channelColumnCannotScrollMobile localUser time guildId guild channelRoute channelNameHover =
-    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False "" False
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False ""
 
 
 discordChannelColumnCanScrollMobile :
@@ -6615,7 +6603,7 @@ discordChannelColumnCanScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnCanScrollMobile time localUser guildId guild channelNameHover =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover True "" False
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover True ""
 
 
 discordChannelColumnCannotScrollMobile :
@@ -6626,11 +6614,11 @@ discordChannelColumnCannotScrollMobile :
     -> GuildChannelNameHover
     -> Element FrontendMsg_
 discordChannelColumnCannotScrollMobile time localUser guildId guild channelNameHover =
-    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover False "" False
+    discordChannelColumn True (Time.millisToPosix time) localUser guildId guild channelNameHover False ""
 
 
-channelColumnContainer : List (Element msg) -> Element msg -> Element msg
-channelColumnContainer header content =
+channelColumnContainer : List (Element msg) -> Element msg -> Element msg -> Element msg
+channelColumnContainer header subHeader content =
     Ui.el
         [ Ui.height Ui.fill, MyUi.htmlStyle "padding-top" MyUi.insetTop ]
         (Ui.column
@@ -6652,6 +6640,7 @@ channelColumnContainer header content =
                 , Ui.clipWithEllipsis
                 ]
                 header
+            , subHeader
             , content
             ]
         )
@@ -6667,9 +6656,8 @@ channelColumn :
     -> GuildChannelNameHover
     -> Bool
     -> String
-    -> Bool
     -> Element FrontendMsg_
-channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 channelSearch searchHasFocus =
+channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 channelSearch =
     let
         guildName : String
         guildName =
@@ -6720,13 +6708,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                     Ui.none
     in
     channelColumnContainer
-        [ (if showSearch then
-            channelSearchHeader channelSearch searchHasFocus
-
-           else
-            identity
-          )
-            (Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName))
+        [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute)
@@ -6739,6 +6721,12 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
             ]
             (Ui.html Icons.inviteUserIcon)
         ]
+        (if showSearch then
+            channelSearchRow channelSearch
+
+         else
+            Ui.none
+        )
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -6853,85 +6841,54 @@ channelColumnNoResults searchFilter channelRows =
         channelRows
 
 
-channelSearchHeader : String -> Bool -> Element FrontendMsg_ -> Element FrontendMsg_
-channelSearchHeader channelSearch searchHasFocus title =
-    let
-        searchIsVisible : Bool
-        searchIsVisible =
-            searchHasFocus || (channelSearch /= "")
-    in
-    Ui.el
-        [ Ui.height Ui.fill
-        , -- The search input is always in the DOM, invisible and covering the magnifying glass
-          -- icon so that clicking the icon focuses it. It has to stay in the DOM while hidden
-          -- because recreating it on press would drop the browser focus that reveals it.
-          Ui.inFront
-            (Ui.row
-                [ Ui.height Ui.fill ]
-                [ Ui.Input.text
-                    (Ui.id (Dom.idToString channelSearchInputId)
-                        :: (if searchIsVisible then
-                                [ Ui.background MyUi.background2
-                                , Ui.border 0
-                                , Ui.rounded 4
-                                , Ui.paddingXY 8 4
-                                , Ui.Font.color MyUi.font1
-                                , Ui.centerY
-                                ]
-
-                            else
-                                [ Ui.opacity 0
-                                , Ui.border 0
-                                , Ui.width (Ui.px 40)
-                                , Ui.alignRight
-                                , Ui.height Ui.fill
-                                , Ui.pointer
-                                ]
-                           )
-                    )
-                    { onChange = TypedChannelSearch
-                    , text = channelSearch
-                    , placeholder =
-                        if searchIsVisible then
-                            Just "Filter channels"
-
-                        else
-                            Nothing
-                    , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
-                    }
-                , if searchIsVisible then
-                    MyUi.elButton
-                        (Dom.id "guild_clearChannelSearch")
-                        PressedClearChannelSearch
-                        [ Ui.Font.color MyUi.font2
-                        , Ui.width (Ui.px 40)
-                        , Ui.paddingXY 8 0
-                        , Ui.height Ui.fill
-                        , Ui.contentCenterY
-                        ]
-                        (Ui.html Icons.x)
-
-                  else
-                    Ui.none
-                ]
-            )
+{-| Sits in its own row below the channel column header's bottom border. It is part of
+the fixed header area, not the scrollable channel list.
+-}
+channelSearchRow : String -> Element FrontendMsg_
+channelSearchRow channelSearch =
+    Ui.row
+        [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border1
+        , MyUi.noShrinking
+        , Ui.paddingXY 8 6
+        , Ui.spacing 4
         ]
-        (Ui.row
-            [ Ui.height Ui.fill
-            , Ui.attrIf searchIsVisible (Ui.opacity 0)
+        [ Ui.Input.text
+            [ Ui.id (Dom.idToString channelSearchInputId)
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.border 1
+            , Ui.rounded 4
+            , Ui.paddingXY 8 4
+            , Ui.Font.color MyUi.font1
             ]
-            [ title
-            , Ui.el
+            { onChange = TypedChannelSearch
+            , text = channelSearch
+            , placeholder = Just "Filter channels"
+            , label = Ui.Input.labelHidden (Dom.idToString channelSearchInputId)
+            }
+        , if channelSearch == "" then
+            Ui.el
                 [ Ui.Font.color MyUi.font2
-                , Ui.width (Ui.px 40)
-                , Ui.alignRight
-                , Ui.paddingXY 8 0
+                , Ui.width (Ui.px 32)
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
+                , Ui.paddingXY 6 0
                 ]
                 (Ui.html Icons.magnifyingGlass)
-            ]
-        )
+
+          else
+            MyUi.elButton
+                (Dom.id "guild_clearChannelSearch")
+                PressedClearChannelSearch
+                [ Ui.Font.color MyUi.font2
+                , Ui.width (Ui.px 32)
+                , Ui.height Ui.fill
+                , Ui.contentCenterY
+                , Ui.paddingXY 6 0
+                ]
+                (Ui.html Icons.x)
+        ]
 
 
 discordChannelColumn :
@@ -6943,9 +6900,8 @@ discordChannelColumn :
     -> GuildChannelNameHover
     -> Bool
     -> String
-    -> Bool
     -> Element FrontendMsg_
-discordChannelColumn isMobile time localUser routeData guild channelNameHover canScroll2 channelSearch searchHasFocus =
+discordChannelColumn isMobile time localUser routeData guild channelNameHover canScroll2 channelSearch =
     let
         guildName : String
         guildName =
@@ -6968,29 +6924,22 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
     channelColumnContainer
-        [ (if showSearch then
-            channelSearchHeader channelSearch searchHasFocus
-
-           else
-            identity
-          )
-            (Ui.row
-                [ MyUi.hoverText guildName
-                , Ui.spacing 4
+        [ Ui.row
+            [ MyUi.hoverText guildName
+            , Ui.spacing 4
+            ]
+            [ Ui.el
+                [ Ui.background (Ui.rgb 88 101 242)
+                , Ui.rounded 99
+                , Ui.padding 3
+                , Ui.border 1
+                , Ui.borderColor MyUi.background1
+                , Ui.width Ui.shrink
+                , MyUi.noShrinking
                 ]
-                [ Ui.el
-                    [ Ui.background (Ui.rgb 88 101 242)
-                    , Ui.rounded 99
-                    , Ui.padding 3
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.background1
-                    , Ui.width Ui.shrink
-                    , MyUi.noShrinking
-                    ]
-                    (Ui.html Icons.discord)
-                , Ui.text guildName
-                ]
-            )
+                (Ui.html Icons.discord)
+            , Ui.text guildName
+            ]
         , GuildColumn.elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
@@ -7008,6 +6957,12 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             ]
             (Ui.html Icons.inviteUserIcon)
         ]
+        (if showSearch then
+            channelSearchRow channelSearch
+
+         else
+            Ui.none
+        )
         (Ui.column
             [ MyUi.scrollable canScroll2
             , Ui.heightMin 0
@@ -7806,6 +7761,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                 ]
             )
         ]
+        Ui.none
         (case columnItems of
             [] ->
                 Ui.Prose.paragraph
