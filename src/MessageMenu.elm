@@ -230,7 +230,7 @@ viewMobile offset extraOptions loggedIn local model =
     Ui.column
         [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
-        , Ui.background (Ui.rgb 0 0 0)
+        , Ui.background MyUi.black
         , MyUi.htmlStyle
             "padding"
             (String.fromInt topPadding

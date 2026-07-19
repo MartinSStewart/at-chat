@@ -761,8 +761,8 @@ notificationEmailHtml text link shared =
                 []
                 [ Email.Html.a
                     [ Email.Html.Attributes.href link
-                    , Email.Html.Attributes.backgroundColor "#407ab2"
-                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
+                    , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
                     , Email.Html.Attributes.fontSize "14px"
                     , Email.Html.Attributes.padding "4px 8px"
                     , Email.Html.Attributes.borderRadius "4px"
@@ -830,14 +830,12 @@ emailBoardCellView board lastPlaced position =
             cell
                 [ Email.Html.Attributes.backgroundColor
                     (if Set.member position lastPlaced then
-                        -- Fresh tile gold (see tileInFront).
-                        "#f0dc82"
+                        MyUi.colorToHex freshTileColor
 
                      else
-                        -- Committed tile gold (see boardTileInFront).
-                        "#baab67"
+                        MyUi.colorToHex committedTileColor
                     )
-                , Email.Html.Attributes.color "#000000"
+                , Email.Html.Attributes.color (MyUi.colorToHex MyUi.black)
                 , Email.Html.Attributes.fontSize "16px"
                 ]
                 (letterOrWildcardText letterOrWildcard)
@@ -862,7 +860,7 @@ emailBoardCellView board lastPlaced position =
 
                 Nothing ->
                     cell
-                        [ Email.Html.Attributes.backgroundColor "#fafafa" ]
+                        [ Email.Html.Attributes.backgroundColor (MyUi.colorToHex emptyCellColor) ]
                         "\u{00A0}"
 
 
@@ -3807,7 +3805,7 @@ playerRow localUser userId highlight isSelected suffix =
         , MyUi.htmlStyle
             "outline"
             (if isSelected then
-                "4px solid rgb(40, 90, 220)"
+                "4px solid " ++ MyUi.colorToStyle selectionBlue
 
              else
                 "0 solid rgba(0,0,0,0)"
@@ -3871,7 +3869,7 @@ mobilePlayerRow highlightedPlayer userId highlight user suffix =
         , Ui.border 2
         , Ui.borderColor
             (if highlightedPlayer == Just userId then
-                Ui.rgb 40 90 220
+                selectionBlue
 
              else
                 Ui.rgba 0 0 0 0
@@ -4405,7 +4403,7 @@ wordDefinitionOverlay boardPx open data =
         , Ui.heightMin 0
         ]
         (Ui.column
-            [ Ui.background (Ui.rgba 14 20 40 0.85)
+            [ Ui.background (MyUi.colorWithAlpha 0.85 MyUi.background1)
             , Ui.rounded 8
             , Ui.border 1
             , Ui.borderColor MyUi.border1
@@ -5088,7 +5086,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                     , Ui.rounded (buttonSize // 6)
                     , Ui.contentCenterX
                     , Ui.contentCenterY
-                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.Font.color MyUi.white
                     , Ui.background MyUi.buttonBackground
                     , Ui.Font.center
                     , Ui.Font.bold
@@ -5206,11 +5204,11 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                         MyUi.buttonBackground
                                 )
                             , Ui.rounded (buttonSize // 5)
-                            , Ui.borderColor (Ui.rgb 255 255 255)
+                            , Ui.borderColor MyUi.white
                             , Ui.border 2
                             , Ui.contentCenterX
                             , Ui.contentCenterY
-                            , Ui.Font.color (Ui.rgb 255 255 255)
+                            , Ui.Font.color MyUi.white
                             ]
                             (Ui.html Icons.delete)
                         )
@@ -5281,6 +5279,34 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
         boardLayer
 
 
+{-| Background of a tile placed this turn but not yet committed
+-}
+freshTileColor : Ui.Color
+freshTileColor =
+    Ui.rgb 240 220 130
+
+
+{-| Background of a tile from a previous turn
+-}
+committedTileColor : Ui.Color
+committedTileColor =
+    Ui.rgb 186 171 103
+
+
+{-| Background of an empty board cell with no bonus
+-}
+emptyCellColor : Ui.Color
+emptyCellColor =
+    Ui.rgb 250 250 250
+
+
+{-| Outline/border marking the selected or highlighted player
+-}
+selectionBlue : Ui.Color
+selectionBlue =
+    Ui.rgb 40 90 220
+
+
 premoveColor : Ui.Color
 premoveColor =
     Ui.rgb 98 43 227
@@ -5329,11 +5355,11 @@ submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize curre
                     , Ui.height (Ui.px p.size)
                     , Ui.background color
                     , Ui.rounded (p.size // 4)
-                    , Ui.borderColor (Ui.rgb 255 255 255)
+                    , Ui.borderColor MyUi.white
                     , Ui.border 2
                     , Ui.contentCenterX
                     , Ui.contentCenterY
-                    , Ui.Font.color (Ui.rgb 255 255 255)
+                    , Ui.Font.color MyUi.white
                     ]
                     (Ui.html Icons.sendMessage)
                     |> Ui.inFront
@@ -5366,7 +5392,7 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                     premoveColor
 
                  else
-                    Ui.rgb 240 220 130
+                    freshTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5384,7 +5410,7 @@ tileInFront setup currentTime createdAt premove cellSize2 offset letterOrWildcar
                     MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , Ui.opacity fade.opacity
             , MyUi.noPointerEvents
@@ -5403,7 +5429,7 @@ boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
                     MyUi.replyToColor
 
                  else
-                    Ui.rgb 186 171 103
+                    committedTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5417,7 +5443,7 @@ boardTileInFront setup highlight cellSize2 offset letterOrWildcard =
                     MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , MyUi.noPointerEvents
             , tileScoreView setup cellSize2 letterOrWildcard
@@ -5457,7 +5483,7 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
                     Ui.rgb 214 69 69
 
                  else
-                    Ui.rgb 186 171 103
+                    committedTileColor
                 )
             , Ui.width (Ui.px (cellSize2 - 1))
             , Ui.height (Ui.px (cellSize2 - 1))
@@ -5468,10 +5494,10 @@ animatedTileInFront setup cellSize2 offset red letterOrWildcard =
             , Ui.move { x = Coord.xRaw offset, y = Coord.yRaw offset, z = 0 }
             , Ui.Font.color
                 (if red then
-                    Ui.rgb 255 255 255
+                    MyUi.white
 
                  else
-                    Ui.rgb 0 0 0
+                    MyUi.black
                 )
             , MyUi.noPointerEvents
             , tileScoreView setup cellSize2 letterOrWildcard
@@ -5554,7 +5580,7 @@ cellView cellSize2 position =
                 Ui.background (bonusCellColor specialCell)
 
             Nothing ->
-                Ui.background (Ui.rgb 250 250 250)
+                Ui.background emptyCellColor
         , Ui.width (Ui.px cellSize2)
         , Ui.height (Ui.px cellSize2)
 
@@ -5883,7 +5909,7 @@ setupView windowSize isReadonly setup =
             ]
         , case setup.error of
             Just error ->
-                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50), padding ] (Ui.text error)
+                Ui.el [ Ui.Font.color MyUi.dangerRed, padding ] (Ui.text error)
 
             Nothing ->
                 Ui.none

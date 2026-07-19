@@ -93,7 +93,7 @@ notificationView xOffset yOffset borderColor notification =
             Ui.noAttr
 
         NewMessage count ->
-            notificationHelper MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
+            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
 
         NewMessageForUser count ->
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
@@ -137,7 +137,7 @@ view mode guild =
                                 Ui.rounded (round (toFloat size * 8 / 50))
                         , MyUi.notoSans
                         , Ui.Font.weight 600
-                        , Ui.background (Ui.rgb 240 240 240)
+                        , Ui.background MyUi.secondaryGray
                         , Ui.border 1
                         , Ui.borderColor MyUi.secondaryGrayBorder
                         , Ui.centerX
@@ -149,7 +149,7 @@ view mode guild =
                                 Ui.width (Ui.px size)
                         , Ui.height (Ui.px size)
                         , Ui.Font.size (round (toFloat size * 18 / 50))
-                        , Ui.Font.color (Ui.rgb 20 20 20)
+                        , Ui.Font.color iconFontColor
                         , MyUi.hoverText name
                         ]
         )
@@ -196,7 +196,7 @@ defaultUser centerX size2 rounded userId =
         , Ui.width (Ui.px size2)
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
-        , Ui.Font.color (Ui.rgb 20 20 20)
+        , Ui.Font.color iconFontColor
         , -- We need no pointer events here so drawing anchoring gets the offset of the parent
           MyUi.noPointerEvents
         ]
@@ -211,7 +211,7 @@ defaultUserHtml size2 rounded userId =
         , Html.Attributes.style "width" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "height" (String.fromInt (size2 - 8) ++ "px")
         , Html.Attributes.style "padding" "4px"
-        , Html.Attributes.style "color" "rgb(20,20,20)"
+        , Html.Attributes.style "color" (MyUi.colorToStyle iconFontColor)
         ]
         [ Icons.person ]
 
@@ -245,6 +245,14 @@ iconView mode url =
         ]
         []
         |> Ui.html
+
+
+{-| Font color for icons and initials drawn on top of the light colored
+guild/user tiles
+-}
+iconFontColor : Ui.Color
+iconFontColor =
+    Ui.rgb 20 20 20
 
 
 userDefaultColor : Id UserId -> Ui.Color
@@ -289,7 +297,7 @@ addGuildButton htmlId isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.notoSans
         , Ui.Font.weight 600
-        , Ui.background (Ui.rgb 240 240 240)
+        , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
@@ -299,7 +307,7 @@ addGuildButton htmlId isSelected onPress =
             Ui.width (Ui.px size)
         , Ui.height (Ui.px size)
         , Ui.padding 8
-        , Ui.Font.color (Ui.rgb 20 20 20)
+        , Ui.Font.color iconFontColor
         , MyUi.hoverText "Create new guild"
         ]
         (Ui.html Icons.plusIcon)
@@ -320,7 +328,7 @@ showFriendsButton isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.notoSans
         , Ui.Font.weight 600
-        , Ui.background (Ui.rgb 240 240 240)
+        , Ui.background MyUi.secondaryGray
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
@@ -330,7 +338,7 @@ showFriendsButton isSelected onPress =
             Ui.width (Ui.px size)
         , Ui.height (Ui.px size)
         , Ui.padding 8
-        , Ui.Font.color (Ui.rgb 20 20 20)
+        , Ui.Font.color iconFontColor
         , MyUi.hoverText "Show friends list"
         ]
         (Ui.html Icons.userGroup)

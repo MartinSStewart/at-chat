@@ -369,49 +369,38 @@ profileImageAnchorId messageId =
     Dom.id ("drawAnchorProfile_" ++ Id.toString messageId)
 
 
-userColor : Id UserId -> String
-userColor userId =
-    let
-        colors : List String
-        colors =
-            [ "#ff5252"
-            , "#40c4ff"
-            , "#69f0ae"
-            , "#ffd740"
-            , "#e040fb"
-            , "#ffab40"
-            , "#64ffda"
-            , "#ff80ab"
-            ]
+userColors : List String
+userColors =
+    [ "#ff5252"
+    , "#40c4ff"
+    , "#69f0ae"
+    , "#ffd740"
+    , "#e040fb"
+    , "#ffab40"
+    , "#64ffda"
+    , "#ff80ab"
+    ]
 
+
+userColorHelper : Int -> String
+userColorHelper hash =
+    let
         index : Int
         index =
-            modBy (List.length colors) (Id.toInt userId * 31)
+            modBy (List.length userColors) hash
     in
-    List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
+    List.drop index userColors |> List.head |> Maybe.withDefault "#ff5252"
+
+
+userColor : Id UserId -> String
+userColor userId =
+    userColorHelper (Id.toInt userId * 31)
 
 
 discordUserColor : Discord.Id Discord.UserId -> String
 discordUserColor userId =
-    let
-        colors : List String
-        colors =
-            [ "#ff5252"
-            , "#40c4ff"
-            , "#69f0ae"
-            , "#ffd740"
-            , "#e040fb"
-            , "#ffab40"
-            , "#64ffda"
-            , "#ff80ab"
-            ]
-
-        index : Int
-        index =
-            String.foldl (\char total -> total * 31 + Char.toCode char) 0 (Discord.idToString userId)
-                |> modBy (List.length colors)
-    in
-    List.drop index colors |> List.head |> Maybe.withDefault "#ff5252"
+    userColorHelper
+        (String.foldl (\char total -> total * 31 + Char.toCode char) 0 (Discord.idToString userId))
 
 
 {-| Finished and in-progress strokes that are attached to the given anchor type.

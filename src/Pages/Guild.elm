@@ -976,7 +976,7 @@ memberLabel isMobile localUser userId =
         , Ui.paddingXY 0 4
         , MyUi.hover
             isMobile
-            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
+            [ Ui.Anim.backgroundColor MyUi.weakHoverHighlight
             , Ui.Anim.fontColor MyUi.font1
             ]
         , Ui.Font.color MyUi.font3
@@ -1005,7 +1005,7 @@ discordMemberLabel isMobile localUser currentUserId userId =
         , Ui.paddingXY 0 4
         , MyUi.hover
             isMobile
-            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
+            [ Ui.Anim.backgroundColor MyUi.weakHoverHighlight
             , Ui.Anim.fontColor MyUi.font1
             ]
         , Ui.Font.color MyUi.font3
@@ -5602,7 +5602,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     message2.content
                     ++ (if isBeingEdited then
                             [ Html.span
-                                [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
                                 , Html.Attributes.style "font-size" "12px"
                                 ]
                                 [ Html.text " (editing...)" ]
@@ -5612,7 +5612,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                             case message2.editedAt of
                                 Just editedAt ->
                                     [ Html.span
-                                        [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
                                         , Html.Attributes.style "font-size" "12px"
                                         , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
                                         ]
@@ -5730,7 +5730,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     ++ (case message2.editedAt of
                             Just editedAt ->
                                 [ Html.span
-                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
                                     , Html.Attributes.style "font-size" "12px"
                                     , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
                                     ]
@@ -5876,7 +5876,7 @@ userTextMessagePreview timezone customEmojis allUsers revealedSpoilers message =
         , Html.Attributes.style "text-overflow" "ellipsis"
         ]
         (Html.span
-            [ Html.Attributes.style "color" "rgb(200,200,200)"
+            [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
             [ Html.text (User.toString message.createdBy allUsers) ]
@@ -6628,7 +6628,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                         (GuildRoute guildId NewChannelRoute)
                         [ Ui.paddingXY 4 8
                         , Ui.Font.color MyUi.font3
-                        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                        , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
                         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                         , if isSelected then
                             Ui.Font.color MyUi.font1
@@ -6935,7 +6935,7 @@ channelColumnThreadsHelper :
     -> Element FrontendMsg_
 channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThreadCount onMouseEnter onMouseLeave htmlId route name =
     Ui.row
-        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        [ Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         , Ui.attrIf (not isMobile) (Ui.Events.onMouseEnter onMouseEnter)
         , Ui.attrIf (not isMobile) (Ui.Events.onMouseLeave onMouseLeave)
         , Ui.clipWithEllipsis
@@ -7101,7 +7101,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
             channelNameHover == GuildChannelNameHover guildId channelId NoThread
     in
     Ui.row
-        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        [ Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         , Ui.attrIf
             (not isMobile)
             (Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId NoThread))
@@ -7198,7 +7198,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
             channelNameHover == DiscordGuildChannelNameHover routeData.guildId channelId NoThread
     in
     Ui.row
-        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        [ Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         , Ui.attrIf
             (not isMobile)
             (Ui.Events.onMouseEnter (MouseEnteredDiscordChannelName routeData.guildId channelId NoThread))
@@ -7738,7 +7738,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                 MyUi.font3
             )
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
         ]
         [ User.profileImage otherUserId otherUser.icon
         , Ui.column
@@ -7900,7 +7900,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         MyUi.font3
                     )
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                , Ui.attrIf isSelected (Ui.background MyUi.selectedHighlight)
                 ]
                 (case members2 of
                     [] ->
@@ -8405,7 +8405,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         , Ui.Shadow.font
                             { offset = ( 0, 0 )
                             , blur = 3
-                            , color = Ui.rgb 0 0 0
+                            , color = MyUi.black
                             }
                         ]
                         (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
@@ -8421,7 +8421,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                     , Ui.Shadow.font
                                         { offset = ( 0, 0 )
                                         , blur = 3
-                                        , color = Ui.rgb 0 0 0
+                                        , color = MyUi.black
                                         }
                                     ]
                                 |> Ui.inFront

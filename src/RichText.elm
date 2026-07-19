@@ -80,6 +80,35 @@ import UInt64
 import Url exposing (Protocol(..), Url)
 
 
+{-| CSS background that hides spoilered content until it's revealed
+-}
+spoilerBackground : String
+spoilerBackground =
+    MyUi.colorToStyle MyUi.black
+
+
+codeBackground : String
+codeBackground =
+    "rgb(90,100,120)"
+
+
+codeBorder : String
+codeBorder =
+    "rgb(55,61,73)"
+
+
+{-| Blue bar drawn along the left edge of block quotes and embeds
+-}
+accentBarColor : String
+accentBarColor =
+    "rgb(80,120,200)"
+
+
+hyperlinkColor : String
+hyperlinkColor =
+    "rgb(66,133,244)"
+
+
 type RichText userId
     = UserMention userId
     | NormalText Char String
@@ -1050,7 +1079,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                     , currentList
                         ++ [ Email.Html.span
                                 [ Email.Html.Attributes.borderRadius "2px"
-                                , Email.Html.Attributes.backgroundColor "rgb(0,0,0)"
+                                , Email.Html.Attributes.backgroundColor spoilerBackground
                                 ]
                                 list
                            ]
@@ -1069,7 +1098,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                     ( True
                     , currentList
                         ++ [ Email.Html.div
-                                [ Email.Html.Attributes.borderLeft "4px solid rgb(80,120,200)"
+                                [ Email.Html.Attributes.borderLeft ("4px solid " ++ accentBarColor)
                                 , Email.Html.Attributes.padding "2px 8px"
                                 ]
                                 list2
@@ -1134,8 +1163,8 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                     , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
                                     , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
                                     ]
-                                    ++ [ Email.Html.Attributes.backgroundColor "rgb(90,100,120)"
-                                       , Email.Html.Attributes.border "rgb(55,61,73) solid 1px"
+                                    ++ [ Email.Html.Attributes.backgroundColor codeBackground
+                                       , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
                                        , Email.Html.Attributes.padding "0 4px 0 4px"
                                        , Email.Html.Attributes.borderRadius "4px"
                                        , Email.Html.Attributes.fontFamily "monospace"
@@ -1151,12 +1180,12 @@ emailViewHelper config dropNextLineBreak state nonempty =
                         ++ [ Email.Html.div
                                 [ Email.Html.Attributes.backgroundColor
                                     (if state.spoiler then
-                                        "rgb(0,0,0)"
+                                        spoilerBackground
 
                                      else
-                                        "rgb(90,100,120)"
+                                        codeBackground
                                     )
-                                , Email.Html.Attributes.border "rgb(55,61,73) solid 1px"
+                                , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
                                 , Email.Html.Attributes.padding "0 4px 0 4px"
                                 , Email.Html.Attributes.borderRadius "4px"
                                 , Email.Html.Attributes.fontFamily "monospace"
@@ -1185,7 +1214,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                                 Email.Html.div
                                                     [ Email.Html.Attributes.width (String.fromInt (round width) ++ "px")
                                                     , Email.Html.Attributes.height (String.fromInt (round height) ++ "px")
-                                                    , Email.Html.Attributes.backgroundColor "rgb(0,0,0)"
+                                                    , Email.Html.Attributes.backgroundColor spoilerBackground
                                                     ]
                                                     []
 
@@ -1283,9 +1312,9 @@ emailNormalTextView text state =
 emailUserLabel : String -> Email.Html.Html
 emailUserLabel name =
     Email.Html.span
-        [ Email.Html.Attributes.backgroundColor "rgb(50,70,240)"
+        [ Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.userLabelBackground)
         , Email.Html.Attributes.padding "1px 1px 0 1px"
-        , Email.Html.Attributes.color "rgb(215,235,255)"
+        , Email.Html.Attributes.color (MyUi.colorToHex MyUi.userLabelFontColor)
         , Email.Html.Attributes.borderRadius "2px"
         , Email.Html.Attributes.style "white-space" "nowrap"
         ]
@@ -1315,7 +1344,7 @@ emailLinkView state url label =
                 , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
                 ]
                 ++ [ Email.Html.Attributes.href url
-                   , Email.Html.Attributes.color "rgb(66,133,244)"
+                   , Email.Html.Attributes.color hyperlinkColor
                    ]
             )
             [ Email.Html.text label ]
@@ -1336,7 +1365,7 @@ emailFileDownloadView isSpoilered fileData =
         ([ Email.Html.Attributes.style "max-width" "284px"
          , Email.Html.Attributes.backgroundColor
             (if isSpoilered then
-                "rgb(0,0,0)"
+                spoilerBackground
 
              else
                 MyUi.colorToStyle MyUi.background1
@@ -3099,7 +3128,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
 
                                         else
                                             [ Html.Attributes.style "cursor" "pointer"
-                                            , Html.Attributes.style "background" "rgb(0,0,0)"
+                                            , Html.Attributes.style "background" spoilerBackground
                                             ]
                                                 ++ (case maybePressedSpoiler of
                                                         Just ( htmlIdPrefix, pressedSpoiler ) ->
@@ -3159,14 +3188,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                         ++ [ case showLargeContent of
                                 ShowLargeContent _ ->
                                     Html.div
-                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
+                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid " ++ accentBarColor)
                                         , Html.Attributes.style "padding" ("2px " ++ String.fromInt sidePadding ++ "px")
                                         ]
                                         list2
 
                                 NoLargeContent ->
                                     Html.span
-                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
+                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid " ++ accentBarColor)
                                         , Html.Attributes.style "padding" ("0px " ++ String.fromInt sidePadding ++ "px")
                                         ]
                                         list2
@@ -3331,7 +3360,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
                                     , Html.Attributes.attribute "data-link-url" (Url.toString url)
-                                    , Html.Attributes.style "color" "rgb(66,133,244)"
+                                    , Html.Attributes.style "color" hyperlinkColor
                                     , htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
@@ -3351,8 +3380,8 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
-                                , Html.Attributes.style "background-color" "rgb(90,100,120)"
-                                , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
+                                , Html.Attributes.style "background-color" codeBackground
+                                , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
                                 , Html.Attributes.style "padding" "0 4px 0 4px"
                                 , Html.Attributes.style "border-radius" "4px"
                                 , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
@@ -3371,12 +3400,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                         [ Html.Attributes.style
                                             "background-color"
                                             (if state.spoiler then
-                                                "rgb(0,0,0)"
+                                                spoilerBackground
 
                                              else
-                                                "rgb(90,100,120)"
+                                                codeBackground
                                             )
-                                        , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
+                                        , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
                                         , Html.Attributes.style "padding" "0 4px 0 4px"
                                         , Html.Attributes.style "border-radius" "4px"
                                         , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
@@ -3412,7 +3441,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                             [ Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
                                                             , Html.Attributes.style "height" (String.fromInt (round height) ++ "px")
                                                             , Html.Attributes.style "display" "block"
-                                                            , Html.Attributes.style "background-color" "rgb(0,0,0)"
+                                                            , Html.Attributes.style "background-color" spoilerBackground
                                                             ]
                                                             []
 
@@ -3636,7 +3665,7 @@ embedContainer contents =
         [ Html.div
             [ Html.Attributes.style "width" (String.fromInt embedContainerLeftBorderWidth ++ "px")
             , Html.Attributes.style "flex-shrink" "0"
-            , Html.Attributes.style "background-color" "rgb(80,120,200)"
+            , Html.Attributes.style "background-color" accentBarColor
             , Html.Attributes.style "border-radius" "4px 0 0 4px"
             ]
             []
@@ -3992,7 +4021,7 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
         , Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "transform" "translateY(0.3em)"
-        , Html.Attributes.style "border-left" "solid 5px rgb(80,120,200)"
+        , Html.Attributes.style "border-left" ("solid 5px " ++ accentBarColor)
         , Html.Attributes.style "padding-right" "4px"
         ]
         [ Html.img
@@ -4043,7 +4072,7 @@ videoView maybeHtmlId isSpoilered containerWidth fileData =
             , Html.Attributes.style "height" "180px"
             , Html.Attributes.style "display" "block"
             , Html.Attributes.style "border-radius" "4px"
-            , Html.Attributes.style "background-color" "rgb(0,0,0)"
+            , Html.Attributes.style "background-color" spoilerBackground
             ]
             []
 
@@ -4079,7 +4108,7 @@ audioView maybeHtmlId isSpoilered containerWidth fileData =
     Html.div
         (Html.Attributes.style "width" (String.fromInt width ++ "px")
             :: (if isSpoilered then
-                    [ Html.Attributes.style "background-color" "rgb(0,0,0)"
+                    [ Html.Attributes.style "background-color" spoilerBackground
                     ]
 
                 else
@@ -4123,7 +4152,7 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
         , Html.Attributes.style
             "background-color"
             (if isSpoilered then
-                "rgb(0,0,0)"
+                spoilerBackground
 
              else
                 MyUi.colorToStyle MyUi.background1
@@ -4214,7 +4243,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             ( index2 + String.length text
                             , Array.push
                                 (Html.span
-                                    [ Html.Attributes.style "color" "rgb(215,235,255)"
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.userLabelFontColor)
                                     , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
                                     , Html.Attributes.style "border-radius" "2px"
                                     ]
@@ -4236,7 +4265,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                                , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                                , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
                                 ]
                                 [ Html.text text4 ]
                     in
@@ -4398,8 +4427,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
+                            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
                             [ Html.text text ]
                         )
@@ -4417,8 +4446,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
+                            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
                             [ Html.text text ]
                         )
@@ -4436,10 +4465,10 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , if state.spoiler then
-                                    Html.Attributes.style "background-color" "rgb(0,0,0)"
+                                    Html.Attributes.style "background-color" spoilerBackground
 
                                   else
-                                    Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                    Html.Attributes.style "background-color" codeBackground
                                 ]
                                 [ Html.text (String.cons char rest) ]
                             , formatText "`"

@@ -189,7 +189,7 @@ tableConfig id showAll onMsg getModel userColumns =
                                                 [ Ui.Input.button (onMsg PressedShowAll)
                                                 , Dom.idToString id ++ "_showAll" |> Ui.id
                                                 , MyUi.focusEffect
-                                                , Ui.Font.color (Ui.rgb 0 0 0)
+                                                , Ui.Font.color MyUi.black
                                                 , Ui.rounded 4
                                                 , Ui.Font.center
                                                 ]

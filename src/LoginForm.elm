@@ -587,7 +587,7 @@ loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
                                                                 ]
                                                                 (Ui.el
                                                                     [ Ui.height Ui.fill
-                                                                    , Ui.background (Ui.rgb 255 255 255)
+                                                                    , Ui.background MyUi.white
                                                                     , Ui.borderWith { left = 2, right = 0, top = 0, bottom = 0 }
                                                                     , cursorBlinking
                                                                     ]

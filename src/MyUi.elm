@@ -5,6 +5,7 @@ module MyUi exposing
     , background1
     , background2
     , background3
+    , black
     , blockClickPropagation
     , border1
     , border2
@@ -16,17 +17,20 @@ module MyUi exposing
     , channelAndGuildColumnWidth
     , channelColumnWidth
     , channelHeaderHeight
+    , colorToHex
     , colorToStyle
     , colorWithAlpha
     , column
     , container
     , copyBox
     , css
+    , dangerRed
     , datestamp
     , datestampDate
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
+    , dimFont
     , disabledButtonBackground
     , elButton
     , emailAddress
@@ -66,10 +70,12 @@ module MyUi exposing
     , radioRowWithSeparators
     , replyToColor
     , rowButton
+    , scrim
     , scrollable
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
+    , selectedHighlight
     , selectedTextBackground
     , simpleButton
     , tabBackground
@@ -80,7 +86,10 @@ module MyUi exposing
     , timeElapsedView
     , timestamp
     , touchPress
+    , userLabelBackground
+    , userLabelFontColor
     , userLabelHtml
+    , weakHoverHighlight
     , white
     , widthAttr
     )
@@ -819,7 +828,7 @@ secondaryButton htmlId onPress label2 =
         , Ui.background secondaryGray
         , focusEffect
         , Ui.border 1
-        , Ui.Font.color (Ui.rgb 0 0 0)
+        , Ui.Font.color black
         , Ui.rounded 4
         , Ui.width Ui.shrink
         , Ui.paddingXY 16 8
@@ -1079,26 +1088,22 @@ userLabelHtml userId allUsers =
             userLabel2Html user
 
         Nothing ->
-            Html.span
-                [ Html.Attributes.style "background-color" "rgb(50,70,240)"
-                , Html.Attributes.style "padding" "1px 1px 0 1px"
-                , Html.Attributes.style "color" "rgb(215,235,255)"
-                , Html.Attributes.style "border-radius" "2px"
-                , Html.Attributes.style "white-space" "nowrap"
-                ]
-                [ Html.text "@<name missing>" ]
+            Html.span userLabelHtmlAttributes [ Html.text "@<name missing>" ]
+
+
+userLabelHtmlAttributes : List (Html.Attribute msg)
+userLabelHtmlAttributes =
+    [ Html.Attributes.style "background-color" (colorToStyle userLabelBackground)
+    , Html.Attributes.style "padding" "1px 1px 0 1px"
+    , Html.Attributes.style "color" (colorToStyle userLabelFontColor)
+    , Html.Attributes.style "border-radius" "2px"
+    , Html.Attributes.style "white-space" "nowrap"
+    ]
 
 
 userLabel2Html : { a | name : PersonName } -> Html msg
 userLabel2Html user =
-    Html.span
-        [ Html.Attributes.style "background-color" "rgb(50,70,240)"
-        , Html.Attributes.style "padding" "1px 1px 0 1px"
-        , Html.Attributes.style "color" "rgb(215,235,255)"
-        , Html.Attributes.style "border-radius" "2px"
-        , Html.Attributes.style "white-space" "nowrap"
-        ]
-        [ Html.text ("@" ++ PersonName.toString user.name) ]
+    Html.span userLabelHtmlAttributes [ Html.text ("@" ++ PersonName.toString user.name) ]
 
 
 blockClickPropagation : msg -> Ui.Attribute msg
@@ -1187,6 +1192,30 @@ colorToStyle color =
         ++ ","
         ++ String.fromFloat alpha
         ++ ")"
+
+
+{-| Same color as colorToStyle but in hex notation (alpha is ignored). Some
+email clients don't support rgba() so email code should use this instead.
+-}
+colorToHex : Color -> String
+colorToHex color =
+    let
+        { red, green, blue } =
+            Color.toRgba color
+
+        floatToHex : Float -> String
+        floatToHex value =
+            let
+                int =
+                    round (value * 255)
+
+                digit : Int -> String
+                digit a =
+                    String.slice a (a + 1) "0123456789abcdef"
+            in
+            digit (int // 16) ++ digit (modBy 16 int)
+    in
+    "#" ++ floatToHex red ++ floatToHex green ++ floatToHex blue
 
 
 {-| A subtle background drawn behind an image while it's still loading, so it's
@@ -1317,6 +1346,45 @@ hoverHighlight =
     Ui.rgba 255 255 255 0.2
 
 
+{-| Weaker version of hoverHighlight, used when hovering rows that have no
+background of their own
+-}
+weakHoverHighlight : Ui.Color
+weakHoverHighlight =
+    Ui.rgba 255 255 255 0.1
+
+
+{-| Background for the currently selected item in a list of channels/rows
+-}
+selectedHighlight : Ui.Color
+selectedHighlight =
+    Ui.rgba 255 255 255 0.15
+
+
+{-| Dim gray for placeholder text and secondary metadata shown on dark
+backgrounds
+-}
+dimFont : Ui.Color
+dimFont =
+    Ui.rgb 180 180 180
+
+
+{-| Strong red for error text and dangerous state (mic muted, etc.). Icons.elm
+can't import this module so the mic slash in micOff hardcodes the same color.
+-}
+dangerRed : Ui.Color
+dangerRed =
+    Ui.rgb 200 60 60
+
+
+{-| Translucent black drawn behind modals or on top of images so overlaid
+content stays readable
+-}
+scrim : Ui.Color
+scrim =
+    Ui.rgba 0 0 0 0.5
+
+
 replyToColor : Ui.Color
 replyToColor =
     Ui.rgb 69 69 140
@@ -1340,6 +1408,20 @@ hoverAndMentionColor =
 alertColor : Ui.Color
 alertColor =
     Ui.rgb 255 10 40
+
+
+{-| Background for inline @user mention labels in messages
+-}
+userLabelBackground : Ui.Color
+userLabelBackground =
+    Ui.rgb 50 70 240
+
+
+{-| Font color for inline @user mention labels in messages
+-}
+userLabelFontColor : Ui.Color
+userLabelFontColor =
+    Ui.rgb 215 235 255
 
 
 

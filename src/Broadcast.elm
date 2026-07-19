@@ -884,13 +884,13 @@ notificationEmailContent userToString senderName message =
         , Email.Html.Attributes.fontFamily "Arial, Helvetica, sans-serif"
         ]
         [ Email.Html.div
-            [ Email.Html.Attributes.color "#ffffff"
+            [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
             , Email.Html.Attributes.fontSize "16px"
             , Email.Html.Attributes.paddingBottom "4px"
             ]
             [ Email.Html.strong [] [ Email.Html.text senderName ] ]
         , Email.Html.div
-            [ Email.Html.Attributes.color "#ffffff"
+            [ Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
             , Email.Html.Attributes.fontSize "15px"
             , Email.Html.Attributes.lineHeight "1.4"
             , Email.Html.Attributes.style "white-space" "pre-wrap"
@@ -902,8 +902,8 @@ notificationEmailContent userToString senderName message =
                 []
                 [ Email.Html.a
                     [ Email.Html.Attributes.href Env.domain
-                    , Email.Html.Attributes.backgroundColor "#407ab2"
-                    , Email.Html.Attributes.color "#ffffff"
+                    , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
+                    , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
                     , Email.Html.Attributes.fontSize "14px"
                     , Email.Html.Attributes.padding "4px 8px"
                     , Email.Html.Attributes.borderRadius "4px"
