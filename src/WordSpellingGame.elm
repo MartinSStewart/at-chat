@@ -5027,8 +5027,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                 ( NotDragging, Nothing, JoinedAndItsTheirTurn ) ->
                     submitLineButtons
                         "wordSpellingGame_submitLine_"
-                        MyUi.buttonBackground
-                        PressedSubmitWord
+                        False
                         boardTranslate
                         zoomedCellSize
                         currentUserId
@@ -5045,8 +5044,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                 Nothing ->
                                     submitLineButtons
                                         "wsg_submitPremove_"
-                                        premoveColor
-                                        PressedSubmitPremove
+                                        True
                                         boardTranslate
                                         zoomedCellSize
                                         currentUserId
@@ -5201,6 +5199,14 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
 
                             else
                                 0
+
+                        hasPremove =
+                            case maybePlayer of
+                                Just player ->
+                                    player.premove /= Nothing
+
+                                Nothing ->
+                                    False
                     in
                     Ui.inFront
                         (MyUi.elButton (Dom.id "wordSpellingGame_clearBoard")
@@ -5209,17 +5215,11 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             , Ui.width (Ui.px buttonSize)
                             , Ui.height (Ui.px buttonSize)
                             , Ui.background
-                                (case maybePlayer of
-                                    Just player ->
-                                        case player.premove of
-                                            Just _ ->
-                                                premoveColor
+                                (if hasPremove then
+                                    premoveColor
 
-                                            Nothing ->
-                                                MyUi.buttonBackground
-
-                                    Nothing ->
-                                        MyUi.buttonBackground
+                                 else
+                                    MyUi.buttonBackground
                                 )
                             , Ui.rounded (buttonSize // 5)
                             , Ui.borderColor MyUi.white
@@ -5227,7 +5227,13 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.Font.color MyUi.white
-                            , MyUi.hoverText "Clear board"
+                            , MyUi.hoverText
+                                (if hasPremove then
+                                    "Clear premove"
+
+                                 else
+                                    "Clear board"
+                                )
                             ]
                             (Ui.html Icons.delete)
                         )
@@ -5333,15 +5339,14 @@ premoveColor =
 
 submitLineButtons :
     String
-    -> Ui.Color
-    -> ({ start : ( Int, Int ), isVertical : Bool, letters : Nonempty LetterOrWildcard } -> msg)
+    -> Bool
     -> Coord CssPixels
     -> Int
     -> Id UserId
     -> Shared
     -> GameData
-    -> List (Ui.Attribute msg)
-submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize currentUserId shared model =
+    -> List (Ui.Attribute GameMsg)
+submitLineButtons htmlIdPrefix isPremove boardTranslate zoomedCellSize currentUserId shared model =
     submittableLines currentUserId shared model
         |> List.map
             (\line ->
@@ -5367,19 +5372,37 @@ submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize curre
                             ++ "_"
                             ++ String.fromInt (Tuple.second line.placedWord.start)
                 in
-                MyUi.elButton (Dom.id idString)
-                    (onPress line.placedWord)
+                MyUi.elButton
+                    (Dom.id idString)
+                    (if isPremove then
+                        PressedSubmitPremove line.placedWord
+
+                     else
+                        PressedSubmitWord line.placedWord
+                    )
                     [ Ui.move { x = Coord.xRaw p.pos, y = Coord.yRaw p.pos, z = 0 }
                     , Ui.width (Ui.px p.size)
                     , Ui.height (Ui.px p.size)
-                    , Ui.background color
+                    , Ui.background
+                        (if isPremove then
+                            premoveColor
+
+                         else
+                            MyUi.buttonBackground
+                        )
                     , Ui.rounded (p.size // 4)
                     , Ui.borderColor MyUi.white
                     , Ui.border 2
                     , Ui.contentCenterX
                     , Ui.contentCenterY
                     , Ui.Font.color MyUi.white
-                    , MyUi.hoverText "Submit word"
+                    , MyUi.hoverText
+                        (if isPremove then
+                            "Premove word (play automatically when it's your turn)"
+
+                         else
+                            "Submit word"
+                        )
                     ]
                     (Ui.html Icons.sendMessage)
                     |> Ui.inFront
