@@ -39,6 +39,7 @@ import Ui
 import Ui.Font
 import Unsafe
 import Url
+import UserAgent
 import UserSession exposing (ToBeFilledInByBackend(..))
 import WordSpellingGame exposing (Letter(..), LetterOrWildcard(..))
 
@@ -210,9 +211,8 @@ stickersSection =
             (richText |> RichText.toString False SeqDict.empty)
             (Just richText)
             SeqDict.empty
-            SeqDict.empty
-            stickers
-            Nothing
+            { userAgent = UserAgent.init, stickers = stickers, customEmojis = SeqDict.empty }
+            { typedTextCounter = 0, textInputFocus = Nothing }
             SeqDict.empty
             |> Ui.map (\_ -> ())
         ]

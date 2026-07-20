@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the at-chat backup downloader once a day
+
+[Timer]
+# Every day at 04:00 local time.
+OnCalendar=*-*-* 04:00:00
+# If the machine was off at 04:00, run as soon as it's back up.
+Persistent=true
+# Spread the start by up to 5 minutes to avoid a thundering herd.
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

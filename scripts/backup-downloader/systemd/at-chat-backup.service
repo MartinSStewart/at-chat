@@ -1,0 +1,19 @@
+[Unit]
+Description=Download new at-chat backups from the production server
+Documentation=file:%h/at-chat/scripts/backup-downloader/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+
+# Absolute path to the compiled Eco executable (see README: `eco make ... --output=at-chat-backup`).
+ExecStart=%h/at-chat/scripts/backup-downloader/at-chat-backup
+
+# Configuration (all optional — these are the defaults, shown for reference).
+Environment=AT_CHAT_BACKUP_SOURCE=root@at-chat.app:/var/lib/atchat/backups/
+Environment=AT_CHAT_BACKUP_DEST=%h/at-chat-backups
+# Environment=AT_CHAT_SSH_KEY=%h/.ssh/at-chat-backup
+
+# Don't let a hung transfer run forever.
+TimeoutStartSec=1h
