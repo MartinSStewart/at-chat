@@ -1753,6 +1753,22 @@ updateLoaded msg model =
                                                 NoThreadWithFriends _ showMembers2 ->
                                                     showMembers2
 
+                                        DiscordGuildRoute routeData ->
+                                            case routeData.channelRoute of
+                                                DiscordChannel_ChannelRoute _ threadRoute _ ->
+                                                    case threadRoute of
+                                                        ViewThreadWithFriends _ _ showMembers2 ->
+                                                            showMembers2
+
+                                                        NoThreadWithFriends _ showMembers2 ->
+                                                            showMembers2
+
+                                                _ ->
+                                                    HideMembersTab
+
+                                        DiscordDmRoute dmRoute ->
+                                            dmRoute.showMembersTab
+
                                         _ ->
                                             HideMembersTab
                             in
