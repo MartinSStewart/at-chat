@@ -19,7 +19,7 @@ module MessageInput exposing
     )
 
 import Array
-import CustomEmoji exposing (CustomEmojiData)
+import CustomEmoji
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -47,7 +47,7 @@ import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sticker exposing (StickerData)
+import Sticker
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim

@@ -53,7 +53,7 @@ import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, Fronte
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (GameType(..), Message(..), MessageState(..), UserTextMessageData)
-import MessageInput exposing (TextInputFocus)
+import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi exposing (Copied(..))
