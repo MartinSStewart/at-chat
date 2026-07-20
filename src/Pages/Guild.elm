@@ -6781,7 +6781,12 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                 |> List.map Tuple.second
                 |> channelColumnNoResults searchFilter
              )
-                ++ [ newChannelButton ]
+                ++ (if searchFilter == "" then
+                        [ newChannelButton ]
+
+                    else
+                        []
+                   )
             )
         )
 
@@ -6826,9 +6831,9 @@ channelColumnNoResults searchFilter channelRows =
             [ Ui.Font.italic
             , Ui.Font.lineHeight 1.5
             , Ui.Font.color MyUi.font2
-            , Ui.paddingXY 16 12
+            , Ui.paddingXY 8 8
             ]
-            [ Ui.text "No matching channels found" ]
+            [ Ui.text "No matching channels\u{00A0}found" ]
         ]
 
     else
