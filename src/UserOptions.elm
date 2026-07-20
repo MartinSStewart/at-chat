@@ -269,6 +269,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             [ User.profileImage local.localUser.session.userId local.localUser.user.icon
                             , ImageEditor.view
                                 loaded.windowSize
+                                (local.localUser.user.icon /= Nothing)
                                 loggedIn.profilePictureEditor
                                 |> Ui.map ProfilePictureEditorMsg
                             ]

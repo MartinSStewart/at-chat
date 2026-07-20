@@ -17,6 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Touch
+import Icons
 import Id exposing (GuildId, Id)
 import Json.Decode
 import List.Extra as List
@@ -27,6 +28,7 @@ import Quantity exposing (Quantity)
 import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
 
 
 type Msg
@@ -41,12 +43,13 @@ type Msg
     | GotImageSize (Result Dom.Error Dom.Element)
     | CroppedImage (Result String CropImageDataResponse)
     | PressedCancel
+    | PressedRemoveImage
     | UploadedImage (Result Http.Error UploadResponse)
 
 
 type ToBackend
-    = ChangeUserAvatarRequest FileHash
-    | ChangeGuildIconRequest (Id GuildId) FileHash
+    = ChangeUserAvatarRequest (Maybe FileHash)
+    | ChangeGuildIconRequest (Id GuildId) (Maybe FileHash)
 
 
 type ToFrontend
@@ -129,6 +132,9 @@ isPressMsg msg =
         PressedCancel ->
             True
 
+        PressedRemoveImage ->
+            True
+
         UploadedImage _ ->
             False
 
@@ -145,7 +151,7 @@ init =
     }
 
 
-update : (FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update : (Maybe FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 update toBackendMsg sessionIdHash windowSize msg model =
     case msg of
         PressedProfileImage ->
@@ -285,11 +291,14 @@ update toBackendMsg sessionIdHash windowSize msg model =
         PressedCancel ->
             ( { model | imageUrl = Nothing, imageSize = Nothing }, Command.none )
 
+        PressedRemoveImage ->
+            ( model, Lamdera.sendToBackend (toBackendMsg Nothing) )
+
         UploadedImage result ->
             case result of
                 Ok uploaded ->
                     ( { model | status = Uploading uploaded.fileHash }
-                    , Lamdera.sendToBackend (toBackendMsg uploaded.fileHash)
+                    , Lamdera.sendToBackend (toBackendMsg (Just uploaded.fileHash))
                     )
 
                 Err _ ->
@@ -453,11 +462,39 @@ profileImagePlaceholderId =
     Dom.id "profile-image-placeholder-id"
 
 
-view : Coord CssPixels -> Model -> Element Msg
-view windowSize model =
+view : Coord CssPixels -> Bool -> Model -> Element Msg
+view windowSize hasImage model =
     case model.imageUrl of
         Nothing ->
-            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
+            Ui.row
+                [ Ui.spacing 8 ]
+                [ if hasImage then
+                    Ui.el
+                        [ Ui.Input.button PressedRemoveImage
+                        , Ui.id "imageEditor_removeImage"
+                        , MyUi.hoverText "Remove profile image"
+                        , Ui.paddingXY 8 0
+                        , Ui.background MyUi.deleteButtonBackground
+                        , Ui.Font.color MyUi.deleteButtonFont
+                        , Ui.rounded 4
+                        , Ui.width Ui.shrink
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        ]
+                        (Ui.html Icons.delete)
+
+                  else
+                    Ui.none
+                , MyUi.secondaryButton
+                    (Dom.id "imageEditor_selectImage")
+                    PressedProfileImage
+                    (if hasImage then
+                        "Select new image"
+
+                     else
+                        "Select image"
+                    )
+                ]
 
         Just imageUrl ->
             let

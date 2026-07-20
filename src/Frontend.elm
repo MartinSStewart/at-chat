@@ -1745,6 +1745,9 @@ updateLoaded msg model =
                                                 NoThreadWithFriends _ showMembers2 ->
                                                     showMembers2
 
+                                        GuildRoute _ _ ->
+                                            HideMembersTab
+
                                         DmRoute dmRoute ->
                                             case dmRoute.threadRoute of
                                                 ViewThreadWithFriends _ _ showMembers2 ->
@@ -1753,7 +1756,41 @@ updateLoaded msg model =
                                                 NoThreadWithFriends _ showMembers2 ->
                                                     showMembers2
 
-                                        _ ->
+                                        DiscordGuildRoute routeData ->
+                                            case routeData.channelRoute of
+                                                DiscordChannel_ChannelRoute _ threadRoute _ ->
+                                                    case threadRoute of
+                                                        ViewThreadWithFriends _ _ showMembers2 ->
+                                                            showMembers2
+
+                                                        NoThreadWithFriends _ showMembers2 ->
+                                                            showMembers2
+
+                                                _ ->
+                                                    HideMembersTab
+
+                                        DiscordDmRoute dmRoute ->
+                                            dmRoute.showMembersTab
+
+                                        HomePageRoute ->
+                                            HideMembersTab
+
+                                        AdminRoute _ ->
+                                            HideMembersTab
+
+                                        AiChatRoute ->
+                                            HideMembersTab
+
+                                        SlackOAuthRedirect _ ->
+                                            HideMembersTab
+
+                                        TextEditorRoute ->
+                                            HideMembersTab
+
+                                        LinkDiscord _ ->
+                                            HideMembersTab
+
+                                        PublicGoMatchRoute _ ->
                                             HideMembersTab
                             in
                             case showMember of

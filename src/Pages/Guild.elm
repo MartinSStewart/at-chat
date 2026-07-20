@@ -1259,7 +1259,7 @@ guildSettingsForm model loggedIn local guildId guild =
                     , Ui.row
                         [ Ui.spacing 12, Ui.alignLeft ]
                         [ GuildIcon.view (GuildIcon.Normal NoNotification) guild
-                        , ImageEditor.view model.windowSize guildIconEditor
+                        , ImageEditor.view model.windowSize (guild.icon /= Nothing) guildIconEditor
                             |> Ui.map (GuildIconEditorMsg guildId)
                         ]
                     ]

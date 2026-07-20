@@ -434,9 +434,9 @@ setName name user =
     { user | name = name }
 
 
-setIcon : FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
+setIcon : Maybe FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
 setIcon icon user =
-    { user | icon = Just icon }
+    { user | icon = icon }
 
 
 getUser : Id UserId -> LocalUser -> Maybe FrontendUser

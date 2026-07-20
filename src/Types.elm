@@ -874,8 +874,8 @@ type ServerChange
     | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
     | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
-    | Server_SetUserIcon (Id UserId) FileHash
-    | Server_SetGuildIcon (Id GuildId) FileHash
+    | Server_SetUserIcon (Id UserId) (Maybe FileHash)
+    | Server_SetGuildIcon (Id GuildId) (Maybe FileHash)
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel

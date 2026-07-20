@@ -5492,7 +5492,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\_ _ guild ->
                     ( { model
                         | guilds =
-                            SeqDict.insert guildId { guild | icon = Just fileHash } model.guilds
+                            SeqDict.insert guildId { guild | icon = fileHash } model.guilds
                       }
                     , Command.batch
                         [ Lamdera.sendToFrontend

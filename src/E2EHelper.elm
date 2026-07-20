@@ -2766,8 +2766,8 @@ allAttackerToBackendChanges =
     , ReloadDataRequest InitialLoadRequested_None
     , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
-    , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
-    , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
+    , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (Just (FileStatus.FileHash "fake-hash")))
+    , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (Just (FileStatus.FileHash "fake-hash")))
     , AdminDataRequest Nothing
     , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
     , LogOutRequest sessionId0Hash
