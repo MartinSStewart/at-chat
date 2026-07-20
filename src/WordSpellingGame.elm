@@ -5105,13 +5105,25 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             Nothing ->
                                 case passBehavior setup shared of
                                     ShouldReplaceTray ->
-                                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.el [ MyUi.hoverText "Replace tray" ] (Ui.html Icons.recycle))
+                                        MyUi.elButton
+                                            (Dom.id "wordSpellingGame_replaceTray")
+                                            PressedReplaceTrayOrPass
+                                            attributes
+                                            (Ui.el [ MyUi.hoverText "Replace tray", Ui.width Ui.shrink ] (Ui.html Icons.recycle))
 
                                     ShouldPass ->
-                                        MyUi.elButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass attributes (Ui.text "Pass")
+                                        MyUi.elButton
+                                            (Dom.id "wordSpellingGame_passOrEndTurn")
+                                            PressedReplaceTrayOrPass
+                                            attributes
+                                            (Ui.text "Pass")
 
                                     ShouldEndGame ->
-                                        MyUi.elButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass attributes (Ui.text "End game")
+                                        MyUi.elButton
+                                            (Dom.id "wordSpellingGame_passOrEndTurn")
+                                            PressedReplaceTrayOrPass
+                                            attributes
+                                            (Ui.text "End game")
 
                     Joined ->
                         Ui.none

@@ -217,7 +217,6 @@ drawButton isMobile currentTab =
             currentTab
             (Ui.el
                 [ Ui.width (Ui.px 24)
-                , Ui.Accessibility.description "Draw on top of messages"
                 , MyUi.hoverText "Draw on top of messages"
                 ]
                 (Ui.html Icons.paintbrush)
