@@ -19,7 +19,7 @@ module MessageInput exposing
     )
 
 import Array
-import CustomEmoji
+import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -47,14 +47,14 @@ import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sticker
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
 import User exposing (FrontendUser, LocalUser)
-import UserAgent exposing (Browser(..))
+import UserAgent exposing (Browser(..), UserAgent)
 import UserSession exposing (DiscordFrontendUser)
 
 
@@ -211,7 +211,12 @@ textarea :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
-    -> LocalUser
+    ->
+        { localUser
+            | userAgent : UserAgent
+            , stickers : SeqDict (Id StickerId) StickerData
+            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        }
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
@@ -251,7 +256,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
         , Html.Attributes.style "height" "fit-content"
         , Html.Attributes.style
             "letter-spacing"
-            (if localUser.session.userAgent.browser == Safari && modBy 2 loggedIn.typedTextCounter == 0 then
+            (if localUser.userAgent.browser == Safari && modBy 2 loggedIn.typedTextCounter == 0 then
                 "0"
 
              else
@@ -542,7 +547,12 @@ view :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) FileStatus
-    -> LocalUser
+    ->
+        { localUser
+            | userAgent : UserAgent
+            , stickers : SeqDict (Id StickerId) StickerData
+            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        }
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
