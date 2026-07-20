@@ -238,7 +238,7 @@ channelSearchTest config =
                 , admin.checkView 100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_openChannel_6" ])
                 , admin.checkView 100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "No matching channels found" ])
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "No matching channels\u{00A0}found" ])
 
                 -- Clearing the text shows all channels again.
                 , admin.click 100 (Dom.id "guild_clearChannelSearch")

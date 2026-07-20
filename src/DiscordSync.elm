@@ -79,17 +79,42 @@ addOrRemoveDiscordReaction :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addOrRemoveDiscordReaction isAdding reaction model =
+    let
+        customEmojiData :
+            { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+            , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+            }
+        customEmojiData =
+            handleCustomEmojis
+                model.serverSecret
+                (emojiDataToEmojiIdAndName [ reaction.emoji ])
+                { tasks = [], customEmojis = model.customEmojis, discordCustomEmojis = model.discordCustomEmojis }
+
+        emoji : EmojiOrCustomEmoji
+        emoji =
+            emojiFromDiscord customEmojiData.discordCustomEmojis reaction.emoji
+
+        loadCustomEmojiCmd : MessageFromGuildOrDm -> Command BackendOnly ToFrontend BackendMsg
+        loadCustomEmojiCmd guildOrDmId =
+            case customEmojiData.tasks of
+                [] ->
+                    Command.none
+
+                tasks ->
+                    Task.sequence tasks
+                        |> Task.andThen
+                            (\customEmojis2 ->
+                                Task.map (GotDiscordMessageCustomEmojis guildOrDmId customEmojis2) Time.now
+                            )
+                        |> Task.perform identity
+    in
     case reaction.guildId of
         Included guildId ->
             case SeqDict.get guildId model.discordGuilds of
                 Just guild ->
                     case discordChannelIdToChannelId reaction.channelId reaction.messageId guild of
                         Just ( channelId, channel, threadRoute ) ->
-                            let
-                                emoji : EmojiOrCustomEmoji
-                                emoji =
-                                    emojiFromDiscord model.discordCustomEmojis reaction.emoji
-                            in
                             ( { model
                                 | discordGuilds =
                                     SeqDict.insert
@@ -113,28 +138,33 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                                     |> Result.withDefault guild.membersAndOwner
                                         }
                                         model.discordGuilds
+                                , customEmojis = customEmojiData.customEmojis
+                                , discordCustomEmojis = customEmojiData.discordCustomEmojis
                               }
-                            , Broadcast.toDiscordGuild
-                                guildId
-                                ((if isAdding then
-                                    Server_DiscordAddReactionGuildEmoji
-                                        reaction.userId
-                                        guildId
-                                        channelId
-                                        threadRoute
-                                        emoji
+                            , Command.batch
+                                [ Broadcast.toDiscordGuild
+                                    guildId
+                                    ((if isAdding then
+                                        Server_DiscordAddReactionGuildEmoji
+                                            reaction.userId
+                                            guildId
+                                            channelId
+                                            threadRoute
+                                            emoji
 
-                                  else
-                                    Server_DiscordRemoveReactionGuildEmoji
-                                        reaction.userId
-                                        guildId
-                                        channelId
-                                        threadRoute
-                                        emoji
-                                 )
-                                    |> ServerChange
-                                )
-                                model
+                                      else
+                                        Server_DiscordRemoveReactionGuildEmoji
+                                            reaction.userId
+                                            guildId
+                                            channelId
+                                            threadRoute
+                                            emoji
+                                     )
+                                        |> ServerChange
+                                    )
+                                    model
+                                , loadCustomEmojiCmd (MessageFromGuildOrDm_Guild guildId)
+                                ]
                             )
 
                         Nothing ->
@@ -153,11 +183,6 @@ addOrRemoveDiscordReaction isAdding reaction model =
                 Just channel ->
                     case OneToOne.second reaction.messageId channel.linkedMessageIds of
                         Just messageId ->
-                            let
-                                emoji : EmojiOrCustomEmoji
-                                emoji =
-                                    emojiFromDiscord model.discordCustomEmojis reaction.emoji
-                            in
                             ( { model
                                 | discordDmChannels =
                                     SeqDict.updateIfExists
@@ -169,18 +194,23 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                             LocalState.removeReactionEmojiHelper emoji reaction.userId messageId
                                         )
                                         model.discordDmChannels
+                                , customEmojis = customEmojiData.customEmojis
+                                , discordCustomEmojis = customEmojiData.discordCustomEmojis
                               }
-                            , Broadcast.toDiscordDmChannel
-                                dmChannelId
-                                ((if isAdding then
-                                    Server_DiscordAddReactionDmEmoji reaction.userId dmChannelId messageId emoji
+                            , Command.batch
+                                [ Broadcast.toDiscordDmChannel
+                                    dmChannelId
+                                    ((if isAdding then
+                                        Server_DiscordAddReactionDmEmoji reaction.userId dmChannelId messageId emoji
 
-                                  else
-                                    Server_DiscordRemoveReactionDmEmoji reaction.userId dmChannelId messageId emoji
-                                 )
-                                    |> ServerChange
-                                )
-                                model
+                                      else
+                                        Server_DiscordRemoveReactionDmEmoji reaction.userId dmChannelId messageId emoji
+                                     )
+                                        |> ServerChange
+                                    )
+                                    model
+                                , loadCustomEmojiCmd (MessageFromGuildOrDm_Dm dmChannelId)
+                                ]
                             )
 
                         Nothing ->

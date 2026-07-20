@@ -6781,7 +6781,12 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
                 |> List.map Tuple.second
                 |> channelColumnNoResults searchFilter
              )
-                ++ [ newChannelButton ]
+                ++ (if searchFilter == "" then
+                        [ newChannelButton ]
+
+                    else
+                        []
+                   )
             )
         )
 
@@ -6826,9 +6831,9 @@ channelColumnNoResults searchFilter channelRows =
             [ Ui.Font.italic
             , Ui.Font.lineHeight 1.5
             , Ui.Font.color MyUi.font2
-            , Ui.paddingXY 16 12
+            , Ui.paddingXY 8 8
             ]
-            [ Ui.text "No matching channels found" ]
+            [ Ui.text "No matching channels\u{00A0}found" ]
         ]
 
     else
@@ -6848,10 +6853,9 @@ channelSearchRow isMobile channelSearch =
         , if channelSearch == "" then
             Ui.el
                 [ Ui.Font.color MyUi.font3
-                , Ui.width (Ui.px 32)
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 6 0
+                , Ui.paddingXY 12 0
                 , MyUi.noPointerEvents
                 , Ui.alignRight
                 ]
@@ -6863,10 +6867,10 @@ channelSearchRow isMobile channelSearch =
                 (Dom.id "guild_clearChannelSearch")
                 PressedClearChannelSearch
                 [ Ui.Font.color MyUi.font3
-                , Ui.width (Ui.px 32)
+                , Ui.width Ui.shrink
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 6 0
+                , Ui.paddingXY 12 0
                 , Ui.background MyUi.inputBackground
                 , Ui.alignRight
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
@@ -7934,7 +7938,7 @@ friendLabelMessagePreview time messagePreview message =
             MessageLoaded message2 ->
                 MyUi.timeElapsedShort time (Message.createdAt message2)
                     |> Ui.text
-                    |> Ui.el [ Ui.alignRight, Ui.Font.italic, Ui.opacity 0.7 ]
+                    |> Ui.el [ Ui.alignRight, Ui.opacity 0.7 ]
 
             MessageUnloaded ->
                 Ui.none
