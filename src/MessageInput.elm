@@ -202,7 +202,7 @@ isPress msg =
             False
 
 
-{-| The textarea's text is hidden underneath the formatted text overlay so the two must line-break at exactly the same points, otherwise the overlay stops covering the textarea's (red) text. Browsers don't all use the same UA defaults for these properties on textareas, so set them explicitly to match what the overlay div gets. The data attribute lets JS (elm-pkg-js/pin-textarea-scroll.js) keep the textarea's internal scroll position pinned at 0 to match the overlay, which can't scroll (mobile browsers in particular will otherwise sometimes scroll the textarea to keep the caret in view, even though it has overflow hidden).
+{-| The textarea's text is hidden underneath the formatted text overlay so the two must line-break at exactly the same points, otherwise the overlay stops covering the textarea's (red) text. Browsers don't all use the same UA defaults for these properties on textareas, so set them explicitly to match what the overlay div gets. The data attribute lets JS (elm-pkg-js/pin-textarea-scroll.js) keep the textarea's internal scroll position pinned at 0 to match the overlay, which can't scroll (mobile browsers in particular will otherwise sometimes scroll the textarea to keep the caret in view, even though it has overflow hidden), and force the textarea to rebuild its line layout after each edit (iOS Safari has been seen keeping a stale wrap point after a deletion that the overlay re-wraps).
 -}
 overlayAlignmentAttributes : List (Html.Attribute msg)
 overlayAlignmentAttributes =
