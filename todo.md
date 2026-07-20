@@ -19,6 +19,7 @@
 * If someone links their Discord account, when the linking finishes, show all the accounts they are a part of, not just
   all the ones that loaded (some might already be loaded)
 * Add support for Discord roles
+* Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
 
 Requested features:
 
