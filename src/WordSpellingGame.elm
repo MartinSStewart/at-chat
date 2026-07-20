@@ -4210,7 +4210,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                         |> Ui.el
                                             [ Ui.background premoveColor
                                             , Ui.Font.color MyUi.white
-                                            , Ui.paddingXY 2 0
+                                            , Ui.paddingXY 4 0
                                             , Ui.width Ui.shrink
                                             ]
                                     ]
