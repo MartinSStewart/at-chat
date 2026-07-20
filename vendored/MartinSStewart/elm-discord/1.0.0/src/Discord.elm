@@ -2838,8 +2838,7 @@ type alias Channel =
     , type_ : ChannelType
     , guildId : OptionalData (Id GuildId)
     , position : OptionalData Int
-
-    -- premission overwrites field excluded
+    , permissionOverwrites : OptionalData (List Overwrite)
     , name : OptionalData String
     , topic : OptionalData (Maybe String)
     , nsfw : OptionalData Bool
@@ -2853,6 +2852,7 @@ type alias Channel =
     , applicationId : OptionalData (Id ApplicationId)
     , parentId : OptionalData (Maybe (Id ChannelId))
     , lastPinTimestamp : OptionalData Time.Posix
+    , permissions : OptionalData Permissions
     }
 
 
@@ -2868,6 +2868,7 @@ type alias Channel2 =
     , bitrate : OptionalData (Quantity Int (Rate Bits Seconds))
     , parentId : OptionalData (Maybe (Id ChannelId))
     , permissionOverwrites : List Overwrite
+    , permissions : OptionalData Permissions
     }
 
 
@@ -4353,6 +4354,7 @@ decodeChannel =
         |> JD.andMap (JD.field "type" decodeChannelType)
         |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
+        |> JD.andMap (decodeOptionalData "permission_overwrites" (JD.list decodeOverwrite))
         |> JD.andMap (decodeOptionalData "name" JD.string)
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
@@ -4366,6 +4368,7 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "application_id" decodeId)
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "last_pin_timestamp" Iso8601.decoder)
+        |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
 
 
 type alias PrivateChannel =
@@ -4409,6 +4412,7 @@ decodeChannel2 =
         |> JD.andMap (decodeOptionalData "bitrate" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "permission_overwrites" (JD.list decodeOverwrite))
+        |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
 
 
 decodeChannelType : JD.Decoder ChannelType
