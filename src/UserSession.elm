@@ -76,6 +76,7 @@ type SetViewing
     | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
+    | ViewOverview
 
 
 type Viewing
@@ -87,6 +88,7 @@ type Viewing
     | Viewing_DiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId)
     | Viewing_DiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId)
     | Viewing_None
+    | Viewing_Overview
 
 
 type alias ViewDiscordGuildData messageId =
@@ -127,6 +129,9 @@ setViewingToCurrentlyViewing viewing =
 
         StopViewingChannel ->
             Viewing_None
+
+        ViewOverview ->
+            Viewing_Overview
 
 
 isViewing : AnyGuildOrDmId -> ThreadRoute -> Viewing -> Bool
@@ -188,6 +193,9 @@ isViewingGame guildOrDmId matchId viewing =
             False
 
         Viewing_DiscordChannelThread _ _ _ _ ->
+            False
+
+        Viewing_Overview ->
             False
 
 

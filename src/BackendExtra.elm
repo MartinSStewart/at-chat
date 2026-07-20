@@ -915,6 +915,9 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
 
             UserSession.Viewing_None ->
                 visibleDmUsers
+
+            UserSession.Viewing_Overview ->
+                Debug.todo ""
         )
         linkedUsers
 
