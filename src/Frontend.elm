@@ -1775,22 +1775,22 @@ updateLoaded msg model =
                                         HomePageRoute ->
                                             HideMembersTab
 
-                                        AdminRoute record ->
+                                        AdminRoute _ ->
                                             HideMembersTab
 
                                         AiChatRoute ->
                                             HideMembersTab
 
-                                        SlackOAuthRedirect result ->
+                                        SlackOAuthRedirect _ ->
                                             HideMembersTab
 
                                         TextEditorRoute ->
                                             HideMembersTab
 
-                                        LinkDiscord result ->
+                                        LinkDiscord _ ->
                                             HideMembersTab
 
-                                        PublicGoMatchRoute secretId ->
+                                        PublicGoMatchRoute _ ->
                                             HideMembersTab
                             in
                             case showMember of
