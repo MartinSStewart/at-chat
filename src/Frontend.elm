@@ -1769,7 +1769,25 @@ updateLoaded msg model =
                                         DiscordDmRoute dmRoute ->
                                             dmRoute.showMembersTab
 
-                                        _ ->
+                                        HomePageRoute ->
+                                            HideMembersTab
+
+                                        AdminRoute record ->
+                                            HideMembersTab
+
+                                        AiChatRoute ->
+                                            HideMembersTab
+
+                                        SlackOAuthRedirect result ->
+                                            HideMembersTab
+
+                                        TextEditorRoute ->
+                                            HideMembersTab
+
+                                        LinkDiscord result ->
+                                            HideMembersTab
+
+                                        PublicGoMatchRoute secretId ->
                                             HideMembersTab
                             in
                             case showMember of
