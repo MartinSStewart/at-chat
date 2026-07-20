@@ -1745,6 +1745,9 @@ updateLoaded msg model =
                                                 NoThreadWithFriends _ showMembers2 ->
                                                     showMembers2
 
+                                        GuildRoute _ _ ->
+                                            HideMembersTab
+
                                         DmRoute dmRoute ->
                                             case dmRoute.threadRoute of
                                                 ViewThreadWithFriends _ _ showMembers2 ->
