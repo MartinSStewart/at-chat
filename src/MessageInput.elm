@@ -257,10 +257,10 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
         , Html.Attributes.style
             "letter-spacing"
             (if localUser.userAgent.browser == Safari && modBy 2 loggedIn.typedTextCounter == 0 then
-                "0"
+                "-0.001px"
 
              else
-                "-0.001px"
+                "0"
             )
         , RichText.bigEmojiFont
         ]
