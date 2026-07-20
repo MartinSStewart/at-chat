@@ -41,12 +41,13 @@ type Msg
     | GotImageSize (Result Dom.Error Dom.Element)
     | CroppedImage (Result String CropImageDataResponse)
     | PressedCancel
+    | PressedRemoveImage
     | UploadedImage (Result Http.Error UploadResponse)
 
 
 type ToBackend
-    = ChangeUserAvatarRequest FileHash
-    | ChangeGuildIconRequest (Id GuildId) FileHash
+    = ChangeUserAvatarRequest (Maybe FileHash)
+    | ChangeGuildIconRequest (Id GuildId) (Maybe FileHash)
 
 
 type ToFrontend
@@ -129,6 +130,9 @@ isPressMsg msg =
         PressedCancel ->
             True
 
+        PressedRemoveImage ->
+            True
+
         UploadedImage _ ->
             False
 
@@ -145,7 +149,7 @@ init =
     }
 
 
-update : (FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update : (Maybe FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 update toBackendMsg sessionIdHash windowSize msg model =
     case msg of
         PressedProfileImage ->
@@ -285,11 +289,14 @@ update toBackendMsg sessionIdHash windowSize msg model =
         PressedCancel ->
             ( { model | imageUrl = Nothing, imageSize = Nothing }, Command.none )
 
+        PressedRemoveImage ->
+            ( model, Lamdera.sendToBackend (toBackendMsg Nothing) )
+
         UploadedImage result ->
             case result of
                 Ok uploaded ->
                     ( { model | status = Uploading uploaded.fileHash }
-                    , Lamdera.sendToBackend (toBackendMsg uploaded.fileHash)
+                    , Lamdera.sendToBackend (toBackendMsg (Just uploaded.fileHash))
                     )
 
                 Err _ ->
@@ -453,11 +460,19 @@ profileImagePlaceholderId =
     Dom.id "profile-image-placeholder-id"
 
 
-view : Coord CssPixels -> Model -> Element Msg
-view windowSize model =
+view : Coord CssPixels -> Bool -> Model -> Element Msg
+view windowSize hasImage model =
     case model.imageUrl of
         Nothing ->
-            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
+            Ui.row
+                [ Ui.spacing 16 ]
+                [ MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
+                , if hasImage then
+                    MyUi.secondaryButton (Dom.id "imageEditor_removeImage") PressedRemoveImage "Remove image"
+
+                  else
+                    Ui.none
+                ]
 
         Just imageUrl ->
             let
