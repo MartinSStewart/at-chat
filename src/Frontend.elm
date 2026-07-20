@@ -483,6 +483,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , friendsSearch = ""
             , channelSearch = ""
             , expandedUserOptions = SeqSet.fromList [ UserOption_Settings ]
+            , typedTextCounter = 0
             }
     in
     ( loggedIn
@@ -3283,6 +3284,7 @@ updateLoaded msg model =
                                                                 { edit | text = text }
                                                                 loggedIn.editMessage
                                                         , typingDebouncer = False
+                                                        , typedTextCounter = loggedIn.typedTextCounter + 1
                                                     }
                                             in
                                             FrontendExtra.handleLocalChange
@@ -3646,6 +3648,7 @@ updateLoaded msg model =
                                                     Nothing ->
                                                         SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.drafts
                                             , typingDebouncer = False
+                                            , typedTextCounter = loggedIn.typedTextCounter + 1
                                         }
                                         (Command.batch
                                             [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)

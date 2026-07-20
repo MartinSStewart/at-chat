@@ -257,6 +257,10 @@ type alias LoggedIn2 =
     , friendsSearch : String
     , channelSearch : String
     , expandedUserOptions : SeqSet UserOptionSection
+    , {- We want to slightly change the letter spacing for textarea's on Safari in order to force it to recalculate word wrap.
+         This is to work around this bug https://github.com/panphora/overtype/issues/116
+      -}
+      typedTextCounter : Int
     }
 
 

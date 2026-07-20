@@ -278,9 +278,8 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText
                                     (FileStatus.hasUploadingFile edit.attachedFiles)
                                     edit.attachedFiles
-                                    local.localUser.customEmojis
-                                    local.localUser.stickers
-                                    loggedIn.textInputFocus
+                                    local.localUser
+                                    loggedIn
                                     allUsers
                         in
                         [ (case extraOptions.guildOrDmId of
