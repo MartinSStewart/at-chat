@@ -2767,6 +2767,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 )
                                 guild.emojis
                                 |> SeqSet.fromList
+                        , roles = guild.roles
                     }
                         |> Just
 
@@ -2802,6 +2803,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                             )
                             guild.emojis
                             |> SeqSet.fromList
+                    , roles = guild.roles
                     }
                         |> Just
         )

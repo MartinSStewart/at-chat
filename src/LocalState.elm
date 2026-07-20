@@ -215,6 +215,7 @@ type alias DiscordBackendGuild =
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
+    , roles : List Discord.Role
     }
 
 
@@ -768,6 +769,7 @@ type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , roles : List Discord.Role
     }
 
 

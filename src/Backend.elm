@@ -1865,6 +1865,31 @@ update msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToRegenerateServerSecret error) model responseCmd
 
+        ReloadedDiscordGuildForAdmin time changeId clientId userIdToLoadWith guildId result ->
+            let
+                responseCmd : Command BackendOnly ToFrontend BackendMsg
+                responseCmd =
+                    FilledInByBackend (Result.map .roles result)
+                        |> Pages.Admin.ReloadDiscordGuild userIdToLoadWith guildId
+                        |> Local_Admin
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
+            case result of
+                Ok guild ->
+                    ( { model
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\discordGuild -> { discordGuild | roles = guild.roles })
+                                model.discordGuilds
+                      }
+                    , responseCmd
+                    )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedToReloadDiscordGuild guildId error) model responseCmd
+
         GotRustServerFileUpload fileHash fileSize2 maybeImageSize ->
             ( { model
                 | files =
@@ -1995,6 +2020,7 @@ addDiscordGuildData discordUserId data guild =
             |> Result.withDefault guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
+    , roles = data.guild.roles
     }
 
 
@@ -7754,6 +7780,18 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         --        )
                         --    |> Task.attempt (ReloadedDiscordDmChannel time userIdToLoadWith channelId)
                         ]
+                    )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Pages.Admin.ReloadDiscordGuild userIdToLoadWith guildId _ ->
+            case SeqDict.get userIdToLoadWith model.discordUsers of
+                Just (FullData discordUser) ->
+                    ( model
+                    , Discord.getGuildPayload (Discord.userToken discordUser.auth) guildId
+                        |> DiscordSync.http model.serverSecret
+                        |> Task.attempt (ReloadedDiscordGuildForAdmin time changeId clientId userIdToLoadWith guildId)
                     )
 
                 _ ->

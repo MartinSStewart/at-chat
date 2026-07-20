@@ -140,6 +140,7 @@ type Msg
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | PressedReloadDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | PressedReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId)
     | PressedCopyText String
     | TypedInReadOnlyTextInput
     | PressedExportBackend
@@ -307,6 +308,7 @@ type AdminChange
     | RestoreGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | ReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (ToBeFilledInByBackend (Result Discord.HttpError (List Discord.Role)))
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
@@ -560,6 +562,24 @@ updateAdmin changedBy change adminData local =
                                         adminData.loadingDiscordChannels
                             }
                 }
+
+        ReloadDiscordGuild _ guildId toBeFilledInByBackend ->
+            case toBeFilledInByBackend of
+                FilledInByBackend (Ok roles) ->
+                    { local
+                        | adminData =
+                            IsAdmin
+                                { adminData
+                                    | discordGuilds =
+                                        SeqDict.updateIfExists
+                                            guildId
+                                            (\guild -> { guild | roles = roles })
+                                            adminData.discordGuilds
+                                }
+                    }
+
+                _ ->
+                    local
 
         ExpandGuild guildId ->
             let
@@ -1229,6 +1249,9 @@ update navigationKey time adminData localState msg model =
         PressedReloadDiscordDmChannel currentUserId channelId ->
             ( model, Command.none, StartReloadingDiscordDmChannel time currentUserId channelId |> AdminChange )
 
+        PressedReloadDiscordGuild currentUserId guildId ->
+            ( model, Command.none, ReloadDiscordGuild currentUserId guildId EmptyPlaceholder |> AdminChange )
+
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
@@ -1678,6 +1701,9 @@ pendingChangesText change =
 
         StartReloadingDiscordDmChannel _ _ _ ->
             "Reset Discord DM channel"
+
+        ReloadDiscordGuild _ _ _ ->
+            "Reloaded Discord guild"
 
         ExpandGuild _ ->
             "Expanded guild in admin page"
@@ -3458,7 +3484,9 @@ discordGuildsSection isMobile user adminData =
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels))
+                                    (discordGuildRoles userThatCanReload guildId guild.roles
+                                        :: List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels)
+                                    )
 
                               else
                                 Ui.none
@@ -3508,6 +3536,34 @@ loadingChannelErrorView channelId isReloading =
 
         _ ->
             Ui.none
+
+
+discordGuildRoles : Maybe (Discord.Id Discord.UserId) -> Discord.Id Discord.GuildId -> List Discord.Role -> Element Msg
+discordGuildRoles maybeUserId guildId roles =
+    Ui.row
+        [ Ui.spacing 8, Ui.Font.size 13 ]
+        [ case maybeUserId of
+            Just userId ->
+                resetButton
+                    (reloadDiscordGuildButtonId guildId)
+                    (PressedReloadDiscordGuild userId guildId)
+
+            Nothing ->
+                Ui.none
+        , if List.isEmpty roles then
+            Ui.text "No roles loaded. Press reload to fetch them."
+
+          else
+            List.sortBy (\role -> -role.position) roles
+                |> List.map .name
+                |> String.join ", "
+                |> (\text -> Ui.text ("Roles (" ++ String.fromInt (List.length roles) ++ "): " ++ text))
+        ]
+
+
+reloadDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
+reloadDiscordGuildButtonId guildId =
+    Dom.id ("admin_reloadDiscordGuild_" ++ Discord.idToString guildId)
 
 
 discordGuildChannel :

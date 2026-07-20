@@ -977,6 +977,7 @@ adminData model lastLogPageViewed =
                         )
                         guild.channels
                 , membersAndOwner = guild.membersAndOwner
+                , roles = guild.roles
                 }
             )
             model.discordGuilds
