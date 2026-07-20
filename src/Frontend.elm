@@ -5475,22 +5475,22 @@ setShowMembers showMembers model =
         HomePageRoute ->
             ( model, Command.none )
 
-        AdminRoute record ->
+        AdminRoute _ ->
             ( model, Command.none )
 
         AiChatRoute ->
             ( model, Command.none )
 
-        SlackOAuthRedirect result ->
+        SlackOAuthRedirect _ ->
             ( model, Command.none )
 
         TextEditorRoute ->
             ( model, Command.none )
 
-        LinkDiscord result ->
+        LinkDiscord _ ->
             ( model, Command.none )
 
-        PublicGoMatchRoute secretId ->
+        PublicGoMatchRoute _ ->
             ( model, Command.none )
 
 
