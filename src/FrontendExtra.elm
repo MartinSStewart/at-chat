@@ -924,6 +924,7 @@ editMessage_gotPastedText guildOrDmId { textBeforePaste, pastedText, textAfterPa
                                 SeqDict.insert fileId (pastedTextFileStatus pastedText) edit.attachedFiles
                         }
                         loggedIn.editMessage
+                , typedTextCounter = loggedIn.typedTextCounter + 1
               }
             , FileStatus.uploadString
                 (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)

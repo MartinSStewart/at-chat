@@ -1796,7 +1796,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         charsLeft
                                         edit
                                         editRichText
-                                        loggedIn.textInputFocus
+                                        loggedIn
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -2097,7 +2097,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         edit
                                         editRichText
-                                        loggedIn.textInputFocus
+                                        loggedIn
                                         currentDiscordUserId
                                         allUsers
                                         local
@@ -2418,7 +2418,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         (RichText.maxLength - String.length editing.text)
                                         editing
                                         editRichText
-                                        loggedIn.textInputFocus
+                                        loggedIn
                                         local.localUser.session.userId
                                         allUsers
                                         local
@@ -2635,7 +2635,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         editing
                                         editRichText
-                                        loggedIn.textInputFocus
+                                        loggedIn
                                         currentDiscordUserId
                                         allUsers
                                         local
@@ -3241,9 +3241,8 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
-                local.localUser.customEmojis
-                local.localUser.stickers
-                loggedIn.textInputFocus
+                local.localUser
+                loggedIn
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
@@ -3422,9 +3421,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        local.localUser.customEmojis
-                        local.localUser.stickers
-                        loggedIn.textInputFocus
+                        local.localUser
+                        loggedIn
                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
@@ -3699,9 +3697,8 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
-                local.localUser.customEmojis
-                local.localUser.stickers
-                loggedIn.textInputFocus
+                local.localUser
+                loggedIn
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
@@ -3874,9 +3871,8 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
-                local.localUser.customEmojis
-                local.localUser.stickers
-                loggedIn.textInputFocus
+                local.localUser
+                loggedIn
                 (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel currentDiscordUserId model
@@ -3953,7 +3949,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             charsLeft
                             edit
                             editRichText
-                            loggedIn.textInputFocus
+                            loggedIn
                             local.localUser.session.userId
                             allUsers
                             local
@@ -4072,7 +4068,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             (RichText.discordCharsLeft OneToOne.empty editRichText)
                             edit
                             editRichText
-                            loggedIn.textInputFocus
+                            loggedIn
                             currentUserId
                             allUsers
                             local
@@ -4316,12 +4312,12 @@ messageEditingView :
     -> Int
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
-    -> Maybe TextInputFocus
+    -> LoggedIn2
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4343,9 +4339,8 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         editing.text
                         editingRichText
                         editing.attachedFiles
-                        local.localUser.customEmojis
-                        local.localUser.stickers
-                        pingUser
+                        local.localUser
+                        loggedIn
                         allUsers
             in
             Ui.column
@@ -4462,12 +4457,12 @@ threadMessageEditingView :
     -> Int
     -> EditMessage
     -> Maybe (Nonempty (RichText userId))
-    -> Maybe TextInputFocus
+    -> LoggedIn2
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4491,9 +4486,8 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         editing.text
                         editingRichText
                         editing.attachedFiles
-                        local.localUser.customEmojis
-                        local.localUser.stickers
-                        pingUser
+                        local.localUser
+                        loggedIn
                         allUsers
             in
             Ui.column
