@@ -6848,10 +6848,9 @@ channelSearchRow isMobile channelSearch =
         , if channelSearch == "" then
             Ui.el
                 [ Ui.Font.color MyUi.font3
-                , Ui.width (Ui.px 32)
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 6 0
+                , Ui.paddingXY 12 0
                 , MyUi.noPointerEvents
                 , Ui.alignRight
                 ]
@@ -6863,10 +6862,10 @@ channelSearchRow isMobile channelSearch =
                 (Dom.id "guild_clearChannelSearch")
                 PressedClearChannelSearch
                 [ Ui.Font.color MyUi.font3
-                , Ui.width (Ui.px 32)
+                , Ui.width Ui.shrink
                 , Ui.height Ui.fill
                 , Ui.contentCenterY
-                , Ui.paddingXY 6 0
+                , Ui.paddingXY 12 0
                 , Ui.background MyUi.inputBackground
                 , Ui.alignRight
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
