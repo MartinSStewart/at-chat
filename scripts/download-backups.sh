@@ -10,16 +10,20 @@
 #
 # Usage:
 #   scripts/download-backups.sh            Download any new backups now.
-#   scripts/download-backups.sh install    Install a daily cron job that runs it.
-#   scripts/download-backups.sh uninstall  Remove the cron job.
+#   scripts/download-backups.sh install    Install a daily systemd user timer.
+#   scripts/download-backups.sh uninstall  Remove the systemd user timer.
 #
-# Configuration (override by exporting these before running, e.g. in the cron
-# environment or a wrapper):
+# The timer uses Persistent=true, so if the machine is off or asleep at the
+# scheduled time, the download runs the next time you log in / power on instead
+# of being skipped (unlike cron). Any config values below are baked into the
+# unit at install time.
+#
+# Configuration (override by exporting these before running):
 #   REMOTE_HOST        SSH target                (default: root@at-chat.app)
 #   REMOTE_BACKUP_DIR  Backups folder on server  (default: /var/lib/atchat/backups/)
 #   LOCAL_BACKUP_DIR   Where to save backups     (default: $HOME/at-chat-backups)
 #   SSH_KEY            Path to a private key      (default: ssh default)
-#   RUN_HOUR          Hour (0-23) for the daily run when installing (default: 4)
+#   RUN_HOUR           Hour (0-23) for the daily run when installing (default: 4)
 #
 set -euo pipefail
 
@@ -31,7 +35,11 @@ RUN_HOUR="${RUN_HOUR:-4}"
 LOG_FILE="${LOG_FILE:-$LOCAL_BACKUP_DIR/download-backups.log}"
 
 log() {
-    printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE" >&2
+    local line
+    line="$(date '+%Y-%m-%d %H:%M:%S') $*"
+    printf '%s\n' "$line" >&2
+    # Best-effort append to the log file; never let logging abort the script.
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null && printf '%s\n' "$line" >>"$LOG_FILE" 2>/dev/null || true
 }
 
 # Build the ssh command rsync should use, optionally with an explicit key.
@@ -71,34 +79,78 @@ download() {
     fi
 }
 
-install_cron() {
+UNIT_NAME="at-chat-backups"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+install_systemd() {
+    command -v systemctl >/dev/null 2>&1 || {
+        log "ERROR: systemctl not found. This system doesn't use systemd."
+        exit 1
+    }
+
     local script_path
     script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-    local cron_line="0 $RUN_HOUR * * * $script_path >/dev/null 2>&1"
-    local marker="# at-chat-download-backups"
 
-    # Replace any existing entry for this script, then add the fresh one.
-    local current
-    current="$(crontab -l 2>/dev/null | grep -v "$marker" || true)"
-    printf '%s\n%s %s\n' "$current" "$cron_line" "$marker" | crontab -
-    log "Installed daily cron job at ${RUN_HOUR}:00 -> $script_path"
-    log "Verify with: crontab -l"
+    mkdir -p "$UNIT_DIR"
+
+    # Bake the current config into the service so overrides set at install time
+    # persist. Only include SSH_KEY if one was provided.
+    local key_env=""
+    [ -n "$SSH_KEY" ] && key_env="Environment=SSH_KEY=$SSH_KEY"
+
+    cat >"$UNIT_DIR/$UNIT_NAME.service" <<EOF
+[Unit]
+Description=Download new at-chat backups from $REMOTE_HOST
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=REMOTE_HOST=$REMOTE_HOST
+Environment=REMOTE_BACKUP_DIR=$REMOTE_BACKUP_DIR
+Environment=LOCAL_BACKUP_DIR=$LOCAL_BACKUP_DIR
+$key_env
+ExecStart=$script_path download
+EOF
+
+    cat >"$UNIT_DIR/$UNIT_NAME.timer" <<EOF
+[Unit]
+Description=Daily at-chat backup download
+
+[Timer]
+OnCalendar=*-*-* $(printf '%02d' "$RUN_HOUR"):00:00
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$UNIT_NAME.timer"
+
+    log "Installed systemd user timer '$UNIT_NAME.timer' (daily around ${RUN_HOUR}:00)."
+    log "Check status: systemctl --user list-timers $UNIT_NAME.timer"
+    log "Run now:      systemctl --user start $UNIT_NAME.service"
+    log "NOTE: user timers only run while you're logged in. To have it run even"
+    log "when logged out, enable lingering: sudo loginctl enable-linger \$USER"
 }
 
-uninstall_cron() {
-    local marker="# at-chat-download-backups"
-    if crontab -l 2>/dev/null | grep -q "$marker"; then
-        crontab -l 2>/dev/null | grep -v "$marker" | crontab -
-        log "Removed at-chat backup cron job."
-    else
-        log "No at-chat backup cron job found."
-    fi
+uninstall_systemd() {
+    command -v systemctl >/dev/null 2>&1 || {
+        log "systemctl not found; nothing to remove."
+        return 0
+    }
+    systemctl --user disable --now "$UNIT_NAME.timer" 2>/dev/null || true
+    rm -f "$UNIT_DIR/$UNIT_NAME.timer" "$UNIT_DIR/$UNIT_NAME.service"
+    systemctl --user daemon-reload
+    log "Removed systemd user timer and service."
 }
 
 case "${1:-download}" in
     download) download ;;
-    install) install_cron ;;
-    uninstall) uninstall_cron ;;
+    install) install_systemd ;;
+    uninstall) uninstall_systemd ;;
     *)
         echo "Usage: $0 [download|install|uninstall]" >&2
         exit 2
