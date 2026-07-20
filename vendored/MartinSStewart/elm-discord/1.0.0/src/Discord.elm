@@ -2735,31 +2735,12 @@ type alias GuildMemberNoUser =
     }
 
 
-{-| Roles represent a set of permissions attached to a group of users.
-
-<https://docs.discord.food/resources/guild#role-object>
-
-  - `id`: The ID of the role
-  - `name`: The name of the role (max 100 characters)
-  - `description`: The description for the role (max 90 characters)
-  - `color`: The color of the role represented as an integer representation of a hexadecimal color code (deprecated in favor of `colors`)
-  - `colors`: The colors of the role encoded as an integer representation of hexadecimal color codes
-  - `hoist`: Whether this role is pinned in the user listing
-  - `icon`: The role's icon hash
-  - `unicodeEmoji`: The role's unicode emoji
-  - `position`: Position of this role
-  - `permissions`: The permission bitwise value for the role
-  - `managed`: Whether this role is managed by an integration
-  - `mentionable`: Whether this role is mentionable
-  - `flags`: The role's flags
-  - `tags`: The tags this role has
-
+{-| <https://docs.discord.food/resources/guild#role-object>
 -}
 type alias Role =
     { id : Id RoleId
     , name : String
     , description : Maybe String
-    , color : Int
     , colors : OptionalData RoleColors
     , hoist : Bool
     , icon : Maybe (ImageHash RoleIconHash)
@@ -4167,7 +4148,6 @@ decodeRole =
         |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.optionalNullableField "description" JD.string)
-        |> JD.andMap (JD.field "color" JD.int)
         |> JD.andMap (decodeOptionalData "colors" decodeRoleColors)
         |> JD.andMap (JD.field "hoist" JD.bool)
         |> JD.andMap (JD.optionalNullableField "icon" decodeHash)
