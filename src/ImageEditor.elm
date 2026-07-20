@@ -17,6 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Touch
+import Icons
 import Id exposing (GuildId, Id)
 import Json.Decode
 import List.Extra as List
@@ -27,6 +28,7 @@ import Quantity exposing (Quantity)
 import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
 
 
 type Msg
@@ -465,13 +467,33 @@ view windowSize hasImage model =
     case model.imageUrl of
         Nothing ->
             Ui.row
-                [ Ui.spacing 16 ]
-                [ MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
-                , if hasImage then
-                    MyUi.secondaryButton (Dom.id "imageEditor_removeImage") PressedRemoveImage "Remove image"
+                [ Ui.spacing 8 ]
+                [ if hasImage then
+                    Ui.el
+                        [ Ui.Input.button PressedRemoveImage
+                        , Ui.id "imageEditor_removeImage"
+                        , MyUi.hoverText "Remove profile image"
+                        , Ui.paddingXY 8 0
+                        , Ui.background MyUi.deleteButtonBackground
+                        , Ui.Font.color MyUi.deleteButtonFont
+                        , Ui.rounded 4
+                        , Ui.width Ui.shrink
+                        , Ui.height Ui.fill
+                        , Ui.contentCenterY
+                        ]
+                        (Ui.html Icons.delete)
 
                   else
                     Ui.none
+                , MyUi.secondaryButton
+                    (Dom.id "imageEditor_selectImage")
+                    PressedProfileImage
+                    (if hasImage then
+                        "Select new image"
+
+                     else
+                        "Select image"
+                    )
                 ]
 
         Just imageUrl ->
