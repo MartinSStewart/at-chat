@@ -527,6 +527,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
+                    , MyUi.hoverText "Send message"
                     , Html.Events.preventDefaultOn
                         "touchend"
                         (Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True ))
@@ -616,6 +617,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
+                    , MyUi.hoverText "Send message"
                     , Html.Events.custom
                         "touchstart"
                         (Json.Decode.succeed
@@ -665,6 +667,7 @@ attachmentButton htmlIdPrefix =
         , Ui.background MyUi.buttonBackground
         , Ui.contentCenterY
         , Ui.centerY
+        , MyUi.hoverText "Attach file"
         , Html.Events.preventDefaultOn
             "touchend"
             (Json.Decode.succeed ( PressedUploadFile, True ))
@@ -684,6 +687,7 @@ showEmojiSelectorButton htmlIdPrefix =
         , Ui.background MyUi.buttonBackground
         , Ui.contentCenterY
         , Ui.centerY
+        , MyUi.hoverText "Add emoji"
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
         , Html.Events.preventDefaultOn
             "touchend"

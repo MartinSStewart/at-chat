@@ -462,6 +462,7 @@ searchInput searchHasFocus model items columns =
                 , Ui.height Ui.fill
                 , Ui.contentCenterX
                 , Ui.contentCenterY
+                , MyUi.hoverText "Clear search"
                 ]
                 (Ui.html Icons.x)
 

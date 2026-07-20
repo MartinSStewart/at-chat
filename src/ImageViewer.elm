@@ -809,12 +809,13 @@ closeButton =
         , Ui.Font.color MyUi.white
         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
         , Ui.background MyUi.scrim
+        , MyUi.hoverText "Close"
         ]
         (Ui.html Icons.x)
 
 
-zoomButton : HtmlId -> Msg -> String -> Element Msg
-zoomButton htmlId onPress label =
+zoomButton : HtmlId -> Msg -> String -> String -> Element Msg
+zoomButton htmlId onPress title label =
     MyUi.elButton
         htmlId
         onPress
@@ -826,6 +827,7 @@ zoomButton htmlId onPress label =
         , Ui.Font.size 24
         , Ui.contentCenterX
         , Ui.contentCenterY
+        , MyUi.hoverText title
         ]
         (Ui.text label)
 
@@ -840,6 +842,6 @@ zoomButtons =
         , Ui.paddingXY 16 24
         , MyUi.htmlStyle "transform" ("translateY(-" ++ MyUi.insetBottom ++ ")")
         ]
-        [ zoomButton (Dom.id "imageViewer_zoomOut") PressedZoomOut "−"
-        , zoomButton (Dom.id "imageViewer_zoomIn") PressedZoomIn "+"
+        [ zoomButton (Dom.id "imageViewer_zoomOut") PressedZoomOut "Zoom out" "−"
+        , zoomButton (Dom.id "imageViewer_zoomIn") PressedZoomIn "Zoom in" "+"
         ]

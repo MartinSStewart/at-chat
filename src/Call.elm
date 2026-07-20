@@ -1130,11 +1130,23 @@ view windowSize roomId calls model =
                             ]
                         , voiceChatControlButton
                             "guild_voiceChatMute"
+                            (if model.remoteCallData.audioInputEnabled then
+                                "Mute microphone"
+
+                             else
+                                "Unmute microphone"
+                            )
                             (Ui.html Icons.microphone)
                             model.remoteCallData.audioInputEnabled
                             PressedToggleMute
                         , voiceChatControlButton
                             "guild_voiceChatPauseVideo"
+                            (if model.remoteCallData.videoInputEnabled then
+                                "Turn off camera"
+
+                             else
+                                "Turn on camera"
+                            )
                             (Ui.html (Icons.camera 24))
                             model.remoteCallData.videoInputEnabled
                             PressedTogglePauseVideo
@@ -1146,8 +1158,8 @@ view windowSize roomId calls model =
         Ui.none
 
 
-voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
-voiceChatControlButton htmlId iconHtml isEnabled onPress =
+voiceChatControlButton : String -> String -> Element msg -> Bool -> msg -> Element msg
+voiceChatControlButton htmlId title iconHtml isEnabled onPress =
     MyUi.elButton
         (Dom.id htmlId)
         onPress
@@ -1156,6 +1168,7 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
         , Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.rounded 20
+        , MyUi.hoverText title
         , Ui.border 1
         , Ui.borderColor
             (if isEnabled then

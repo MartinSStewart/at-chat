@@ -111,6 +111,7 @@ loggedInAsView localUser =
             , Ui.contentCenterY
             , Ui.paddingXY 8 0
             , Ui.alignRight
+            , MyUi.hoverText "User settings"
             ]
             (Ui.html Icons.gear)
         ]
@@ -1575,6 +1576,7 @@ copyableText text model =
             , Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.Font.size 14
+            , MyUi.hoverText "Copy"
             ]
             (if isCopied then
                 Ui.text "Copied!"
@@ -3008,6 +3010,7 @@ replyToHeaderHelper onPress userId allUsers =
                 [ Ui.width (Ui.px 32)
                 , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
                 , Ui.alignRight
+                , MyUi.hoverText "Cancel reply"
                 ]
                 (Ui.html Icons.x)
             )
@@ -6712,6 +6715,7 @@ channelColumn isMobile time localUser guildId guild channelRoute channelNameHove
             , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
+            , MyUi.hoverText "Invite users"
             ]
             (Ui.html Icons.inviteUserIcon)
         ]
@@ -6874,6 +6878,7 @@ channelSearchRow isMobile channelSearch =
                 , Ui.background MyUi.inputBackground
                 , Ui.alignRight
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font3 ]
+                , MyUi.hoverText "Clear search"
                 ]
                 (Ui.html Icons.x)
                 |> Ui.inFront
@@ -6956,6 +6961,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             , Ui.paddingXY 8 0
             , Ui.height Ui.fill
             , Ui.contentCenterY
+            , MyUi.hoverText "Invite users"
             ]
             (Ui.html Icons.inviteUserIcon)
         ]
@@ -7342,6 +7348,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
                 , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
                 , Ui.Font.color MyUi.font3
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText "Edit channel"
                 ]
                 (Ui.html Icons.gear)
 
@@ -7453,6 +7460,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
                 , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
                 , Ui.Font.color MyUi.font3
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText "Edit channel"
                 ]
                 (Ui.html Icons.gear)
 
@@ -7733,6 +7741,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                             , Ui.paddingXY 8 0
                             , Ui.height Ui.fill
                             , Ui.contentCenterY
+                            , MyUi.hoverText "Clear search"
                             ]
                             (Ui.html Icons.x)
 
@@ -8498,6 +8507,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         , Ui.height (Ui.px 42)
                         , Ui.rounded 16
                         , Ui.move { x = -3, y = -3, z = 0 }
+                        , MyUi.hoverText "Remove file"
                         ]
                         (Ui.el
                             [ Ui.width (Ui.px 34)
@@ -8517,6 +8527,13 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         , Ui.height (Ui.px 42)
                         , Ui.rounded 16
                         , Ui.move { x = -3, y = 40, z = 0 }
+                        , MyUi.hoverText
+                            (if isSpoilered2 then
+                                "Remove spoiler"
+
+                             else
+                                "Mark as spoiler"
+                            )
                         ]
                         (Ui.el
                             [ Ui.width (Ui.px 34)
@@ -8548,6 +8565,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                             , Ui.height (Ui.px 42)
                                             , Ui.rounded 16
                                             , Ui.move { x = -3, y = 77, z = 0 }
+                                            , MyUi.hoverText "Image info"
                                             ]
                                             (Ui.el
                                                 [ Ui.width (Ui.px 34)

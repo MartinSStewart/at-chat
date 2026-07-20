@@ -36,7 +36,6 @@ import Thread
 import Touch
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
-import Ui.Accessibility
 import Ui.Anim
 import Ui.Font
 import Ui.Lazy
@@ -216,7 +215,9 @@ drawButton isMobile currentTab =
             ChannelHeaderTab_Draw
             currentTab
             (Ui.el
-                [ Ui.width (Ui.px 24), Ui.Accessibility.description "Draw on top of messages" ]
+                [ Ui.width (Ui.px 24)
+                , MyUi.hoverText "Draw on top of messages"
+                ]
                 (Ui.html Icons.paintbrush)
             )
 
@@ -232,6 +233,7 @@ showFilesButton =
         , Ui.height Ui.fill
         , Ui.contentCenterY
         , Ui.Font.color MyUi.font3
+        , MyUi.hoverText "Show files"
         ]
         (Ui.html Icons.document)
 
@@ -276,6 +278,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                         , Ui.height Ui.fill
                         , Ui.paddingXY 12 0
                         , Ui.contentCenterY
+                        , MyUi.hoverText "Show members"
                         ]
                         (Ui.html Icons.users)
 
@@ -306,6 +309,7 @@ headerBackButton htmlId onPress =
         , Ui.contentCenterY
         , Ui.contentCenterX
         , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
+        , MyUi.hoverText "Back"
         ]
         (Ui.html (Icons.arrowLeft 16))
 
@@ -404,7 +408,12 @@ privateChatWith isMobile currentTab otherUserId local name =
 
 gameButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
 gameButton isMobile currentTab =
-    channelHeaderTab isMobile (Dom.id "guild_openGamesTab") (ChannelHeaderTab_Games Nothing) currentTab (Ui.html Icons.go)
+    channelHeaderTab
+        isMobile
+        (Dom.id "guild_openGamesTab")
+        (ChannelHeaderTab_Games Nothing)
+        currentTab
+        (Ui.el [ MyUi.hoverText "Games" ] (Ui.html Icons.go))
 
 
 voiceChatButton : Bool -> Maybe ChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg_
@@ -466,7 +475,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
             (Dom.id "guild_voiceChat")
             ChannelHeaderTab_VoiceChat
             currentTab
-            (Ui.html Icons.phone)
+            (Ui.el [ MyUi.hoverText "Voice chat" ] (Ui.html Icons.phone))
         ]
 
 

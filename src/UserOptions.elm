@@ -212,6 +212,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             )
                         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                         , Ui.spacing 8
+                        , MyUi.hoverText "Close"
                         ]
                         [ if isMobile then
                             Ui.none

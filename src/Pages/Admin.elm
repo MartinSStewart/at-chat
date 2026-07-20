@@ -3273,7 +3273,16 @@ guildsSection isMobile user adminData =
                             [ Ui.row
                                 [ Ui.spacing 8, Ui.Font.size 14 ]
                                 [ Ui.el
-                                    [ Ui.width Ui.shrink, Ui.Input.button (PressedExpandGuild guildId) ]
+                                    [ Ui.width Ui.shrink
+                                    , Ui.Input.button (PressedExpandGuild guildId)
+                                    , MyUi.hoverText
+                                        (if isExpanded then
+                                            "Collapse"
+
+                                         else
+                                            "Expand"
+                                        )
+                                    ]
                                     (if isExpanded then
                                         Icons.collapseContainer
 
@@ -3395,7 +3404,16 @@ discordGuildsSection isMobile user adminData =
                             [ Ui.row
                                 [ Ui.spacing 8, Ui.Font.size 14 ]
                                 [ Ui.el
-                                    [ Ui.width Ui.shrink, Ui.Input.button (PressedExpandDiscordGuild guildId) ]
+                                    [ Ui.width Ui.shrink
+                                    , Ui.Input.button (PressedExpandDiscordGuild guildId)
+                                    , MyUi.hoverText
+                                        (if isExpanded then
+                                            "Collapse"
+
+                                         else
+                                            "Expand"
+                                        )
+                                    ]
                                     (if isExpanded then
                                         Icons.collapseContainer
 
