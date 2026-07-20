@@ -36,7 +36,6 @@ import Thread
 import Touch
 import Types exposing (Drag(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
-import Ui.Accessibility
 import Ui.Anim
 import Ui.Font
 import Ui.Lazy

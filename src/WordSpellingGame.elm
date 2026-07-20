@@ -5109,7 +5109,10 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                                             (Dom.id "wordSpellingGame_replaceTray")
                                             PressedReplaceTrayOrPass
                                             attributes
-                                            (Ui.el [ MyUi.hoverText "Replace tray", Ui.width Ui.shrink ] (Ui.html Icons.recycle))
+                                            (Ui.el
+                                                [ MyUi.hoverText "Replace tray", Ui.width Ui.shrink, Ui.centerX ]
+                                                (Ui.html Icons.recycle)
+                                            )
 
                                     ShouldPass ->
                                         MyUi.elButton
