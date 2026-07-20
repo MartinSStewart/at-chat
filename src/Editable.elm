@@ -175,6 +175,13 @@ view htmlId isSecret label validation msg value model =
 
                               else
                                 Ui.noAttr
+                            , MyUi.hoverText
+                                (if model.showSecret then
+                                    "Hide value"
+
+                                 else
+                                    "Show value"
+                                )
                             ]
                             (Ui.html
                                 (if model.showSecret then
@@ -215,6 +222,7 @@ view htmlId isSecret label validation msg value model =
 
                                     Err _ ->
                                         Ui.background MyUi.disabledButtonBackground
+                                , MyUi.hoverText "Save"
                                 ]
                                 (Ui.html Icons.checkmark)
                             , MyUi.elButton
@@ -230,6 +238,7 @@ view htmlId isSecret label validation msg value model =
                                 , Ui.background MyUi.deleteButtonBackground
                                 , Ui.Font.color MyUi.deleteButtonFont
                                 , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                                , MyUi.hoverText "Cancel"
                                 ]
                                 (Ui.html Icons.delete)
                             ]

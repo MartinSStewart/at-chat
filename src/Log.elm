@@ -278,6 +278,7 @@ view isMobile2 isHidden timezone customEmojis msgConfig isCopied isHighlighted {
                 , Ui.Input.button msgConfig.onPressCopyLink
                 , Ui.id "Log_copyLink"
                 , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText "Copy link"
                 ]
                 (Ui.html Icons.link)
             , timeToString timezone False time |> Ui.text
@@ -294,6 +295,13 @@ view isMobile2 isHidden timezone customEmojis msgConfig isCopied isHighlighted {
                 , Ui.Font.color MyUi.font3
                 , Ui.width Ui.shrink
                 , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText
+                    (if isHidden then
+                        "Show"
+
+                     else
+                        "Hide"
+                    )
                 ]
                 (Ui.html
                     (if isHidden then

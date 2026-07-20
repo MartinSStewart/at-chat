@@ -3692,6 +3692,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
                     , Ui.alignBottom
                     , Ui.Font.color MyUi.font1
                     , Ui.Accessibility.description "Game settings"
+                    , MyUi.hoverText "Game settings"
                     , Ui.background MyUi.background1
                     ]
                     (Ui.html Icons.gear)
@@ -3711,6 +3712,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
                             Ui.noAttr
                     , Ui.Font.color MyUi.font1
                     , Ui.Accessibility.description "Game settings"
+                    , MyUi.hoverText "Game settings"
                     ]
                     (Ui.html Icons.gear)
             )
@@ -4493,6 +4495,7 @@ wordDefinitionHeader open =
             , Ui.rounded 4
             , Ui.Font.color MyUi.font3
             , Ui.Accessibility.description "Close word definition"
+            , MyUi.hoverText "Close word definition"
             , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
             ]
             (Ui.html Icons.x)
@@ -5102,7 +5105,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             Nothing ->
                                 case passBehavior setup shared of
                                     ShouldReplaceTray ->
-                                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.html Icons.recycle)
+                                        MyUi.elButton (Dom.id "wordSpellingGame_replaceTray") PressedReplaceTrayOrPass attributes (Ui.el [ MyUi.hoverText "Replace tray" ] (Ui.html Icons.recycle))
 
                                     ShouldPass ->
                                         MyUi.elButton (Dom.id "wordSpellingGame_passOrEndTurn") PressedReplaceTrayOrPass attributes (Ui.text "Pass")
@@ -5209,6 +5212,7 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.Font.color MyUi.white
+                            , MyUi.hoverText "Clear board"
                             ]
                             (Ui.html Icons.delete)
                         )
@@ -5360,6 +5364,7 @@ submitLineButtons htmlIdPrefix color onPress boardTranslate zoomedCellSize curre
                     , Ui.contentCenterX
                     , Ui.contentCenterY
                     , Ui.Font.color MyUi.white
+                    , MyUi.hoverText "Submit word"
                     ]
                     (Ui.html Icons.sendMessage)
                     |> Ui.inFront

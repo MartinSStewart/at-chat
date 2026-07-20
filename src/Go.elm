@@ -2211,7 +2211,7 @@ historyView state model =
     else
         Ui.row
             [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
-            [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.html (Icons.arrowLeft 20))
+            [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.el [ MyUi.hoverText "Previous move" ] (Ui.html (Icons.arrowLeft 20)))
             , Html.input
                 [ Html.Attributes.type_ "range"
                 , Html.Attributes.min "0"
@@ -2223,7 +2223,7 @@ historyView state model =
                 []
                 |> Ui.html
                 |> Ui.el [ Ui.width (Ui.px 220) ]
-            , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.html (Icons.arrowRight 20))
+            , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.el [ MyUi.hoverText "Next move" ] (Ui.html (Icons.arrowRight 20)))
             , Ui.el [ Ui.Font.bold ] (Ui.text (String.fromInt currentMove ++ " / " ++ String.fromInt total))
             ]
 

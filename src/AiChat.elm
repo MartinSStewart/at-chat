@@ -1255,6 +1255,7 @@ showOptionsButton =
         , Ui.rounded 4
         , Ui.width (Ui.px 36)
         , Ui.height (Ui.px 36)
+        , MyUi.hoverText "Options"
         ]
         (Ui.html Icons.gear)
 
@@ -1288,6 +1289,7 @@ optionsView model =
                 , Ui.rounded 4
                 , Ui.width (Ui.px 42)
                 , Ui.height (Ui.px 42)
+                , MyUi.hoverText "Close"
                 ]
                 (Ui.html closeIcon)
             ]
@@ -1395,6 +1397,7 @@ userMessageView model =
             , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
             , Ui.roundedWith { topLeft = 0, topRight = 4, bottomRight = 4, bottomLeft = 0 }
             , MyUi.noShrinking
+            , MyUi.hoverText "Send"
             ]
             (Ui.html sendIcon)
         ]
@@ -1472,6 +1475,7 @@ aiModelDropdownRow aiModels selected index showRemove =
                 , Ui.rounded 4
                 , Ui.paddingXY 8 8
                 , MyUi.noShrinking
+                , MyUi.hoverText "Remove model"
                 ]
                 (Ui.html closeIcon)
 

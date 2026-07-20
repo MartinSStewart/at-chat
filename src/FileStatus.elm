@@ -623,6 +623,7 @@ imageInfoView onPressClose fileData =
                 [ Ui.alignRight
                 , Ui.paddingXY 16 16
                 , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+                , MyUi.hoverText "Close"
                 ]
                 (Ui.html Icons.x)
             )

@@ -32,6 +32,7 @@ header isMobile route loginStatus =
                 [ Ui.width (Ui.px 64)
                 , Ui.paddingWith { top = 4, left = 8, right = 8, bottom = 8 }
                 , Ui.Input.button (PressedLink HomePageRoute)
+                , MyUi.hoverText "Home"
                 ]
                 { source = "/at-logo-no-background.png"
                 , description = "Logo"
