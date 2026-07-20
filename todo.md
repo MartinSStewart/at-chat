@@ -16,6 +16,9 @@
 * Fix BrowserDomNotFound error in program-test that's breaking the zoom-in part of the "Draw on top of messages" test
 * Some Discord stickers width /= height but the current sticker view assumes width == height
 * Video nodes need to have a fixed height to prevent layout thrashing
+* If someone links their Discord account, when the linking finishes, show all the accounts they are a part of, not just
+  all the ones that loaded (some might already be loaded)
+* Add support for Discord roles
 
 Requested features:
 
