@@ -551,6 +551,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                         _ ->
                             Nothing
                     )
+                    guildId
                     guild
                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
@@ -709,15 +710,16 @@ getVoiceChatData clientId session model =
 
 discordGuildToFrontendForUser :
     Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
+    -> Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendGuild
-discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
+discordGuildToFrontendForUser requestMessagesFor guildId guild linkedDiscordUsers =
     if
         SeqDict.member (MembersAndOwner.owner guild.membersAndOwner) linkedDiscordUsers
             || not (SeqDict.isEmpty (SeqDict.intersect (MembersAndOwner.members guild.membersAndOwner) linkedDiscordUsers))
     then
-        discordGuildToFrontend requestMessagesFor guild |> Just
+        discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild |> Just
 
     else
         Nothing
@@ -725,15 +727,20 @@ discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
 
 discordGuildToFrontend :
     Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
+    -> SeqDict (Discord.Id Discord.UserId) a
+    -> Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> DiscordFrontendGuild
-discordGuildToFrontend requestMessagesFor guild =
+discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild =
     { name = guild.name
     , icon = guild.icon
     , channels =
         SeqDict.filterMap
             (\channelId channel ->
                 LocalState.discordChannelToFrontend
+                    guildId
+                    guild
+                    linkedDiscordUsers
                     (case requestMessagesFor of
                         Just ( channelIdB, threadRoute ) ->
                             if channelId == channelIdB then
@@ -1592,9 +1599,10 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toDiscordGuildExcludingOne
+                                , Broadcast.toDiscordGuildChannelExcludingOne
                                     clientId
                                     guildId
+                                    channelId
                                     (Server_Drawing session.userId guildOrDmId anchor change |> ServerChange)
                                     model
                                 ]

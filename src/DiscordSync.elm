@@ -143,8 +143,9 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                 , discordCustomEmojis = customEmojiData.discordCustomEmojis
                               }
                             , Command.batch
-                                [ Broadcast.toDiscordGuild
+                                [ Broadcast.toDiscordGuildChannel
                                     guildId
+                                    reaction.channelId
                                     ((if isAdding then
                                         Server_DiscordAddReactionGuildEmoji
                                             reaction.userId
@@ -418,8 +419,9 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                         (LocalState.updateChannel (\_ -> channel2) edit.channelId)
                                         model.discordGuilds
                               }
-                            , Broadcast.toDiscordGuild
+                            , Broadcast.toDiscordGuildChannel
                                 guildId
+                                edit.channelId
                                 (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
                                     edit.author.id
@@ -483,8 +485,9 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                         (LocalState.updateChannel (\_ -> channel2) channelId)
                                         model.discordGuilds
                               }
-                            , Broadcast.toDiscordGuild
+                            , Broadcast.toDiscordGuildChannel
                                 guildId
+                                edit.channelId
                                 (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
                                     edit.author.id
@@ -520,8 +523,9 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
                             case deleteMessageHelper discordMessageId channel of
                                 Just ( messageId, channel2 ) ->
                                     ( { guild | channels = SeqDict.insert discordChannelId channel2 guild.channels }
-                                    , Broadcast.toDiscordGuild
+                                    , Broadcast.toDiscordGuildChannel
                                         discordGuildId
+                                        discordChannelId
                                         (Server_DiscordDeleteGuildMessage
                                             discordGuildId
                                             discordChannelId
@@ -557,8 +561,9 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
                                                                         }
                                                                         guild.channels
                                                               }
-                                                            , Broadcast.toDiscordGuild
+                                                            , Broadcast.toDiscordGuildChannel
                                                                 discordGuildId
+                                                                discordChannelId
                                                                 (Server_DiscordDeleteGuildMessage
                                                                     discordGuildId
                                                                     discordChannelId
@@ -1126,8 +1131,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                         in
                                         ( { model2 | sessions = sessions }
                                         , Command.batch
-                                            [ Broadcast.toDiscordGuild
+                                            [ Broadcast.toDiscordGuildChannel
                                                 discordGuildId
+                                                channelId
                                                 (Server_DiscordGuildMemberJoined
                                                     discordMessage.timestamp
                                                     discordGuildId
@@ -1360,9 +1366,10 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             )
                                                             |> Lamdera.sendToFrontend clientId
-                                                        , Broadcast.toDiscordGuildExcludingOne
+                                                        , Broadcast.toDiscordGuildChannelExcludingOne
                                                             clientId
                                                             discordGuildId
+                                                            channelId
                                                             (Server_Discord_SendMessage
                                                                 discordMessage.timestamp
                                                                 guildOrDmId
@@ -1376,8 +1383,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         ]
 
                                                 Nothing ->
-                                                    Broadcast.toDiscordGuild
+                                                    Broadcast.toDiscordGuildChannel
                                                         discordGuildId
+                                                        channelId
                                                         (Server_Discord_SendMessage
                                                             discordMessage.timestamp
                                                             guildOrDmId
@@ -2047,8 +2055,9 @@ handleChannelUpdated channel model =
                         )
                         model.discordGuilds
               }
-            , Broadcast.toDiscordGuild
+            , Broadcast.toDiscordGuildChannel
                 guildId
+                channel.id
                 (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic |> ServerChange)
                 model
             )
@@ -2139,8 +2148,9 @@ handleTypingStarted typingStart model =
                                             { guild | channels = SeqDict.insert channelId channel2 guild.channels }
                                             model.discordGuilds
                                   }
-                                , Broadcast.toDiscordGuild
+                                , Broadcast.toDiscordGuildChannel
                                     guildId
+                                    channelId
                                     (Server_DiscordGuildMemberTyping
                                         typingStart.timestamp
                                         typingStart.userId
@@ -2410,8 +2420,9 @@ handleChannelCreated channel model =
                         )
                         model.discordGuilds
               }
-            , Broadcast.toDiscordGuild
+            , Broadcast.toDiscordGuildChannel
                 guildId
+                channel.id
                 (Server_DiscordChannelCreated
                     guildId
                     channel.id

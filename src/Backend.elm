@@ -922,6 +922,7 @@ update msg model =
                                                             Just guild ->
                                                                 BackendExtra.discordGuildToFrontendForUser
                                                                     Nothing
+                                                                    guildId
                                                                     guild
                                                                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
 
@@ -1420,8 +1421,9 @@ update msg model =
                                         }
                                         model.discordGuilds
                               }
-                            , Broadcast.toDiscordGuild
+                            , Broadcast.toDiscordGuildChannel
                                 guildId
+                                channelId
                                 (Server_GotDiscordGuildMessageEmbed
                                     guildId
                                     channelId
@@ -1534,7 +1536,13 @@ update msg model =
                                 discordUser.linkedTo
                                 (Server_DiscordGuildJoinedOrCreated
                                     guildId
-                                    (BackendExtra.discordGuildToFrontend Nothing guild2)
+                                    (BackendExtra.discordGuildToFrontend
+                                        Nothing
+                                        -- We don't need to provide all the linked users because the current one must have access to the channels we just loaded
+                                        (SeqDict.singleton discordUserId ())
+                                        guildId
+                                        guild2
+                                    )
                                     |> ServerChange
                                 )
                                 model
@@ -3205,9 +3213,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 [ Local_MemberTyping time ( guildOrDmId, threadRoute )
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_DiscordGuildMemberTyping
                                                         time
                                                         currentDiscordUserId
@@ -3352,9 +3361,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                               }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_DiscordAddReactionGuildEmoji currentUserId guildId channelId threadRoute emoji
                                                         |> ServerChange
                                                     )
@@ -3540,9 +3550,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                               }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_DiscordRemoveReactionGuildEmoji
                                                         currentUserId
                                                         guildId
@@ -3776,9 +3787,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     newContent
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_DiscordSendEditGuildMessage
                                                         time
                                                         currentUserId
@@ -3971,9 +3983,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 [ Local_MemberEditTyping time guildOrDmId threadRoute
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_MemberEditTyping time session.userId guildOrDmId threadRoute
                                                         |> ServerChange
                                                     )
@@ -4173,9 +4186,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 [ Lamdera.sendToFrontend
                                                     clientId
                                                     (LocalChangeResponse changeId localMsg)
-                                                , Broadcast.toDiscordGuildExcludingOne
+                                                , Broadcast.toDiscordGuildChannelExcludingOne
                                                     clientId
                                                     guildId
+                                                    channelId
                                                     (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                     model
                                                 , case threadRouteToDiscordMessageId channelId channel threadRoute of

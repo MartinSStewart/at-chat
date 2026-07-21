@@ -18,7 +18,8 @@ module Broadcast exposing
     , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
     , toDiscordGuild
-    , toDiscordGuildExcludingOne
+    , toDiscordGuildChannel
+    , toDiscordGuildChannelExcludingOne
     , toDmChannel
     , toDmChannelExcludingOne
     , toEveryone
@@ -95,8 +96,14 @@ toGuildExcludingOne clientToSkip guildId msg model =
         |> Command.batch
 
 
-toDiscordGuildExcludingOne : ClientId -> Discord.Id Discord.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordGuildExcludingOne clientToSkip guildId msg model =
+toDiscordGuildChannelExcludingOne :
+    ClientId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> LocalMsg
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+toDiscordGuildChannelExcludingOne clientToSkip guildId channelId msg model =
     List.filterMap
         (\clientId ->
             if clientToSkip == clientId then
@@ -210,6 +217,14 @@ toGuild guildId msg model =
     List.map
         (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
         (guildConnections guildId model)
+        |> Command.batch
+
+
+toDiscordGuildChannel : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordGuildChannel guildId channelId msg model =
+    List.map
+        (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId)
+        (discordGuildConnections guildId model)
         |> Command.batch
 
 
