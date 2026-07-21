@@ -213,7 +213,7 @@ type alias DiscordBackendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
@@ -235,7 +235,7 @@ type alias DiscordFrontendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
@@ -780,7 +780,12 @@ type alias AdminData_GuildChannel =
 type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner :
+        MembersAndOwner
+            (Discord.Id Discord.UserId)
+            { joinedAt : Maybe Time.Posix
+            , roles : SeqSet (Discord.Id Discord.RoleId)
+            }
     , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
     }
 

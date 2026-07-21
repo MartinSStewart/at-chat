@@ -795,10 +795,11 @@ memberColumnNotMobile localUser membersAndOwner =
 
 discordMemberColumnNotMobile :
     LocalUser
+    -> DiscordFrontendChannel
     -> Discord.Id Discord.UserId
     -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
+discordMemberColumnNotMobile localUser channel currentDiscordUserId membersAndOwner =
     let
         members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
         members =
@@ -815,15 +816,15 @@ discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
         ]
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
-            [ Ui.text "Owner"
-            , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner membersAndOwner)
-            , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
                     (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
                     []
-                    members
+                    (Discord.channelAccess
+                        channel.permissionOverwrites
+                    )
                 )
             ]
         ]

@@ -3437,7 +3437,7 @@ discordGuildsSection isMobile user adminData =
                             owner =
                                 MembersAndOwner.owner guild.membersAndOwner
 
-                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
                             members =
                                 MembersAndOwner.members guild.membersAndOwner
                         in
@@ -3494,7 +3494,7 @@ discordGuildsSection isMobile user adminData =
                                                 )
                                                 adminData.discordUsers
                                             )
-                                            (SeqDict.insert owner { joinedAt = Nothing } members)
+                                            (SeqDict.insert owner { joinedAt = Nothing, roles = SeqSet.empty } members)
                                             |> SeqDict.keys
                                             |> List.head
                                 in

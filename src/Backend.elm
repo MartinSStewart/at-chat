@@ -2016,7 +2016,7 @@ addDiscordGuildData discordUserId data guild =
             guild.channels
             data.channels
     , membersAndOwner =
-        MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
+        MembersAndOwner.addMember discordUserId { joinedAt = Nothing, roles = SeqSet.empty } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
