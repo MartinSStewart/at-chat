@@ -2662,7 +2662,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_UnlinkDiscordUser _ ->
                             True
 
-                        Types.Server_DiscordChannelCreated _ _ _ _ ->
+                        Types.Server_DiscordChannelCreated _ _ _ _ _ ->
                             True
 
                         Types.Server_DiscordDmChannelCreated _ _ ->

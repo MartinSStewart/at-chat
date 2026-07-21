@@ -1881,7 +1881,7 @@ update msg model =
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (\discordGuild -> { discordGuild | roles = guild.roles })
+                                (\discordGuild -> { discordGuild | roles = Pages.Admin.rolesToDict guild.roles })
                                 model.discordGuilds
                       }
                     , responseCmd
@@ -2020,7 +2020,7 @@ addDiscordGuildData discordUserId data guild =
             |> Result.withDefault guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
-    , roles = data.guild.roles
+    , roles = Pages.Admin.rolesToDict data.guild.roles
     }
 
 

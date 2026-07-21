@@ -51,6 +51,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import Pages.Admin
 import PersonName
 import Quantity
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
@@ -701,6 +702,13 @@ addDiscordChannel discordChannel =
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
         , dateDividerDrawings = SeqDict.empty
+        , permissionOverwrites =
+            case discordChannel.permissionOverwrites of
+                Missing ->
+                    []
+
+                Included permissions ->
+                    permissions
         }
             |> Just
 
@@ -2360,6 +2368,13 @@ handleChannelCreated channel model =
                                                                 LocalState.discordTopicToDescription
                                                                     channel.topic
                                                                     existingChannel.description
+                                                            , permissionOverwrites =
+                                                                case channel.permissionOverwrites of
+                                                                    Missing ->
+                                                                        []
+
+                                                                    Included permissions ->
+                                                                        permissions
                                                         }
 
                                                 Nothing ->
@@ -2374,6 +2389,13 @@ handleChannelCreated channel model =
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
                                                     , dateDividerDrawings = SeqDict.empty
+                                                    , permissionOverwrites =
+                                                        case channel.permissionOverwrites of
+                                                            Missing ->
+                                                                []
+
+                                                            Included permissions ->
+                                                                permissions
                                                     }
                                                         |> Just
                                         )
@@ -2384,7 +2406,20 @@ handleChannelCreated channel model =
               }
             , Broadcast.toDiscordGuild
                 guildId
-                (Server_DiscordChannelCreated guildId channel.id name channel.topic |> ServerChange)
+                (Server_DiscordChannelCreated
+                    guildId
+                    channel.id
+                    name
+                    channel.topic
+                    (case channel.permissionOverwrites of
+                        Missing ->
+                            []
+
+                        Included permissions ->
+                            permissions
+                    )
+                    |> ServerChange
+                )
                 model
             )
 
@@ -2767,7 +2802,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 )
                                 guild.emojis
                                 |> SeqSet.fromList
-                        , roles = guild.roles
+                        , roles = Pages.Admin.rolesToDict guild.roles
                     }
                         |> Just
 
@@ -2803,7 +2838,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                             )
                             guild.emojis
                             |> SeqSet.fromList
-                    , roles = guild.roles
+                    , roles = Pages.Admin.rolesToDict guild.roles
                     }
                         |> Just
         )

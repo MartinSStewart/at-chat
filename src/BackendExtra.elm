@@ -751,6 +751,7 @@ discordGuildToFrontend requestMessagesFor guild =
     , membersAndOwner = guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
+    , roles = guild.roles
     }
 
 

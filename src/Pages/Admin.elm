@@ -25,6 +25,7 @@ module Pages.Admin exposing
     , initForUser
     , logSectionId
     , pendingChangesText
+    , rolesToDict
     , update
     , updateAdmin
     , updateFromBackend
@@ -62,7 +63,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -573,7 +574,7 @@ updateAdmin changedBy change adminData local =
                                     | discordGuilds =
                                         SeqDict.updateIfExists
                                             guildId
-                                            (\guild -> { guild | roles = roles })
+                                            (\guild -> { guild | roles = rolesToDict roles })
                                             adminData.discordGuilds
                                 }
                     }
@@ -697,6 +698,21 @@ updateAdmin changedBy change adminData local =
 
         EndAllCalls ->
             { local | adminData = endAllCalls adminData |> IsAdmin }
+
+
+rolesToDict : List Discord.Role -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
+rolesToDict roles =
+    List.map
+        (\role ->
+            ( role.id
+            , { name = role.name
+              , description = role.description
+              , permissions = role.permissions
+              }
+            )
+        )
+        roles
+        |> SeqDict.fromList
 
 
 endAllCalls :
@@ -3538,7 +3554,11 @@ loadingChannelErrorView channelId isReloading =
             Ui.none
 
 
-discordGuildRoles : Maybe (Discord.Id Discord.UserId) -> Discord.Id Discord.GuildId -> List Discord.Role -> Element Msg
+discordGuildRoles :
+    Maybe (Discord.Id Discord.UserId)
+    -> Discord.Id Discord.GuildId
+    -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    -> Element Msg
 discordGuildRoles maybeUserId guildId roles =
     Ui.row
         [ Ui.spacing 8, Ui.Font.size 13 ]
@@ -3550,14 +3570,14 @@ discordGuildRoles maybeUserId guildId roles =
 
             Nothing ->
                 Ui.none
-        , if List.isEmpty roles then
+        , if SeqDict.isEmpty roles then
             Ui.text "No roles loaded. Press reload to fetch them."
 
           else
-            List.sortBy (\role -> -role.position) roles
+            List.sortBy .name (SeqDict.values roles)
                 |> List.map .name
                 |> String.join ", "
-                |> (\text -> Ui.text ("Roles (" ++ String.fromInt (List.length roles) ++ "): " ++ text))
+                |> (\text -> Ui.text ("Roles (" ++ String.fromInt (SeqDict.size roles) ++ "): " ++ text))
         ]
 
 

@@ -20,6 +20,7 @@ module LocalState exposing
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
+    , DiscordRole
     , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
@@ -215,7 +216,7 @@ type alias DiscordBackendGuild =
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
-    , roles : List Discord.Role
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
     }
 
 
@@ -237,6 +238,14 @@ type alias DiscordFrontendGuild =
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    }
+
+
+type alias DiscordRole =
+    { name : String
+    , description : Maybe String
+    , permissions : Discord.Permissions
     }
 
 
@@ -327,6 +336,7 @@ type alias DiscordBackendChannel =
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , permissionOverwrites : List Discord.Overwrite
     }
 
 
@@ -353,6 +363,7 @@ type alias DiscordFrontendChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , permissionOverwrites : List Discord.Overwrite
     }
 
 
@@ -506,6 +517,7 @@ discordChannelToFrontend threadRoute channel =
                             (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
                             channel.threads
                     , dateDividerDrawings = channel.dateDividerDrawings
+                    , permissionOverwrites = channel.permissionOverwrites
                     }
             in
             channel2
@@ -769,7 +781,7 @@ type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , roles : List Discord.Role
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
     }
 
 

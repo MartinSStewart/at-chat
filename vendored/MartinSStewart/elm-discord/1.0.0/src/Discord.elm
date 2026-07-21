@@ -2995,25 +2995,25 @@ channelAccess guild members channel =
                     []
 
         writePermission : Permissions -> Bool
-        writePermission =
+        writePermission permission =
             case channel.type_ of
                 GuildVoice ->
-                    .connect
+                    permission.connect
 
                 GuildStageVoice ->
-                    .connect
+                    permission.connect
 
                 AnnouncementThread ->
-                    .sendMessagesInThreads
+                    permission.sendMessagesInThreads
 
                 PublicThread ->
-                    .sendMessagesInThreads
+                    permission.sendMessagesInThreads
 
                 PrivateThread ->
-                    .sendMessagesInThreads
+                    permission.sendMessagesInThreads
 
                 _ ->
-                    .sendMessages
+                    permission.sendMessages
     in
     List.foldr
         (\member access ->
