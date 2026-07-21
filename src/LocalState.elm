@@ -30,6 +30,7 @@ module LocalState exposing
     , LocalState
     , LogWithTime
     , PrivateVapidKey(..)
+    , ReadWriteAccess(..)
     , ServerSecretStatus(..)
     , WebsocketClosedEvent(..)
     , WordSpellingGameStatus(..)
@@ -326,7 +327,13 @@ type alias DiscordBackendChannel =
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , recipients : ReadWriteAccess
     }
+
+
+type ReadWriteAccess
+    = ReadWriteAccess_Everyone
+    | ReadWriteAccess_Restricted (NonemptySet (Discord.Id Discord.UserId))
 
 
 type alias FrontendChannel =
@@ -352,6 +359,7 @@ type alias DiscordFrontendChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , recipients : ReadWriteAccess
     }
 
 
@@ -505,6 +513,7 @@ discordChannelToFrontend threadRoute channel =
                             (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
                             channel.threads
                     , dateDividerDrawings = channel.dateDividerDrawings
+                    , recipients = channel.recipients
                     }
             in
             channel2

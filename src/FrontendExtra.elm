@@ -4120,7 +4120,7 @@ changeUpdate localMsg local =
                             { localUser | discordUsers = LinkedAndOtherDiscordUsers.unlinkUser userId localUser.discordUsers }
                     }
 
-                Server_DiscordChannelCreated guildId channelId channelName topic ->
+                Server_DiscordChannelCreated guildId channelId channelName topic recipients ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -4139,6 +4139,7 @@ changeUpdate localMsg local =
                                                                     LocalState.discordTopicToDescription
                                                                         topic
                                                                         ChannelDescription.empty
+                                                                , recipients = recipients
                                                             }
                                                                 |> Just
 
@@ -4153,6 +4154,7 @@ changeUpdate localMsg local =
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
                                                             , dateDividerDrawings = SeqDict.empty
+                                                            , recipients = recipients
                                                             }
                                                                 |> Just
                                                 )

@@ -87,7 +87,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, ReadWriteAccess, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -887,7 +887,7 @@ type ServerChange
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
-    | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName (OptionalData (Maybe String))
+    | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName (OptionalData (Maybe String)) ReadWriteAccess
     | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone

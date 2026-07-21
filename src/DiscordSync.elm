@@ -45,11 +45,12 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), WebsocketClosedEvent(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), ReadWriteAccess(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import OneToOne exposing (OneToOne)
 import PersonName
 import Quantity
@@ -701,6 +702,7 @@ addDiscordChannel discordChannel =
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
         , dateDividerDrawings = SeqDict.empty
+        , recipients = ReadWriteAccess_Everyone
         }
             |> Just
 
@@ -1752,7 +1754,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ChannelCreated channel ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleChannelCreated channel model2
+                                    handleChannelCreated discordUserId channel model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2261,8 +2263,8 @@ attachmentsToFileData attachment fileHash imageSize =
     }
 
 
-handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleChannelCreated channel model =
+handleChannelCreated : Discord.Id Discord.UserId -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreated userId channel model =
     case channel.guildId of
         Missing ->
             case channel.recipients of
@@ -2374,6 +2376,7 @@ handleChannelCreated channel model =
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
                                                     , dateDividerDrawings = SeqDict.empty
+                                                    , recipients = ReadWriteAccess_Everyone
                                                     }
                                                         |> Just
                                         )
@@ -2384,7 +2387,20 @@ handleChannelCreated channel model =
               }
             , Broadcast.toDiscordGuild
                 guildId
-                (Server_DiscordChannelCreated guildId channel.id name channel.topic |> ServerChange)
+                (Server_DiscordChannelCreated
+                    guildId
+                    channel.id
+                    name
+                    channel.topic
+                    (case channel.recipients of
+                        Missing ->
+                            ReadWriteAccess_Everyone
+
+                        Included list ->
+                            Nonempty userId (List.map .id list) |> NonemptySet.fromNonemptyList
+                    )
+                    |> ServerChange
+                )
                 model
             )
 
