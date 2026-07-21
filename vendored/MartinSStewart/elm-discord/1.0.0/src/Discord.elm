@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, channelAccess, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -2965,6 +2965,137 @@ decodeOverwrite =
         (JD.optionalNullableField "allow" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
         (JD.optionalNullableField "deny" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
         |> JD.andThen identity
+
+
+{-| Determine which guild members have read access and which have write access
+to a channel, based on their roles and the channel's permission overwrites.
+
+  - Read access means the member can view the channel.
+  - Write access means the member can also send messages (or for voice and
+    stage channels, connect; for threads, send messages in threads).
+
+Only members included in the members list are considered. This only makes
+sense for guild channels; DM and group DM channels have no roles or overwrites.
+
+-}
+channelAccess :
+    { guildId : Id GuildId, ownerId : Id UserId, roles : List Role }
+    -> List { userId : Id UserId, roles : List (Id RoleId) }
+    -> Channel
+    -> { readAccess : List (Id UserId), writeAccess : List (Id UserId) }
+channelAccess guild members channel =
+    let
+        overwrites : List Overwrite
+        overwrites =
+            case channel.permissionOverwrites of
+                Included list ->
+                    list
+
+                Missing ->
+                    []
+
+        writePermission : Permissions -> Bool
+        writePermission =
+            case channel.type_ of
+                GuildVoice ->
+                    .connect
+
+                GuildStageVoice ->
+                    .connect
+
+                AnnouncementThread ->
+                    .sendMessagesInThreads
+
+                PublicThread ->
+                    .sendMessagesInThreads
+
+                PrivateThread ->
+                    .sendMessagesInThreads
+
+                _ ->
+                    .sendMessages
+    in
+    List.foldr
+        (\member access ->
+            if memberHasChannelPermission .viewChannel guild member overwrites then
+                { readAccess = member.userId :: access.readAccess
+                , writeAccess =
+                    if memberHasChannelPermission writePermission guild member overwrites then
+                        member.userId :: access.writeAccess
+
+                    else
+                        access.writeAccess
+                }
+
+            else
+                access
+        )
+        { readAccess = [], writeAccess = [] }
+        members
+
+
+{-| Check if a guild member has a permission in a channel, following Discord's
+permission resolution order: the guild owner and administrators are allowed
+everything, otherwise role permissions are combined and then the channel's
+@everyone overwrite, role overwrites, and member overwrite are applied in
+turn (an allow beats a deny within the same step).
+
+<https://docs.discord.food/topics/permissions#permission-overwrites>
+
+-}
+memberHasChannelPermission :
+    (Permissions -> Bool)
+    -> { guildId : Id GuildId, ownerId : Id UserId, roles : List Role }
+    -> { userId : Id UserId, roles : List (Id RoleId) }
+    -> List Overwrite
+    -> Bool
+memberHasChannelPermission getPermission guild member overwrites =
+    let
+        everyoneRoleId : Id RoleId
+        everyoneRoleId =
+            idToUInt64 guild.guildId |> idFromUInt64
+
+        memberRoleIds : List (Id RoleId)
+        memberRoleIds =
+            everyoneRoleId :: member.roles
+
+        memberRoles : List Role
+        memberRoles =
+            List.filter (\role -> List.member role.id memberRoleIds) guild.roles
+    in
+    if member.userId == guild.ownerId || List.any (\role -> role.permissions.administrator) memberRoles then
+        True
+
+    else
+        let
+            applyOverwrites : List Overwrite -> Bool -> Bool
+            applyOverwrites relevantOverwrites value =
+                if List.any (\overwrite -> getPermission overwrite.allow) relevantOverwrites then
+                    True
+
+                else if List.any (\overwrite -> getPermission overwrite.deny) relevantOverwrites then
+                    False
+
+                else
+                    value
+        in
+        List.any (\role -> getPermission role.permissions) memberRoles
+            |> applyOverwrites
+                (List.filter (\overwrite -> overwrite.id == RoleOrUserId_RoleId everyoneRoleId) overwrites)
+            |> applyOverwrites
+                (List.filter
+                    (\overwrite ->
+                        case overwrite.id of
+                            RoleOrUserId_RoleId roleId ->
+                                roleId /= everyoneRoleId && List.member roleId member.roles
+
+                            RoleOrUserId_UserId _ ->
+                                False
+                    )
+                    overwrites
+                )
+            |> applyOverwrites
+                (List.filter (\overwrite -> overwrite.id == RoleOrUserId_UserId member.userId) overwrites)
 
 
 type alias PartialChannel =
