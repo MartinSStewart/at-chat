@@ -21,6 +21,7 @@
 * Add support for Discord roles
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
 * Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
+* Show a Discord icon above guild and users
 
 Requested features:
 
