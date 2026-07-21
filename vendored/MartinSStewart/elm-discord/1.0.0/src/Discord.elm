@@ -2984,7 +2984,7 @@ turn (an allow beats a deny within the same step).
 -}
 memberHasChannelPermission :
     (Permissions -> Bool)
-    -> { guildId : Id GuildId, ownerId : Id UserId, roles : List Role }
+    -> { guildId : Id GuildId, ownerId : Id UserId, roles : List { role | id : Id RoleId, permissions : Permissions } }
     -> { userId : Id UserId, roles : List (Id RoleId) }
     -> List Overwrite
     -> Bool
@@ -2998,7 +2998,6 @@ memberHasChannelPermission permission guild member overwrites =
         memberRoleIds =
             everyoneRoleId :: member.roles
 
-        memberRoles : List Role
         memberRoles =
             List.filter (\role -> List.member role.id memberRoleIds) guild.roles
     in

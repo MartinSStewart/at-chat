@@ -4458,7 +4458,7 @@ changeUpdate localMsg local =
                                 (\guild ->
                                     { guild
                                         | membersAndOwner =
-                                            MembersAndOwner.addMember userJoinedId { joinedAt = Just time } guild.membersAndOwner
+                                            MembersAndOwner.addMember userJoinedId { joinedAt = Just time, roles = SeqSet.empty } guild.membersAndOwner
                                                 |> Result.withDefault guild.membersAndOwner
                                         , channels =
                                             SeqDict.updateIfExists

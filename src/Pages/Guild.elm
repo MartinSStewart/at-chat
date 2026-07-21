@@ -622,12 +622,13 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy4
-                                        discordMemberColumnMobile
+                                    discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
+                                        routeData.guildId
                                         routeData.currentDiscordUserId
-                                        guild.membersAndOwner
+                                        guild
+                                        (discordSelectedChannelId routeData.channelRoute)
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -697,11 +698,13 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy3
+                            , Ui.Lazy.lazy5
                                 discordMemberColumnNotMobile
                                 local.localUser
+                                routeData.guildId
                                 routeData.currentDiscordUserId
-                                guild.membersAndOwner
+                                guild
+                                (discordSelectedChannelId routeData.channelRoute)
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -793,41 +796,103 @@ memberColumnNotMobile localUser membersAndOwner =
         ]
 
 
+{-| The channel currently being viewed, if any. Routes other than viewing a
+channel (creating/editing a channel, guild settings) have no selected channel.
+-}
+discordSelectedChannelId : DiscordChannelRoute -> Maybe (Discord.Id Discord.ChannelId)
+discordSelectedChannelId channelRoute =
+    case channelRoute of
+        DiscordChannel_ChannelRoute channelId _ _ ->
+            Just channelId
+
+        DiscordChannel_NewChannelRoute ->
+            Nothing
+
+        DiscordChannel_EditChannelRoute _ ->
+            Nothing
+
+        DiscordChannel_GuildSettingsRoute ->
+            Nothing
+
+
+{-| Determine which guild members can view the given channel, following the
+channel's permission overwrites. The owner is not included here since it's
+shown separately and can always view every channel. Returns `Nothing` when no
+channel is selected, so the member column can be hidden.
+-}
+discordChannelViewers :
+    Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> Maybe (Discord.Id Discord.ChannelId)
+    -> Maybe (SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })
+discordChannelViewers guildId guild maybeChannelId =
+    case maybeChannelId |> Maybe.andThen (\channelId -> SeqDict.get channelId guild.channels) of
+        Just channel ->
+            let
+                guildInfo :
+                    { guildId : Discord.Id Discord.GuildId
+                    , ownerId : Discord.Id Discord.UserId
+                    , roles : List { id : Discord.Id Discord.RoleId, permissions : Discord.Permissions }
+                    }
+                guildInfo =
+                    { guildId = guildId
+                    , ownerId = MembersAndOwner.owner guild.membersAndOwner
+                    , roles =
+                        SeqDict.toList guild.roles
+                            |> List.map (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
+                    }
+            in
+            MembersAndOwner.members guild.membersAndOwner
+                |> SeqDict.filter
+                    (\userId member ->
+                        Discord.memberHasChannelPermission
+                            .viewChannel
+                            guildInfo
+                            { userId = userId, roles = SeqSet.toList member.roles }
+                            channel.permissionOverwrites
+                    )
+                |> Just
+
+        Nothing ->
+            Nothing
+
+
 discordMemberColumnNotMobile :
     LocalUser
-    -> DiscordFrontendChannel
+    -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
-    -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    -> DiscordFrontendGuild
+    -> Maybe (Discord.Id Discord.ChannelId)
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser channel currentDiscordUserId membersAndOwner =
-    let
-        members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-        members =
-            MembersAndOwner.members membersAndOwner
-    in
-    Ui.column
-        [ Ui.height Ui.fill
-        , Ui.alignRight
-        , Ui.background MyUi.background2
-        , Ui.Font.color MyUi.font1
-        , Ui.width (Ui.px memberColumnWidth)
-        , Ui.scrollable
-        , Ui.heightMin 0
-        ]
-        [ Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-            , Ui.column
-                [ Ui.height Ui.fill ]
-                (SeqDict.foldr
-                    (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
-                    []
-                    (Discord.channelAccess
-                        channel.permissionOverwrites
-                    )
-                )
-            ]
-        ]
+discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild maybeChannelId =
+    case discordChannelViewers guildId guild maybeChannelId of
+        Nothing ->
+            Ui.none
+
+        Just members ->
+            Ui.column
+                [ Ui.height Ui.fill
+                , Ui.alignRight
+                , Ui.background MyUi.background2
+                , Ui.Font.color MyUi.font1
+                , Ui.width (Ui.px memberColumnWidth)
+                , Ui.scrollable
+                , Ui.heightMin 0
+                ]
+                [ Ui.column
+                    [ Ui.paddingXY 8 4 ]
+                    [ Ui.text "Owner"
+                    , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
+                    , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+                    , Ui.column
+                        [ Ui.height Ui.fill ]
+                        (SeqDict.foldr
+                            (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
+                            []
+                            members
+                        )
+                    ]
+                ]
 
 
 memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
@@ -878,55 +943,57 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
 discordMemberColumnMobile :
     Bool
     -> LocalUser
+    -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
-    -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    -> DiscordFrontendGuild
+    -> Maybe (Discord.Id Discord.ChannelId)
     -> Element FrontendMsg_
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOwner =
-    let
-        members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-        members =
-            MembersAndOwner.members membersAndOwner
-    in
-    Ui.column
-        [ Ui.height Ui.fill ]
-        [ Ui.row
-            [ Ui.contentCenterY
-            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor MyUi.border2
-            , Ui.background MyUi.background3
-            , Ui.height (Ui.px MyUi.channelHeaderHeight)
-            , MyUi.noShrinking
-            ]
-            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-            , Ui.text "Channel members"
-            ]
-        , Ui.column
-            [ Ui.height Ui.fill
-            , Ui.background MyUi.background2
-            , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
-            , MyUi.scrollable canScroll2
-            , Ui.heightMin 0
-            ]
-            [ Ui.column
-                [ Ui.paddingXY 8 4 ]
-                [ Ui.column
-                    [ Ui.paddingXY 8 4 ]
-                    [ Ui.text "Owner"
-                    , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner membersAndOwner)
+discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guild maybeChannelId =
+    case discordChannelViewers guildId guild maybeChannelId of
+        Nothing ->
+            Ui.none
+
+        Just members ->
+            Ui.column
+                [ Ui.height Ui.fill ]
+                [ Ui.row
+                    [ Ui.contentCenterY
+                    , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                    , Ui.borderColor MyUi.border2
+                    , Ui.background MyUi.background3
+                    , Ui.height (Ui.px MyUi.channelHeaderHeight)
+                    , MyUi.noShrinking
                     ]
-                , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+                    [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+                    , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
+                    , Ui.text "Channel members"
+                    ]
                 , Ui.column
-                    [ Ui.height Ui.fill ]
-                    (SeqDict.foldr
-                        (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
-                        []
-                        members
-                    )
+                    [ Ui.height Ui.fill
+                    , Ui.background MyUi.background2
+                    , Ui.Font.color MyUi.font1
+                    , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
+                    , MyUi.scrollable canScroll2
+                    , Ui.heightMin 0
+                    ]
+                    [ Ui.column
+                        [ Ui.paddingXY 8 4 ]
+                        [ Ui.column
+                            [ Ui.paddingXY 8 4 ]
+                            [ Ui.text "Owner"
+                            , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
+                            ]
+                        , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+                        , Ui.column
+                            [ Ui.height Ui.fill ]
+                            (SeqDict.foldr
+                                (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
+                                []
+                                members
+                            )
+                        ]
+                    ]
                 ]
-            ]
-        ]
 
 
 memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_

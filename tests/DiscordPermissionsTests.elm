@@ -89,30 +89,6 @@ member roles =
     { userId = userId, roles = roles }
 
 
-channel : List Discord.Overwrite -> Discord.Channel
-channel overwrites =
-    { id = Discord.idFromUInt64 (UInt64.fromInt 50)
-    , type_ = Discord.GuildText
-    , guildId = Included guildId
-    , position = Missing
-    , permissionOverwrites = Included overwrites
-    , name = Missing
-    , topic = Missing
-    , nsfw = Missing
-    , lastMessageId = Missing
-    , bitrate = Missing
-    , userLimit = Missing
-    , rateLimitPerUser = Missing
-    , recipients = Missing
-    , icon = Missing
-    , ownerId = Missing
-    , applicationId = Missing
-    , parentId = Missing
-    , lastPinTimestamp = Missing
-    , permissions = Missing
-    }
-
-
 tests : Test
 tests =
     Test.describe
@@ -193,37 +169,15 @@ tests =
                     (member [ roleId 2 ])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView ]
                     |> Expect.equal True
-        , Test.test "channelAccess separates read and write access" <|
+        , Test.test "Works with a minimal role record (only id and permissions)" <|
             \_ ->
-                let
-                    readerId =
-                        Discord.idFromUInt64 (UInt64.fromInt 102)
-
-                    noAccessId =
-                        Discord.idFromUInt64 (UInt64.fromInt 103)
-
-                    readOnlyOverwrite : Discord.Overwrite
-                    readOnlyOverwrite =
-                        { id = RoleOrUserId_UserId readerId
-                        , allow = Discord.noPermissions
-                        , deny =
-                            let
-                                noPermissions =
-                                    Discord.noPermissions
-                            in
-                            { noPermissions | sendMessages = True }
-                        }
-
-                    noAccessOverwrite : Discord.Overwrite
-                    noAccessOverwrite =
-                        emptyOverwrite (RoleOrUserId_UserId noAccessId) |> denyView
-                in
-                Discord.channelAccess
-                    (guild [ role 1 viewAndSend ])
-                    [ member [], { userId = readerId, roles = [] }, { userId = noAccessId, roles = [] } ]
-                    (channel [ readOnlyOverwrite, noAccessOverwrite ])
-                    |> Expect.equal
-                        { readAccess = [ userId, readerId ]
-                        , writeAccess = [ userId ]
-                        }
+                Discord.memberHasChannelPermission
+                    .viewChannel
+                    { guildId = guildId
+                    , ownerId = ownerId
+                    , roles = [ { id = roleId 1, permissions = viewAndSend } ]
+                    }
+                    (member [])
+                    []
+                    |> Expect.equal True
         ]
