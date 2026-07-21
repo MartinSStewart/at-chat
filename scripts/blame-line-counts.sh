@@ -4,8 +4,8 @@
 #
 # Counts how many lines of Elm code each author is currently responsible for,
 # using `git blame` (i.e. the last person to touch each line). Only .elm files
-# are considered, and src/Evergreen is ignored (it's auto-generated migration /
-# type-snapshot code, not hand-written).
+# under src/ are considered, and src/Evergreen is ignored (it's auto-generated
+# migration / type-snapshot code, not hand-written).
 #
 # Usage:
 #   scripts/blame-line-counts.sh            Report per-author line counts.
@@ -14,9 +14,7 @@
 # Notes:
 #   * Whitespace-only changes are ignored for attribution (blame -w), so a
 #     reformat doesn't steal ownership of a line from its real author.
-#   * Add more paths to EXCLUDES below to skip them (e.g. "vendored/" for the
-#     third-party packages, which otherwise get attributed to whoever committed
-#     the vendored copy).
+#   * Add more paths to EXCLUDES below to skip additional subtrees of src/.
 #
 set -euo pipefail
 
@@ -34,7 +32,7 @@ fi
 
 # List the Elm files, blame each one, and pull out the author of every line.
 authors() {
-    git ls-files -z -- '*.elm' "${EXCLUDES[@]}" \
+    git ls-files -z -- 'src/*.elm' "${EXCLUDES[@]}" \
         | while IFS= read -r -d '' file; do
             git blame -w --line-porcelain -- "$file"
         done \
