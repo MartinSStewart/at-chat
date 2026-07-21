@@ -58,6 +58,7 @@ module E2EHelper exposing
     , lastGuildChannelMessage
     , lastGuildChannelMessageAt
     , linkDiscordAndLogin
+    , linkDiscordAndLoginSecondUser
     , linkDiscordUrl
     , linkSecondDiscordAccount
     , logoutOtherSessionButtonId
@@ -2050,6 +2051,75 @@ linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
                         Nothing ->
                             [ T.checkState 0 (\_ -> Err "Second Discord websocket didn't send OP2 with the expected token") ]
                 )
+            ]
+        )
+
+
+{-| Logs a brand new at-chat user in (in a fresh session) and links a _second_
+Discord account to that user, distinct from the one linked by
+`linkDiscordAndLogin`. Unlike `linkSecondDiscordAccount`, this represents a
+genuinely different at-chat user rather than a second Discord account on the
+already-logged-in user. The second Discord account shares the same guild
+membership as the first because the provided ready data is reused with the user
+id substituted.
+-}
+linkDiscordAndLoginSecondUser :
+    SessionId
+    -> String
+    -> EmailAddress
+    -> String
+    -> String
+    -> (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+linkDiscordAndLoginSecondUser sessionId name emailAddress discordOp0Ready discordOp0ReadySupplemental continueWith =
+    let
+        secondAuth : Discord.UserAuth
+        secondAuth =
+            { discordUserAuth | token = secondDiscordToken }
+
+        secondReady : String
+        secondReady =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0Ready
+
+        secondSupplemental : String
+        secondSupplemental =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0ReadySupplemental
+    in
+    T.connectFrontend
+        100
+        sessionId
+        ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondAuth)
+        desktopWindow
+        (\userB ->
+            [ T.andThen
+                10
+                (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (startupDataJson data.time firefoxDesktop) ])
+            , handleLoginFromLoginPage emailAddress userB
+            , userB.input 100 (Dom.id "loginForm_name") name
+            , userB.click 100 (Dom.id "loginForm_submit")
+            , T.andThen
+                120
+                (\data ->
+                    case findUntouchedBackendWebsocket data of
+                        Just connection ->
+                            [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Couldn't find the second user's newly opened Discord websocket") ]
+                )
+            , T.andThen
+                120
+                (\data ->
+                    case websocketByDiscordToken secondDiscordToken data of
+                        Just ( connection, _ ) ->
+                            [ T.websocketSendString 100 connection secondReady
+                            , T.websocketSendString 100 connection secondSupplemental
+                            ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "The second user's Discord websocket didn't send OP2 with the expected token") ]
+                )
+            , T.group (continueWith userB)
             ]
         )
 
