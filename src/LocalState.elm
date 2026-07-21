@@ -497,33 +497,56 @@ channelToFrontend threadRoute channel =
             Nothing
 
 
-discordChannelToFrontend : Maybe ThreadRoute -> DiscordBackendChannel -> Maybe DiscordFrontendChannel
-discordChannelToFrontend threadRoute channel =
-    case channel.status of
-        ChannelActive ->
+discordChannelToFrontend :
+    Discord.Id Discord.GuildId
+    -> DiscordBackendGuild
+    -> Discord.Id Discord.UserId
+    -> Maybe ThreadRoute
+    -> DiscordBackendChannel
+    -> Maybe DiscordFrontendChannel
+discordChannelToFrontend guildId guild userId threadRoute channel =
+    let
+        canView =
+            Discord.memberHasChannelPermission
+                .viewChannel
+                guildId
+                (MembersAndOwner.owner guild.membersAndOwner)
+                (List.map
+                    (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
+                    (SeqDict.toList guild.roles)
+                )
+                { userId = userId
+                , roles =
+                    case SeqDict.get userId (MembersAndOwner.members guild.membersAndOwner) of
+                        Just memberData ->
+                            SeqSet.toList memberData.roles
+
+                        Nothing ->
+                            []
+                }
+                channel.permissionOverwrites
+    in
+    case ( canView, channel.status ) of
+        ( True, ChannelActive ) ->
             let
                 preloadMessages =
                     Just NoThread == threadRoute
-
-                channel2 : DiscordFrontendChannel
-                channel2 =
-                    { name = channel.name
-                    , description = channel.description
-                    , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
-                    , visibleMessages = VisibleMessages.init preloadMessages channel
-                    , lastTypedAt = channel.lastTypedAt
-                    , threads =
-                        SeqDict.map
-                            (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
-                            channel.threads
-                    , dateDividerDrawings = channel.dateDividerDrawings
-                    , permissionOverwrites = channel.permissionOverwrites
-                    }
             in
-            channel2
+            { name = channel.name
+            , description = channel.description
+            , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
+            , visibleMessages = VisibleMessages.init preloadMessages channel
+            , lastTypedAt = channel.lastTypedAt
+            , threads =
+                SeqDict.map
+                    (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    channel.threads
+            , dateDividerDrawings = channel.dateDividerDrawings
+            , permissionOverwrites = channel.permissionOverwrites
+            }
                 |> Just
 
-        ChannelDeleted _ ->
+        _ ->
             Nothing
 
 

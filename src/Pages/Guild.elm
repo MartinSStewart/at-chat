@@ -828,26 +828,17 @@ discordChannelViewers :
 discordChannelViewers guildId guild maybeChannelId =
     case maybeChannelId |> Maybe.andThen (\channelId -> SeqDict.get channelId guild.channels) of
         Just channel ->
-            let
-                guildInfo :
-                    { guildId : Discord.Id Discord.GuildId
-                    , ownerId : Discord.Id Discord.UserId
-                    , roles : List { id : Discord.Id Discord.RoleId, permissions : Discord.Permissions }
-                    }
-                guildInfo =
-                    { guildId = guildId
-                    , ownerId = MembersAndOwner.owner guild.membersAndOwner
-                    , roles =
-                        SeqDict.toList guild.roles
-                            |> List.map (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
-                    }
-            in
             MembersAndOwner.members guild.membersAndOwner
                 |> SeqDict.filter
                     (\userId member ->
                         Discord.memberHasChannelPermission
                             .viewChannel
-                            guildInfo
+                            guildId
+                            (MembersAndOwner.owner guild.membersAndOwner)
+                            (List.map
+                                (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
+                                (SeqDict.toList guild.roles)
+                            )
                             { userId = userId, roles = SeqSet.toList member.roles }
                             channel.permissionOverwrites
                     )

@@ -2984,24 +2984,26 @@ turn (an allow beats a deny within the same step).
 -}
 memberHasChannelPermission :
     (Permissions -> Bool)
-    -> { guildId : Id GuildId, ownerId : Id UserId, roles : List { role | id : Id RoleId, permissions : Permissions } }
+    -> Id GuildId
+    -> Id UserId
+    -> List { role | id : Id RoleId, permissions : Permissions }
     -> { userId : Id UserId, roles : List (Id RoleId) }
     -> List Overwrite
     -> Bool
-memberHasChannelPermission permission guild member overwrites =
+memberHasChannelPermission permission guildId ownerId roles member overwrites =
     let
         everyoneRoleId : Id RoleId
         everyoneRoleId =
-            idToUInt64 guild.guildId |> idFromUInt64
+            idToUInt64 guildId |> idFromUInt64
 
         memberRoleIds : List (Id RoleId)
         memberRoleIds =
             everyoneRoleId :: member.roles
 
         memberRoles =
-            List.filter (\role -> List.member role.id memberRoleIds) guild.roles
+            List.filter (\role -> List.member role.id memberRoleIds) roles
     in
-    if member.userId == guild.ownerId || List.any (\role -> role.permissions.administrator) memberRoles then
+    if member.userId == ownerId || List.any (\role -> role.permissions.administrator) memberRoles then
         True
 
     else
