@@ -20,6 +20,7 @@
   all the ones that loaded (some might already be loaded)
 * Add support for Discord roles
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
+* Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
 
 Requested features:
 
