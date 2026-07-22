@@ -143,7 +143,7 @@ import Game
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
-import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)

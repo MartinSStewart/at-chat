@@ -3951,7 +3951,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 channelId
                                 currentUserId
-                                (\session _ _ guild channel ->
+                                (\session _ _ guild _ ->
                                     case LocalState.memberIsEditTypingBackend currentUserId time channelId threadRoute guild of
                                         Ok guild2 ->
                                             ( { model | discordGuilds = SeqDict.insert guildId guild2 model.discordGuilds }
@@ -4731,7 +4731,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 channelId
                                 currentUserId
-                                (\_ _ _ _ guild channel ->
+                                (\_ _ _ _ _ channel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage channel
                                         |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
@@ -4763,7 +4763,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 channelId
                                 currentDiscordUserId
-                                (\_ _ _ guild channel ->
+                                (\_ _ _ _ channel ->
                                     ( model
                                     , SeqDict.get threadId channel.threads
                                         |> Maybe.withDefault Thread.discordBackendInit

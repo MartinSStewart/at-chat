@@ -646,7 +646,7 @@ discordGuildView model routeData loggedIn local =
                                         DiscordChannel_NewChannelRoute ->
                                             discordMemberColumnContainer []
 
-                                        DiscordChannel_EditChannelRoute id ->
+                                        DiscordChannel_EditChannelRoute _ ->
                                             discordMemberColumnContainer []
 
                                         DiscordChannel_GuildSettingsRoute ->
@@ -727,7 +727,7 @@ discordGuildView model routeData loggedIn local =
                                 DiscordChannel_NewChannelRoute ->
                                     discordMemberColumnContainer []
 
-                                DiscordChannel_EditChannelRoute id ->
+                                DiscordChannel_EditChannelRoute _ ->
                                     discordMemberColumnContainer []
 
                                 DiscordChannel_GuildSettingsRoute ->

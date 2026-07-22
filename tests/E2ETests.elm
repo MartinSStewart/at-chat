@@ -2677,7 +2677,7 @@ attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSuppleme
             False
             discordOpReady
             discordOpSupplemental
-            (\admin ->
+            (\_ ->
                 [ -- The admin creates a private channel that only their Discord account can access.
                   E2EHelper.andThenWebsocket
                     (\connection _ ->
