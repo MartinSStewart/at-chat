@@ -1899,28 +1899,10 @@ asDiscordGuildChannelMember model sessionId guildId channelId discordUserId func
                 ( Just user, Just guild, Just (FullData discordUser) ) ->
                     case SeqDict.get channelId guild.channels of
                         Just channel ->
-                            let
-                                canView =
-                                    Discord.memberHasChannelPermission
-                                        .viewChannel
-                                        guildId
-                                        (MembersAndOwner.owner guild.membersAndOwner)
-                                        (List.map
-                                            (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
-                                            (SeqDict.toList guild.roles)
-                                        )
-                                        { userId = discordUserId
-                                        , roles =
-                                            case SeqDict.get discordUserId (MembersAndOwner.members guild.membersAndOwner) of
-                                                Just member ->
-                                                    SeqSet.toList member.roles
-
-                                                Nothing ->
-                                                    []
-                                        }
-                                        channel.permissionOverwrites
-                            in
-                            if (discordUser.linkedTo == session.userId) && canView then
+                            if
+                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                    && (discordUser.linkedTo == session.userId)
+                            then
                                 case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )
@@ -2026,28 +2008,10 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId
                 ( Just user, Just guild ) ->
                     case ( SeqDict.get channelId guild.channels, SeqDict.get discordUserId model.discordUsers ) of
                         ( Just channel, Just (FullData discordUser) ) ->
-                            let
-                                canView =
-                                    Discord.memberHasChannelPermission
-                                        .viewChannel
-                                        guildId
-                                        (MembersAndOwner.owner guild.membersAndOwner)
-                                        (List.map
-                                            (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
-                                            (SeqDict.toList guild.roles)
-                                        )
-                                        { userId = discordUserId
-                                        , roles =
-                                            case SeqDict.get discordUserId (MembersAndOwner.members guild.membersAndOwner) of
-                                                Just member ->
-                                                    SeqSet.toList member.roles
-
-                                                Nothing ->
-                                                    []
-                                        }
-                                        channel.permissionOverwrites
-                            in
-                            if discordUser.linkedTo == session.userId && canView then
+                            if
+                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                    && (discordUser.linkedTo == session.userId)
+                            then
                                 case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )

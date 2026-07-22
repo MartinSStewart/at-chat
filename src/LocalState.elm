@@ -47,6 +47,7 @@ module LocalState exposing
     , announcementChannel
     , callStartedText
     , canSendDiscordMessage
+    , canViewDiscordChannel
     , createChannel
     , createChannelFrontend
     , createChannelMessageBackend
@@ -497,6 +498,37 @@ channelToFrontend threadRoute channel =
             Nothing
 
 
+canViewDiscordChannel :
+    Discord.Id Discord.GuildId
+    -> { a | permissionOverwrites : List Discord.Overwrite }
+    ->
+        { b
+            | membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { c | roles : SeqSet (Discord.Id Discord.RoleId) }
+            , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+        }
+    -> Discord.Id Discord.UserId
+    -> Bool
+canViewDiscordChannel guildId channel guild userId =
+    Discord.memberHasChannelPermission
+        .viewChannel
+        guildId
+        (MembersAndOwner.owner guild.membersAndOwner)
+        (List.map
+            (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
+            (SeqDict.toList guild.roles)
+        )
+        { userId = userId
+        , roles =
+            case SeqDict.get userId (MembersAndOwner.members guild.membersAndOwner) of
+                Just memberData ->
+                    SeqSet.toList memberData.roles
+
+                Nothing ->
+                    []
+        }
+        channel.permissionOverwrites
+
+
 discordChannelToFrontend :
     Discord.Id Discord.GuildId
     -> DiscordBackendGuild
@@ -508,26 +540,7 @@ discordChannelToFrontend guildId guild linkedDiscordUsers threadRoute channel =
     let
         canView =
             List.any
-                (\userId ->
-                    Discord.memberHasChannelPermission
-                        .viewChannel
-                        guildId
-                        (MembersAndOwner.owner guild.membersAndOwner)
-                        (List.map
-                            (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
-                            (SeqDict.toList guild.roles)
-                        )
-                        { userId = userId
-                        , roles =
-                            case SeqDict.get userId (MembersAndOwner.members guild.membersAndOwner) of
-                                Just memberData ->
-                                    SeqSet.toList memberData.roles
-
-                                Nothing ->
-                                    []
-                        }
-                        channel.permissionOverwrites
-                )
+                (canViewDiscordChannel guildId channel guild)
                 (SeqDict.keys linkedDiscordUsers)
     in
     case ( canView, channel.status ) of

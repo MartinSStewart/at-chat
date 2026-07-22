@@ -823,25 +823,13 @@ channel is selected, so the member column can be hidden.
 discordChannelViewers :
     Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
-    -> Maybe (Discord.Id Discord.ChannelId)
+    -> Discord.Id Discord.ChannelId
     -> Maybe (SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })
-discordChannelViewers guildId guild maybeChannelId =
-    case maybeChannelId |> Maybe.andThen (\channelId -> SeqDict.get channelId guild.channels) of
+discordChannelViewers guildId guild channelId =
+    case SeqDict.get channelId guild.channels of
         Just channel ->
             MembersAndOwner.members guild.membersAndOwner
-                |> SeqDict.filter
-                    (\userId member ->
-                        Discord.memberHasChannelPermission
-                            .viewChannel
-                            guildId
-                            (MembersAndOwner.owner guild.membersAndOwner)
-                            (List.map
-                                (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
-                                (SeqDict.toList guild.roles)
-                            )
-                            { userId = userId, roles = SeqSet.toList member.roles }
-                            channel.permissionOverwrites
-                    )
+                |> SeqDict.filter (\userId _ -> LocalState.canViewDiscordChannel guildId channel guild userId)
                 |> Just
 
         Nothing ->
