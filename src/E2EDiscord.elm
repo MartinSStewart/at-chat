@@ -1689,6 +1689,116 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord channel made private via CHANNEL_UPDATE stops being visible"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ ->
+                let
+                    -- Whether a plain guild member (the second user's Discord account, which
+                    -- has no special roles) is allowed to view the regular channel on the
+                    -- backend. This is the exact check the backend uses to decide what to
+                    -- serve, so it pinpoints whether the permission overwrites are current.
+                    secondUserCanView : Bool -> { a | backend : BackendModel } -> Result String ()
+                    secondUserCanView expected data =
+                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                            Just guild ->
+                                case SeqDict.get E2EHelper.regularDiscordChannelId guild.channels of
+                                    Just channel ->
+                                        if LocalState.canViewDiscordChannel E2EHelper.botTestGuild channel guild E2EHelper.secondDiscordUserId == expected then
+                                            Ok ()
+
+                                        else if expected then
+                                            Err "The public channel should be viewable by a plain guild member but isn't"
+
+                                        else
+                                            Err "The channel was made private via CHANNEL_UPDATE, but a plain guild member can still view it on the backend (the updated permission overwrites weren't applied)"
+
+                                    Nothing ->
+                                        Err "The backend doesn't have the regular channel"
+
+                            Nothing ->
+                                Err "The backend doesn't have the Bot Test guild"
+                in
+                [ -- The admin's linked Discord account creates a channel that @everyone may view.
+                  E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelCreateEvent ]
+                    )
+                , -- While public, a plain guild member can view it.
+                  T.checkState 100 (secondUserCanView True)
+                , -- The admin makes the channel private: @everyone is now denied View Channel.
+                  -- (Sent on the admin's gateway before the second user links, so there is only
+                  -- one websocket connection for andThenWebsocket to resolve.)
+                  E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.regularDiscordChannelBecomesPrivateEvent ]
+                    )
+                , -- Regression check: the backend applied the CHANNEL_UPDATE's overwrites, so the
+                  -- same member can no longer view the channel. Before the fix the overwrites were
+                  -- dropped and this stayed viewable.
+                  T.checkState 100 (secondUserCanView False)
+                , -- End-to-end: a second at-chat user links that Discord account and loads fresh in
+                  -- a new tab. The now-private channel must be absent from their frontend.
+                  E2EHelper.linkDiscordAndLoginSecondUser
+                    E2EHelper.sessionId1
+                    "Second User"
+                    E2EHelper.userEmail
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "regular-channel" ])
+                        , T.checkState
+                            500
+                            (\data ->
+                                case SeqDict.get userB.clientId data.frontends |> Maybe.map Audio.userModel of
+                                    Just (Types.Loaded loaded) ->
+                                        case loaded.loginStatus of
+                                            Types.LoggedIn loggedIn ->
+                                                let
+                                                    local : LocalState.LocalState
+                                                    local =
+                                                        Local.model loggedIn.localState
+                                                in
+                                                case SeqDict.get E2EHelper.botTestGuild local.discordGuilds of
+                                                    Just guild ->
+                                                        if SeqDict.member E2EHelper.regularDiscordChannelId guild.channels then
+                                                            Err "The second user, whose Discord account can no longer view the channel, still received the now-private channel in their guild"
+
+                                                        else
+                                                            Ok ()
+
+                                                    Nothing ->
+                                                        Err "The Bot Test guild wasn't delivered to the second user's frontend, so the scenario can't be verified"
+
+                                            _ ->
+                                                Err "Expected the second user to be logged in"
+
+                                    _ ->
+                                        Err "Expected the second user's frontend to be loaded"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Discord users are loaded based on the guild being viewed plus DM channels"
         E2EHelper.startTime
         normalConfig

@@ -69,6 +69,9 @@ module E2EHelper exposing
     , privateDiscordChannelId
     , privateDiscordChannelMessageEvent
     , regeneratedServerSecretValue
+    , regularDiscordChannelBecomesPrivateEvent
+    , regularDiscordChannelCreateEvent
+    , regularDiscordChannelId
     , safariIphone
     , scrollToMiddle
     , scrollToTop
@@ -2784,7 +2787,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordGuildJoinedOrCreated _ _ ->
                             True
 
-                        Types.Server_DiscordUpdateChannel _ _ _ _ ->
+                        Types.Server_DiscordUpdateChannel _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordUpdateRole _ _ _ ->
                             True
 
                         Types.Server_UpdateDiscordMembers _ _ ->
@@ -3053,6 +3059,35 @@ member should be able to see or interact with the channel.
 privateDiscordChannelCreateEvent : String
 privateDiscordChannelCreateEvent =
     """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000777","type":0,"guild_id":"705745250815311942","name":"secret-channel","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"0","deny":"1024"},{"id":"184437096813953035","type":1,"allow":"1024","deny":"0"}]}}"""
+
+
+{-| Id of a channel in the Bot Test guild (705745250815311942) that starts out
+public and is later made private through a CHANNEL\_UPDATE event.
+-}
+regularDiscordChannelId : Discord.Id Discord.ChannelId
+regularDiscordChannelId =
+    Unsafe.uint64 "1500000000000000778" |> Discord.idFromUInt64
+
+
+{-| A CHANNEL\_CREATE gateway event for a public channel in the Bot Test guild.
+The @everyone role (whose id equals the guild id) is explicitly allowed View
+Channel (permission bit 10 = 1024), so every guild member can see it.
+-}
+regularDiscordChannelCreateEvent : String
+regularDiscordChannelCreateEvent =
+    """{"t":"CHANNEL_CREATE","s":91,"op":0,"d":{"id":"1500000000000000778","type":0,"guild_id":"705745250815311942","name":"regular-channel","position":11,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"1024","deny":"0"}]}}"""
+
+
+{-| A CHANNEL\_UPDATE gateway event that makes the previously public
+`regularDiscordChannelId` private: the @everyone overwrite now denies View
+Channel (permission bit 10 = 1024) instead of allowing it. Discord sends a
+CHANNEL\_UPDATE whenever a channel's permission overwrites change, so the backend
+must apply the new overwrites; otherwise a member would keep seeing a channel
+they've just been locked out of.
+-}
+regularDiscordChannelBecomesPrivateEvent : String
+regularDiscordChannelBecomesPrivateEvent =
+    """{"t":"CHANNEL_UPDATE","s":92,"op":0,"d":{"id":"1500000000000000778","type":0,"guild_id":"705745250815311942","name":"regular-channel","position":11,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"0","deny":"1024"}]}}"""
 
 
 {-| A MESSAGE\_CREATE gateway event authored by the admin's Discord account

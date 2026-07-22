@@ -4413,7 +4413,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordUpdateChannel guildId channelId name topic ->
+                Server_DiscordUpdateChannel guildId channelId name topic permissionOverwrites ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -4430,10 +4430,20 @@ changeUpdate localMsg local =
                                                         channel.name
                                             , description =
                                                 LocalState.discordTopicToDescription topic channel.description
+                                            , permissionOverwrites = permissionOverwrites
                                         }
                                     )
                                     channelId
                                 )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordUpdateRole guildId roleId role ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | roles = SeqDict.insert roleId role guild.roles })
                                 local.discordGuilds
                     }
 

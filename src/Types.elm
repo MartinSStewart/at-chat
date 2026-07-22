@@ -87,7 +87,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -909,7 +909,8 @@ type ServerChange
     | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Url, Result () EmbedData )
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
-    | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
+    | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String)) (List Discord.Overwrite)
+    | Server_DiscordUpdateRole (Discord.Id Discord.GuildId) (Discord.Id Discord.RoleId) DiscordRole
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
