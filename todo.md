@@ -27,6 +27,7 @@
 * Show reaction emoji name when hovering over a message reaction
 * Hovering a word in WordSpellingGame should highlight it on the board
 * Show invalid word placed
+* Losing a turn in WordSpellingGame is not being treated as a pass for purposes of ending the game
 
 Requested features:
 
