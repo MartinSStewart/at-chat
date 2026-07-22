@@ -26,7 +26,7 @@ import Message
 import MessageInput
 import Pages.Guild
 import PersonName
-import Route
+import Route exposing (ShowMembersTab(..))
 import SeqDict
 import Sticker
 import Test.Html.Query
@@ -1542,6 +1542,147 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , E2EHelper.tallSnapshot admin 100 { name = "Viewing Discord group DM" }
                         , admin.click 100 (Dom.id "guildIcon_showFriends")
                         , friendLabelHasNoNotificationCircle admin "1500000000000000099" "1"
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Private Discord channel is hidden from a user without access"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ -- The admin's linked Discord account creates a private channel that only it
+                  -- can view (@everyone is denied View Channel, the admin's account is allowed).
+                  E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
+                    )
+                , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (3)" ])
+                , admin.click 100 (Dom.id "guild_openChannel_1500000000000000777")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (0)" ])
+                , -- Sanity check: the backend stored the private channel with its overwrites.
+                  T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                            Just guild ->
+                                case SeqDict.get E2EHelper.privateDiscordChannelId guild.channels of
+                                    Just channel ->
+                                        if List.isEmpty channel.permissionOverwrites then
+                                            Err "The private channel was created without permission overwrites"
+
+                                        else
+                                            Ok ()
+
+                                    Nothing ->
+                                        Err "The backend didn't create the private channel"
+
+                            Nothing ->
+                                Err "The backend doesn't have the Bot Test guild"
+                    )
+                , E2EHelper.writeMessage admin 100 "Message in secret channel"
+                , -- A second, distinct at-chat user links a different Discord account (555...)
+                  -- which is a member of the guild but has no access to the private channel.
+                  E2EHelper.linkDiscordAndLoginSecondUser
+                    E2EHelper.sessionId1
+                    "Second User"
+                    E2EHelper.userEmail
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
+                , -- Sanity check: the second user's Discord account is now a guild member on the backend.
+                  T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                            Just backendGuild ->
+                                if List.member E2EHelper.secondDiscordUserId (MembersAndOwner.membersAndOwner backendGuild.membersAndOwner) then
+                                    Ok ()
+
+                                else
+                                    Err "The second user's Discord account never became a member of the Bot Test guild, so the private channel scenario can't be verified"
+
+                            Nothing ->
+                                Err "The backend doesn't have the Bot Test guild"
+                    )
+                , -- Reconnect the second user in a fresh tab so their initial load delivers the guild
+                  -- and its channels. A user without access to the private channel should not receive
+                  -- it, so it should be absent from their frontend.
+                  T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
+                        , userB.snapshotView 100 { name = "Shouldn't see private channel" }
+                        , T.checkState
+                            500
+                            (\data ->
+                                case SeqDict.get userB.clientId data.frontends |> Maybe.map Audio.userModel of
+                                    Just (Types.Loaded loaded) ->
+                                        case loaded.loginStatus of
+                                            Types.LoggedIn loggedIn ->
+                                                let
+                                                    local : LocalState.LocalState
+                                                    local =
+                                                        Local.model loggedIn.localState
+                                                in
+                                                case SeqDict.get E2EHelper.botTestGuild local.discordGuilds of
+                                                    Just guild ->
+                                                        if SeqDict.member E2EHelper.privateDiscordChannelId guild.channels then
+                                                            Err "The second user, whose Discord account has no access to the private channel, can still see the private channel in their guild"
+
+                                                        else
+                                                            Ok ()
+
+                                                    Nothing ->
+                                                        Err "The Bot Test guild wasn't delivered to the second user's frontend, so the private channel scenario can't be verified"
+
+                                            _ ->
+                                                Err "Expected the second user to be logged in"
+
+                                    _ ->
+                                        Err "Expected the second user's frontend to be loaded"
+                            )
+                        ]
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode
+                        (Route.DiscordGuildRoute
+                            { currentDiscordUserId = E2EHelper.secondDiscordUserId
+                            , guildId = checkGuildVisibleMessageCountGuildId
+                            , channelRoute =
+                                Route.DiscordChannel_ChannelRoute
+                                    E2EHelper.privateDiscordChannelId
+                                    (Route.NoThreadWithFriends Nothing HideMembersTab)
+                                    Nothing
+                            }
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
+                        , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Channel does not exist" ])
+                        , userB.snapshotView 100 { name = "Shouldn't see private channel even when directly linked" }
                         ]
                     )
                 ]

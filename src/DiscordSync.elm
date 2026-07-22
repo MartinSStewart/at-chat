@@ -51,6 +51,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import Pages.Admin
 import PersonName
 import Quantity
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
@@ -133,7 +134,7 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                             , membersAndOwner =
                                                 MembersAndOwner.addMember
                                                     reaction.userId
-                                                    { joinedAt = Nothing }
+                                                    { joinedAt = Nothing, roles = SeqSet.empty }
                                                     guild.membersAndOwner
                                                     |> Result.withDefault guild.membersAndOwner
                                         }
@@ -142,8 +143,9 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                 , discordCustomEmojis = customEmojiData.discordCustomEmojis
                               }
                             , Command.batch
-                                [ Broadcast.toDiscordGuild
+                                [ Broadcast.toDiscordGuildChannel
                                     guildId
+                                    reaction.channelId
                                     ((if isAdding then
                                         Server_DiscordAddReactionGuildEmoji
                                             reaction.userId
@@ -417,8 +419,9 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                         (LocalState.updateChannel (\_ -> channel2) edit.channelId)
                                         model.discordGuilds
                               }
-                            , Broadcast.toDiscordGuild
+                            , Broadcast.toDiscordGuildChannel
                                 guildId
+                                edit.channelId
                                 (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
                                     edit.author.id
@@ -482,8 +485,9 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                                         (LocalState.updateChannel (\_ -> channel2) channelId)
                                         model.discordGuilds
                               }
-                            , Broadcast.toDiscordGuild
+                            , Broadcast.toDiscordGuildChannel
                                 guildId
+                                edit.channelId
                                 (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
                                     edit.author.id
@@ -519,8 +523,9 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
                             case deleteMessageHelper discordMessageId channel of
                                 Just ( messageId, channel2 ) ->
                                     ( { guild | channels = SeqDict.insert discordChannelId channel2 guild.channels }
-                                    , Broadcast.toDiscordGuild
+                                    , Broadcast.toDiscordGuildChannel
                                         discordGuildId
+                                        discordChannelId
                                         (Server_DiscordDeleteGuildMessage
                                             discordGuildId
                                             discordChannelId
@@ -556,8 +561,9 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
                                                                         }
                                                                         guild.channels
                                                               }
-                                                            , Broadcast.toDiscordGuild
+                                                            , Broadcast.toDiscordGuildChannel
                                                                 discordGuildId
+                                                                discordChannelId
                                                                 (Server_DiscordDeleteGuildMessage
                                                                     discordGuildId
                                                                     discordChannelId
@@ -701,6 +707,13 @@ addDiscordChannel discordChannel =
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
         , dateDividerDrawings = SeqDict.empty
+        , permissionOverwrites =
+            case discordChannel.permissionOverwrites of
+                Missing ->
+                    []
+
+                Included permissions ->
+                    permissions
         }
             |> Just
 
@@ -1091,7 +1104,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 , membersAndOwner =
                                                                     MembersAndOwner.addMember
                                                                         discordMessage.author.id
-                                                                        { joinedAt = Just discordMessage.timestamp }
+                                                                        { joinedAt = Just discordMessage.timestamp
+                                                                        , roles = SeqSet.empty
+                                                                        }
                                                                         guild.membersAndOwner
                                                                         |> Result.withDefault guild.membersAndOwner
                                                             }
@@ -1116,8 +1131,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                         in
                                         ( { model2 | sessions = sessions }
                                         , Command.batch
-                                            [ Broadcast.toDiscordGuild
+                                            [ Broadcast.toDiscordGuildChannel
                                                 discordGuildId
+                                                channelId
                                                 (Server_DiscordGuildMemberJoined
                                                     discordMessage.timestamp
                                                     discordGuildId
@@ -1289,7 +1305,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         , membersAndOwner =
                                                             MembersAndOwner.addMember
                                                                 discordMessage.author.id
-                                                                { joinedAt = Nothing }
+                                                                { joinedAt = Nothing, roles = SeqSet.empty }
                                                                 guild.membersAndOwner
                                                                 |> Result.withDefault guild.membersAndOwner
                                                     }
@@ -1350,9 +1366,10 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             )
                                                             |> Lamdera.sendToFrontend clientId
-                                                        , Broadcast.toDiscordGuildExcludingOne
+                                                        , Broadcast.toDiscordGuildChannelExcludingOne
                                                             clientId
                                                             discordGuildId
+                                                            channelId
                                                             (Server_Discord_SendMessage
                                                                 discordMessage.timestamp
                                                                 guildOrDmId
@@ -1366,8 +1383,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         ]
 
                                                 Nothing ->
-                                                    Broadcast.toDiscordGuild
+                                                    Broadcast.toDiscordGuildChannel
                                                         discordGuildId
+                                                        channelId
                                                         (Server_Discord_SendMessage
                                                             discordMessage.timestamp
                                                             guildOrDmId
@@ -1778,7 +1796,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                     | membersAndOwner =
                                                                         MembersAndOwner.addMember
                                                                             presence.userId
-                                                                            { joinedAt = Nothing }
+                                                                            { joinedAt = Nothing, roles = SeqSet.empty }
                                                                             guild.membersAndOwner
                                                                             |> Result.withDefault guild.membersAndOwner
                                                                 }
@@ -1815,7 +1833,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                 | membersAndOwner =
                                                                                     MembersAndOwner.addOrUpdateMember
                                                                                         participant.userId
-                                                                                        { joinedAt = Just member.joinedAt }
+                                                                                        { joinedAt = Just member.joinedAt
+                                                                                        , roles = SeqSet.empty
+                                                                                        }
                                                                                         guild2.membersAndOwner
                                                                               }
                                                                             , member.user :: users
@@ -2035,8 +2055,9 @@ handleChannelUpdated channel model =
                         )
                         model.discordGuilds
               }
-            , Broadcast.toDiscordGuild
+            , Broadcast.toDiscordGuildChannel
                 guildId
+                channel.id
                 (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic |> ServerChange)
                 model
             )
@@ -2044,7 +2065,7 @@ handleChannelUpdated channel model =
 
 handleGuildMemberUpdate :
     Discord.Id Discord.GuildId
-    -> { b | user : Discord.User, joinedAt : Time.Posix }
+    -> { b | user : Discord.User, joinedAt : Time.Posix, roles : List (Discord.Id Discord.RoleId) }
     -> BackendModel
     -> ( BackendModel, Command restriction toMsg BackendMsg )
 handleGuildMemberUpdate guildId guildMember model2 =
@@ -2059,7 +2080,9 @@ handleGuildMemberUpdate guildId guildMember model2 =
                             | membersAndOwner =
                                 MembersAndOwner.addOrUpdateMember
                                     guildMember.user.id
-                                    { joinedAt = Just guildMember.joinedAt }
+                                    { joinedAt = Just guildMember.joinedAt
+                                    , roles = SeqSet.fromList guildMember.roles
+                                    }
                                     guild.membersAndOwner
                         }
                         model2.discordGuilds
@@ -2125,8 +2148,9 @@ handleTypingStarted typingStart model =
                                             { guild | channels = SeqDict.insert channelId channel2 guild.channels }
                                             model.discordGuilds
                                   }
-                                , Broadcast.toDiscordGuild
+                                , Broadcast.toDiscordGuildChannel
                                     guildId
+                                    channelId
                                     (Server_DiscordGuildMemberTyping
                                         typingStart.timestamp
                                         typingStart.userId
@@ -2360,6 +2384,13 @@ handleChannelCreated channel model =
                                                                 LocalState.discordTopicToDescription
                                                                     channel.topic
                                                                     existingChannel.description
+                                                            , permissionOverwrites =
+                                                                case channel.permissionOverwrites of
+                                                                    Missing ->
+                                                                        []
+
+                                                                    Included permissions ->
+                                                                        permissions
                                                         }
 
                                                 Nothing ->
@@ -2374,6 +2405,13 @@ handleChannelCreated channel model =
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
                                                     , dateDividerDrawings = SeqDict.empty
+                                                    , permissionOverwrites =
+                                                        case channel.permissionOverwrites of
+                                                            Missing ->
+                                                                []
+
+                                                            Included permissions ->
+                                                                permissions
                                                     }
                                                         |> Just
                                         )
@@ -2382,9 +2420,23 @@ handleChannelCreated channel model =
                         )
                         model.discordGuilds
               }
-            , Broadcast.toDiscordGuild
+            , Broadcast.toDiscordGuildChannel
                 guildId
-                (Server_DiscordChannelCreated guildId channel.id name channel.topic |> ServerChange)
+                channel.id
+                (Server_DiscordChannelCreated
+                    guildId
+                    channel.id
+                    name
+                    channel.topic
+                    (case channel.permissionOverwrites of
+                        Missing ->
+                            []
+
+                        Included permissions ->
+                            permissions
+                    )
+                    |> ServerChange
+                )
                 model
             )
 
@@ -2400,13 +2452,15 @@ handleReadySupplementalData data model =
                 case SeqDict.get guildId model2.discordGuilds of
                     Just guild ->
                         let
-                            mergedMembers2 : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            mergedMembers2 : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
                             mergedMembers2 =
                                 List.foldl
                                     (\mergedMember state ->
                                         MembersAndOwner.addOrUpdateMember
                                             mergedMember.userId
-                                            { joinedAt = Just mergedMember.joinedAt }
+                                            { joinedAt = Just mergedMember.joinedAt
+                                            , roles = SeqSet.fromList mergedMember.roles
+                                            }
                                             state
                                     )
                                     guild.membersAndOwner
@@ -2740,7 +2794,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 (\member dict ->
                                     MembersAndOwner.addOrUpdateMember
                                         member.userId
-                                        { joinedAt = Just member.joinedAt }
+                                        { joinedAt = Just member.joinedAt, roles = SeqSet.fromList member.roles }
                                         dict
                                 )
                                 existingGuild.membersAndOwner
@@ -2767,6 +2821,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                                 )
                                 guild.emojis
                                 |> SeqSet.fromList
+                        , roles = Pages.Admin.rolesToDict guild.roles
                     }
                         |> Just
 
@@ -2776,7 +2831,13 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                     , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
                     , membersAndOwner =
                         MembersAndOwner.init
-                            (List.map (\member -> ( member.userId, { joinedAt = Just member.joinedAt } )) members
+                            (List.map
+                                (\member ->
+                                    ( member.userId
+                                    , { joinedAt = Just member.joinedAt, roles = SeqSet.fromList member.roles }
+                                    )
+                                )
+                                members
                                 |> SeqDict.fromList
                             )
                             guild.properties.ownerId
@@ -2802,6 +2863,7 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                             )
                             guild.emojis
                             |> SeqSet.fromList
+                    , roles = Pages.Admin.rolesToDict guild.roles
                     }
                         |> Just
         )
@@ -3074,7 +3136,7 @@ handleListGuildMembersResponse chunkData model =
                                 (\member guildMembers ->
                                     MembersAndOwner.addOrUpdateMember
                                         member.user.id
-                                        { joinedAt = Just member.joinedAt }
+                                        { joinedAt = Just member.joinedAt, roles = SeqSet.fromList member.roles }
                                         guildMembers
                                 )
                                 guild.membersAndOwner

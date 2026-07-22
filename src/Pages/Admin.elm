@@ -25,6 +25,7 @@ module Pages.Admin exposing
     , initForUser
     , logSectionId
     , pendingChangesText
+    , rolesToDict
     , update
     , updateAdmin
     , updateFromBackend
@@ -62,7 +63,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordRole, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..), WordSpellingGameStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -140,6 +141,7 @@ type Msg
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | PressedReloadDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | PressedReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId)
     | PressedCopyText String
     | TypedInReadOnlyTextInput
     | PressedExportBackend
@@ -307,6 +309,7 @@ type AdminChange
     | RestoreGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | ReloadDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (ToBeFilledInByBackend (Result Discord.HttpError (List Discord.Role)))
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
@@ -561,6 +564,24 @@ updateAdmin changedBy change adminData local =
                             }
                 }
 
+        ReloadDiscordGuild _ guildId toBeFilledInByBackend ->
+            case toBeFilledInByBackend of
+                FilledInByBackend (Ok roles) ->
+                    { local
+                        | adminData =
+                            IsAdmin
+                                { adminData
+                                    | discordGuilds =
+                                        SeqDict.updateIfExists
+                                            guildId
+                                            (\guild -> { guild | roles = rolesToDict roles })
+                                            adminData.discordGuilds
+                                }
+                    }
+
+                _ ->
+                    local
+
         ExpandGuild guildId ->
             let
                 localUser =
@@ -677,6 +698,21 @@ updateAdmin changedBy change adminData local =
 
         EndAllCalls ->
             { local | adminData = endAllCalls adminData |> IsAdmin }
+
+
+rolesToDict : List Discord.Role -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
+rolesToDict roles =
+    List.map
+        (\role ->
+            ( role.id
+            , { name = role.name
+              , description = role.description
+              , permissions = role.permissions
+              }
+            )
+        )
+        roles
+        |> SeqDict.fromList
 
 
 endAllCalls :
@@ -1229,6 +1265,9 @@ update navigationKey time adminData localState msg model =
         PressedReloadDiscordDmChannel currentUserId channelId ->
             ( model, Command.none, StartReloadingDiscordDmChannel time currentUserId channelId |> AdminChange )
 
+        PressedReloadDiscordGuild currentUserId guildId ->
+            ( model, Command.none, ReloadDiscordGuild currentUserId guildId EmptyPlaceholder |> AdminChange )
+
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
@@ -1678,6 +1717,9 @@ pendingChangesText change =
 
         StartReloadingDiscordDmChannel _ _ _ ->
             "Reset Discord DM channel"
+
+        ReloadDiscordGuild _ _ _ ->
+            "Reloaded Discord guild"
 
         ExpandGuild _ ->
             "Expanded guild in admin page"
@@ -3395,7 +3437,7 @@ discordGuildsSection isMobile user adminData =
                             owner =
                                 MembersAndOwner.owner guild.membersAndOwner
 
-                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
                             members =
                                 MembersAndOwner.members guild.membersAndOwner
                         in
@@ -3452,13 +3494,15 @@ discordGuildsSection isMobile user adminData =
                                                 )
                                                 adminData.discordUsers
                                             )
-                                            (SeqDict.insert owner { joinedAt = Nothing } members)
+                                            (SeqDict.insert owner { joinedAt = Nothing, roles = SeqSet.empty } members)
                                             |> SeqDict.keys
                                             |> List.head
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels))
+                                    (discordGuildRoles userThatCanReload guildId guild.roles
+                                        :: List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels)
+                                    )
 
                               else
                                 Ui.none
@@ -3508,6 +3552,38 @@ loadingChannelErrorView channelId isReloading =
 
         _ ->
             Ui.none
+
+
+discordGuildRoles :
+    Maybe (Discord.Id Discord.UserId)
+    -> Discord.Id Discord.GuildId
+    -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    -> Element Msg
+discordGuildRoles maybeUserId guildId roles =
+    Ui.row
+        [ Ui.spacing 8, Ui.Font.size 13 ]
+        [ case maybeUserId of
+            Just userId ->
+                resetButton
+                    (reloadDiscordGuildButtonId guildId)
+                    (PressedReloadDiscordGuild userId guildId)
+
+            Nothing ->
+                Ui.none
+        , if SeqDict.isEmpty roles then
+            Ui.text "No roles loaded. Press reload to fetch them."
+
+          else
+            List.sortBy .name (SeqDict.values roles)
+                |> List.map .name
+                |> String.join ", "
+                |> (\text -> Ui.text ("Roles (" ++ String.fromInt (SeqDict.size roles) ++ "): " ++ text))
+        ]
+
+
+reloadDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
+reloadDiscordGuildButtonId guildId =
+    Dom.id ("admin_reloadDiscordGuild_" ++ Discord.idToString guildId)
 
 
 discordGuildChannel :

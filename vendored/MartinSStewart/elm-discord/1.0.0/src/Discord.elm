@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -116,6 +116,14 @@ type UserId
 
 type RoleId
     = RoleId Never
+
+
+type IntegrationId
+    = IntegrationId Never
+
+
+type SubscriptionListingId
+    = SubscriptionListingId Never
 
 
 type ChannelId
@@ -2668,8 +2676,7 @@ type alias Guild =
     , verificationLevel : Int
     , defaultMessageNotifications : Int
     , explicitContentFilter : Int
-
-    -- roles field excluded
+    , roles : List Role
     , emojis : List EmojiData
     , features : List String
     , mfaLevel : Int
@@ -2725,6 +2732,47 @@ type alias GuildMemberNoUser =
     , premiumSince : OptionalData (Maybe Time.Posix)
     , deaf : Bool
     , mute : Bool
+    }
+
+
+{-| <https://docs.discord.food/resources/guild#role-object>
+-}
+type alias Role =
+    { id : Id RoleId
+    , name : String
+    , description : Maybe String
+    , colors : OptionalData RoleColors
+    , hoist : Bool
+    , icon : Maybe (ImageHash RoleIconHash)
+    , unicodeEmoji : Maybe String
+    , position : Int
+    , permissions : Permissions
+    , managed : Bool
+    , mentionable : Bool
+    , flags : OptionalData Int
+    , tags : OptionalData RoleTags
+
+    -- version field excluded (only included in gateway guild role events)
+    }
+
+
+type alias RoleColors =
+    { primaryColor : Int
+    , secondaryColor : Maybe Int
+    , tertiaryColor : Maybe Int
+    }
+
+
+{-| The tags this role has. Boolean tags are represented by Discord as fields
+that are present and set to null when true, and absent when false.
+-}
+type alias RoleTags =
+    { botId : OptionalData (Id UserId)
+    , integrationId : OptionalData (Id IntegrationId)
+    , premiumSubscriber : Bool
+    , subscriptionListingId : OptionalData (Id SubscriptionListingId)
+    , availableForPurchase : Bool
+    , guildConnections : Bool
     }
 
 
@@ -2790,8 +2838,7 @@ type alias Channel =
     , type_ : ChannelType
     , guildId : OptionalData (Id GuildId)
     , position : OptionalData Int
-
-    -- premission overwrites field excluded
+    , permissionOverwrites : OptionalData (List Overwrite)
     , name : OptionalData String
     , topic : OptionalData (Maybe String)
     , nsfw : OptionalData Bool
@@ -2805,6 +2852,7 @@ type alias Channel =
     , applicationId : OptionalData (Id ApplicationId)
     , parentId : OptionalData (Maybe (Id ChannelId))
     , lastPinTimestamp : OptionalData Time.Posix
+    , permissions : OptionalData Permissions
     }
 
 
@@ -2820,6 +2868,7 @@ type alias Channel2 =
     , bitrate : OptionalData (Quantity Int (Rate Bits Seconds))
     , parentId : OptionalData (Maybe (Id ChannelId))
     , permissionOverwrites : List Overwrite
+    , permissions : OptionalData Permissions
     }
 
 
@@ -2916,6 +2965,77 @@ decodeOverwrite =
         (JD.optionalNullableField "allow" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
         (JD.optionalNullableField "deny" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
         |> JD.andThen identity
+
+
+
+--memberCanReadChannel : Id UserId -> List Overwrite -> Bool
+--memberCanReadChannel id overwrites =
+--    memberHasChannelPermission .viewChannel id overwrites
+
+
+{-| Check if a guild member has a permission in a channel, following Discord's
+permission resolution order: the guild owner and administrators are allowed
+everything, otherwise role permissions are combined and then the channel's
+@everyone overwrite, role overwrites, and member overwrite are applied in
+turn (an allow beats a deny within the same step).
+
+<https://docs.discord.food/topics/permissions#permission-overwrites>
+
+-}
+memberHasChannelPermission :
+    (Permissions -> Bool)
+    -> Id GuildId
+    -> Id UserId
+    -> List { role | id : Id RoleId, permissions : Permissions }
+    -> { userId : Id UserId, roles : List (Id RoleId) }
+    -> List Overwrite
+    -> Bool
+memberHasChannelPermission permission guildId ownerId roles member overwrites =
+    let
+        everyoneRoleId : Id RoleId
+        everyoneRoleId =
+            idToUInt64 guildId |> idFromUInt64
+
+        memberRoleIds : List (Id RoleId)
+        memberRoleIds =
+            everyoneRoleId :: member.roles
+
+        memberRoles =
+            List.filter (\role -> List.member role.id memberRoleIds) roles
+    in
+    if member.userId == ownerId || List.any (\role -> role.permissions.administrator) memberRoles then
+        True
+
+    else
+        let
+            applyOverwrites : List Overwrite -> Bool -> Bool
+            applyOverwrites relevantOverwrites value =
+                if List.any (\overwrite -> permission overwrite.allow) relevantOverwrites then
+                    True
+
+                else if List.any (\overwrite -> permission overwrite.deny) relevantOverwrites then
+                    False
+
+                else
+                    value
+        in
+        List.any (\role -> permission role.permissions) memberRoles
+            |> applyOverwrites
+                (List.filter (\overwrite -> overwrite.id == RoleOrUserId_RoleId everyoneRoleId) overwrites)
+            |> applyOverwrites
+                (List.filter
+                    (\overwrite ->
+                        case overwrite.id of
+                            RoleOrUserId_RoleId roleId ->
+                                roleId /= everyoneRoleId && List.member roleId member.roles
+
+                            RoleOrUserId_UserId _ ->
+                                False
+                    )
+                    overwrites
+                )
+            |> applyOverwrites
+                (List.filter (\overwrite -> overwrite.id == RoleOrUserId_UserId member.userId) overwrites)
 
 
 type alias PartialChannel =
@@ -3130,6 +3250,10 @@ type TeamIconHash
 
 type ApplicationIconHash
     = ApplicationIconHash Never
+
+
+type RoleIconHash
+    = RoleIconHash Never
 
 
 type SessionId
@@ -4061,6 +4185,7 @@ decodeGuild =
         |> JD.andMap (JD.field "verification_level" JD.int)
         |> JD.andMap (JD.field "default_message_notifications" JD.int)
         |> JD.andMap (JD.field "explicit_content_filter" JD.int)
+        |> JD.andMap (JD.field "roles" (JD.list decodeRole))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
         |> JD.andMap (JD.field "features" (JD.list JD.string))
         |> JD.andMap (JD.field "mfa_level" JD.int)
@@ -4087,6 +4212,51 @@ decodeGuild =
         |> JD.andMap (JD.field "public_updates_channel_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "approximate_member_count" JD.int)
         |> JD.andMap (decodeOptionalData "approximate_presence_count" JD.int)
+
+
+decodeRole : JD.Decoder Role
+decodeRole =
+    JD.succeed Role
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.field "name" JD.string)
+        |> JD.andMap (JD.optionalNullableField "description" JD.string)
+        |> JD.andMap (decodeOptionalData "colors" decodeRoleColors)
+        |> JD.andMap (JD.field "hoist" JD.bool)
+        |> JD.andMap (JD.optionalNullableField "icon" decodeHash)
+        |> JD.andMap (JD.optionalNullableField "unicode_emoji" JD.string)
+        |> JD.andMap (JD.field "position" JD.int)
+        |> JD.andMap (JD.field "permissions" decodePermissions)
+        |> JD.andMap (JD.field "managed" JD.bool)
+        |> JD.andMap (JD.field "mentionable" JD.bool)
+        |> JD.andMap (decodeOptionalData "flags" JD.int)
+        |> JD.andMap (decodeOptionalData "tags" decodeRoleTags)
+
+
+decodeRoleColors : JD.Decoder RoleColors
+decodeRoleColors =
+    JD.succeed RoleColors
+        |> JD.andMap (JD.field "primary_color" JD.int)
+        |> JD.andMap (JD.field "secondary_color" (JD.nullable JD.int))
+        |> JD.andMap (JD.field "tertiary_color" (JD.nullable JD.int))
+
+
+decodeRoleTags : JD.Decoder RoleTags
+decodeRoleTags =
+    JD.succeed RoleTags
+        |> JD.andMap (decodeOptionalData "bot_id" decodeId)
+        |> JD.andMap (decodeOptionalData "integration_id" decodeId)
+        |> JD.andMap (decodeNullBool "premium_subscriber")
+        |> JD.andMap (decodeOptionalData "subscription_listing_id" decodeId)
+        |> JD.andMap (decodeNullBool "available_for_purchase")
+        |> JD.andMap (decodeNullBool "guild_connections")
+
+
+{-| Decodes a field that Discord represents as being present and set to null
+when true, and absent when false.
+-}
+decodeNullBool : String -> JD.Decoder Bool
+decodeNullBool fieldName =
+    JD.oneOf [ JD.field fieldName (JD.null True), JD.succeed False ]
 
 
 exp : Int
@@ -4255,6 +4425,7 @@ decodeChannel =
         |> JD.andMap (JD.field "type" decodeChannelType)
         |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
+        |> JD.andMap (decodeOptionalData "permission_overwrites" (JD.list decodeOverwrite))
         |> JD.andMap (decodeOptionalData "name" JD.string)
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
@@ -4268,6 +4439,7 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "application_id" decodeId)
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "last_pin_timestamp" Iso8601.decoder)
+        |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
 
 
 type alias PrivateChannel =
@@ -4311,6 +4483,7 @@ decodeChannel2 =
         |> JD.andMap (decodeOptionalData "bitrate" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "permission_overwrites" (JD.list decodeOverwrite))
+        |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
 
 
 decodeChannelType : JD.Decoder ChannelType
@@ -4537,8 +4710,7 @@ type alias GatewayGuild =
     , dataMode : String
     , properties : GatewayGuildProperties
     , stickers : List Sticker
-
-    --, roles : List Role
+    , roles : List Role
     , emojis : List EmojiData
 
     --, soundboardSounds : List SoundboardSound
@@ -4912,7 +5084,7 @@ decodeGatewayGuild =
         |> JD.andMap (JD.field "data_mode" JD.string)
         |> JD.andMap (JD.field "properties" decodeGatewayGuildProperties)
         |> JD.andMap (JD.field "stickers" (JD.list decodeSticker))
-        --|> JD.andMap (JD.field "roles" (JD.list roleDecoder))
+        |> JD.andMap (JD.field "roles" (JD.list decodeRole))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
         --|> JD.andMap (JD.field "soundboard_sounds" (JD.list soundboardSoundDecoder))
         |> JD.andMap (JD.field "premium_subscription_count" JD.int)

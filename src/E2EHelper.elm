@@ -8,6 +8,7 @@ module E2EHelper exposing
     , andThenWebsocket
     , attachmentTestActions
     , attackerEmail
+    , attackerPrivateDiscordChannelChanges
     , attackerShouldNotGetThisToFrontend
     , botTestGuild
     , botTestGuild_ChannelA
@@ -58,11 +59,15 @@ module E2EHelper exposing
     , lastGuildChannelMessage
     , lastGuildChannelMessageAt
     , linkDiscordAndLogin
+    , linkDiscordAndLoginSecondUser
     , linkDiscordUrl
     , linkSecondDiscordAccount
     , logoutOtherSessionButtonId
     , mockCloudflareSfu
     , noMissingMessages
+    , privateDiscordChannelCreateEvent
+    , privateDiscordChannelId
+    , privateDiscordChannelMessageEvent
     , regeneratedServerSecretValue
     , safariIphone
     , scrollToMiddle
@@ -2054,6 +2059,75 @@ linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
         )
 
 
+{-| Logs a brand new at-chat user in (in a fresh session) and links a _second_
+Discord account to that user, distinct from the one linked by
+`linkDiscordAndLogin`. Unlike `linkSecondDiscordAccount`, this represents a
+genuinely different at-chat user rather than a second Discord account on the
+already-logged-in user. The second Discord account shares the same guild
+membership as the first because the provided ready data is reused with the user
+id substituted.
+-}
+linkDiscordAndLoginSecondUser :
+    SessionId
+    -> String
+    -> EmailAddress
+    -> String
+    -> String
+    -> (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+linkDiscordAndLoginSecondUser sessionId name emailAddress discordOp0Ready discordOp0ReadySupplemental continueWith =
+    let
+        secondAuth : Discord.UserAuth
+        secondAuth =
+            { discordUserAuth | token = secondDiscordToken }
+
+        secondReady : String
+        secondReady =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0Ready
+
+        secondSupplemental : String
+        secondSupplemental =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0ReadySupplemental
+    in
+    T.connectFrontend
+        100
+        sessionId
+        ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondAuth)
+        desktopWindow
+        (\userB ->
+            [ T.andThen
+                10
+                (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (startupDataJson data.time firefoxDesktop) ])
+            , handleLoginFromLoginPage emailAddress userB
+            , userB.input 100 (Dom.id "loginForm_name") name
+            , userB.click 100 (Dom.id "loginForm_submit")
+            , T.andThen
+                120
+                (\data ->
+                    case findUntouchedBackendWebsocket data of
+                        Just connection ->
+                            [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Couldn't find the second user's newly opened Discord websocket") ]
+                )
+            , T.andThen
+                120
+                (\data ->
+                    case websocketByDiscordToken secondDiscordToken data of
+                        Just ( connection, _ ) ->
+                            [ T.websocketSendString 100 connection secondReady
+                            , T.websocketSendString 100 connection secondSupplemental
+                            ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "The second user's Discord websocket didn't send OP2 with the expected token") ]
+                )
+            , T.group (continueWith userB)
+            ]
+        )
+
+
 findUntouchedBackendWebsocket : T.Data frontendModel backendModel -> Maybe Websocket.Connection
 findUntouchedBackendWebsocket data =
     SeqDict.toList data.websockets
@@ -2132,6 +2206,15 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 
             ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
                 StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
+
+            ( "DELETE", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
+                StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
+
+            ( "PUT", [ "discord.com", "api", "v9", "channels", _, "messages", _, "reactions", _, "@me" ] ) ->
+                StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
+
+            ( "DELETE", [ "discord.com", "api", "v9", "channels", _, "messages", _, "reactions", _, "@me" ] ) ->
+                StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
 
             ( "PUT", [ "discord.com", "api", "v9", "channels", _, "thread-members", "@me" ] ) ->
                 StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
@@ -2662,7 +2745,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_UnlinkDiscordUser _ ->
                             True
 
-                        Types.Server_DiscordChannelCreated _ _ _ _ ->
+                        Types.Server_DiscordChannelCreated _ _ _ _ _ ->
                             True
 
                         Types.Server_DiscordDmChannelCreated _ _ ->
@@ -2951,6 +3034,109 @@ allAttackerLocalChanges =
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( 0, 0 ))
+    ]
+
+
+{-| Id of a private Discord channel in the Bot Test guild (705745250815311942).
+-}
+privateDiscordChannelId : Discord.Id Discord.ChannelId
+privateDiscordChannelId =
+    Unsafe.uint64 "1500000000000000777" |> Discord.idFromUInt64
+
+
+{-| A CHANNEL\_CREATE gateway event for a private channel in the Bot Test guild.
+The @everyone role (whose id equals the guild id) is denied View Channel
+(permission bit 10 = 1024) and only the admin's linked Discord account
+(184437096813953035) is granted it through a member overwrite, so no other guild
+member should be able to see or interact with the channel.
+-}
+privateDiscordChannelCreateEvent : String
+privateDiscordChannelCreateEvent =
+    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000777","type":0,"guild_id":"705745250815311942","name":"secret-channel","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"0","deny":"1024"},{"id":"184437096813953035","type":1,"allow":"1024","deny":"0"}]}}"""
+
+
+{-| A MESSAGE\_CREATE gateway event authored by the admin's Discord account
+(184437096813953035) in the private channel, carrying the given sequence number
+and content. Used to simulate the admin writing ordinary messages that no other
+guild member should be able to read.
+-}
+privateDiscordChannelMessageEvent : Int -> String -> String
+privateDiscordChannelMessageEvent sequence content =
+    """{"t":"MESSAGE_CREATE","s":"""
+        ++ String.fromInt sequence
+        ++ ""","op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2020-05-01T11:39:39.915000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":\""""
+        -- Built by string concatenation (not integer arithmetic) so the 19-digit
+        -- snowflake keeps full precision.
+        ++ ("1500000000000010" ++ String.padLeft 3 '0' (String.fromInt sequence))
+        ++ """","flags":0,"embeds":[],"edited_timestamp":null,"content":\""""
+        ++ content
+        ++ """","components":[],"channel_type":0,"channel_id":"1500000000000000777","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+
+
+{-| LocalChanges an attacker might send trying to read from or modify the private
+Discord channel they have no access to. The attacker acts as their own linked
+Discord account (555...), and also tries impersonating the admin's account
+(184...) for the read/write vectors.
+-}
+attackerPrivateDiscordChannelChanges : List LocalChange
+attackerPrivateDiscordChannelChanges =
+    let
+        attackerDiscordUserId : Discord.Id Discord.UserId
+        attackerDiscordUserId =
+            secondDiscordUserId
+
+        adminDiscordUserId : Discord.Id Discord.UserId
+        adminDiscordUserId =
+            currentDiscordUserId
+
+        guildId : Discord.Id Discord.GuildId
+        guildId =
+            botTestGuild
+
+        messageTime : Time.Posix
+        messageTime =
+            Time.millisToPosix 99999
+
+        hackedText : NonemptyString
+        hackedText =
+            NonemptyString 'h' "acked"
+
+        threadRouteWithMessage : ThreadRouteWithMessage
+        threadRouteWithMessage =
+            NoThreadWithMessage (Id.fromInt 0)
+
+        threadRouteWithMaybeMessage : ThreadRouteWithMaybeMessage
+        threadRouteWithMaybeMessage =
+            NoThreadWithMaybeMessage (Just (Id.fromInt 0))
+
+        emoji : EmojiOrCustomEmoji
+        emoji =
+            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
+
+        asUser : Discord.Id Discord.UserId -> DiscordGuildOrDmId
+        asUser discordUserId =
+            DiscordGuildOrDmId_Guild discordUserId guildId privateDiscordChannelId
+
+        anyAsUser : Discord.Id Discord.UserId -> AnyGuildOrDmId
+        anyAsUser discordUserId =
+            DiscordGuildOrDmId (asUser discordUserId)
+    in
+    [ -- Read attempts (as the attacker, and impersonating the admin).
+      Local_Discord_LoadChannelMessages (asUser attackerDiscordUserId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages (asUser adminDiscordUserId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages (asUser attackerDiscordUserId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_SetLastViewed (anyAsUser attackerDiscordUserId) threadRouteWithMessage
+
+    -- Write/modify attempts.
+    , Local_Discord_SendMessage messageTime (asUser attackerDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime (asUser adminDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendEditGuildMessage messageTime attackerDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
+    , Local_Discord_SendEditGuildMessage messageTime adminDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
+    , Local_DeleteMessage (anyAsUser attackerDiscordUserId) threadRouteWithMessage
+    , Local_DeleteMessage (anyAsUser adminDiscordUserId) threadRouteWithMessage
+    , Local_AddReactionEmoji (anyAsUser attackerDiscordUserId) threadRouteWithMessage emoji
+    , Local_RemoveReactionEmoji (anyAsUser attackerDiscordUserId) threadRouteWithMessage emoji
+    , Local_MemberTyping messageTime ( anyAsUser attackerDiscordUserId, NoThread )
     ]
 
 

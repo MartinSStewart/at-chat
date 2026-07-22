@@ -5,8 +5,9 @@ module BackendExtra exposing
     , asAdmin
     , asDiscordDmUser
     , asDiscordDmUser_AllowUserThatNeedsAuthAgain
+    , asDiscordGuildChannelMember
+    , asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
     , asDiscordGuildMember
-    , asDiscordGuildMember_AllowUserThatNeedsAuthAgain
     , asDiscordUser
     , asDmUser
     , asGuildMember
@@ -63,7 +64,7 @@ import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAn
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -551,6 +552,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                         _ ->
                             Nothing
                     )
+                    guildId
                     guild
                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
@@ -709,15 +711,16 @@ getVoiceChatData clientId session model =
 
 discordGuildToFrontendForUser :
     Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
+    -> Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendGuild
-discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
+discordGuildToFrontendForUser requestMessagesFor guildId guild linkedDiscordUsers =
     if
         SeqDict.member (MembersAndOwner.owner guild.membersAndOwner) linkedDiscordUsers
             || not (SeqDict.isEmpty (SeqDict.intersect (MembersAndOwner.members guild.membersAndOwner) linkedDiscordUsers))
     then
-        discordGuildToFrontend requestMessagesFor guild |> Just
+        discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild |> Just
 
     else
         Nothing
@@ -725,15 +728,20 @@ discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
 
 discordGuildToFrontend :
     Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
+    -> SeqDict (Discord.Id Discord.UserId) a
+    -> Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> DiscordFrontendGuild
-discordGuildToFrontend requestMessagesFor guild =
+discordGuildToFrontend requestMessagesFor linkedDiscordUsers guildId guild =
     { name = guild.name
     , icon = guild.icon
     , channels =
         SeqDict.filterMap
             (\channelId channel ->
                 LocalState.discordChannelToFrontend
+                    guildId
+                    guild
+                    linkedDiscordUsers
                     (case requestMessagesFor of
                         Just ( channelIdB, threadRoute ) ->
                             if channelId == channelIdB then
@@ -751,6 +759,7 @@ discordGuildToFrontend requestMessagesFor guild =
     , membersAndOwner = guild.membersAndOwner
     , stickers = guild.stickers
     , customEmojis = guild.customEmojis
+    , roles = guild.roles
     }
 
 
@@ -977,6 +986,7 @@ adminData model lastLogPageViewed =
                         )
                         guild.channels
                 , membersAndOwner = guild.membersAndOwner
+                , roles = guild.roles
                 }
             )
             model.discordGuilds
@@ -1550,56 +1560,53 @@ handleDrawingChange sessionId clientId changeId guildOrDmId anchor change model 
                 )
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
-            asDiscordGuildMember
+            asDiscordGuildChannelMember
                 model
                 sessionId
                 guildId
+                channelId
                 currentDiscordUserId
-                (\session _ _ guild ->
-                    case SeqDict.get channelId guild.channels of
-                        Just channel ->
-                            ( { model
-                                | discordGuilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert
-                                                    channelId
-                                                    (case anchor of
-                                                        Drawing.MessageAnchor threadRoute anchor2 ->
-                                                            LocalState.drawingHandleChangeHelperBackend
-                                                                currentDiscordUserId
-                                                                change
-                                                                threadRoute
-                                                                anchor2
-                                                                channel
+                (\session _ _ guild channel ->
+                    ( { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                guildId
+                                { guild
+                                    | channels =
+                                        SeqDict.insert
+                                            channelId
+                                            (case anchor of
+                                                Drawing.MessageAnchor threadRoute anchor2 ->
+                                                    LocalState.drawingHandleChangeHelperBackend
+                                                        currentDiscordUserId
+                                                        change
+                                                        threadRoute
+                                                        anchor2
+                                                        channel
 
-                                                        Drawing.DateDividerAnchor threadRoute date ->
-                                                            LocalState.drawingHandleDateDivider
-                                                                threadRoute
-                                                                date
-                                                                currentDiscordUserId
-                                                                change
-                                                                channel
-                                                    )
-                                                    guild.channels
-                                        }
-                                        model.discordGuilds
-                              }
-                            , Command.batch
-                                [ LocalChangeResponse changeId localMsg
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toDiscordGuildExcludingOne
-                                    clientId
-                                    guildId
-                                    (Server_Drawing session.userId guildOrDmId anchor change |> ServerChange)
-                                    model
-                                ]
-                            )
-
-                        Nothing ->
-                            ( model, invalidChangeResponse changeId clientId )
+                                                Drawing.DateDividerAnchor threadRoute date ->
+                                                    LocalState.drawingHandleDateDivider
+                                                        threadRoute
+                                                        date
+                                                        currentDiscordUserId
+                                                        change
+                                                        channel
+                                            )
+                                            guild.channels
+                                }
+                                model.discordGuilds
+                      }
+                    , Command.batch
+                        [ LocalChangeResponse changeId localMsg
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toDiscordGuildChannelExcludingOne
+                            clientId
+                            guildId
+                            channelId
+                            (Server_Drawing session.userId guildOrDmId anchor change |> ServerChange)
+                            model
+                        ]
+                    )
                 )
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
@@ -1862,12 +1869,78 @@ asGuildMember model sessionId guildId func =
             ( model, Command.none )
 
 
+asDiscordGuildChannelMember :
+    BackendModel
+    -> SessionId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Discord.Id Discord.UserId
+    ->
+        (UserSession
+         -> DiscordFullUserData
+         -> BackendUser
+         -> DiscordBackendGuild
+         -> DiscordBackendChannel
+         ->
+            ( BackendModel
+            , Command BackendOnly ToFrontend BackendMsg
+            )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordGuildChannelMember model sessionId guildId channelId discordUserId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case
+                ( NonemptyDict.get session.userId model.users
+                , SeqDict.get guildId model.discordGuilds
+                , SeqDict.get discordUserId model.discordUsers
+                )
+            of
+                ( Just user, Just guild, Just (FullData discordUser) ) ->
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            if
+                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                    && (discordUser.linkedTo == session.userId)
+                            then
+                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                    IsNotMember ->
+                                        ( model, Command.none )
+
+                                    IsMember ->
+                                        func session discordUser user guild channel
+
+                                    IsOwner ->
+                                        func session discordUser user guild channel
+
+                            else
+                                ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
 asDiscordGuildMember :
     BackendModel
     -> SessionId
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
-    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    ->
+        (UserSession
+         -> DiscordFullUserData
+         -> BackendUser
+         -> DiscordBackendGuild
+         ->
+            ( BackendModel
+            , Command BackendOnly ToFrontend BackendMsg
+            )
+        )
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDiscordGuildMember model sessionId guildId discordUserId func =
     case SeqDict.get sessionId model.sessions of
@@ -1900,15 +1973,27 @@ asDiscordGuildMember model sessionId guildId discordUserId func =
             ( model, Command.none )
 
 
-asDiscordGuildMember_AllowUserThatNeedsAuthAgain :
+asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain :
     BackendModel
     -> SessionId
     -> ClientId
     -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     -> Discord.Id Discord.UserId
-    -> (UserSession -> LocalState.ConnectionData -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    ->
+        (UserSession
+         -> LocalState.ConnectionData
+         -> NeedsAuthAgainData
+         -> BackendUser
+         -> DiscordBackendGuild
+         -> DiscordBackendChannel
+         ->
+            ( BackendModel
+            , Command BackendOnly ToFrontend BackendMsg
+            )
+        )
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildId discordUserId func =
+asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildId channelId discordUserId func =
     case
         ( SeqDict.get sessionId model.sessions
         , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
@@ -1918,56 +2003,65 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildI
             case
                 ( NonemptyDict.get session.userId model.users
                 , SeqDict.get guildId model.discordGuilds
-                , SeqDict.get discordUserId model.discordUsers
                 )
             of
-                ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
-                            IsNotMember ->
+                ( Just user, Just guild ) ->
+                    case ( SeqDict.get channelId guild.channels, SeqDict.get discordUserId model.discordUsers ) of
+                        ( Just channel, Just (FullData discordUser) ) ->
+                            if
+                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                    && (discordUser.linkedTo == session.userId)
+                            then
+                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                    IsNotMember ->
+                                        ( model, Command.none )
+
+                                    IsMember ->
+                                        func
+                                            session
+                                            connection
+                                            { user = discordUser.user
+                                            , linkedTo = discordUser.linkedTo
+                                            , icon = discordUser.icon
+                                            , linkedAt = discordUser.linkedAt
+                                            }
+                                            user
+                                            guild
+                                            channel
+
+                                    IsOwner ->
+                                        func
+                                            session
+                                            connection
+                                            { user = discordUser.user
+                                            , linkedTo = discordUser.linkedTo
+                                            , icon = discordUser.icon
+                                            , linkedAt = discordUser.linkedAt
+                                            }
+                                            user
+                                            guild
+                                            channel
+
+                            else
                                 ( model, Command.none )
 
-                            IsMember ->
-                                func
-                                    session
-                                    connection
-                                    { user = discordUser.user
-                                    , linkedTo = discordUser.linkedTo
-                                    , icon = discordUser.icon
-                                    , linkedAt = discordUser.linkedAt
-                                    }
-                                    user
-                                    guild
+                        ( Just channel, Just (NeedsAuthAgain discordUser) ) ->
+                            if discordUser.linkedTo == session.userId then
+                                case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                                    IsNotMember ->
+                                        ( model, Command.none )
 
-                            IsOwner ->
-                                func
-                                    session
-                                    connection
-                                    { user = discordUser.user
-                                    , linkedTo = discordUser.linkedTo
-                                    , icon = discordUser.icon
-                                    , linkedAt = discordUser.linkedAt
-                                    }
-                                    user
-                                    guild
+                                    IsMember ->
+                                        func session connection discordUser user guild channel
 
-                    else
-                        ( model, Command.none )
+                                    IsOwner ->
+                                        func session connection discordUser user guild channel
 
-                ( Just user, Just guild, Just (NeedsAuthAgain discordUser) ) ->
-                    if discordUser.linkedTo == session.userId then
-                        case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
-                            IsNotMember ->
+                            else
                                 ( model, Command.none )
 
-                            IsMember ->
-                                func session connection discordUser user guild
-
-                            IsOwner ->
-                                func session connection discordUser user guild
-
-                    else
-                        ( model, Command.none )
+                        _ ->
+                            ( model, Command.none )
 
                 _ ->
                     ( model, Command.none )

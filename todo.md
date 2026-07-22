@@ -20,6 +20,20 @@
   all the ones that loaded (some might already be loaded)
 * Add support for Discord roles
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
+* Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
+* Show a Discord icon above guild and users
+* Automatically set focus on search input when opening emoji picker
+* Add title for reply button
+* Show reaction emoji name when hovering over a message reaction
+* Hovering a word in WordSpellingGame should highlight it on the board
+* Show invalid word placed
+* Losing a turn in WordSpellingGame is not being treated as a pass for purposes of ending the game
+* I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
+  was invalid so it's unclear if the letter switch is just a visual bug)
+* canScroll should always be true on desktop so scrollbars will stop flickering during a drag
+* Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
+* Radio button selections should have a dot in the center to make it clear which is selected
+* Make video thumbnail larger
 
 Requested features:
 

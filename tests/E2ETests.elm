@@ -325,6 +325,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 E2EHelper.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
+    , attackerTriesToReadPrivateDiscordChannel normalConfig discordOp0Ready discordOp0ReadySupplemental
     , E2EMedia.videoAttachmentTest videoUploadConfig
     , E2EMedia.audioAttachmentTest audioUploadConfig
     , E2EMisc.inviteUserAndDmChat normalConfig
@@ -2624,6 +2625,162 @@ sendMessageRateLimitTest config =
 
                                 else
                                     Err ("Old rate limit logs aren't being filtered. Expected 2 but got " ++ String.fromInt actual)
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| The admin and an attacker are both members of the same Discord guild, but
+only the admin can access a private channel in it. The admin writes ordinary
+messages to the private channel, then the attacker enumerates attack ToBackend
+messages (targeting the private channel plus the generic attacker payloads) and
+inspects every ToFrontend they receive, trying to read or modify the private
+channel's data. The test verifies the attacker can do neither.
+-}
+attackerTriesToReadPrivateDiscordChannel :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSupplemental =
+    let
+        -- The distinctive text the admin puts in the private channel's messages. The
+        -- needle is a mid-string substring so it still matches after the content is
+        -- stored as a `NonemptyString Char String` (whose Debug.toString splits off
+        -- the first character).
+        secret : String
+        secret =
+            "SUPERSECRETPRIVATEDATA"
+
+        secretNeedle : String
+        secretNeedle =
+            "SECRETPRIVATEDATA"
+
+        privateChannel data =
+            SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+                |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.privateDiscordChannelId guild.channels)
+
+        privateChannelMessageCount data =
+            privateChannel data |> Maybe.map (\channel -> IdArray.length channel.messages)
+    in
+    T.start
+        "Attacker in a Discord guild tries to read a private channel"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            "AT"
+            E2EHelper.adminEmail
+            False
+            discordOpReady
+            discordOpSupplemental
+            (\_ ->
+                [ -- The admin creates a private channel that only their Discord account can access.
+                  E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
+                    )
+                , -- The attacker links a second Discord account that is a guild member but has no
+                  -- access to the private channel.
+                  E2EHelper.linkDiscordAndLoginSecondUser
+                    E2EHelper.sessionIdAttacker
+                    "Attacker"
+                    E2EHelper.attackerEmail
+                    discordOpReady
+                    discordOpSupplemental
+                    (\attacker ->
+                        [ attacker.update 0 (Audio.userMsg Types.EnableToFrontendLogging)
+                        , -- The admin writes ordinary messages to the private channel.
+                          T.andThen
+                            100
+                            (\data ->
+                                case E2EHelper.websocketByDiscordToken "legit-token" data of
+                                    Just ( adminConnection, _ ) ->
+                                        [ T.websocketSendString 100 adminConnection (E2EHelper.privateDiscordChannelMessageEvent 200 (secret ++ "1"))
+                                        , T.websocketSendString 100 adminConnection (E2EHelper.privateDiscordChannelMessageEvent 201 (secret ++ "2"))
+                                        ]
+
+                                    Nothing ->
+                                        [ T.checkState 0 (\_ -> Err "Couldn't find the admin's Discord websocket") ]
+                            )
+                        , -- Sanity check: the admin's messages landed in the private channel on the backend.
+                          -- A generous delay lets both MESSAGE_CREATE events finish processing before the
+                          -- `before` snapshot below, so a late-arriving message can't look like attacker
+                          -- tampering.
+                          T.checkState
+                            1000
+                            (\data ->
+                                case privateChannelMessageCount data of
+                                    Just count ->
+                                        if count >= 1 then
+                                            Ok ()
+
+                                        else
+                                            Err "The admin's messages never reached the private channel"
+
+                                    Nothing ->
+                                        Err "The private channel is missing from the backend"
+                            )
+                        , T.andThen
+                            100
+                            (\before ->
+                                [ List.indexedMap
+                                    (\index localChange ->
+                                        attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId index) localChange)
+                                    )
+                                    E2EHelper.attackerPrivateDiscordChannelChanges
+                                    |> T.collapsableGroup "private channel attacks"
+                                , List.indexedMap
+                                    (\index localChange ->
+                                        attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId (1000 + index)) localChange)
+                                    )
+                                    E2EHelper.allAttackerLocalChanges
+                                    |> T.collapsableGroup "generic local attacks"
+                                , List.map (attacker.sendToBackend 100) E2EHelper.allAttackerToBackendChanges
+                                    |> T.collapsableGroup "generic toBackend attacks"
+                                , -- Neither modifying nor reading the private channel should have been
+                                  -- possible. Report every vector that succeeded so the test surfaces both.
+                                  T.checkState
+                                    500
+                                    (\after ->
+                                        let
+                                            modifyErrors : List String
+                                            modifyErrors =
+                                                if privateChannel before == privateChannel after then
+                                                    []
+
+                                                else
+                                                    [ "The attacker was able to modify the private Discord channel" ]
+
+                                            readErrors : List String
+                                            readErrors =
+                                                case SeqDict.get attacker.clientId after.frontends |> Maybe.map Audio.userModel of
+                                                    Just (Types.Loaded loaded) ->
+                                                        case loaded.toFrontendLogs of
+                                                            Just toFrontendLogs ->
+                                                                if Array.isEmpty (Array.filter (\toFrontend -> String.contains secretNeedle (Debug.toString toFrontend)) toFrontendLogs) then
+                                                                    []
+
+                                                                else
+                                                                    [ "The attacker received the private channel's messages in a ToFrontend" ]
+
+                                                            Nothing ->
+                                                                [ "The attacker should have been logging ToFrontend" ]
+
+                                                    _ ->
+                                                        [ "The attacker's frontend didn't load" ]
+                                        in
+                                        case modifyErrors ++ readErrors of
+                                            [] ->
+                                                Ok ()
+
+                                            errors ->
+                                                Err (String.join "; " errors)
+                                    )
+                                ]
                             )
                         ]
                     )

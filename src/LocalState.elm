@@ -20,6 +20,7 @@ module LocalState exposing
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
+    , DiscordRole
     , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
@@ -46,6 +47,7 @@ module LocalState exposing
     , announcementChannel
     , callStartedText
     , canSendDiscordMessage
+    , canViewDiscordChannel
     , createChannel
     , createChannelFrontend
     , createChannelMessageBackend
@@ -212,9 +214,10 @@ type alias DiscordBackendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
     }
 
 
@@ -233,9 +236,17 @@ type alias DiscordFrontendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
     , stickers : SeqSet (Id StickerId)
     , customEmojis : SeqSet (Id CustomEmojiId)
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    }
+
+
+type alias DiscordRole =
+    { name : String
+    , description : Maybe String
+    , permissions : Discord.Permissions
     }
 
 
@@ -326,6 +337,7 @@ type alias DiscordBackendChannel =
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , permissionOverwrites : List Discord.Overwrite
     }
 
 
@@ -352,6 +364,7 @@ type alias DiscordFrontendChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     , dateDividerDrawings : SeqDict Date (Drawing (Discord.Id Discord.UserId))
+    , permissionOverwrites : List Discord.Overwrite
     }
 
 
@@ -485,32 +498,72 @@ channelToFrontend threadRoute channel =
             Nothing
 
 
-discordChannelToFrontend : Maybe ThreadRoute -> DiscordBackendChannel -> Maybe DiscordFrontendChannel
-discordChannelToFrontend threadRoute channel =
-    case channel.status of
-        ChannelActive ->
+canViewDiscordChannel :
+    Discord.Id Discord.GuildId
+    -> { a | permissionOverwrites : List Discord.Overwrite }
+    ->
+        { b
+            | membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { c | roles : SeqSet (Discord.Id Discord.RoleId) }
+            , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
+        }
+    -> Discord.Id Discord.UserId
+    -> Bool
+canViewDiscordChannel guildId channel guild userId =
+    Discord.memberHasChannelPermission
+        .viewChannel
+        guildId
+        (MembersAndOwner.owner guild.membersAndOwner)
+        (List.map
+            (\( roleId, role ) -> { id = roleId, permissions = role.permissions })
+            (SeqDict.toList guild.roles)
+        )
+        { userId = userId
+        , roles =
+            case SeqDict.get userId (MembersAndOwner.members guild.membersAndOwner) of
+                Just memberData ->
+                    SeqSet.toList memberData.roles
+
+                Nothing ->
+                    []
+        }
+        channel.permissionOverwrites
+
+
+discordChannelToFrontend :
+    Discord.Id Discord.GuildId
+    -> DiscordBackendGuild
+    -> SeqDict (Discord.Id Discord.UserId) a
+    -> Maybe ThreadRoute
+    -> DiscordBackendChannel
+    -> Maybe DiscordFrontendChannel
+discordChannelToFrontend guildId guild linkedDiscordUsers threadRoute channel =
+    let
+        canView =
+            List.any
+                (canViewDiscordChannel guildId channel guild)
+                (SeqDict.keys linkedDiscordUsers)
+    in
+    case ( canView, channel.status ) of
+        ( True, ChannelActive ) ->
             let
                 preloadMessages =
                     Just NoThread == threadRoute
-
-                channel2 : DiscordFrontendChannel
-                channel2 =
-                    { name = channel.name
-                    , description = channel.description
-                    , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
-                    , visibleMessages = VisibleMessages.init preloadMessages channel
-                    , lastTypedAt = channel.lastTypedAt
-                    , threads =
-                        SeqDict.map
-                            (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
-                            channel.threads
-                    , dateDividerDrawings = channel.dateDividerDrawings
-                    }
             in
-            channel2
+            { name = channel.name
+            , description = channel.description
+            , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
+            , visibleMessages = VisibleMessages.init preloadMessages channel
+            , lastTypedAt = channel.lastTypedAt
+            , threads =
+                SeqDict.map
+                    (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    channel.threads
+            , dateDividerDrawings = channel.dateDividerDrawings
+            , permissionOverwrites = channel.permissionOverwrites
+            }
                 |> Just
 
-        ChannelDeleted _ ->
+        _ ->
             Nothing
 
 
@@ -767,7 +820,13 @@ type alias AdminData_GuildChannel =
 type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
-    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , membersAndOwner :
+        MembersAndOwner
+            (Discord.Id Discord.UserId)
+            { joinedAt : Maybe Time.Posix
+            , roles : SeqSet (Discord.Id Discord.RoleId)
+            }
+    , roles : SeqDict (Discord.Id Discord.RoleId) DiscordRole
     }
 
 

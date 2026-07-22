@@ -18,7 +18,8 @@ module Broadcast exposing
     , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
     , toDiscordGuild
-    , toDiscordGuildExcludingOne
+    , toDiscordGuildChannel
+    , toDiscordGuildChannelExcludingOne
     , toDmChannel
     , toDmChannelExcludingOne
     , toEveryone
@@ -95,8 +96,14 @@ toGuildExcludingOne clientToSkip guildId msg model =
         |> Command.batch
 
 
-toDiscordGuildExcludingOne : ClientId -> Discord.Id Discord.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordGuildExcludingOne clientToSkip guildId msg model =
+toDiscordGuildChannelExcludingOne :
+    ClientId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> LocalMsg
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+toDiscordGuildChannelExcludingOne clientToSkip guildId channelId msg model =
     List.filterMap
         (\clientId ->
             if clientToSkip == clientId then
@@ -107,7 +114,7 @@ toDiscordGuildExcludingOne clientToSkip guildId msg model =
                     |> Lamdera.sendToFrontend clientId
                     |> Just
         )
-        (discordGuildConnections guildId model)
+        (discordGuildChannelConnections guildId channelId model)
         |> Command.batch
 
 
@@ -122,6 +129,42 @@ guildConnections guildId model =
                         (userConnections member model)
                 )
                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+
+        Nothing ->
+            []
+
+
+discordGuildChannelConnections : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> BackendModel -> List ClientId
+discordGuildChannelConnections guildId channelId model =
+    case SeqDict.get guildId model.discordGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    List.foldl
+                        (\member set ->
+                            case SeqDict.get member model.discordUsers of
+                                Just (FullData discordUser) ->
+                                    if LocalState.canViewDiscordChannel guildId channel guild member then
+                                        SeqSet.insert discordUser.linkedTo set
+
+                                    else
+                                        set
+
+                                _ ->
+                                    set
+                        )
+                        SeqSet.empty
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                        |> SeqSet.toList
+                        |> List.concatMap
+                            (\linkedTo ->
+                                List.concatMap
+                                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                                    (userConnections linkedTo model)
+                            )
+
+                Nothing ->
+                    []
 
         Nothing ->
             []
@@ -210,6 +253,19 @@ toGuild guildId msg model =
     List.map
         (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
         (guildConnections guildId model)
+        |> Command.batch
+
+
+toDiscordGuildChannel :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> LocalMsg
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+toDiscordGuildChannel guildId channelId msg model =
+    List.map
+        (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId)
+        (discordGuildChannelConnections guildId channelId model)
         |> Command.batch
 
 
