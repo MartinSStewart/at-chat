@@ -28,6 +28,9 @@
 * Hovering a word in WordSpellingGame should highlight it on the board
 * Show invalid word placed
 * Losing a turn in WordSpellingGame is not being treated as a pass for purposes of ending the game
+* I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
+  was invalid so it's unclear if the letter switch is just a visual bug)
+* canScroll should always be true on desktop so scrollbars will stop flickering during a drag
 
 Requested features:
 
