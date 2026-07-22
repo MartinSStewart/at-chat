@@ -79,11 +79,6 @@ emptyOverwrite id =
     { id = id, allow = Discord.noPermissions, deny = Discord.noPermissions }
 
 
-guild : List Discord.Role -> { guildId : Discord.Id Discord.GuildId, ownerId : Discord.Id Discord.UserId, roles : List Discord.Role }
-guild roles =
-    { guildId = guildId, ownerId = ownerId, roles = roles }
-
-
 member : List (Discord.Id Discord.RoleId) -> { userId : Discord.Id Discord.UserId, roles : List (Discord.Id Discord.RoleId) }
 member roles =
     { userId = userId, roles = roles }
@@ -95,17 +90,19 @@ tests =
         "Discord channel permission tests"
         [ Test.test "Member gets access from the @everyone role" <|
             \_ ->
-                Discord.memberHasChannelPermission .viewChannel (guild [ role 1 viewAndSend ]) (member []) []
+                Discord.memberHasChannelPermission .viewChannel guildId ownerId [ role 1 viewAndSend ] (member []) []
                     |> Expect.equal True
         , Test.test "Member without the permission has no access" <|
             \_ ->
-                Discord.memberHasChannelPermission .viewChannel (guild [ role 1 Discord.noPermissions ]) (member []) []
+                Discord.memberHasChannelPermission .viewChannel guildId ownerId [ role 1 Discord.noPermissions ] (member []) []
                     |> Expect.equal False
         , Test.test "@everyone overwrite denies access" <|
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 viewAndSend ])
+                    guildId
+                    ownerId
+                    [ role 1 viewAndSend ]
                     (member [])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView ]
                     |> Expect.equal False
@@ -113,7 +110,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 viewAndSend, role 2 Discord.noPermissions ])
+                    guildId
+                    ownerId
+                    [ role 1 viewAndSend, role 2 Discord.noPermissions ]
                     (member [ roleId 2 ])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView
                     , emptyOverwrite (RoleOrUserId_RoleId (roleId 2)) |> allowView
@@ -123,7 +122,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 viewAndSend, role 2 Discord.noPermissions ])
+                    guildId
+                    ownerId
+                    [ role 1 viewAndSend, role 2 Discord.noPermissions ]
                     (member [])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView
                     , emptyOverwrite (RoleOrUserId_RoleId (roleId 2)) |> allowView
@@ -133,7 +134,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 Discord.noPermissions, role 2 Discord.noPermissions, role 3 Discord.noPermissions ])
+                    guildId
+                    ownerId
+                    [ role 1 Discord.noPermissions, role 2 Discord.noPermissions, role 3 Discord.noPermissions ]
                     (member [ roleId 2, roleId 3 ])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 2)) |> denyView
                     , emptyOverwrite (RoleOrUserId_RoleId (roleId 3)) |> allowView
@@ -143,7 +146,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 viewAndSend, role 2 Discord.noPermissions ])
+                    guildId
+                    ownerId
+                    [ role 1 viewAndSend, role 2 Discord.noPermissions ]
                     (member [ roleId 2 ])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 2)) |> allowView
                     , emptyOverwrite (RoleOrUserId_UserId userId) |> denyView
@@ -153,7 +158,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 Discord.noPermissions ])
+                    guildId
+                    ownerId
+                    [ role 1 Discord.noPermissions ]
                     { userId = ownerId, roles = [] }
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView ]
                     |> Expect.equal True
@@ -165,7 +172,9 @@ tests =
                 in
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    (guild [ role 1 Discord.noPermissions, role 2 { noPermissions | administrator = True } ])
+                    guildId
+                    ownerId
+                    [ role 1 Discord.noPermissions, role 2 { noPermissions | administrator = True } ]
                     (member [ roleId 2 ])
                     [ emptyOverwrite (RoleOrUserId_RoleId (roleId 1)) |> denyView ]
                     |> Expect.equal True
@@ -173,10 +182,9 @@ tests =
             \_ ->
                 Discord.memberHasChannelPermission
                     .viewChannel
-                    { guildId = guildId
-                    , ownerId = ownerId
-                    , roles = [ { id = roleId 1, permissions = viewAndSend } ]
-                    }
+                    guildId
+                    ownerId
+                    [ { id = roleId 1, permissions = viewAndSend } ]
                     (member [])
                     []
                     |> Expect.equal True
