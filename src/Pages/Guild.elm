@@ -622,24 +622,35 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    discordMemberColumnMobile
-                                        canScroll2
-                                        local.localUser
-                                        routeData.guildId
-                                        routeData.currentDiscordUserId
-                                        guild
-                                        (discordSelectedChannelId routeData.channelRoute)
-                                        |> Ui.el
-                                            [ Ui.height Ui.fill
-                                            , Ui.background MyUi.background3
-                                            , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                            , Ui.move
-                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                                , y = 0
-                                                , z = 0
-                                                }
-                                            , Ui.heightMin 0
-                                            ]
+                                    case routeData.channelRoute of
+                                        DiscordChannel_ChannelRoute channelId _ _ ->
+                                            discordMemberColumnMobile
+                                                canScroll2
+                                                local.localUser
+                                                routeData.guildId
+                                                routeData.currentDiscordUserId
+                                                guild
+                                                channelId
+                                                |> Ui.el
+                                                    [ Ui.height Ui.fill
+                                                    , Ui.background MyUi.background3
+                                                    , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                                    , Ui.move
+                                                        { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                        , y = 0
+                                                        , z = 0
+                                                        }
+                                                    , Ui.heightMin 0
+                                                    ]
+
+                                        DiscordChannel_NewChannelRoute ->
+                                            discordMemberColumnContainer []
+
+                                        DiscordChannel_EditChannelRoute id ->
+                                            discordMemberColumnContainer []
+
+                                        DiscordChannel_GuildSettingsRoute ->
+                                            discordMemberColumnContainer []
 
                                 HideMembersTab ->
                                     Ui.none
@@ -698,18 +709,29 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy5
-                                discordMemberColumnNotMobile
-                                local.localUser
-                                routeData.guildId
-                                routeData.currentDiscordUserId
-                                guild
-                                (discordSelectedChannelId routeData.channelRoute)
-                                |> Ui.el
-                                    [ Ui.width Ui.shrink
-                                    , Ui.height Ui.fill
-                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
-                                    ]
+                            , case routeData.channelRoute of
+                                DiscordChannel_ChannelRoute channelId _ _ ->
+                                    Ui.Lazy.lazy5
+                                        discordMemberColumnNotMobile
+                                        local.localUser
+                                        routeData.guildId
+                                        routeData.currentDiscordUserId
+                                        guild
+                                        channelId
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                            ]
+
+                                DiscordChannel_NewChannelRoute ->
+                                    discordMemberColumnContainer []
+
+                                DiscordChannel_EditChannelRoute id ->
+                                    discordMemberColumnContainer []
+
+                                DiscordChannel_GuildSettingsRoute ->
+                                    discordMemberColumnContainer []
                             ]
 
                 ( Just _, Nothing ) ->
@@ -796,25 +818,6 @@ memberColumnNotMobile localUser membersAndOwner =
         ]
 
 
-{-| The channel currently being viewed, if any. Routes other than viewing a
-channel (creating/editing a channel, guild settings) have no selected channel.
--}
-discordSelectedChannelId : DiscordChannelRoute -> Maybe (Discord.Id Discord.ChannelId)
-discordSelectedChannelId channelRoute =
-    case channelRoute of
-        DiscordChannel_ChannelRoute channelId _ _ ->
-            Just channelId
-
-        DiscordChannel_NewChannelRoute ->
-            Nothing
-
-        DiscordChannel_EditChannelRoute _ ->
-            Nothing
-
-        DiscordChannel_GuildSettingsRoute ->
-            Nothing
-
-
 {-| Determine which guild members can view the given channel, following the
 channel's permission overwrites. The owner is not included here since it's
 shown separately and can always view every channel. Returns `Nothing` when no
@@ -841,25 +844,17 @@ discordMemberColumnNotMobile :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
-    -> Maybe (Discord.Id Discord.ChannelId)
+    -> Discord.Id Discord.ChannelId
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild maybeChannelId =
-    case discordChannelViewers guildId guild maybeChannelId of
+discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId =
+    case discordChannelViewers guildId guild channelId of
         Nothing ->
             Ui.none
 
         Just members ->
-            Ui.column
-                [ Ui.height Ui.fill
-                , Ui.alignRight
-                , Ui.background MyUi.background2
-                , Ui.Font.color MyUi.font1
-                , Ui.width (Ui.px memberColumnWidth)
-                , Ui.scrollable
-                , Ui.heightMin 0
-                ]
+            discordMemberColumnContainer
                 [ Ui.column
-                    [ Ui.paddingXY 8 4 ]
+                    []
                     [ Ui.text "Owner"
                     , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
                     , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
@@ -872,6 +867,21 @@ discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild maybeC
                         )
                     ]
                 ]
+
+
+discordMemberColumnContainer : List (Element msg) -> Element msg
+discordMemberColumnContainer contents =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.alignRight
+        , Ui.background MyUi.background2
+        , Ui.Font.color MyUi.font1
+        , Ui.width (Ui.px memberColumnWidth)
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.paddingXY 8 4
+        ]
+        contents
 
 
 memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
@@ -925,10 +935,10 @@ discordMemberColumnMobile :
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
-    -> Maybe (Discord.Id Discord.ChannelId)
+    -> Discord.Id Discord.ChannelId
     -> Element FrontendMsg_
-discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guild maybeChannelId =
-    case discordChannelViewers guildId guild maybeChannelId of
+discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guild channelId =
+    case discordChannelViewers guildId guild channelId of
         Nothing ->
             Ui.none
 

@@ -1566,7 +1566,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
                     )
                 , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (2)" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (3)" ])
                 , admin.click 100 (Dom.id "guild_openChannel_1500000000000000777")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (0)" ])
                 , -- Sanity check: the backend stored the private channel with its overwrites.
