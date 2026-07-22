@@ -31,6 +31,9 @@
 * I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
   was invalid so it's unclear if the letter switch is just a visual bug)
 * canScroll should always be true on desktop so scrollbars will stop flickering during a drag
+* Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
+* Radio button selections should have a dot in the center to make it clear which is selected
+* Make video thumbnail larger
 
 Requested features:
 
