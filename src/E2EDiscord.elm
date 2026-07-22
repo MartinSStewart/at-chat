@@ -137,24 +137,6 @@ checkGuildVisibleMessageCount admin isExpected data =
         )
 
 
-{-| Id of the private channel created during the "private channel access" test.
--}
-privateDiscordChannelId : Discord.Id Discord.ChannelId
-privateDiscordChannelId =
-    Unsafe.uint64 "1500000000000000777" |> Discord.idFromUInt64
-
-
-{-| A CHANNEL\_CREATE gateway event for a private channel in the Bot Test guild
-(705745250815311942). The @everyone role (whose id equals the guild id) is denied
-View Channel (permission bit 10 = 1024) and only the admin's linked Discord
-account (184437096813953035) is granted it through a member overwrite, so no
-other guild member can see the channel on Discord.
--}
-privateDiscordChannelCreateEvent : String
-privateDiscordChannelCreateEvent =
-    """{"t":"CHANNEL_CREATE","s":90,"op":0,"d":{"id":"1500000000000000777","type":0,"guild_id":"705745250815311942","name":"secret-channel","position":10,"topic":null,"parent_id":null,"nsfw":false,"last_message_id":null,"permission_overwrites":[{"id":"705745250815311942","type":0,"allow":"0","deny":"1024"},{"id":"184437096813953035","type":1,"allow":"1024","deny":"0"}]}}"""
-
-
 discordTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> String
@@ -1581,7 +1563,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                   -- can view (@everyone is denied View Channel, the admin's account is allowed).
                   E2EHelper.andThenWebsocket
                     (\connection _ ->
-                        [ T.websocketSendString 100 connection privateDiscordChannelCreateEvent ]
+                        [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
                     )
                 , -- Sanity check: the backend stored the private channel with its overwrites.
                   T.checkState
@@ -1589,7 +1571,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\data ->
                         case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
                             Just guild ->
-                                case SeqDict.get privateDiscordChannelId guild.channels of
+                                case SeqDict.get E2EHelper.privateDiscordChannelId guild.channels of
                                     Just channel ->
                                         if List.isEmpty channel.permissionOverwrites then
                                             Err "The private channel was created without permission overwrites"
@@ -1653,7 +1635,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                                 in
                                                 case SeqDict.get E2EHelper.botTestGuild local.discordGuilds of
                                                     Just guild ->
-                                                        if SeqDict.member privateDiscordChannelId guild.channels then
+                                                        if SeqDict.member E2EHelper.privateDiscordChannelId guild.channels then
                                                             Err "The second user, whose Discord account has no access to the private channel, can still see the private channel in their guild"
 
                                                         else
