@@ -22,6 +22,11 @@
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
 * Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
 * Show a Discord icon above guild and users
+* Automatically set focus on search input when opening emoji picker
+* Add title for reply button
+* Show reaction emoji name when hovering over a message reaction
+* Hovering a word in WordSpellingGame should highlight it on the board
+* Show invalid word placed
 
 Requested features:
 
