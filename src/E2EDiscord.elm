@@ -26,7 +26,7 @@ import Message
 import MessageInput
 import Pages.Guild
 import PersonName
-import Route
+import Route exposing (ShowMembersTab(..))
 import SeqDict
 import Sticker
 import Test.Html.Query
@@ -1565,6 +1565,10 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\connection _ ->
                         [ T.websocketSendString 100 connection E2EHelper.privateDiscordChannelCreateEvent ]
                     )
+                , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (2)" ])
+                , admin.click 100 (Dom.id "guild_openChannel_1500000000000000777")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (0)" ])
                 , -- Sanity check: the backend stored the private channel with its overwrites.
                   T.checkState
                     100
@@ -1585,6 +1589,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             Nothing ->
                                 Err "The backend doesn't have the Bot Test guild"
                     )
+                , E2EHelper.writeMessage admin 100 "Message in secret channel"
                 , -- A second, distinct at-chat user links a different Discord account (555...)
                   -- which is a member of the guild but has no access to the private channel.
                   E2EHelper.linkDiscordAndLoginSecondUser
@@ -1621,6 +1626,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ T.andThen
                             10
                             (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
+                        , userB.snapshotView 100 { name = "Shouldn't see private channel" }
                         , T.checkState
                             500
                             (\data ->
@@ -1650,6 +1658,31 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     _ ->
                                         Err "Expected the second user's frontend to be loaded"
                             )
+                        ]
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode
+                        (Route.DiscordGuildRoute
+                            { currentDiscordUserId = E2EHelper.secondDiscordUserId
+                            , guildId = checkGuildVisibleMessageCountGuildId
+                            , channelRoute =
+                                Route.DiscordChannel_ChannelRoute
+                                    E2EHelper.privateDiscordChannelId
+                                    (Route.NoThreadWithFriends Nothing HideMembersTab)
+                                    Nothing
+                            }
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\userB ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userB.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
+                        , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Channel does not exist" ])
+                        , userB.snapshotView 100 { name = "Shouldn't see private channel even when directly linked" }
                         ]
                     )
                 ]
