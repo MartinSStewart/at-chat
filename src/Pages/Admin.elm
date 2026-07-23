@@ -3501,6 +3501,7 @@ discordGuildsSection isMobile user adminData =
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
                                     (discordGuildRoles userThatCanReload guildId guild.roles
+                                        :: discordGuildRoleMembers guildId guild.roles members adminData
                                         :: List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels)
                                     )
 
@@ -3585,6 +3586,91 @@ discordGuildRoles maybeUserId guildId roles =
 reloadDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
 reloadDiscordGuildButtonId guildId =
     Dom.id ("admin_reloadDiscordGuild_" ++ Discord.idToString guildId)
+
+
+{-| Lists every member that has at least one role besides the @everyone role (whose id equals the
+guild id). The guild owner's roles aren't tracked, so only regular members appear here.
+-}
+discordGuildRoleMembers :
+    Discord.Id Discord.GuildId
+    -> SeqDict (Discord.Id Discord.RoleId) DiscordRole
+    -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix, roles : SeqSet (Discord.Id Discord.RoleId) }
+    -> AdminData
+    -> Element Msg
+discordGuildRoleMembers guildId roles members adminData =
+    let
+        everyoneRoleId : String
+        everyoneRoleId =
+            Discord.idToString guildId
+
+        roleName : Discord.Id Discord.RoleId -> String
+        roleName roleId =
+            case SeqDict.get roleId roles of
+                Just role ->
+                    role.name
+
+                Nothing ->
+                    Discord.idToString roleId
+
+        userName : Discord.Id Discord.UserId -> String
+        userName userId =
+            case SeqDict.get userId adminData.discordUsers of
+                Just (FullData_ForAdmin data) ->
+                    data.user.username
+
+                Just (BasicData_ForAdmin data) ->
+                    data.user.username
+
+                Just (NeedsAuthAgain_ForAdmin data) ->
+                    data.user.username
+
+                Nothing ->
+                    Discord.idToString userId
+
+        membersWithRoles : List ( Discord.Id Discord.UserId, List String )
+        membersWithRoles =
+            SeqDict.toList members
+                |> List.filterMap
+                    (\( userId, member ) ->
+                        case
+                            SeqSet.toList member.roles
+                                |> List.filter (\roleId -> Discord.idToString roleId /= everyoneRoleId)
+                                |> List.map roleName
+                                |> List.sort
+                        of
+                            [] ->
+                                Nothing
+
+                            roleNames ->
+                                Just ( userId, roleNames )
+                    )
+                |> List.sortBy (\( userId, _ ) -> String.toLower (userName userId))
+    in
+    Ui.column
+        [ Ui.spacing 2, Ui.Font.size 13 ]
+        (case membersWithRoles of
+            [] ->
+                [ Ui.text "No users with roles (besides @everyone)" ]
+
+            _ ->
+                Ui.text ("Users with roles (" ++ String.fromInt (List.length membersWithRoles) ++ "):")
+                    :: List.map
+                        (\( userId, roleNames ) ->
+                            Ui.row
+                                [ Ui.spacing 8
+                                , Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
+                                ]
+                                [ case SeqDict.get userId adminData.discordUsers of
+                                    Just discordUser ->
+                                        discordUserLabel userId discordUser
+
+                                    Nothing ->
+                                        Ui.text (Discord.idToString userId)
+                                , Ui.text (String.join ", " roleNames)
+                                ]
+                        )
+                        membersWithRoles
+        )
 
 
 discordGuildChannel :
