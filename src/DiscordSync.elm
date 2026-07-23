@@ -2010,43 +2010,10 @@ handleChannelUpdated : Discord.Channel -> BackendModel -> ( BackendModel, Comman
 handleChannelUpdated channel model =
     case channel.guildId of
         Missing ->
-            --let
-            --    channelId : Discord.Id Discord.PrivateChannelId
-            --    channelId =
-            --        Discord.idToUInt64 channel.id |> Discord.idFromUInt64
-            --in
-            --case SeqDict.get channelId model.discordDmChannels of
-            --    Just existingChannel ->
-            --        { model
-            --            | discordDmChannels =
-            --                SeqDict.insert
-            --                    channelId
-            --                    { existingChannel | members =  channel.recipients }
-            --                    model.discordDmChannels
-            --        }
-            --
-            --    Nothing ->
-            --        ( model, Command.none )
             ( model, Command.none )
 
         Included guildId ->
             let
-                -- A CHANNEL_UPDATE carries the channel's current permission overwrites,
-                -- which are what LocalState.canViewDiscordChannel uses to decide who may
-                -- see the channel. We must persist them so that making a channel private
-                -- (or revoking a user's access) actually takes effect; keeping the stale
-                -- overwrites would let users keep seeing a channel Discord has hidden from
-                -- them. If the event omits them (Missing) we keep whatever we already have
-                -- rather than wiping to [] (which would make a private channel public).
-                updateOverwrites : DiscordBackendChannel -> List Discord.Overwrite
-                updateOverwrites existingChannel =
-                    case channel.permissionOverwrites of
-                        Missing ->
-                            existingChannel.permissionOverwrites
-
-                        Included permissions ->
-                            permissions
-
                 model2 : BackendModel
                 model2 =
                     { model
@@ -2071,7 +2038,13 @@ handleChannelUpdated channel model =
                                                             LocalState.discordTopicToDescription
                                                                 channel.topic
                                                                 existingChannel.description
-                                                        , permissionOverwrites = updateOverwrites existingChannel
+                                                        , permissionOverwrites =
+                                                            case channel.permissionOverwrites of
+                                                                Missing ->
+                                                                    existingChannel.permissionOverwrites
+
+                                                                Included permissions ->
+                                                                    permissions
                                                     }
                                                 )
                                                 guild.channels
