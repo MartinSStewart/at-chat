@@ -1,0 +1,38 @@
+module Evergreen.V334.MessageView exposing (..)
+
+import Date
+import Duration
+import Evergreen.V334.Coord
+import Evergreen.V334.CssPixels
+import Evergreen.V334.Emoji
+import Evergreen.V334.NonemptyDict
+import Evergreen.V334.Point2d
+import Evergreen.V334.RichText
+import Evergreen.V334.Touch
+import Url
+
+
+type MessageViewMsg
+    = MessageView_PressedSpoiler Int
+    | MessageView_PressedNonWhitelistLink Url.Url
+    | MessageView_PressedImage Evergreen.V334.RichText.PressedImageData
+    | MessageView_MouseEnteredMessage
+    | MessageView_MouseExitedMessage
+    | MessageView_TouchStart Duration.Duration Bool (Maybe String) (Maybe String) (Evergreen.V334.NonemptyDict.NonemptyDict Int Evergreen.V334.Touch.Touch)
+    | MessageView_AltPressedMessage Bool (Maybe String) (Maybe String) (Evergreen.V334.Coord.Coord Evergreen.V334.CssPixels.CssPixels)
+    | MessageView_PressedReactionEmoji_Remove Evergreen.V334.Emoji.EmojiOrCustomEmoji
+    | MessageView_PressedReactionEmoji_Add Evergreen.V334.Emoji.EmojiOrCustomEmoji
+    | MessageView_PressedReplyLink
+    | MessageViewMsg_PressedShowReactionEmojiSelector
+    | MessageViewMsg_PressedEditMessage
+    | MessageViewMsg_PressedReply
+    | MessageViewMsg_PressedShowFullMenu Bool (Evergreen.V334.Coord.Coord Evergreen.V334.CssPixels.CssPixels)
+    | MessageView_PressedViewThreadLink
+    | MessageView_NoOp
+    | MessageViewMsg_PressedReactionEmoji Evergreen.V334.Emoji.EmojiOrCustomEmoji
+    | MessageViewMsg_PressedCallStartedCard
+    | MessageViewMsg_PressedGameStartedCard
+    | MessageView_PressedUserIcon (Evergreen.V334.Point2d.Point2d Evergreen.V334.CssPixels.CssPixels Evergreen.V334.Touch.ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedTimestamp (Evergreen.V334.Point2d.Point2d Evergreen.V334.CssPixels.CssPixels Evergreen.V334.Touch.ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedDateDivider Date.Date (Evergreen.V334.Point2d.Point2d Evergreen.V334.CssPixels.CssPixels Evergreen.V334.Touch.ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedCardAnchor (Evergreen.V334.Point2d.Point2d Evergreen.V334.CssPixels.CssPixels Evergreen.V334.Touch.ScreenCoordinate) ( Float, Float )
