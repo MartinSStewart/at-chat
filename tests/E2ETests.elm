@@ -34,7 +34,6 @@ import IdArray
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
-import Log
 import LoginForm
 import MembersAndOwner
 import NonemptyDict
