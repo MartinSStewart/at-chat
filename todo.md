@@ -18,7 +18,6 @@
 * Video nodes need to have a fixed height to prevent layout thrashing
 * If someone links their Discord account, when the linking finishes, show all the accounts they are a part of, not just
   all the ones that loaded (some might already be loaded)
-* Add support for Discord roles
 * Unlinking a Discord account causes "Something went wrong" to appear in the direct message list
 * Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
 * Show a Discord icon above guild and users
@@ -33,7 +32,6 @@
 * canScroll should always be true on desktop so scrollbars will stop flickering during a drag
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
 * Radio button selections should have a dot in the center to make it clear which is selected
-* Make video thumbnail larger
 
 Requested features:
 
