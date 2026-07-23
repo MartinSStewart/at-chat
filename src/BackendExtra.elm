@@ -1994,10 +1994,6 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain :
         )
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId guildId channelId discordUserId func =
-    -- Both the FullData and NeedsAuthAgain branches below must gate on
-    -- LocalState.canViewDiscordChannel. Allowing a user whose Discord auth expired to skip
-    -- the channel permission check would let a guild member read private channels their
-    -- roles/permission overwrites forbid.
     case
         ( SeqDict.get sessionId model.sessions
         , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
