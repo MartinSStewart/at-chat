@@ -1,6 +1,6 @@
 module Effect.Test exposing
     ( start, testGroup, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse(..), RequestedBy(..), PortToJs, FileData, FileUpload(..), MultipleFilesUpload(..), uploadBytesFile, uploadStringFile, Data, FileContents(..)
-    , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
+    , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, websocketClose, WebsocketState, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
     , checkState, checkBackend, toTest, toSnapshots
     , fakeNavigationKey, viewer, Msg, Model, viewerWith, ViewerWith, startViewer, addStringFile, addStringFiles, addBytesFile, addBytesFiles, addTexture, addTextureWithOptions, addTextures, addTexturesWithOptions
     , startHeadless, HeadlessMsg
@@ -18,7 +18,7 @@ module Effect.Test exposing
 
 ## Control the tests
 
-@docs FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody, HttpPart, DelayInMs, KeyEvent, KeyOptions, PointerEvent, PointerOptions
+@docs FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, websocketClose, WebsocketState, EndToEndTest, Action, HttpBody, HttpPart, DelayInMs, KeyEvent, KeyOptions, PointerEvent, PointerOptions
 
 
 ## Check the current state
@@ -1330,6 +1330,51 @@ websocketSendString delay connection data =
         )
 
 
+{-| Simulate the server closing a websocket that the backend opened, delivering the close
+event (with the given reason) to the backend's websocket `onClose` listeners. This is the
+close-event counterpart to `websocketSendString`, which delivers to the `onData` listeners.
+Use it to test how the backend reacts to an unexpected websocket close, such as an
+authentication failure.
+-}
+websocketClose : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+websocketClose delay connection reason =
+    Action
+        (\instructions ->
+            wait (Duration.milliseconds delay) instructions
+                |> NextStep
+                    (\state ->
+                        let
+                            connection2 : Websocket.Connection
+                            connection2 =
+                                Effect.Websocket.connectionToInternal connection
+                        in
+                        case SeqDict.get connection2 state.websockets of
+                            Just websocket ->
+                                List.foldl
+                                    (\msg state2 ->
+                                        handleBackendUpdate
+                                            (currentTime state2)
+                                            (msg { code = Websocket.NormalClosure, reason = reason })
+                                            state2
+                                    )
+                                    { state
+                                        | websockets =
+                                            SeqDict.insert
+                                                connection2
+                                                { websocket
+                                                    | closedAt =
+                                                        Maybe.withDefault (currentTime state) websocket.closedAt |> Just
+                                                }
+                                                state.websockets
+                                    }
+                                    (getWebsocketOnCloseForConnection connection2 (state.backendApp.subscriptions state.model))
+
+                            Nothing ->
+                                state
+                    )
+        )
+
+
 frontendWebsocketSendString : ClientId -> DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 frontendWebsocketSendString clientId delay connection data =
     Action
@@ -1699,6 +1744,27 @@ getWebsocketOnClose sub =
 
         Effect.Internal.WebsocketListen _ _ onClose ->
             [ onClose ]
+
+        _ ->
+            []
+
+
+{-| Like `getWebsocketOnClose`, but only returns the close listeners registered for a
+specific connection. Used by `websocketClose` so that closing one websocket doesn't fire
+the close listeners of every other open websocket.
+-}
+getWebsocketOnCloseForConnection : Websocket.Connection -> Effect.Internal.Subscription r msg -> List ({ code : Websocket.CloseEventCode, reason : String } -> msg)
+getWebsocketOnCloseForConnection connection sub =
+    case sub of
+        Effect.Internal.SubBatch batch ->
+            List.foldl (\sub2 list -> getWebsocketOnCloseForConnection connection sub2 ++ list) [] batch
+
+        Effect.Internal.WebsocketListen listenConnection _ onClose ->
+            if listenConnection == connection then
+                [ onClose ]
+
+            else
+                []
 
         _ ->
             []
