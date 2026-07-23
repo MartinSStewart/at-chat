@@ -821,7 +821,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 |> List.any
                                     (\entry ->
                                         case entry.log of
-                                            Log.NotificationEmail (Ok ()) emailAddress ->
+                                            Log.FailedToSendNotificationEmail (Ok ()) emailAddress ->
                                                 emailAddress == E2EHelper.userEmail
 
                                             _ ->

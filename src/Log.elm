@@ -23,7 +23,7 @@ import Ui.Prose
 
 type Log
     = LoginEmail (Result Postmark.SendEmailError ()) EmailAddress
-    | NotificationEmail (Result Postmark.SendEmailError ()) EmailAddress
+    | FailedToSendNotificationEmail Postmark.SendEmailError EmailAddress
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
@@ -88,7 +88,7 @@ shouldNotifyAdmin log =
         LoginEmail _ _ ->
             Nothing
 
-        NotificationEmail _ _ ->
+        FailedToSendNotificationEmail _ _ ->
             Nothing
 
         LoginsRateLimited _ ->
@@ -357,23 +357,13 @@ logContent onPressCopy customEmojis log =
                         , errorDetails (sendEmailErrorToString error)
                         ]
 
-        NotificationEmail result emailAddress ->
-            case result of
-                Ok () ->
-                    Ui.column
-                        [ Ui.spacing 4 ]
-                        [ tag successTag "Notification Email"
-                        , fieldRow "To" (MyUi.emailAddress emailAddress)
-                        , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
-                        ]
-
-                Err error ->
-                    Ui.column
-                        [ Ui.spacing 4 ]
-                        [ tag errorTag "Notification Email Failed"
-                        , fieldRow "To" (MyUi.emailAddress emailAddress)
-                        , errorDetails (sendEmailErrorToString error)
-                        ]
+        FailedToSendNotificationEmail error emailAddress ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Notification Email Failed"
+                , fieldRow "To" (MyUi.emailAddress emailAddress)
+                , errorDetails (sendEmailErrorToString error)
+                ]
 
         LoginsRateLimited id ->
             Ui.column
