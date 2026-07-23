@@ -2046,7 +2046,10 @@ asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain model sessionId clientId
                                 ( model, Command.none )
 
                         ( Just channel, Just (NeedsAuthAgain discordUser) ) ->
-                            if discordUser.linkedTo == session.userId then
+                            if
+                                LocalState.canViewDiscordChannel guildId channel guild discordUserId
+                                    && (discordUser.linkedTo == session.userId)
+                            then
                                 case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
                                     IsNotMember ->
                                         ( model, Command.none )

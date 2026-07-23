@@ -6,6 +6,7 @@ import Backend
 import Codec
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
+import DiscordUserData
 import Drawing
 import Duration
 import E2EHelper
@@ -19,7 +20,7 @@ import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
 import IdArray
 import Iso8601
 import LinkedAndOtherDiscordUsers
-import Local
+import Local exposing (ChangeId(..))
 import LocalState
 import MembersAndOwner
 import Message
@@ -32,9 +33,10 @@ import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import Unsafe
 import User
+import UserSession exposing (SetViewing(..), ToBeFilledInByBackend(..))
 
 
 {-| Runs the given function against the admin frontend's LocalState, surfacing a
@@ -1683,6 +1685,107 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , userB.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "secret-channel" ])
                         , userB.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Channel does not exist" ])
                         , userB.snapshotView 100 { name = "Shouldn't see private channel even when directly linked" }
+                        ]
+                    )
+                , -- Regression: after the second user's Discord auth expires (NeedsAuthAgain), an
+                  -- on-demand ViewDiscordChannel request must still be denied. Before the fix, the
+                  -- NeedsAuthAgain branch of asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
+                  -- skipped the canViewDiscordChannel check the FullData branch performs, letting a
+                  -- guild member whose token expired read a private channel they can't view.
+                  -- First seed the private channel with a message only the admin should be able to read.
+                  T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.websocketByDiscordToken "legit-token" data of
+                            Just ( adminConnection, _ ) ->
+                                [ T.websocketSendString 100 adminConnection (E2EHelper.privateDiscordChannelMessageEvent 300 "SUPERSECRETNEEDLE1") ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Couldn't find the admin's Discord websocket") ]
+                    )
+                , T.checkState
+                    500
+                    (\data ->
+                        case
+                            SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+                                |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.privateDiscordChannelId guild.channels)
+                        of
+                            Just channel ->
+                                if IdArray.length channel.messages >= 1 then
+                                    Ok ()
+
+                                else
+                                    Err "The admin's secret message never reached the private channel"
+
+                            Nothing ->
+                                Err "The private channel is missing from the backend"
+                    )
+                , -- The second user's Discord auth expires, moving their linked account into NeedsAuthAgain.
+                  T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data of
+                            Just ( connection, _ ) ->
+                                [ T.websocketClose 100 connection "Authentication failed." ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Couldn't find the second user's Discord websocket") ]
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        case SeqDict.get E2EHelper.secondDiscordUserId data.backend.discordUsers of
+                            Just (DiscordUserData.NeedsAuthAgain _) ->
+                                Ok ()
+
+                            _ ->
+                                Err "The second user's Discord account wasn't put into the NeedsAuthAgain state, so the expired-auth scenario can't be verified"
+                    )
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    "/"
+                    E2EHelper.desktopWindow
+                    (\userC ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userC.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , -- Wait for the frontend to finish loading before enabling logging, since the
+                          -- EnableToFrontendLogging handler only runs once the frontend is in the Loaded state.
+                          userC.update 200 (Audio.userMsg Types.EnableToFrontendLogging)
+                        , -- Directly request to view the private channel as the (now expired) second user.
+                          userC.sendToBackend
+                            100
+                            (LocalModelChangeRequest
+                                (ChangeId 900)
+                                (Local_CurrentlyViewing
+                                    (ViewDiscordChannel
+                                        E2EHelper.botTestGuild
+                                        E2EHelper.privateDiscordChannelId
+                                        E2EHelper.secondDiscordUserId
+                                        EmptyPlaceholder
+                                    )
+                                )
+                            )
+                        , T.checkState
+                            500
+                            (\after ->
+                                case SeqDict.get userC.clientId after.frontends |> Maybe.map Audio.userModel of
+                                    Just (Types.Loaded loaded) ->
+                                        case loaded.toFrontendLogs of
+                                            Just logs ->
+                                                if Array.isEmpty (Array.filter (\toFrontend -> String.contains "SECRETNEEDLE" (Debug.toString toFrontend)) logs) then
+                                                    Ok ()
+
+                                                else
+                                                    Err "The second user, whose Discord auth expired, read the private channel's messages via ViewDiscordChannel"
+
+                                            Nothing ->
+                                                Err "The second user should have been logging ToFrontend"
+
+                                    _ ->
+                                        Err "The second user's frontend didn't load"
+                            )
                         ]
                     )
                 ]
