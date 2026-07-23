@@ -1726,7 +1726,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     (\data ->
                         case E2EHelper.websocketByDiscordToken E2EHelper.secondDiscordToken data of
                             Just ( connection, _ ) ->
-                                [ T.websocketClose 100 connection "Authentication failed." ]
+                                [ T.websocketClose 100 connection Websocket.NormalClosure "Authentication failed." ]
 
                             Nothing ->
                                 [ T.checkState 0 (\_ -> Err "Couldn't find the second user's Discord websocket") ]

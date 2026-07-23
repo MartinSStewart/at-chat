@@ -1274,6 +1274,7 @@ type alias FrontendActions toBackend frontendMsg frontendModel toFrontend backen
     , navigateForward : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , setNetworkLatency : DelayInMs -> Latency -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , websocketSendString : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    , websocketClose : DelayInMs -> Effect.Websocket.Connection -> Effect.Websocket.CloseEventCode -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     }
 
 
@@ -1330,14 +1331,71 @@ websocketSendString delay connection data =
         )
 
 
+closeEventCodeToInternal : Effect.Websocket.CloseEventCode -> Websocket.CloseEventCode
+closeEventCodeToInternal closeEventCode =
+    case closeEventCode of
+        Effect.Websocket.NormalClosure ->
+            Websocket.NormalClosure
+
+        Effect.Websocket.GoingAway ->
+            Websocket.GoingAway
+
+        Effect.Websocket.ProtocolError ->
+            Websocket.ProtocolError
+
+        Effect.Websocket.UnsupportedData ->
+            Websocket.UnsupportedData
+
+        Effect.Websocket.NoStatusReceived ->
+            Websocket.NoStatusReceived
+
+        Effect.Websocket.AbnormalClosure ->
+            Websocket.AbnormalClosure
+
+        Effect.Websocket.InvalidFramePayloadData ->
+            Websocket.InvalidFramePayloadData
+
+        Effect.Websocket.PolicyViolation ->
+            Websocket.PolicyViolation
+
+        Effect.Websocket.MessageTooBig ->
+            Websocket.MessageTooBig
+
+        Effect.Websocket.MissingExtension ->
+            Websocket.MissingExtension
+
+        Effect.Websocket.InternalError ->
+            Websocket.InternalError
+
+        Effect.Websocket.ServiceRestart ->
+            Websocket.ServiceRestart
+
+        Effect.Websocket.TryAgainLater ->
+            Websocket.TryAgainLater
+
+        Effect.Websocket.BadGateway ->
+            Websocket.BadGateway
+
+        Effect.Websocket.TlsHandshake ->
+            Websocket.TlsHandshake
+
+        Effect.Websocket.UnknownCode code ->
+            Websocket.UnknownCode code
+
+
 {-| Simulate the server closing a websocket that the backend opened, delivering the close
 event (with the given reason) to the backend's websocket `onClose` listeners. This is the
 close-event counterpart to `websocketSendString`, which delivers to the `onData` listeners.
 Use it to test how the backend reacts to an unexpected websocket close, such as an
 authentication failure.
 -}
-websocketClose : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-websocketClose delay connection reason =
+websocketClose :
+    DelayInMs
+    -> Effect.Websocket.Connection
+    -> Effect.Websocket.CloseEventCode
+    -> String
+    -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+websocketClose delay connection closeEventCode reason =
     Action
         (\instructions ->
             wait (Duration.milliseconds delay) instructions
@@ -1354,23 +1412,127 @@ websocketClose delay connection reason =
                                     (\msg state2 ->
                                         handleBackendUpdate
                                             (currentTime state2)
-                                            (msg { code = Websocket.NormalClosure, reason = reason })
+                                            (msg
+                                                { code = closeEventCodeToInternal closeEventCode
+                                                , reason = reason
+                                                }
+                                            )
                                             state2
                                     )
-                                    { state
-                                        | websockets =
-                                            SeqDict.insert
-                                                connection2
-                                                { websocket
-                                                    | closedAt =
-                                                        Maybe.withDefault (currentTime state) websocket.closedAt |> Just
-                                                }
-                                                state.websockets
-                                    }
+                                    (addEvent
+                                        (WebsocketCloseEvent Nothing connection2 closeEventCode reason)
+                                        (case websocket.closedAt of
+                                            Just _ ->
+                                                Just WebsocketClosed
+
+                                            Nothing ->
+                                                Nothing
+                                        )
+                                        { state
+                                            | websockets =
+                                                SeqDict.insert
+                                                    connection2
+                                                    { websocket
+                                                        | closedAt =
+                                                            Maybe.withDefault (currentTime state) websocket.closedAt |> Just
+                                                    }
+                                                    state.websockets
+                                        }
+                                    )
                                     (getWebsocketOnCloseForConnection connection2 (state.backendApp.subscriptions state.model))
 
                             Nothing ->
-                                state
+                                addEvent
+                                    (WebsocketCloseEvent Nothing connection2 closeEventCode reason)
+                                    (Just WebsocketMissing)
+                                    state
+                    )
+        )
+
+
+{-| Simulate the server closing a websocket that the backend opened, delivering the close
+event (with the given reason) to the backend's websocket `onClose` listeners. This is the
+close-event counterpart to `websocketSendString`, which delivers to the `onData` listeners.
+Use it to test how the backend reacts to an unexpected websocket close, such as an
+authentication failure.
+-}
+frontendWebsocketClose :
+    ClientId
+    -> DelayInMs
+    -> Effect.Websocket.Connection
+    -> Effect.Websocket.CloseEventCode
+    -> String
+    -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+frontendWebsocketClose clientId delay connection closeEventCode reason =
+    Action
+        (\instructions ->
+            wait (Duration.milliseconds delay) instructions
+                |> NextStep
+                    (\state ->
+                        let
+                            connection2 : Websocket.Connection
+                            connection2 =
+                                Effect.Websocket.connectionToInternal connection
+                        in
+                        case SeqDict.get clientId state.frontends of
+                            Just frontend ->
+                                case SeqDict.get connection2 frontend.websockets of
+                                    Just websocket ->
+                                        List.foldl
+                                            (\msg state2 ->
+                                                handleFrontendUpdate
+                                                    clientId
+                                                    (currentTime state2)
+                                                    (msg
+                                                        { code = closeEventCodeToInternal closeEventCode
+                                                        , reason = reason
+                                                        }
+                                                    )
+                                                    state2
+                                            )
+                                            (addEvent
+                                                (WebsocketCloseEvent (Just clientId) connection2 closeEventCode reason)
+                                                (case websocket.closedAt of
+                                                    Just _ ->
+                                                        Just WebsocketClosed
+
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                { state
+                                                    | frontends =
+                                                        SeqDict.insert
+                                                            clientId
+                                                            { frontend
+                                                                | websockets =
+                                                                    SeqDict.insert
+                                                                        connection2
+                                                                        { websocket
+                                                                            | closedAt =
+                                                                                Maybe.withDefault (currentTime state) websocket.closedAt
+                                                                                    |> Just
+                                                                        }
+                                                                        frontend.websockets
+                                                            }
+                                                            state.frontends
+                                                }
+                                            )
+                                            (getWebsocketOnCloseForConnection
+                                                connection2
+                                                (state.frontendApp.subscriptions frontend.model)
+                                            )
+
+                                    Nothing ->
+                                        addEvent
+                                            (WebsocketCloseEvent (Just clientId) connection2 closeEventCode reason)
+                                            (Just WebsocketMissing)
+                                            state
+
+                            Nothing ->
+                                addEvent
+                                    (WebsocketCloseEvent (Just clientId) connection2 closeEventCode reason)
+                                    (Just (ClientIdNotFound clientId))
+                                    state
                     )
         )
 
@@ -1931,6 +2093,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                                     , navigateBack = navigateBackAction clientId
                                     , setNetworkLatency = setNetworkLatency clientId
                                     , websocketSendString = frontendWebsocketSendString clientId
+                                    , websocketClose = frontendWebsocketClose clientId
                                     }
                         in
                         getClientConnectSubs (state2.backendApp.subscriptions state2.model)
@@ -1987,6 +2150,7 @@ type EventType toBackend frontendMsg frontendModel toFrontend backendMsg backend
     | CollapsableGroupStart String
     | CollapsableGroupEnd String
     | WebsocketSendStringEvent (Maybe ClientId) Websocket.Connection String
+    | WebsocketCloseEvent (Maybe ClientId) Websocket.Connection Effect.Websocket.CloseEventCode String
 
 
 {-| -}
@@ -5979,6 +6143,14 @@ eventTypeToTimelineType eventType =
                 Nothing ->
                     BackendTimeline
 
+        WebsocketCloseEvent maybeClientId _ closeEventCode string ->
+            case maybeClientId of
+                Just clientId ->
+                    FrontendTimeline clientId
+
+                Nothing ->
+                    BackendTimeline
+
 
 {-| -}
 isSkippable : EventType toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Bool
@@ -6039,6 +6211,9 @@ isSkippable eventType =
             True
 
         WebsocketSendStringEvent _ _ _ ->
+            True
+
+        WebsocketCloseEvent maybeClientId _ closeEventCode string ->
             True
 
 
@@ -6328,6 +6503,9 @@ checkCachedElmValueHelper event state =
                     Nothing
 
                 WebsocketSendStringEvent _ _ _ ->
+                    Nothing
+
+                WebsocketCloseEvent maybeClientId _ closeEventCode string ->
                     Nothing
     }
 
@@ -7009,6 +7187,62 @@ currentStepText stepIndex currentStep testView_ =
 
                 WebsocketSendStringEvent _ (Websocket.Connection _ url) _ ->
                     "Websocket sent data from " ++ url
+
+                WebsocketCloseEvent maybeClientId (Websocket.Connection _ url) closeEventCode reason ->
+                    "Websocket to "
+                        ++ url
+                        ++ " was closed. Code: "
+                        ++ (case closeEventCode of
+                                Effect.Websocket.NormalClosure ->
+                                    "NormalClosure"
+
+                                Effect.Websocket.GoingAway ->
+                                    "GoingAway"
+
+                                Effect.Websocket.ProtocolError ->
+                                    "ProtocolError"
+
+                                Effect.Websocket.UnsupportedData ->
+                                    "UnsupportedData"
+
+                                Effect.Websocket.NoStatusReceived ->
+                                    "NoStatusReceived"
+
+                                Effect.Websocket.AbnormalClosure ->
+                                    "AbnormalClosure"
+
+                                Effect.Websocket.InvalidFramePayloadData ->
+                                    "InvalidFramePayloadData"
+
+                                Effect.Websocket.PolicyViolation ->
+                                    "PolicyViolation"
+
+                                Effect.Websocket.MessageTooBig ->
+                                    "MessageTooBig"
+
+                                Effect.Websocket.MissingExtension ->
+                                    "MissingExtension"
+
+                                Effect.Websocket.InternalError ->
+                                    "InternalError"
+
+                                Effect.Websocket.ServiceRestart ->
+                                    "ServiceRestart"
+
+                                Effect.Websocket.TryAgainLater ->
+                                    "TryAgainLater"
+
+                                Effect.Websocket.BadGateway ->
+                                    "BadGateway"
+
+                                Effect.Websocket.TlsHandshake ->
+                                    "TlsHandshake"
+
+                                Effect.Websocket.UnknownCode int ->
+                                    "UnknownCode " ++ String.fromInt int
+                           )
+                        ++ ", reason: "
+                        ++ reason
     in
     Html.div
         [ Html.Attributes.style "padding" "4px", Html.Attributes.title fullMsg ]
@@ -7219,6 +7453,9 @@ eventToArrows timelines collapsedRanges2 adjustedColumnIndex event rowIndex =
             []
 
         WebsocketSendStringEvent _ _ _ ->
+            []
+
+        WebsocketCloseEvent maybeClientId connection closeEventCode string ->
             []
 
 
@@ -7958,6 +8195,9 @@ eventIcon timelines testView2 event collapsedRanges2 adjustedColumIndex columnIn
             ]
 
         WebsocketSendStringEvent _ _ _ ->
+            [ circleHelper "e2e-big-circle" ]
+
+        WebsocketCloseEvent maybeClientId connection closeEventCode string ->
             [ circleHelper "e2e-big-circle" ]
     )
         ++ (if noErrors then
