@@ -1274,6 +1274,7 @@ type alias FrontendActions toBackend frontendMsg frontendModel toFrontend backen
     , navigateForward : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , setNetworkLatency : DelayInMs -> Latency -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , websocketSendString : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    , websocketClose : DelayInMs -> Effect.Websocket.Connection -> Effect.Websocket.CloseEventCode -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     }
 
 
@@ -1455,14 +1456,14 @@ close-event counterpart to `websocketSendString`, which delivers to the `onData`
 Use it to test how the backend reacts to an unexpected websocket close, such as an
 authentication failure.
 -}
-websocketCloseFrontend :
+frontendWebsocketClose :
     ClientId
     -> DelayInMs
     -> Effect.Websocket.Connection
     -> Effect.Websocket.CloseEventCode
     -> String
     -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-websocketCloseFrontend clientId delay connection closeEventCode reason =
+frontendWebsocketClose clientId delay connection closeEventCode reason =
     Action
         (\instructions ->
             wait (Duration.milliseconds delay) instructions
@@ -2092,6 +2093,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                                     , navigateBack = navigateBackAction clientId
                                     , setNetworkLatency = setNetworkLatency clientId
                                     , websocketSendString = frontendWebsocketSendString clientId
+                                    , websocketClose = frontendWebsocketClose clientId
                                     }
                         in
                         getClientConnectSubs (state2.backendApp.subscriptions state2.model)
