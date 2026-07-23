@@ -1454,9 +1454,9 @@ setupView playingAgainstSelf windowSize model =
                     , selected = Just model.sizeSelection
                     , label = Ui.Input.labelHidden "go_boardSize"
                     , options =
-                        [ Ui.Input.option Standard9 (Ui.text "9 x 9")
-                        , Ui.Input.option Standard13 (Ui.text "13 x 13")
-                        , Ui.Input.option Standard19 (Ui.text "19 x 19")
+                        [ Ui.Input.optionWith Standard9 (sizeOptionView (Ui.text "9 x 9"))
+                        , Ui.Input.optionWith Standard13 (sizeOptionView (Ui.text "13 x 13"))
+                        , Ui.Input.optionWith Standard19 (sizeOptionView (Ui.text "19 x 19"))
                         , Ui.Input.optionWith CustomSize
                             (sizeOptionView
                                 (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
@@ -1483,8 +1483,8 @@ setupView playingAgainstSelf windowSize model =
                         , selected = Just model.gameCreatorPlayingAs
                         , label = Ui.Input.labelHidden "go_boardSize"
                         , options =
-                            [ Ui.Input.option Black (Ui.text "Black")
-                            , Ui.Input.option White (Ui.text "White")
+                            [ Ui.Input.optionWith Black (sizeOptionView (Ui.text "Black"))
+                            , Ui.Input.optionWith White (sizeOptionView (Ui.text "White"))
                             ]
                         }
                     )
@@ -1600,16 +1600,23 @@ sizeOptionView label status =
                     _ ->
                         Ui.rgb 208 208 208
                 )
-            , Ui.border
-                (case status of
-                    Ui.Input.Selected ->
-                        5
-
-                    _ ->
-                        1
-                )
+            , Ui.border 1
             ]
-            Ui.none
+            (case status of
+                Ui.Input.Selected ->
+                    Ui.el
+                        [ Ui.width (Ui.px 6)
+                        , Ui.height (Ui.px 6)
+                        , Ui.centerX
+                        , Ui.centerY
+                        , Ui.background (Ui.rgb 59 153 252)
+                        , Ui.rounded 3
+                        ]
+                        Ui.none
+
+                _ ->
+                    Ui.none
+            )
         , label
         ]
 

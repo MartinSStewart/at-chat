@@ -151,6 +151,7 @@ miniView user isThreadStarter canEdit customEmojis =
                         miniButton
                             (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
                             (MessageViewMsg_PressedReactionEmoji emoji)
+                            ""
                             (reactionEmojiButtonContent customEmojis emoji)
                     )
     in
@@ -168,11 +169,13 @@ miniView user isThreadStarter canEdit customEmojis =
             ++ [ miniButton
                     (Dom.id "miniView_showReactionEmojiSelector")
                     MessageViewMsg_PressedShowReactionEmojiSelector
+                    "Add reaction"
                     Icons.smile
                , if canEdit then
                     miniButton
                         (Dom.id "miniView_editMessage")
                         MessageViewMsg_PressedEditMessage
+                        "Edit message"
                         Icons.pencil
 
                  else
@@ -184,6 +187,7 @@ miniView user isThreadStarter canEdit customEmojis =
                     miniButton
                         (Dom.id "miniView_reply")
                         MessageViewMsg_PressedReply
+                        "Reply"
                         Icons.reply
                , miniButtonWithPosition
                     (Dom.id "miniView_showFullMenu")
@@ -193,8 +197,8 @@ miniView user isThreadStarter canEdit customEmojis =
         )
 
 
-miniButton : HtmlId -> msg -> Html msg -> Element msg
-miniButton htmlId onPress svg =
+miniButton : HtmlId -> msg -> String -> Html msg -> Element msg
+miniButton htmlId onPress hoverText svg =
     Ui.el
         [ Ui.width (Ui.px 32)
         , Ui.paddingXY 4 3
@@ -202,6 +206,7 @@ miniButton htmlId onPress svg =
         , Ui.id (Dom.idToString htmlId)
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
         , Ui.pointer
+        , MyUi.hoverText hoverText
         , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
         (Ui.html svg)
