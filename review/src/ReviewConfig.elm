@@ -60,7 +60,7 @@ config =
         |> Review.Rule.ignoreErrorsForFiles
             [ "tests/E2ETests.elm"
             , "src/E2EHelper.elm"
-            , "src/DiscordRecordedTest.elm"
+            , "src/E2EDiscord.elm"
             ]
     , RunUnsafeAtStartup.rule
     , NoRedundantUiAttributes.rule
@@ -75,6 +75,11 @@ config =
     , NoConfusingPrefixOperator.rule |> defaultIgnore
     , NoDebug.TodoOrToString.rule
         |> Review.Rule.ignoreErrorsForDirectories [ "tests/" ]
+        |> Review.Rule.ignoreErrorsForFiles
+            [ "tests/E2ETests.elm"
+            , "src/E2EHelper.elm"
+            , "src/E2EDiscord.elm"
+            ]
         |> defaultIgnore
     , NoExposingEverything.rule |> Review.Rule.ignoreErrorsForFiles [ "src/Env.elm" ] |> defaultIgnore
     , NoImportingEverything.rule [] |> defaultIgnore
