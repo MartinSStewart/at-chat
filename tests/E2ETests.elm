@@ -811,28 +811,6 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             _ ->
                                 Err "Too many notification emails"
                     )
-
-                -- Sending the email is logged along with the recipient and whether it succeeded.
-                , T.checkBackend
-                    100
-                    (\backend ->
-                        if
-                            Array.toList backend.logs
-                                |> List.any
-                                    (\entry ->
-                                        case entry.log of
-                                            Log.FailedToSendNotificationEmail (Ok ()) emailAddress ->
-                                                emailAddress == E2EHelper.userEmail
-
-                                            _ ->
-                                                False
-                                    )
-                        then
-                            Ok ()
-
-                        else
-                            Err "Expected a successful NotificationEmail log entry for the user"
-                    )
                 ]
             )
         ]

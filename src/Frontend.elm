@@ -1542,7 +1542,11 @@ updateLoaded msg model =
                                 Drag_CallThumbnail ->
                                     { loggedIn
                                         | voiceChat =
-                                            Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
+                                            Call.dragThumbnail
+                                                (MyUi.isMobile model)
+                                                averageMove
+                                                model.windowSize
+                                                loggedIn.voiceChat
                                     }
 
                                 Drag_Game ->
@@ -1632,7 +1636,11 @@ updateLoaded msg model =
                                         Drag_CallThumbnail ->
                                             { loggedIn
                                                 | voiceChat =
-                                                    Call.dragThumbnail averageMove model.windowSize loggedIn.voiceChat
+                                                    Call.dragThumbnail
+                                                        (MyUi.isMobile model)
+                                                        averageMove
+                                                        model.windowSize
+                                                        loggedIn.voiceChat
                                             }
 
                                         Drag_Channel ->

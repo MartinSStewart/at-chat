@@ -218,34 +218,34 @@ initModel =
     }
 
 
-thumbnailPosition : Coord CssPixels -> Model -> Coord CssPixels
-thumbnailPosition windowSize model =
+thumbnailPosition : Bool -> Coord CssPixels -> Model -> Coord CssPixels
+thumbnailPosition isMobile windowSize model =
     let
         ( x, y ) =
             model.thumbnailPosition
     in
     Coord.xy
-        (round (toFloat (Coord.xRaw windowSize - thumbnailWindowWidth) * x))
-        (round ((toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio) * y))
+        (round (toFloat (Coord.xRaw windowSize - thumbnailWindowWidth isMobile) * x))
+        (round ((toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth isMobile / aspectRatio) * y))
 
 
 {-| Move the thumbnail by the given drag delta (in CSS pixels). The stored
 position is normalized to 0..1, so we divide the pixel delta by the range the
 thumbnail can travel and clamp it back into bounds.
 -}
-dragThumbnail : { x : Float, y : Float } -> Coord CssPixels -> Model -> Model
-dragThumbnail delta windowSize model =
+dragThumbnail : Bool -> { x : Float, y : Float } -> Coord CssPixels -> Model -> Model
+dragThumbnail isMobile delta windowSize model =
     let
         ( x, y ) =
             model.thumbnailPosition
 
         availableWidth : Float
         availableWidth =
-            toFloat (Coord.xRaw windowSize - thumbnailWindowWidth)
+            toFloat (Coord.xRaw windowSize - thumbnailWindowWidth isMobile)
 
         availableHeight : Float
         availableHeight =
-            toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth / aspectRatio
+            toFloat (Coord.yRaw windowSize) - thumbnailWindowWidth isMobile / aspectRatio
     in
     { model
         | thumbnailPosition =
@@ -263,9 +263,13 @@ dragThumbnail delta windowSize model =
     }
 
 
-thumbnailWindowWidth : number
-thumbnailWindowWidth =
-    200
+thumbnailWindowWidth : Bool -> number
+thumbnailWindowWidth isMobile =
+    if isMobile then
+        200
+
+    else
+        300
 
 
 gotUserMediaDevices : List MediaDevice -> List (IdString MediaDeviceId) -> Model -> Model
@@ -590,7 +594,7 @@ videoNodes localUser config loggedIn local =
                  else
                     VideoNodeHidden
                 )
-                ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
+                ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                 model.localIsSpeaking
                 model
                 :: List.indexedMap
@@ -611,7 +615,7 @@ videoNodes localUser config loggedIn local =
                              else
                                 VideoNodeHidden
                             )
-                            ( thumbnailPosition config.windowSize model, thumbnailWindowWidth )
+                            ( thumbnailPosition isMobile config.windowSize model, thumbnailWindowWidth isMobile )
                             (SeqSet.member connectionId model.isSpeaking)
                             model
                     )
@@ -623,11 +627,14 @@ videoNodes localUser config loggedIn local =
 insideThumbnail : Coord CssPixels -> { a | windowSize : Coord CssPixels } -> Model -> Bool
 insideThumbnail coord config model =
     let
+        isMobile =
+            MyUi.isMobile config
+
         pA =
-            thumbnailPosition config.windowSize model
+            thumbnailPosition isMobile config.windowSize model
 
         pB =
-            Coord.addTuple_ ( thumbnailWindowWidth, round (thumbnailWindowWidth / aspectRatio) ) pA
+            Coord.addTuple_ ( thumbnailWindowWidth isMobile, round (thumbnailWindowWidth isMobile / aspectRatio) ) pA
     in
     Coord.maximum pA coord == coord && Coord.minimum pB coord == coord
 

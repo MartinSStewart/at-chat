@@ -1068,7 +1068,11 @@ dmCallTest isMobile normalConfig =
                     -- -dragDistanceX / (windowWidth - thumbnailWidth).
                     thumbnailWidth : Float
                     thumbnailWidth =
-                        200
+                        if isMobile then
+                            200
+
+                        else
+                            300
 
                     availableWidth : Float
                     availableWidth =
@@ -1082,11 +1086,11 @@ dmCallTest isMobile normalConfig =
                     -- move dragDistanceX pixels to the left.
                     dragStart : ( Float, Float )
                     dragStart =
-                        ( toFloat window.width - 100, 100 )
+                        ( toFloat window.width - 150, 100 )
 
                     dragEnd : ( Float, Float )
                     dragEnd =
-                        ( toFloat window.width - 100 - dragDistanceX, 100 )
+                        ( toFloat window.width - 150 - dragDistanceX, 100 )
 
                     expectedThumbnailX : Float
                     expectedThumbnailX =
