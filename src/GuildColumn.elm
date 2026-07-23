@@ -35,20 +35,26 @@ import Ui.Lazy
 import User exposing (FrontendCurrentUser, LocalUser)
 
 
-canScroll : Drag -> Bool
-canScroll drag =
-    case drag of
-        Dragging dragging ->
-            not dragging.horizontalStart
+canScroll : Bool -> Drag -> Bool
+canScroll isMobile drag =
+    if isMobile then
+        case drag of
+            Dragging dragging ->
+                not dragging.horizontalStart
 
-        _ ->
-            True
+            _ ->
+                True
+
+    else
+        -- On desktop there's no horizontal drag gesture, so keep scrolling
+        -- enabled to stop scrollbars flickering while other drags happen.
+        True
 
 
 guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg_
 guildColumnLazy isMobile model local =
     Ui.Lazy.lazy6
-        (case ( canScroll model.drag, isMobile ) of
+        (case ( canScroll isMobile model.drag, isMobile ) of
             ( True, True ) ->
                 guildColumnCanScrollMobile
 

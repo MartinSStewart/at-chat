@@ -187,7 +187,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll model.drag)
+                                (GuildColumn.canScroll True model.drag)
                                 True
                                 model.time
                                 maybeOtherUserId
@@ -210,7 +210,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll model.drag)
+                                (GuildColumn.canScroll False model.drag)
                                 False
                                 model.time
                                 maybeOtherUserId
@@ -416,7 +416,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll model.drag
+                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -599,7 +599,7 @@ discordGuildView model routeData loggedIn local =
                     else if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll model.drag
+                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -1301,7 +1301,7 @@ guildSettingsForm model loggedIn local guildId guild =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , MyUi.scrollable (GuildColumn.canScroll model.drag)
+            , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile False (Ui.text "Guild settings") Nothing
             , if isOwner then
@@ -3205,7 +3205,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3382,7 +3382,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3647,7 +3647,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3832,7 +3832,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on

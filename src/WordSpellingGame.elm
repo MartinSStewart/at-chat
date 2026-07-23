@@ -1019,7 +1019,23 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                     )
 
                 Nothing ->
-                    incrementTurnCount (Description_InvalidMove player.userId Nothing) time setup shared2
+                    -- Running out of attempts loses the turn without placing a
+                    -- word, so treat it like a pass: keep (or start) the passing
+                    -- streak instead of resetting it, otherwise the game could
+                    -- never end while a player keeps losing their turn.
+                    incrementTurnCount
+                        (Description_InvalidMove player.userId Nothing)
+                        time
+                        setup
+                        { shared2
+                            | passingStartedAt =
+                                case shared.passingStartedAt of
+                                    Nothing ->
+                                        Just shared.turnCount
+
+                                    Just _ ->
+                                        shared.passingStartedAt
+                        }
 
         FilledInByBackend (IsValid wildcardMatches) ->
             incrementTurnCount (placedWordDescription setup player placedWord result isPremove wildcardMatches) time setup shared2
