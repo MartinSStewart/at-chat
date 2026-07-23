@@ -1877,19 +1877,24 @@ update msg model =
             let
                 responseCmd : Command BackendOnly ToFrontend BackendMsg
                 responseCmd =
-                    FilledInByBackend (Result.map .roles result)
+                    FilledInByBackend (Result.map (\( guild, _ ) -> guild.roles) result)
                         |> Pages.Admin.ReloadDiscordGuild userIdToLoadWith guildId
                         |> Local_Admin
                         |> LocalChangeResponse changeId
                         |> Lamdera.sendToFrontend clientId
             in
             case result of
-                Ok guild ->
+                Ok ( guild, channels ) ->
                     ( { model
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (\discordGuild -> { discordGuild | roles = Pages.Admin.rolesToDict guild.roles })
+                                (\discordGuild ->
+                                    { discordGuild
+                                        | roles = Pages.Admin.rolesToDict guild.roles
+                                        , channels = reloadChannelPermissionOverwrites channels discordGuild.channels
+                                    }
+                                )
                                 model.discordGuilds
                       }
                     , responseCmd
@@ -1996,6 +2001,26 @@ gotDiscordCustomEmojis results model =
         )
         ( [], model.customEmojis, SeqDict.empty )
         results
+
+
+{-| Refresh the permission overwrites of the channels we already track for a guild, using freshly
+fetched channels. Channels we don't track are ignored and every other field of the channels we do
+track is left untouched, so this only updates permission overwrites without affecting anything else.
+-}
+reloadChannelPermissionOverwrites :
+    List Discord.Channel2
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+    -> SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+reloadChannelPermissionOverwrites discordChannels channels =
+    List.foldl
+        (\discordChannel acc ->
+            SeqDict.updateIfExists
+                discordChannel.id
+                (\channel -> { channel | permissionOverwrites = discordChannel.permissionOverwrites })
+                acc
+        )
+        channels
+        discordChannels
 
 
 addDiscordGuildData :
@@ -7757,9 +7782,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
         Pages.Admin.ReloadDiscordGuild userIdToLoadWith guildId _ ->
             case SeqDict.get userIdToLoadWith model.discordUsers of
                 Just (FullData discordUser) ->
+                    let
+                        token : Discord.Authentication
+                        token =
+                            Discord.userToken discordUser.auth
+                    in
                     ( model
-                    , Discord.getGuildPayload (Discord.userToken discordUser.auth) guildId
-                        |> DiscordSync.http model.serverSecret
+                    , Task.map2
+                        Tuple.pair
+                        (Discord.getGuildPayload token guildId |> DiscordSync.http model.serverSecret)
+                        (Discord.getGuildChannelsPayload token guildId |> DiscordSync.http model.serverSecret)
                         |> Task.attempt (ReloadedDiscordGuildForAdmin time changeId clientId userIdToLoadWith guildId)
                     )
 

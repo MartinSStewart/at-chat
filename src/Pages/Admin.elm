@@ -1719,7 +1719,7 @@ pendingChangesText change =
             "Reset Discord DM channel"
 
         ReloadDiscordGuild _ _ _ ->
-            "Reloaded Discord guild"
+            "Reloaded Discord guild roles and channel permissions"
 
         ExpandGuild _ ->
             "Expanded guild in admin page"
@@ -3564,14 +3564,15 @@ discordGuildRoles maybeUserId guildId roles =
         [ Ui.spacing 8, Ui.Font.size 13 ]
         [ case maybeUserId of
             Just userId ->
-                resetButton
+                reloadButton
+                    "Reload roles and channel permissions"
                     (reloadDiscordGuildButtonId guildId)
                     (PressedReloadDiscordGuild userId guildId)
 
             Nothing ->
                 Ui.none
         , if SeqDict.isEmpty roles then
-            Ui.text "No roles loaded. Press reload to fetch them."
+            Ui.text "No roles loaded. Press reload to fetch roles and channel permissions."
 
           else
             List.sortBy .name (SeqDict.values roles)
@@ -4308,10 +4309,15 @@ userTableColumns timezone tableState users twoFactorAuthentication =
 
 resetButton : HtmlId -> msg -> Element msg
 resetButton htmlId onPress =
+    reloadButton "Reset" htmlId onPress
+
+
+reloadButton : String -> HtmlId -> msg -> Element msg
+reloadButton hoverText htmlId onPress =
     Ui.el
         [ Ui.Input.button onPress
         , Ui.id (Dom.idToString htmlId)
-        , MyUi.hoverText "Reset"
+        , MyUi.hoverText hoverText
         , Ui.padding 3
         , Ui.background (Ui.rgb 50 100 255)
         , Ui.Font.color MyUi.white
