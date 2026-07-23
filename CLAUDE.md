@@ -40,3 +40,6 @@ pass the binary path directly:
 ```
 npx --yes elm-test --compiler="$(realpath node_modules/.bin/lamdera)"
 ```
+
+## Final notes
+Ignore the overrides folder. It is only used when I want to modify lamdera/program-test.
