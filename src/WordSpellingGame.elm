@@ -137,6 +137,9 @@ type alias GameData =
       lastWordPlaced : Maybe { time : Time.Posix, letterCount : Int }
     , showSettings : Bool
     , highlightedPlayer : Maybe (Id UserId)
+    , -- The board cells of the word currently hovered in the Moves log, drawn with a highlight so
+      -- the player can see where a past word was placed. Empty when no word is hovered.
+      highlightedWordCells : Set ( Int, Int )
     , scrollPosition : ScrollPosition
     , -- The dictionary definition popup opened by clicking a played word in the Moves log. Shown in
       -- a column to the right of the status view on wide screens, or overlaid on the board otherwise
@@ -333,6 +336,8 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
+    | MouseEnterWord (List ( Int, Int ))
+    | MouseExitWord
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
     | PressedWordDefinition (Nonempty String)
@@ -482,6 +487,7 @@ initGame time currentUserId setup shared =
     , lastWordPlaced = Nothing
     , showSettings = False
     , highlightedPlayer = Nothing
+    , highlightedWordCells = Set.empty
     , scrollPosition = ScrolledToBottom
     , wordDefinition = WordDefinition_None
     }
@@ -1015,7 +1021,7 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
             case OneOrGreater.decrement shared2.attemptsLeft of
                 Just attemptsLeft ->
                     ( { shared2 | attemptsLeft = attemptsLeft }
-                    , [ Description_InvalidMove player.userId (Just attemptsLeft) ]
+                    , [ Description_InvalidMove player.userId { word = headlineWord result.words, attemptsLeft = Just attemptsLeft } ]
                     )
 
                 Nothing ->
@@ -1024,7 +1030,7 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                     -- streak instead of resetting it, otherwise the game could
                     -- never end while a player keeps losing their turn.
                     incrementTurnCount
-                        (Description_InvalidMove player.userId Nothing)
+                        (Description_InvalidMove player.userId { word = headlineWord result.words, attemptsLeft = Nothing })
                         time
                         setup
                         { shared2
@@ -1070,7 +1076,7 @@ the next player's premove (or fail to), which gets its own entry attributed to t
 -}
 type Description
     = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ), isPremove : Bool, wildcardMatches : Set String }
-    | Description_InvalidMove (Id UserId) (Maybe OneOrGreater)
+    | Description_InvalidMove (Id UserId) { word : String, attemptsLeft : Maybe OneOrGreater }
     | Description_ReplacedTray (Id UserId)
     | Description_Passed (Id UserId)
     | Description_EndedGame (Id UserId)
@@ -1907,6 +1913,12 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             , Nothing
             , Nothing
             )
+
+        MouseEnterWord cells ->
+            ( { model | highlightedWordCells = Set.fromList cells }, Nothing, Nothing )
+
+        MouseExitWord ->
+            ( { model | highlightedWordCells = Set.empty }, Nothing, Nothing )
 
         UserScrolledPastMoves position ->
             -- Track how far the Past moves list is scrolled so new moves only auto-scroll to the
@@ -3773,7 +3785,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , Ui.contentTop
             , overlayAttr
             ]
-            ([ boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model
+            ([ boardView currentTime windowSize maybeDragging localUser setup shared (Set.union highlightedCells model.highlightedWordCells) model
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
                 ++ (case ( wideEnough, model.wordDefinition ) of
@@ -4110,11 +4122,13 @@ descriptionToString description =
                    )
                 ++ ")"
 
-        Description_InvalidMove _ maybeAttemptsLeft ->
-            case maybeAttemptsLeft of
-                Just attemptsLeft ->
-                    " played an invalid word ("
-                        ++ (case OneOrGreater.toString attemptsLeft of
+        Description_InvalidMove _ { word, attemptsLeft } ->
+            case attemptsLeft of
+                Just attemptsLeft2 ->
+                    " tried to play the invalid word "
+                        ++ word
+                        ++ " ("
+                        ++ (case OneOrGreater.toString attemptsLeft2 of
                                 "1" ->
                                     "1 attempt left)"
 
@@ -4123,7 +4137,7 @@ descriptionToString description =
                            )
 
                 Nothing ->
-                    " played an invalid word (turn ended)"
+                    " tried to play the invalid word " ++ word ++ " (turn ended)"
 
         Description_ReplacedTray _ ->
             " swapped their tiles"
@@ -4268,11 +4282,12 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 ]
                         in
                         case description of
-                            Description_PlacedWord _ { word, wildcardMatches } ->
-                                -- A placed word is clickable: hovering highlights the row and clicking
-                                -- looks up its dictionary definition (see `PressedWordDefinition`).
-                                -- Any wildcards are resolved with the fill-ins the backend found
-                                -- valid, so the looked-up words are real dictionary words.
+                            Description_PlacedWord _ { word, wildcardMatches, placedCells } ->
+                                -- A placed word is clickable: hovering highlights the row (and the
+                                -- word's cells on the board) and clicking looks up its dictionary
+                                -- definition (see `PressedWordDefinition`). Any wildcards are resolved
+                                -- with the fill-ins the backend found valid, so the looked-up words
+                                -- are real dictionary words.
                                 MyUi.rowButton
                                     (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
                                     (PressedWordDefinition (definitionWords wildcardMatches word))
@@ -4283,6 +4298,8 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
+                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells)
+                                    , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
 
