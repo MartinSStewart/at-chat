@@ -74,7 +74,7 @@ import Char
 import Color.Manipulate
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Dict
+import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
@@ -139,7 +139,7 @@ type alias GameData =
     , highlightedPlayer : Maybe (Id UserId)
     , -- The board cells of the word currently hovered in the Moves log, drawn with a highlight so
       -- the player can see where a past word was placed. Empty when no word is hovered.
-      highlightedWordCells : Set ( Int, Int )
+      highlightedWordCells : Dict ( Int, Int ) LetterOrWildcard
     , scrollPosition : ScrollPosition
     , -- The dictionary definition popup opened by clicking a played word in the Moves log. Shown in
       -- a column to the right of the status view on wide screens, or overlaid on the board otherwise
@@ -336,7 +336,7 @@ type GameMsg
     | PressedPlayerRow (Id UserId)
     | MouseEnterPlayerRow (Id UserId)
     | MouseExitPlayerRow (Id UserId)
-    | MouseEnterWord (List ( Int, Int ))
+    | MouseEnterWord (List ( ( Int, Int ), LetterOrWildcard ))
     | MouseExitWord
     | UserScrolledPastMoves ScrollPosition
     | PressedSubmitPremove PlacedWord
@@ -487,7 +487,7 @@ initGame time currentUserId setup shared =
     , lastWordPlaced = Nothing
     , showSettings = False
     , highlightedPlayer = Nothing
-    , highlightedWordCells = Set.empty
+    , highlightedWordCells = Dict.empty
     , scrollPosition = ScrolledToBottom
     , wordDefinition = WordDefinition_None
     }
@@ -1021,7 +1021,13 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
             case OneOrGreater.decrement shared2.attemptsLeft of
                 Just attemptsLeft ->
                     ( { shared2 | attemptsLeft = attemptsLeft }
-                    , [ Description_InvalidMove player.userId { word = headlineWord result.words, attemptsLeft = Just attemptsLeft } ]
+                    , [ Description_InvalidMove
+                            player.userId
+                            { word = headlineWord result.words
+                            , placedCells = List.map Tuple.first result.placedCells
+                            , attemptsLeft = Just attemptsLeft
+                            }
+                      ]
                     )
 
                 Nothing ->
@@ -1030,7 +1036,13 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                     -- streak instead of resetting it, otherwise the game could
                     -- never end while a player keeps losing their turn.
                     incrementTurnCount
-                        (Description_InvalidMove player.userId { word = headlineWord result.words, attemptsLeft = Nothing })
+                        (Description_InvalidMove
+                            player.userId
+                            { word = headlineWord result.words
+                            , placedCells = List.map Tuple.first result.placedCells
+                            , attemptsLeft = Nothing
+                            }
+                        )
                         time
                         setup
                         { shared2
@@ -1064,7 +1076,7 @@ placedWordDescription setup player placedWord result isPremove wildcardMatches =
         { word = headlineWord result.words
         , points = result.score + bonus
         , isBingo = bonus /= 0
-        , placedCells = List.map Tuple.first result.placedCells
+        , placedCells =  result.placedCells
         , isPremove = isPremove
         , wildcardMatches = wildcardMatches
         }
@@ -1075,8 +1087,8 @@ placedWordDescription setup player placedWord result isPremove wildcardMatches =
 the next player's premove (or fail to), which gets its own entry attributed to the premover.
 -}
 type Description
-    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( Int, Int ), isPremove : Bool, wildcardMatches : Set String }
-    | Description_InvalidMove (Id UserId) { word : String, attemptsLeft : Maybe OneOrGreater }
+    = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( ( Int, Int ), LetterOrWildcard ), isPremove : Bool, wildcardMatches : Set String }
+    | Description_InvalidMove (Id UserId) { word : String, placedCells : List ( Int, Int ), attemptsLeft : Maybe OneOrGreater }
     | Description_ReplacedTray (Id UserId)
     | Description_Passed (Id UserId)
     | Description_EndedGame (Id UserId)
@@ -1915,10 +1927,10 @@ updateGame time windowSize currentUserId setup shared msg oldModel =
             )
 
         MouseEnterWord cells ->
-            ( { model | highlightedWordCells = Set.fromList cells }, Nothing, Nothing )
+            ( { model | highlightedWordCells = Dict.fromList cells }, Nothing, Nothing )
 
         MouseExitWord ->
-            ( { model | highlightedWordCells = Set.empty }, Nothing, Nothing )
+            ( { model | highlightedWordCells = Dict.empty }, Nothing, Nothing )
 
         UserScrolledPastMoves position ->
             -- Track how far the Past moves list is scrolled so new moves only auto-scroll to the
@@ -3688,23 +3700,23 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
 
         -- The board cells placed by the player whose name was clicked in the status view, drawn with
         -- a highlight so their letters stand out. Empty when no player is selected.
-        highlightedCells : Set ( Int, Int )
+        highlightedCells : Dict ( Int, Int ) LetterOrWildcard
         highlightedCells =
             case model.highlightedPlayer of
                 Just userId ->
                     SeqDict.foldl
-                        (\cell owner acc ->
+                        (\(pos,data)  owner acc ->
                             if owner == userId then
-                                Set.insert cell acc
+                                Dict.insert pos data.letter acc
 
                             else
                                 acc
                         )
-                        Set.empty
+                        Dict.empty
                         (tileOwners setup actions)
 
                 Nothing ->
-                    Set.empty
+                    Dict.empty
 
         -- A gear in the top right corner that toggles between the game and its (read-only)
         -- settings, so players can check what was configured for the match.
@@ -3785,7 +3797,15 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             , Ui.contentTop
             , overlayAttr
             ]
-            ([ boardView currentTime windowSize maybeDragging localUser setup shared (Set.union highlightedCells model.highlightedWordCells) model
+            ([ boardView
+                currentTime
+                windowSize
+                maybeDragging
+                localUser
+                setup
+                shared
+                (Set.union highlightedCells model.highlightedWordCells)
+                model
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
                 ++ (case ( wideEnough, model.wordDefinition ) of
@@ -4303,6 +4323,22 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     ]
                                     rowContent
 
+                            Description_InvalidMove _ { word, placedCells } ->
+                                MyUi.rowButton
+                                    (Dom.id ("wsg_moveWord_" ++ String.fromInt moveNumber))
+                                    (PressedWordDefinition (definitionWords Set.empty word))
+                                    [ Ui.Font.color MyUi.font3
+                                    , Ui.spacing 8
+                                    , Ui.paddingXY 4 6
+                                    , Ui.rounded 4
+                                    , Ui.width Ui.shrink
+                                    , MyUi.htmlStyle "cursor" "pointer"
+                                    , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
+                                    , Ui.Events.onMouseEnter (MouseEnterInvalidWord placedCells)
+                                    , Ui.Events.onMouseLeave MouseExitWord
+                                    ]
+                                    rowContent
+
                             _ ->
                                 Ui.row
                                     [ Ui.Font.color MyUi.font3, Ui.spacing 8, Ui.paddingXY 4 6 ]
@@ -4636,7 +4672,7 @@ words too, which get attributed to the premover (a placement rejected by the bac
 invalid-move description instead, leaving the board unchanged, so it's skipped). Used to highlight
 one player's letters when their name is clicked (see `statusView`).
 -}
-tileOwners : ValidatedSetup -> Array ActionWithTime -> SeqDict ( Int, Int ) (Id UserId)
+tileOwners : ValidatedSetup -> Array ActionWithTime -> SeqDict ( Int, Int ) { userId : Id UserId, letter : LetterOrWildcard }
 tileOwners setup actions =
     Array.foldl
         (\action ( shared, owners ) ->
@@ -4650,7 +4686,7 @@ tileOwners setup actions =
                     case description of
                         Description_PlacedWord userId { placedCells } ->
                             List.foldl
-                                (\cell acc -> SeqDict.insert cell userId acc)
+                                (\cell acc -> SeqDict.insert cell { userId = userId , letter =  } acc)
                                 owners2
                                 placedCells
 

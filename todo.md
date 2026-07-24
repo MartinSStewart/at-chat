@@ -28,7 +28,8 @@
   which of the formed words were invalid needs the backend to report per-word validity instead of a
   single IsNotValid)
 * I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
-  was invalid so it's unclear if the letter switch is just a visual bug)
+  was invalid so it's unclear if the letter switch is just a visual bug).
+  Update: it seems like this might be caused by premoving, switching to another device and doing another turn, and then switching back, since the original device has it's own state that still has the tiles place on the board
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
 
 Requested features:
