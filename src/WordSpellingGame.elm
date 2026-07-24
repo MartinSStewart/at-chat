@@ -5883,7 +5883,7 @@ setupView windowSize isReadonly setup =
               --        ]
               --    )
               if isReadonly then
-                setupSection (Ui.text "Dictionary") (Ui.text (languageToString setup.language))
+                Go.setupSection (Ui.text "Dictionary") Nothing (Ui.text (languageToString setup.language))
 
               else
                 MyUi.radioColumn
@@ -5892,13 +5892,9 @@ setupView windowSize isReadonly setup =
                     (Just setup.language)
                     "Dictionary"
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
-            , setupSection
-                (Ui.row
-                    []
-                    [ Ui.text "Attempts per turn"
-                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (# of tries you get place a valid word)")
-                    ]
-                )
+            , Go.setupSection
+                (Ui.text "Attempts per turn")
+                (Just " (# of tries you get place a valid word)")
                 (Go.numberInput
                     { htmlId = "wsg_attemptsPerTurn"
                     , width = 60
@@ -5921,13 +5917,9 @@ setupView windowSize isReadonly setup =
             MyUi.background1
             isMobile
             "Advanced settings"
-            [ setupSection
-                (Ui.row
-                    []
-                    [ Ui.text "Bingo bonus"
-                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (points for using a full tray)")
-                    ]
-                )
+            [ Go.setupSection
+                (Ui.text "Bingo bonus")
+                (Just " (points for using a full tray)")
                 (Go.numberInput
                     { htmlId = "wsg_fullTrayBonusInput"
                     , width = 60
@@ -5938,13 +5930,9 @@ setupView windowSize isReadonly setup =
                     , onChange = ChangedFullTrayBonusInput
                     }
                 )
-            , setupSection
-                (Ui.row
-                    []
-                    [ Ui.text "Tray size"
-                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (how many letters you get)")
-                    ]
-                )
+            , Go.setupSection
+                (Ui.text "Tray size")
+                (Just " (how many letters you get)")
                 (Go.numberInput
                     { htmlId = "wsg_traySizeInput"
                     , width = 60
@@ -5955,21 +5943,18 @@ setupView windowSize isReadonly setup =
                     , onChange = ChangedTraySizeInput
                     }
                 )
-            , setupSection
-                (Ui.row
-                    []
-                    [ Ui.text "Letter distribution"
-                    , Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text " (spaces are wildcards)")
-                    ]
-                )
+            , Go.setupSection
+                (Ui.text "Letter distribution")
+                (Just " (spaces are wildcards)")
                 (lettersInput isReadonly setup.letters)
             , case distributionInputLetters setup.letters of
                 [] ->
                     Ui.none
 
                 distributionChars ->
-                    setupSection
+                    Go.setupSection
                         (Ui.text "Letter values")
+                        Nothing
                         (Ui.row
                             [ Ui.spacing 8, Ui.wrap, Ui.width Ui.shrink ]
                             (List.map
@@ -5994,15 +5979,6 @@ setupView windowSize isReadonly setup =
 
           else
             Go.startOrCancel "wsg" isMobile PressedCancel PressedStartGame
-        ]
-
-
-setupSection : Element SetupMsg -> Element SetupMsg -> Element SetupMsg
-setupSection title content =
-    Ui.column
-        [ Ui.spacing 2, MyUi.prewrap ]
-        [ Ui.el [ Ui.Font.weight 600 ] title
-        , content
         ]
 
 
