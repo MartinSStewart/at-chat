@@ -4311,6 +4311,41 @@ reactionPopup customEmojis allUsers animationMode emoji users =
 
         nameCount =
             List.Nonempty.length names
+
+        maybeEmojiName : Maybe String
+        maybeEmojiName =
+            case emoji of
+                EmojiOrCustomEmoji_Emoji _ ->
+                    Nothing
+
+                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                    SeqDict.get customEmojiId customEmojis
+                        |> Maybe.map (\emojiData -> ":" ++ CustomEmoji.emojiNameToString emojiData.name ++ ":")
+
+        namesParagraph : Element msg
+        namesParagraph =
+            Ui.Prose.paragraph
+                [ Ui.Font.size 14, Ui.width Ui.fill ]
+                (if nameCount > 10 then
+                    let
+                        visible =
+                            List.Nonempty.take 8 names
+                                |> List.Nonempty.toList
+                                |> List.intersperse (Ui.text ", ")
+                    in
+                    visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
+
+                 else
+                    case List.Nonempty.tail names of
+                        [] ->
+                            [ List.Nonempty.head names ]
+
+                        [ two ] ->
+                            [ List.Nonempty.head names, Ui.text " and ", two ]
+
+                        rest ->
+                            List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
+                )
     in
     Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
@@ -4336,28 +4371,16 @@ reactionPopup customEmojis allUsers animationMode emoji users =
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
-        , Ui.Prose.paragraph
-            [ Ui.Font.size 14, Ui.width Ui.fill ]
-            (if nameCount > 10 then
-                let
-                    visible =
-                        List.Nonempty.take 8 names
-                            |> List.Nonempty.toList
-                            |> List.intersperse (Ui.text ", ")
-                in
-                visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
+        , case maybeEmojiName of
+            Just emojiName ->
+                Ui.column
+                    [ Ui.spacing 2, Ui.width Ui.fill ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.width Ui.fill ] (Ui.text emojiName)
+                    , namesParagraph
+                    ]
 
-             else
-                case List.Nonempty.tail names of
-                    [] ->
-                        [ List.Nonempty.head names ]
-
-                    [ two ] ->
-                        [ List.Nonempty.head names, Ui.text " and ", two ]
-
-                    rest ->
-                        List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
-            )
+            Nothing ->
+                namesParagraph
         ]
 
 

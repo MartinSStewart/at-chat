@@ -22,9 +22,11 @@
 * Track frequent emojis in messages and sort :emoji: autocompletes based on frequency
 * Show a Discord icon above guild and users
 * Automatically set focus on search input when opening emoji picker
-* Show reaction emoji name when hovering over a message reaction
-* Hovering a word in WordSpellingGame should highlight it on the board
-* Show invalid word placed
+* Show reaction emoji name when hovering over a message reaction (done for custom emojis; standard
+  unicode emoji names still need model.emojiData threaded into the message render path)
+* Show invalid word placed (the attempted word is now shown in the Moves log; pinpointing exactly
+  which of the formed words were invalid needs the backend to report per-word validity instead of a
+  single IsNotValid)
 * I played a premove and it failed and when I looked at the board, the premoved letters had switched (the word itself
   was invalid so it's unclear if the letter switch is just a visual bug)
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
