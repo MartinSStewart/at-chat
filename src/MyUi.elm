@@ -66,7 +66,10 @@ module MyUi exposing
     , notoSans
     , outwardBottomCorner
     , prewrap
+    , radioCircle
     , radioColumn
+    , radioOption
+    , radioRow
     , radioRowWithSeparators
     , replyToColor
     , rowButton
@@ -547,6 +550,26 @@ radioColumn htmlId onPress maybeValue title options =
         ]
 
 
+radioRow : HtmlId -> (option -> msg) -> Maybe option -> String -> List ( option, String ) -> Element msg
+radioRow htmlId onPress maybeValue title options =
+    let
+        label2 =
+            Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] (Ui.text title)
+    in
+    Ui.column
+        [ Ui.spacing 8 ]
+        [ label2.element
+        , Ui.Input.chooseOne
+            Ui.row
+            [ Ui.spacing 24, Ui.wrap ]
+            { onChange = onPress
+            , options = List.map (\( value, text ) -> radioOption htmlId value text) options
+            , selected = maybeValue
+            , label = label2.id
+            }
+        ]
+
+
 radioOption : HtmlId -> value -> String -> Ui.Input.Option value msg
 radioOption htmlId value text =
     Ui.Input.optionWith
@@ -554,44 +577,59 @@ radioOption htmlId value text =
         (\option ->
             Ui.row
                 [ Ui.spacing 6, Ui.id (Dom.idToString htmlId ++ "_" ++ text) ]
-                [ Ui.el
-                    [ Ui.width (Ui.px 23)
-                    , Ui.height (Ui.px 23)
-                    , Ui.background (Ui.rgb 250 250 255)
-                    , Ui.rounded 99
-                    , Ui.border 2
-                    , Ui.borderColor
-                        (case option of
-                            Ui.Input.Selected ->
-                                background1
-
-                            Ui.Input.Idle ->
-                                background1
-
-                            Ui.Input.Focused ->
-                                white
-                        )
-                    ]
-                    (case option of
-                        Ui.Input.Selected ->
-                            Ui.el
-                                [ Ui.width (Ui.px 15)
-                                , Ui.height (Ui.px 15)
-                                , Ui.centerX
-                                , Ui.centerY
-                                , Ui.background background1
-                                , Ui.rounded 99
-                                ]
-                                Ui.none
-
-                        Ui.Input.Idle ->
-                            Ui.none
-
-                        Ui.Input.Focused ->
-                            Ui.none
-                    )
+                [ radioCircle option
                 , Ui.text text
                 ]
+        )
+
+
+radioCircle : Ui.Input.OptionState -> Element msg
+radioCircle option =
+    Ui.el
+        [ Ui.width (Ui.px 23)
+        , Ui.height (Ui.px 23)
+        , Ui.background (Ui.rgb 250 250 255)
+        , Ui.rounded 99
+        , Ui.border 2
+        , Ui.borderColor
+            (case option of
+                Ui.Input.Selected ->
+                    background1
+
+                Ui.Input.Idle ->
+                    background1
+
+                Ui.Input.Focused ->
+                    white
+            )
+        ]
+        (case option of
+            Ui.Input.Selected ->
+                Ui.el
+                    [ Ui.width (Ui.px 15)
+                    , Ui.height (Ui.px 15)
+                    , Ui.centerX
+                    , Ui.centerY
+                    , Ui.background background1
+                    , Ui.rounded 99
+                    , Ui.el
+                        [ Ui.width (Ui.px 3)
+                        , Ui.height (Ui.px 3)
+                        , Ui.background white
+                        , Ui.rounded 99
+                        , Ui.centerX
+                        , Ui.centerY
+                        ]
+                        Ui.none
+                        |> Ui.inFront
+                    ]
+                    Ui.none
+
+            Ui.Input.Idle ->
+                Ui.none
+
+            Ui.Input.Focused ->
+                Ui.none
         )
 
 

@@ -35,6 +35,7 @@ module Go exposing
     , numberInput
     , pressedKey
     , publicGoMatchUrl
+    , setupSection
     , setupView
     , spectatorView
     , startOrCancel
@@ -1417,12 +1418,19 @@ publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
 
+sizeRadioButtonId =
+    Dom.id "go_boardSize"
+
+
 setupView : Bool -> Coord CssPixels -> SetupModel -> Element SetupMsg
 setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobileAlt windowSize
+
+        boardSizeLabel =
+            Ui.Input.label (Dom.idToString sizeRadioButtonId) [ Ui.Font.weight 600 ] (Ui.text "Board size")
     in
     Ui.column
         [ Ui.spacing
@@ -1446,50 +1454,50 @@ setupView playingAgainstSelf windowSize model =
                 0
             , Ui.spacing 16
             ]
-            [ setupSection
-                "Board size"
-                (Ui.Input.chooseOne Ui.row
+            [ Ui.column
+                [ Ui.spacing 8 ]
+                [ boardSizeLabel.element
+                , Ui.Input.chooseOne
+                    Ui.row
                     [ Ui.spacing 24, Ui.wrap ]
                     { onChange = SelectedSize
                     , selected = Just model.sizeSelection
-                    , label = Ui.Input.labelHidden "go_boardSize"
+                    , label = boardSizeLabel.id
                     , options =
-                        [ Ui.Input.optionWith Standard9 (sizeOptionView (Ui.text "9 x 9"))
-                        , Ui.Input.optionWith Standard13 (sizeOptionView (Ui.text "13 x 13"))
-                        , Ui.Input.optionWith Standard19 (sizeOptionView (Ui.text "19 x 19"))
-                        , Ui.Input.optionWith CustomSize
-                            (sizeOptionView
-                                (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                    [ Ui.text "Custom"
-                                    , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
-                                    , Ui.text "x"
-                                    , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                        [ MyUi.radioOption sizeRadioButtonId Standard9 "9 x 9"
+                        , MyUi.radioOption sizeRadioButtonId Standard13 "13 x 13"
+                        , MyUi.radioOption sizeRadioButtonId Standard19 "19 x 19"
+                        , Ui.Input.optionWith
+                            CustomSize
+                            (\option ->
+                                Ui.row
+                                    [ Ui.spacing 6, Ui.id (Dom.idToString sizeRadioButtonId ++ "_Custom") ]
+                                    [ MyUi.radioCircle option
+                                    , Ui.row
+                                        [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                        [ Ui.text "Custom"
+                                        , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                                        , Ui.text "x"
+                                        , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                                        ]
                                     ]
-                                )
                             )
                         ]
                     }
-                )
+                ]
             , if playingAgainstSelf then
                 Ui.none
 
               else
-                setupSection
+                MyUi.radioRow
+                    (Dom.id "go_boardSize")
+                    SelectedPlayingAs
+                    (Just model.gameCreatorPlayingAs)
                     "Playing as"
-                    (Ui.Input.chooseOne
-                        Ui.row
-                        [ Ui.spacing 24 ]
-                        { onChange = SelectedPlayingAs
-                        , selected = Just model.gameCreatorPlayingAs
-                        , label = Ui.Input.labelHidden "go_boardSize"
-                        , options =
-                            [ Ui.Input.optionWith Black (sizeOptionView (Ui.text "Black"))
-                            , Ui.Input.optionWith White (sizeOptionView (Ui.text "White"))
-                            ]
-                        }
-                    )
+                    [ ( Black, "Black" ), ( White, "White" ) ]
             , setupSection
-                "Handicap (Black starts with this many stones; White moves first)"
+                (Ui.text "Handicap")
+                (Just " (Black starts with this many stones)")
                 (numberInput
                     { htmlId = "go_handicapInput"
                     , width = 60
@@ -1500,9 +1508,10 @@ setupView playingAgainstSelf windowSize model =
                     , onChange = ChangedHandicapInput
                     }
                 )
-            , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
+            , setupSection (Ui.text "Komi") (Just " (extra points for White)") (komiInput model.komiInput)
             , setupSection
-                "Time control (set main time to 0 to disable)"
+                (Ui.text "Time control")
+                (Just " (set main time to 0 to disable)")
                 (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
                     [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
                     , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
@@ -1583,49 +1592,20 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
             ]
 
 
-sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg
-sizeOptionView label status =
-    Ui.row
-        [ Ui.spacing 10, Ui.alignLeft, Ui.width Ui.shrink, Ui.contentCenterY ]
-        [ Ui.el
-            [ Ui.width (Ui.px 14)
-            , Ui.height (Ui.px 14)
-            , Ui.background MyUi.white
-            , Ui.rounded 7
-            , Ui.borderColor
-                (case status of
-                    Ui.Input.Selected ->
-                        Ui.rgb 59 153 252
-
-                    _ ->
-                        Ui.rgb 208 208 208
-                )
-            , Ui.border 1
-            ]
-            (case status of
-                Ui.Input.Selected ->
-                    Ui.el
-                        [ Ui.width (Ui.px 6)
-                        , Ui.height (Ui.px 6)
-                        , Ui.centerX
-                        , Ui.centerY
-                        , Ui.background (Ui.rgb 59 153 252)
-                        , Ui.rounded 3
-                        ]
-                        Ui.none
-
-                _ ->
-                    Ui.none
-            )
-        , label
-        ]
-
-
-setupSection : String -> Element SetupMsg -> Element SetupMsg
-setupSection title content =
+setupSection : Element msg -> Maybe String -> Element msg -> Element msg
+setupSection title subtitle content =
     Ui.column
-        [ Ui.spacing 8 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text title)
+        [ Ui.spacing 2, MyUi.prewrap ]
+        [ Ui.row
+            [ Ui.Font.weight 600 ]
+            [ title
+            , case subtitle of
+                Just subtitle2 ->
+                    Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text subtitle2)
+
+                Nothing ->
+                    Ui.none
+            ]
         , content
         ]
 
