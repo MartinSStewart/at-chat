@@ -32,7 +32,7 @@ that the Lamdera compiler generates, so the program moved to `lamdera make` and
 | `createDir`      | `Eco.File.createDir`                     |
 | `runProcess`     | `Eco.Process.spawn` + `Eco.Process.wait` |
 | `listDir`        | *(new)* reading the backups folder       |
-| `readFileBase64` | *(new)* reading a backup                 |
+| `readBackupFile` | *(new)* reading a backup                 |
 | `readFile`       | *(new)* reading a reference export       |
 | `writeFile`      | *(new)* writing a reference export       |
 | `stdout`/`stderr`| `Eco.Console.write`                      |
@@ -53,15 +53,33 @@ Because `Backup.elm` is compiled against the main project it lives in the root
      root@at-chat.app:/var/lib/atchat/backups/  ./at-chat-backups
    ```
 5. Decodes the newest `backend-export-*.bin` with
-   `WireHelper.decodeStreamedBackendModel`. Failing to decode is itself a
-   failure — it means the backup is corrupt, or that this program was built from
-   a different version of at-chat than the one that wrote it.
-6. Picks a few channels at random (three normal guild channels and three Discord
-   guild channels) and exports each one to JSON with `ChannelExport`, the same
-   code behind the "Export channel" button.
-7. Compares each export against that channel's reference export (see below).
-8. Prints a summary and exits `0` on success, or non-zero on failure — so the
+   `WireHelper.foldStreamedBackendModel`, picking a few channels at random as it
+   goes (three normal guild channels and three Discord guild channels) and
+   exporting each one to JSON with `ChannelExport`, the same code behind the
+   "Export channel" button. Failing to decode is itself a failure — it means the
+   backup is corrupt, or that this program was built from a different version of
+   at-chat than the one that wrote it.
+6. Compares each export against that channel's reference export (see below).
+7. Prints a summary and exits `0` on success, or non-zero on failure — so the
    systemd timer records whether the run worked.
+
+## Memory
+
+A backup expands to more than twenty times its file size once decoded, so
+decoding one into a `BackendModel` and picking through it afterwards runs out of
+memory on anything but a small backup: a 21 MB backup peaked at 3.0 GB, most of
+it spent turning base64 into `Bytes`.
+
+Two things keep that down. The file crosses the port as `Bytes` rather than
+base64, which Lamdera allows and which costs nothing beyond the file itself.
+And `foldStreamedBackendModel` throws away the DM channels and hands over one
+guild at a time, so the picked channels' exports are all that survive.
+
+That puts the peak in proportion to the largest single guild rather than to the
+whole backup — the same 21 MB backup now peaks at 285-475 MB depending on which
+channels get picked, and a 58 MB one spread over 20 guilds at around 485 MB. A
+single guild holding most of the history is still the worst case, since a guild
+has to be decoded in one piece.
 
 ## The integrity check
 

@@ -18,22 +18,24 @@ picked there's nothing to compare against, so its export becomes the reference.
 
 -}
 
-import Base64
+import Bytes exposing (Bytes)
 import Bytes.Decode
 import ChannelExport
 import ChannelName
 import Discord
+import DiscordUserData exposing (DiscordUserData)
 import ExportComparison
 import GuildName
-import Id exposing (ChannelId, GuildId, Id)
+import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import Json.Encode
-import LocalState exposing (BackendChannel, BackendGuild, DiscordBackendChannel, DiscordBackendGuild)
+import LocalState exposing (BackendGuild, DiscordBackendGuild)
+import NonemptyDict exposing (NonemptyDict)
 import Platform
 import Random
-import SeqDict
+import SeqDict exposing (SeqDict)
 import Time
-import Types exposing (BackendModel)
+import User exposing (BackendUser)
 import WireHelper
 
 
@@ -48,6 +50,14 @@ caused them. The program only ever has one request in flight, so replies are
 matched against whatever step the program is currently on.
 -}
 port fromJs : (Json.Decode.Value -> msg) -> Sub msg
+
+
+{-| Lamdera lets `Bytes` cross a port, which is how a backup gets into Elm
+without being copied or re-encoded on the way. Sending it as base64 instead
+turned a 21 MB backup into 2.3 GB of intermediate encoders, because
+`Base64.toBytes` allocates one per three bytes.
+-}
+port backupFileFromJs : (Bytes -> msg) -> Sub msg
 
 
 {-| How many channels of each kind (normal guilds and Discord guilds) to check
@@ -65,7 +75,8 @@ main =
     Platform.worker
         { init = init
         , update = update
-        , subscriptions = \_ -> fromJs GotResponse
+        , subscriptions =
+            \_ -> Sub.batch [ fromJs GotResponse, backupFileFromJs GotBackupFile ]
         }
 
 
@@ -129,6 +140,7 @@ type alias ChannelToCheck =
 
 type Msg
     = GotResponse Json.Decode.Value
+    | GotBackupFile Bytes
 
 
 init : Flags -> ( Model, Cmd Msg )
@@ -151,13 +163,34 @@ init flags =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update (GotResponse value) model =
-    case Json.Decode.decodeValue decodeResponse value of
-        Ok response ->
-            handleResponse response model
+update msg model =
+    case msg of
+        GotResponse value ->
+            case Json.Decode.decodeValue decodeResponse value of
+                Ok response ->
+                    handleResponse response model
 
-        Err error ->
-            fail model ("Could not understand the reply from run.js: " ++ Json.Decode.errorToString error)
+                Err error ->
+                    fail model ("Could not understand the reply from run.js: " ++ Json.Decode.errorToString error)
+
+        GotBackupFile bytes ->
+            case Bytes.Decode.decode (decodeBackup model.config) bytes of
+                Just channels ->
+                    startVerifying channels model
+
+                Nothing ->
+                    fail
+                        model
+                        ((case model.step of
+                            ReadingBackup fileName ->
+                                fileName
+
+                            _ ->
+                                "The backup"
+                         )
+                            ++ " could not be decoded. Either it is corrupt or it was written by a different"
+                            ++ " version of at-chat than the one this program was compiled from."
+                        )
 
 
 handleResponse : Response -> Model -> ( Model, Cmd Msg )
@@ -221,7 +254,7 @@ handleResponse response model =
                     , Cmd.batch
                         [ stdout ("Checking the integrity of " ++ fileName)
                         , request
-                            "readFileBase64"
+                            "readBackupFile"
                             [ ( "path", Json.Encode.string (model.config.dest ++ "/" ++ fileName) ) ]
                         ]
                     )
@@ -239,21 +272,9 @@ handleResponse response model =
         ( ListingBackups, DirListed (Err error) ) ->
             fail model ("Could not list " ++ model.config.dest ++ ": " ++ error)
 
-        ( ReadingBackup fileName, FileContents (Just base64) ) ->
-            case Maybe.andThen (Bytes.Decode.decode WireHelper.decodeStreamedBackendModel) (Base64.toBytes base64) of
-                Just backendModel ->
-                    startVerifying backendModel model
-
-                Nothing ->
-                    fail
-                        model
-                        (fileName
-                            ++ " could not be decoded. Either the backup is corrupt or it was written by a"
-                            ++ " different version of at-chat than the one this program was compiled from."
-                        )
-
-        ( ReadingBackup fileName, FileContents Nothing ) ->
-            fail model ("Could not read " ++ fileName)
+        -- Only sent when the read failed. A successful read arrives on the bytes port.
+        ( ReadingBackup fileName, BackupFileFailed error ) ->
+            fail model ("Could not read " ++ fileName ++ ": " ++ error)
 
         ( Verifying verify, FileContents contents ) ->
             case verify.awaiting of
@@ -320,22 +341,8 @@ sshCommand config =
         ++ " -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30"
 
 
-{-| Backups are named `backend-export-<year>-<month>-<day>-<hour>:<minute>:<second>.bin`,
-so the newest one is also the last one alphabetically.
--}
-latestBackup : List String -> Maybe String
-latestBackup files =
-    List.filter (\file -> String.startsWith "backend-export-" file && String.endsWith ".bin" file) files
-        |> List.maximum
-
-
-startVerifying : BackendModel -> Model -> ( Model, Cmd Msg )
-startVerifying backendModel model =
-    let
-        channels : List ChannelToCheck
-        channels =
-            channelsToCheck model.config backendModel
-    in
+startVerifying : List ChannelToCheck -> Model -> ( Model, Cmd Msg )
+startVerifying channels model =
     nextChannel
         model
         { -- Replaced straight away by nextChannel. There's nothing in flight yet.
@@ -452,98 +459,162 @@ unexpected model response =
 
 
 
+-- READING THE BACKUP
+
+
+{-| Backups are named `backend-export-<year>-<month>-<day>-<hour>:<minute>:<second>.bin`,
+so the newest one is also the last one alphabetically.
+-}
+latestBackup : List String -> Maybe String
+latestBackup files =
+    List.filter (\file -> String.startsWith "backend-export-" file && String.endsWith ".bin" file) files
+        |> List.maximum
+
+
+
 -- PICKING CHANNELS
 
 
-{-| Everything needed to produce one channel export, kept unevaluated until the
-channel is actually picked so that a run only exports a handful of channels
-instead of the entire history.
+{-| Picking the channels while the backup is being decoded, rather than decoding
+it into a `BackendModel` and picking afterwards, is what keeps this program's
+memory use in proportion to the biggest guild instead of to the whole backup.
 -}
-type Candidate
-    = GuildChannel (Id GuildId) BackendGuild (Id ChannelId) BackendChannel
-    | DiscordGuildChannel (Discord.Id Discord.GuildId) DiscordBackendGuild (Discord.Id Discord.ChannelId) DiscordBackendChannel
+type alias Sampling =
+    { users : NonemptyDict (Id UserId) BackendUser
+    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    , guilds : Sampler
+    , discordGuilds : Sampler
+    }
 
 
-channelsToCheck : Config -> BackendModel -> List ChannelToCheck
-channelsToCheck config backendModel =
+type alias Sampler =
+    { seed : Random.Seed
+    , seen : Int
+    , picked : List ChannelToCheck
+    }
+
+
+decodeBackup : Config -> Bytes.Decode.Decoder (List ChannelToCheck)
+decodeBackup config =
     let
-        guildCandidates : List Candidate
-        guildCandidates =
-            SeqDict.toList backendModel.guilds
-                |> List.concatMap
-                    (\( guildId, guild ) ->
-                        SeqDict.toList guild.channels
-                            |> List.map (\( channelId, channel ) -> GuildChannel guildId guild channelId channel)
-                    )
-
-        discordCandidates : List Candidate
-        discordCandidates =
-            SeqDict.toList backendModel.discordGuilds
-                |> List.concatMap
-                    (\( guildId, guild ) ->
-                        SeqDict.toList guild.channels
-                            |> List.map (\( channelId, channel ) -> DiscordGuildChannel guildId guild channelId channel)
-                    )
-
-        ( guilds, seed ) =
-            pickRandom channelsPerRun guildCandidates config.seed
-
-        ( discordGuilds, _ ) =
-            pickRandom channelsPerRun discordCandidates seed
+        ( guildSeed, discordSeed ) =
+            Random.step Random.independentSeed config.seed
     in
-    List.map (candidateToCheck config backendModel) (guilds ++ discordGuilds)
+    WireHelper.foldStreamedBackendModel
+        { init =
+            \backendModel ->
+                { users = backendModel.users
+                , discordUsers = backendModel.discordUsers
+                , guilds = { seed = guildSeed, seen = 0, picked = [] }
+                , discordGuilds = { seed = discordSeed, seen = 0, picked = [] }
+                }
+        , guild = foldGuild config
+        , discordGuild = foldDiscordGuild config
+        }
+        |> Bytes.Decode.map
+            (\sampling -> List.reverse sampling.guilds.picked ++ List.reverse sampling.discordGuilds.picked)
 
 
-candidateToCheck : Config -> BackendModel -> Candidate -> ChannelToCheck
-candidateToCheck config backendModel candidate =
-    case candidate of
-        GuildChannel guildId guild channelId channel ->
-            { name =
-                "guild \""
-                    ++ GuildName.toString guild.name
-                    ++ "\" channel \""
-                    ++ ChannelName.toString channel.name
-                    ++ "\""
-            , referencePath =
-                config.referenceDir
-                    ++ "/guild-"
-                    ++ Id.toString guildId
-                    ++ "-channel-"
-                    ++ Id.toString channelId
-                    ++ ".json"
-            , json = ChannelExport.guildChannel backendModel.users guild channel
-            }
-
-        DiscordGuildChannel guildId guild channelId channel ->
-            { name =
-                "Discord guild \""
-                    ++ GuildName.toString guild.name
-                    ++ "\" channel \""
-                    ++ ChannelName.toString channel.name
-                    ++ "\""
-            , referencePath =
-                config.referenceDir
-                    ++ "/discord-guild-"
-                    ++ Discord.idToString guildId
-                    ++ "-channel-"
-                    ++ Discord.idToString channelId
-                    ++ ".json"
-            , json = ChannelExport.discordGuildChannel backendModel.discordUsers guildId guild channel
-            }
+foldGuild : Config -> ( Id GuildId, BackendGuild ) -> Sampling -> Sampling
+foldGuild config ( guildId, guild ) sampling =
+    { sampling
+        | guilds =
+            SeqDict.foldl
+                (\channelId channel sampler ->
+                    sample
+                        (\() ->
+                            { name =
+                                "guild \""
+                                    ++ GuildName.toString guild.name
+                                    ++ "\" channel \""
+                                    ++ ChannelName.toString channel.name
+                                    ++ "\""
+                            , referencePath =
+                                config.referenceDir
+                                    ++ "/guild-"
+                                    ++ Id.toString guildId
+                                    ++ "-channel-"
+                                    ++ Id.toString channelId
+                                    ++ ".json"
+                            , json = ChannelExport.guildChannel sampling.users guild channel
+                            }
+                        )
+                        sampler
+                )
+                sampling.guilds
+                guild.channels
+    }
 
 
-pickRandom : Int -> List a -> Random.Seed -> ( List a, Random.Seed )
-pickRandom count list seed =
+foldDiscordGuild : Config -> ( Discord.Id Discord.GuildId, DiscordBackendGuild ) -> Sampling -> Sampling
+foldDiscordGuild config ( guildId, guild ) sampling =
+    { sampling
+        | discordGuilds =
+            SeqDict.foldl
+                (\channelId channel sampler ->
+                    sample
+                        (\() ->
+                            { name =
+                                "Discord guild \""
+                                    ++ GuildName.toString guild.name
+                                    ++ "\" channel \""
+                                    ++ ChannelName.toString channel.name
+                                    ++ "\""
+                            , referencePath =
+                                config.referenceDir
+                                    ++ "/discord-guild-"
+                                    ++ Discord.idToString guildId
+                                    ++ "-channel-"
+                                    ++ Discord.idToString channelId
+                                    ++ ".json"
+                            , json = ChannelExport.discordGuildChannel sampling.discordUsers guildId guild channel
+                            }
+                        )
+                        sampler
+                )
+                sampling.discordGuilds
+                guild.channels
+    }
+
+
+{-| Reservoir sampling. Every channel in the backup gets the same chance of being
+picked without knowing up front how many there are, and no more than
+`channelsPerRun` of them are ever held. The export is only generated for a channel
+that is actually kept, since generating one renders every message in the channel.
+-}
+sample : (() -> ChannelToCheck) -> Sampler -> Sampler
+sample toChannel sampler =
     let
-        ( weights, seed2 ) =
-            Random.step (Random.list (List.length list) (Random.float 0 1)) seed
+        seen : Int
+        seen =
+            sampler.seen + 1
     in
-    ( List.map2 Tuple.pair list weights
-        |> List.sortBy Tuple.second
-        |> List.take count
-        |> List.map Tuple.first
-    , seed2
-    )
+    if List.length sampler.picked < channelsPerRun then
+        { sampler | seen = seen, picked = toChannel () :: sampler.picked }
+
+    else
+        let
+            ( index, seed ) =
+                Random.step (Random.int 0 (seen - 1)) sampler.seed
+        in
+        { sampler
+            | seen = seen
+            , seed = seed
+            , picked =
+                if index < channelsPerRun then
+                    List.indexedMap
+                        (\pickedIndex picked ->
+                            if pickedIndex == index then
+                                toChannel ()
+
+                            else
+                                picked
+                        )
+                        sampler.picked
+
+                else
+                    sampler.picked
+        }
 
 
 
@@ -578,6 +649,7 @@ type Response
     | DirListed (Result String (List String))
     | FileContents (Maybe String)
     | FileWritten (Maybe String)
+    | BackupFileFailed String
 
 
 responseName : Response -> String
@@ -603,6 +675,9 @@ responseName response =
 
         FileWritten _ ->
             "writeFile"
+
+        BackupFileFailed _ ->
+            "readBackupFile"
 
 
 decodeResponse : Json.Decode.Decoder Response
@@ -646,11 +721,13 @@ decodeResponse =
                     "readFile" ->
                         Json.Decode.map FileContents decodeContents
 
-                    "readFileBase64" ->
-                        Json.Decode.map FileContents decodeContents
-
                     "writeFile" ->
                         Json.Decode.map FileWritten decodeMaybeError
+
+                    "readBackupFile" ->
+                        Json.Decode.map
+                            (\maybeError -> BackupFileFailed (Maybe.withDefault "unknown error" maybeError))
+                            decodeMaybeError
 
                     _ ->
                         Json.Decode.fail ("Unknown tag " ++ tag)

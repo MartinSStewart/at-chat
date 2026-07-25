@@ -127,14 +127,25 @@ const handlers = {
         }
     },
 
-    // Bytes can't cross a port, so a backup is handed to Elm as base64 and turned
-    // back into Bytes there.
-    readFileBase64(request) {
-        reply({ tag: 'readFileBase64', contents: readFile(request.path, 'base64') });
-    },
-
     readFile(request) {
         reply({ tag: 'readFile', contents: readFile(request.path, 'utf8') });
+    },
+
+    // Lamdera lets Bytes cross a port as a DataView, so a backup goes into Elm
+    // without being copied or re-encoded. Handing it over as base64 instead
+    // turned a 21 MB backup into 2.3 GB of intermediate encoders on the Elm side.
+    // A successful read answers on the bytes port and a failed one on the normal
+    // port, so exactly one of the two arrives.
+    readBackupFile(request) {
+        let buffer;
+        try {
+            buffer = fs.readFileSync(request.path);
+        }
+        catch (error) {
+            reply({ tag: 'readBackupFile', error: errorMessage(error) });
+            return;
+        }
+        setTimeout(() => app.ports.backupFileFromJs.send(new DataView(toArrayBuffer(buffer))), 0);
     },
 
     writeFile(request) {
@@ -148,6 +159,13 @@ const handlers = {
         }
     }
 };
+
+/** Small reads share a pooled buffer, so those have to be copied out of it. */
+function toArrayBuffer(buffer) {
+    return buffer.byteOffset === 0 && buffer.byteLength === buffer.buffer.byteLength
+        ? buffer.buffer
+        : buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+}
 
 /** `null` means the file isn't there, which Elm treats as "no reference export yet". */
 function readFile(filePath, encoding) {
