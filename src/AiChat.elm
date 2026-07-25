@@ -1116,15 +1116,20 @@ responseView windowWidth responseCount responseId response =
             |> Ui.width
         , [ case response of
                 GotResponse _ _ _ ->
-                    responseButton (PressedKeep responseId) MyUi.background2 Icons.checkmark "Keep"
+                    responseButton (PressedKeep responseId) MyUi.background2 [] Icons.checkmark "Keep"
 
                 Pending _ ->
                     Ui.none
 
                 GotError _ _ ->
                     Ui.none
-          , responseButton (PressedRetry responseId) MyUi.background3 refreshIcon "Retry"
-          , responseButton (PressedDelete responseId) MyUi.deleteButtonBackground deleteIcon "Delete"
+          , responseButton (PressedRetry responseId) MyUi.background3 [] refreshIcon "Retry"
+          , responseButton
+                (PressedDelete responseId)
+                MyUi.deleteButtonBackground
+                [ Ui.border 1, Ui.borderColor MyUi.deleteButtonBorder ]
+                deleteIcon
+                "Delete"
           ]
             |> Ui.row
                 [ Ui.alignRight
@@ -1231,16 +1236,20 @@ responseView windowWidth responseCount responseId response =
         )
 
 
-responseButton : msg -> Ui.Color -> Html msg -> String -> Element msg
-responseButton msg color icon text =
+{-| The buttons sit flush against each other inside one bordered row, so only the
+delete one carries a border of its own.
+-}
+responseButton : msg -> Ui.Color -> List (Ui.Attribute msg) -> Html msg -> String -> Element msg
+responseButton msg color attributes icon text =
     Ui.row
-        [ Ui.background color
-        , Ui.paddingXY 16 4
-        , Ui.Font.bold
-        , Ui.Input.button msg
-        , Ui.width Ui.shrink
-        , Ui.spacing 4
-        ]
+        (Ui.background color
+            :: Ui.paddingXY 16 4
+            :: Ui.Font.bold
+            :: Ui.Input.button msg
+            :: Ui.width Ui.shrink
+            :: Ui.spacing 4
+            :: attributes
+        )
         [ Ui.el [ Ui.width (Ui.px 20), Ui.centerY ] (Ui.html icon), Ui.text text ]
 
 

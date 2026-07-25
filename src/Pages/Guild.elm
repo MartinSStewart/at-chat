@@ -1620,7 +1620,13 @@ deleteGuildSection guildId guild form =
             , Ui.rounded 8
             , Ui.Font.color MyUi.deleteButtonFont
             , Ui.Font.bold
-            , Ui.borderColor MyUi.buttonBorder
+            , Ui.borderColor
+                (if deleteEnabled then
+                    MyUi.deleteButtonBorder
+
+                 else
+                    MyUi.disabledButtonBorder
+                )
             , Ui.border 1
             ]
             (Ui.text "Delete guild")
@@ -8459,7 +8465,13 @@ editChannelFormView isMobile2 guildId channelId channel form =
                 , Ui.rounded 8
                 , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.Font.bold
-                , Ui.borderColor MyUi.buttonBorder
+                , Ui.borderColor
+                    (if deleteEnabled then
+                        MyUi.deleteButtonBorder
+
+                     else
+                        MyUi.disabledButtonBorder
+                    )
                 , Ui.border 1
                 ]
                 (Ui.text "Delete channel")
@@ -8721,6 +8733,8 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.background MyUi.deleteButtonBackground
+                            , Ui.border 1
+                            , Ui.borderColor MyUi.deleteButtonBorder
                             ]
                             (Ui.html Icons.delete)
                         )

@@ -886,6 +886,8 @@ deleteButton htmlId onPress =
         , hoverText "Delete"
         , Ui.padding 3
         , Ui.background deleteButtonBackground
+        , Ui.border 1
+        , Ui.borderColor deleteButtonBorder
         , Ui.Font.color deleteButtonFont
         , Ui.rounded 4
         , Ui.width Ui.shrink

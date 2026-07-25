@@ -700,6 +700,8 @@ discordUserCard loaded discordUserId data =
                 (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
                 (PressedUnlinkDiscordUser discordUserId)
                 [ Ui.background MyUi.deleteButtonBackground
+                , Ui.border 1
+                , Ui.borderColor MyUi.deleteButtonBorder
                 , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.width Ui.shrink
                 , Ui.paddingXY 12 0
