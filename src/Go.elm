@@ -1418,6 +1418,7 @@ publicGoMatchUrl publicLink =
     Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
 
+sizeRadioButtonId : Dom.HtmlId
 sizeRadioButtonId =
     Dom.id "go_boardSize"
 

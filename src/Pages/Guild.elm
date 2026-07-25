@@ -4459,8 +4459,8 @@ reactionPopup customEmojis allUsers animationMode emoji users =
         , case maybeEmojiName of
             Just emojiName ->
                 Ui.column
-                    [ Ui.spacing 2, Ui.width Ui.fill ]
-                    [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.Font.color MyUi.font1, Ui.width Ui.fill ] (Ui.text emojiName)
+                    [ Ui.spacing 2 ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text emojiName)
                     , namesParagraph
                     ]
 

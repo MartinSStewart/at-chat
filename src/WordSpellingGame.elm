@@ -1024,7 +1024,7 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                     , [ Description_InvalidMove
                             player.userId
                             { word = headlineWord result.words
-                            , placedCells = List.map Tuple.first result.placedCells
+                            , placedCells = result.placedCells
                             , attemptsLeft = Just attemptsLeft
                             }
                       ]
@@ -1039,7 +1039,7 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                         (Description_InvalidMove
                             player.userId
                             { word = headlineWord result.words
-                            , placedCells = List.map Tuple.first result.placedCells
+                            , placedCells = result.placedCells
                             , attemptsLeft = Nothing
                             }
                         )
@@ -1047,12 +1047,12 @@ handlePlaceWord time setup placedWord isPremove ( board, result ) isValid player
                         setup
                         { shared2
                             | passingStartedAt =
-                                case shared.passingStartedAt of
+                                case shared2.passingStartedAt of
                                     Nothing ->
-                                        Just shared.turnCount
+                                        Just shared2.turnCount
 
                                     Just _ ->
-                                        shared.passingStartedAt
+                                        shared2.passingStartedAt
                         }
 
         FilledInByBackend (IsValid wildcardMatches) ->
@@ -1076,7 +1076,7 @@ placedWordDescription setup player placedWord result isPremove wildcardMatches =
         { word = headlineWord result.words
         , points = result.score + bonus
         , isBingo = bonus /= 0
-        , placedCells =  result.placedCells
+        , placedCells = result.placedCells
         , isPremove = isPremove
         , wildcardMatches = wildcardMatches
         }
@@ -1088,7 +1088,7 @@ the next player's premove (or fail to), which gets its own entry attributed to t
 -}
 type Description
     = Description_PlacedWord (Id UserId) { word : String, points : Int, isBingo : Bool, placedCells : List ( ( Int, Int ), LetterOrWildcard ), isPremove : Bool, wildcardMatches : Set String }
-    | Description_InvalidMove (Id UserId) { word : String, placedCells : List ( Int, Int ), attemptsLeft : Maybe OneOrGreater }
+    | Description_InvalidMove (Id UserId) { word : String, placedCells : List ( ( Int, Int ), LetterOrWildcard ), attemptsLeft : Maybe OneOrGreater }
     | Description_ReplacedTray (Id UserId)
     | Description_Passed (Id UserId)
     | Description_EndedGame (Id UserId)
@@ -3705,8 +3705,8 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
             case model.highlightedPlayer of
                 Just userId ->
                     SeqDict.foldl
-                        (\(pos,data)  owner acc ->
-                            if owner == userId then
+                        (\pos data acc ->
+                            if data.userId == userId then
                                 Dict.insert pos data.letter acc
 
                             else
@@ -3804,7 +3804,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
                 localUser
                 setup
                 shared
-                (Set.union highlightedCells model.highlightedWordCells)
+                (Dict.union highlightedCells model.highlightedWordCells)
                 model
              , statusView windowSize isPersonalDm localUser setup actions shared model
              ]
@@ -4145,9 +4145,9 @@ descriptionToString description =
         Description_InvalidMove _ { word, attemptsLeft } ->
             case attemptsLeft of
                 Just attemptsLeft2 ->
-                    " tried to play the invalid word "
+                    " tried placing "
                         ++ word
-                        ++ " ("
+                        ++ " but failed ("
                         ++ (case OneOrGreater.toString attemptsLeft2 of
                                 "1" ->
                                     "1 attempt left)"
@@ -4157,7 +4157,7 @@ descriptionToString description =
                            )
 
                 Nothing ->
-                    " tried to play the invalid word " ++ word ++ " (turn ended)"
+                    " tried placing " ++ word ++ " but failed (turn ended)"
 
         Description_ReplacedTray _ ->
             " swapped their tiles"
@@ -4334,7 +4334,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                     , Ui.width Ui.shrink
                                     , MyUi.htmlStyle "cursor" "pointer"
                                     , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
-                                    , Ui.Events.onMouseEnter (MouseEnterInvalidWord placedCells)
+                                    , Ui.Events.onMouseEnter (MouseEnterWord placedCells)
                                     , Ui.Events.onMouseLeave MouseExitWord
                                     ]
                                     rowContent
@@ -4686,7 +4686,9 @@ tileOwners setup actions =
                     case description of
                         Description_PlacedWord userId { placedCells } ->
                             List.foldl
-                                (\cell acc -> SeqDict.insert cell { userId = userId , letter =  } acc)
+                                (\( position, letter ) acc ->
+                                    SeqDict.insert position { userId = userId, letter = letter } acc
+                                )
                                 owners2
                                 placedCells
 
@@ -4788,7 +4790,7 @@ boardView :
     -> LocalUser
     -> ValidatedSetup
     -> Shared
-    -> Set ( Int, Int )
+    -> Dict ( Int, Int ) LetterOrWildcard
     -> GameData
     -> Element GameMsg
 boardView currentTime windowSize maybeDragging localUser setup shared highlightedCells model =
@@ -4833,28 +4835,32 @@ boardView currentTime windowSize maybeDragging localUser setup shared highlighte
 
         boardTiles : List (Ui.Attribute GameMsg)
         boardTiles =
-            SeqDict.foldl
-                (\( x, y ) letter list ->
-                    if Set.member ( x, y ) animatingCellSet then
-                        -- This tile is being animated into place, so the animation layer draws it.
-                        list
-
-                    else
-                        let
-                            p : { pos : Coord CssPixels, size : Int }
-                            p =
-                                project boardTranslate zoomedCellSize x y
-                        in
-                        boardTileInFront
-                            setup
-                            (Set.member ( x, y ) highlightedCells)
-                            p.size
-                            p.pos
-                            letter
-                            :: list
+            List.map
+                (\( ( x, y ), letter ) ->
+                    let
+                        p : { pos : Coord CssPixels, size : Int }
+                        p =
+                            project boardTranslate zoomedCellSize x y
+                    in
+                    boardTileInFront setup True p.size p.pos letter
                 )
-                []
-                shared.board
+                (Dict.toList highlightedCells)
+                ++ SeqDict.foldl
+                    (\( x, y ) letter list ->
+                        if Set.member ( x, y ) animatingCellSet then
+                            -- This tile is being animated into place, so the animation layer draws it.
+                            list
+
+                        else
+                            let
+                                p : { pos : Coord CssPixels, size : Int }
+                                p =
+                                    project boardTranslate zoomedCellSize x y
+                            in
+                            boardTileInFront setup False p.size p.pos letter :: list
+                    )
+                    []
+                    shared.board
 
         currentUserId =
             localUser.session.userId
