@@ -34,10 +34,7 @@ const app = Elm.Backup.init({
         // everything this program produces.
         referenceDir: path.join(dest, 'reference-exports'),
         sshKey: process.env.AT_CHAT_SSH_KEY || null,
-        time: Date.now(),
-        // A fresh seed each run means a different random subset of channels gets
-        // checked, so coverage builds up over time.
-        seed: (Math.random() * 0x7fffffff) | 0
+        time: Date.now()
     }
 });
 

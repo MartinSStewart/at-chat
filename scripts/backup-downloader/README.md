@@ -53,9 +53,9 @@ Because `Backup.elm` is compiled against the main project it lives in the root
      root@at-chat.app:/var/lib/atchat/backups/  ./at-chat-backups
    ```
 5. Decodes the newest `backend-export-*.bin` with
-   `WireHelper.foldStreamedBackendModel`, picking a few channels at random as it
-   goes (three normal guild channels and three Discord guild channels) and
-   exporting each one to JSON with `ChannelExport`, the same code behind the
+   `WireHelper.foldStreamedBackendModel`, and as it goes takes the first five
+   normal guilds and the first five Discord guilds and exports the busiest
+   channel of each to JSON with `ChannelExport`, the same code behind the
    "Export channel" button. Failing to decode is itself a failure — it means the
    backup is corrupt, or that this program was built from a different version of
    at-chat than the one that wrote it.
@@ -76,36 +76,45 @@ And `foldStreamedBackendModel` throws away the DM channels and hands over one
 guild at a time, so the picked channels' exports are all that survive.
 
 That puts the peak in proportion to the largest single guild rather than to the
-whole backup — the same 21 MB backup now peaks at 285-475 MB depending on which
-channels get picked, and a 58 MB one spread over 20 guilds at around 485 MB. A
-single guild holding most of the history is still the worst case, since a guild
-has to be decoded in one piece.
+whole backup — a 21 MB backup peaks at around 280 MB and a 58 MB one spread over
+20 guilds at around 500 MB. A single guild holding most of the history is still
+the worst case, since a guild has to be decoded in one piece.
+
+## Which channels get checked
+
+The first five guilds of each kind, in the order they appear in the backup, and
+within each of those the channel with the most messages. Nothing is random, so a
+run checks the same channels the last run did and a reference export stays
+comparable from one day to the next. Ties on message count go to whichever
+channel comes first, so the choice only moves when the guild's traffic does.
 
 ## The integrity check
 
 The first time a channel is picked there's nothing to compare against, so its
 export is written to `<dest>/reference-exports/` and becomes the reference. On
-later runs the fresh export is compared against that file.
+later runs the fresh export is compared against that file. Two things fail a run:
 
-Only messages **older than a week** are checked. Recent messages are still being
-edited, reacted to and replied to, so they're expected to differ between two
-backups; a message from a month ago changing means the backup lost or corrupted
-data. Thread messages are dated individually rather than inheriting their
-parent's age, so a new reply to an old message doesn't look like the old message
-changed.
+**Messages older than a week changed.** Recent messages are still being edited,
+reacted to and replied to, so they're expected to differ between two backups; a
+message from a month ago changing means the backup lost or corrupted data. Thread
+messages are dated individually rather than inheriting their parent's age, so a
+new reply to an old message doesn't look like the old message changed.
+
+**A channel with a reference export is no longer in the backup.** Every channel
+in the backup is noted while it's decoded, including ones in guilds past the
+first five, so a leftover reference export means that channel is genuinely gone.
+That's either a deleted channel or a backup that lost one, and the program can't
+tell which — so it reports and lets you decide.
 
 When a channel passes, its reference is rewritten from the fresh export. Old
 messages are identical either way, and it means messages that have since aged
-past a week get covered from then on. When a channel fails, its reference is
-left alone so the next run compares against the same known-good copy.
+past a week get covered from then on. When a channel fails, its reference is left
+alone so the next run compares against the same known-good copy.
 
-Because each run picks a random subset, coverage builds up over time instead of
-re-exporting the entire history every day.
-
-One thing to be aware of: the check can't tell data loss apart from someone
-legitimately editing or deleting a message that's more than a week old. That's
-rare, and a false alarm is cheap — delete that channel's file from
-`reference-exports/` and the next run will write a new one.
+Both kinds of failure can also be raised by something you did on purpose:
+editing or deleting a week-old message, or deleting a channel or guild. A false
+alarm is cheap to clear — delete the channel's file from `reference-exports/`,
+and the next run either writes a fresh reference or stops mentioning it.
 
 ## Configuration
 

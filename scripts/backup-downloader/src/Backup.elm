@@ -11,10 +11,11 @@ the Lamdera compiler) to read a backup. So the program is now compiled by
 `lamdera make` and run by `run.js`, which provides the same capabilities over
 ports.
 
-The check works by exporting a random handful of channels with the same
-`ChannelExport` code the "Export channel" button uses, and comparing each export
-against a reference stored alongside the backups. The first time a channel is
-picked there's nothing to compare against, so its export becomes the reference.
+The check works by exporting the busiest channel of each of the first few guilds
+with the same `ChannelExport` code the "Export channel" button uses, and comparing
+each export against a reference stored alongside the backups. The first time a
+channel is picked there's nothing to compare against, so its export becomes the
+reference.
 
 -}
 
@@ -26,14 +27,15 @@ import Discord
 import DiscordUserData exposing (DiscordUserData)
 import ExportComparison
 import GuildName
-import Id exposing (GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
+import IdArray exposing (IdArray)
 import Json.Decode
 import Json.Encode
 import LocalState exposing (BackendGuild, DiscordBackendGuild)
 import NonemptyDict exposing (NonemptyDict)
 import Platform
-import Random
 import SeqDict exposing (SeqDict)
+import Set exposing (Set)
 import Time
 import User exposing (BackendUser)
 import WireHelper
@@ -60,14 +62,13 @@ turned a 21 MB backup into 2.3 GB of intermediate encoders, because
 port backupFileFromJs : (Bytes -> msg) -> Sub msg
 
 
-{-| How many channels of each kind (normal guilds and Discord guilds) to check
-per run. Checking every channel would mean decoding and re-encoding the entire
-history on every run, so instead each run picks a few at random and coverage
-builds up over time.
+{-| How many guilds of each kind (normal and Discord) to check per run, taken
+from the front of the backup. Checking every channel would mean rendering the
+entire history on every run.
 -}
-channelsPerRun : Int
-channelsPerRun =
-    3
+guildsPerRun : Int
+guildsPerRun =
+    5
 
 
 main : Program Flags Model Msg
@@ -86,7 +87,6 @@ type alias Flags =
     , referenceDir : String
     , sshKey : Maybe String
     , time : Int
-    , seed : Int
     }
 
 
@@ -96,7 +96,6 @@ type alias Config =
     , referenceDir : String
     , sshKey : Maybe String
     , cutoff : Time.Posix
-    , seed : Random.Seed
     }
 
 
@@ -113,6 +112,7 @@ type Step
     | Syncing
     | ListingBackups
     | ReadingBackup String
+    | ListingReferences Backup
     | Verifying Verify
     | Exiting
 
@@ -126,16 +126,19 @@ type alias Verify =
     }
 
 
+{-| A reference export's file name doubles as the identity of the channel it
+belongs to, which is what lets a run notice that a channel has gone missing.
+-}
+type alias ChannelToCheck =
+    { name : String
+    , referenceName : String
+    , json : String
+    }
+
+
 type Awaiting
     = AwaitingReference ChannelToCheck
     | AwaitingWrite
-
-
-type alias ChannelToCheck =
-    { name : String
-    , referencePath : String
-    , json : String
-    }
 
 
 type Msg
@@ -151,7 +154,6 @@ init flags =
             , referenceDir = flags.referenceDir
             , sshKey = flags.sshKey
             , cutoff = Time.millisToPosix (flags.time - ExportComparison.oneWeek)
-            , seed = Random.initialSeed flags.seed
             }
       , step = CheckingRsync
       }
@@ -174,9 +176,11 @@ update msg model =
                     fail model ("Could not understand the reply from run.js: " ++ Json.Decode.errorToString error)
 
         GotBackupFile bytes ->
-            case Bytes.Decode.decode (decodeBackup model.config) bytes of
-                Just channels ->
-                    startVerifying channels model
+            case Bytes.Decode.decode decodeBackup bytes of
+                Just backup ->
+                    ( { model | step = ListingReferences backup }
+                    , request "listDir" [ ( "path", Json.Encode.string model.config.referenceDir ) ]
+                    )
 
                 Nothing ->
                     fail
@@ -276,6 +280,11 @@ handleResponse response model =
         ( ReadingBackup fileName, BackupFileFailed error ) ->
             fail model ("Could not read " ++ fileName ++ ": " ++ error)
 
+        ( ListingReferences backup, DirListed referenceFiles ) ->
+            -- A missing reference folder is just a first run, so an error listing
+            -- it is treated as "no references yet" rather than a failure.
+            startVerifying backup (Result.withDefault [] referenceFiles) model
+
         ( Verifying verify, FileContents contents ) ->
             case verify.awaiting of
                 AwaitingReference channel ->
@@ -341,28 +350,44 @@ sshCommand config =
         ++ " -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30"
 
 
-startVerifying : List ChannelToCheck -> Model -> ( Model, Cmd Msg )
-startVerifying channels model =
+startVerifying : Backup -> List String -> Model -> ( Model, Cmd Msg )
+startVerifying backup referenceFiles model =
+    let
+        orphans : List String
+        orphans =
+            orphanedReferences backup.channelsInBackup referenceFiles
+    in
     nextChannel
         model
         { -- Replaced straight away by nextChannel. There's nothing in flight yet.
           awaiting = AwaitingWrite
-        , remaining = channels
+        , remaining = backup.channels
         , created = []
         , verified = []
-        , failures = []
+        , failures =
+            List.map
+                (\orphan ->
+                    referencePath model.config orphan
+                        ++ " has a reference export but the channel is no longer in the backup"
+                )
+                orphans
         }
         |> Tuple.mapSecond
             (\cmd ->
                 Cmd.batch
                     [ stdout
-                        ("Exporting "
-                            ++ String.fromInt (List.length channels)
-                            ++ " randomly picked channels to compare against their reference exports"
+                        ("Exporting the busiest channel of "
+                            ++ String.fromInt (List.length backup.channels)
+                            ++ " guilds to compare against their reference exports"
                         )
                     , cmd
                     ]
             )
+
+
+referencePath : Config -> String -> String
+referencePath config referenceName =
+    config.referenceDir ++ "/" ++ referenceName
 
 
 nextChannel : Model -> Verify -> ( Model, Cmd Msg )
@@ -370,7 +395,7 @@ nextChannel model verify =
     case verify.remaining of
         channel :: rest ->
             ( { model | step = Verifying { verify | awaiting = AwaitingReference channel, remaining = rest } }
-            , request "readFile" [ ( "path", Json.Encode.string channel.referencePath ) ]
+            , request "readFile" [ ( "path", Json.Encode.string (referencePath model.config channel.referenceName) ) ]
             )
 
         [] ->
@@ -385,7 +410,7 @@ gotReference model verify channel maybeReference =
             ( { model | step = Verifying { verify2 | awaiting = AwaitingWrite } }
             , request
                 "writeFile"
-                [ ( "path", Json.Encode.string channel.referencePath )
+                [ ( "path", Json.Encode.string (referencePath model.config channel.referenceName) )
                 , ( "contents", Json.Encode.string channel.json )
                 ]
             )
@@ -408,7 +433,7 @@ gotReference model verify channel maybeReference =
                             | failures =
                                 (channel.name
                                     ++ " no longer matches "
-                                    ++ channel.referencePath
+                                    ++ referencePath model.config channel.referenceName
                                     ++ "\n  "
                                     ++ String.join "\n  " (List.map ExportComparison.differenceToString differences)
                                 )
@@ -475,146 +500,163 @@ latestBackup files =
 -- PICKING CHANNELS
 
 
-{-| Picking the channels while the backup is being decoded, rather than decoding
-it into a `BackendModel` and picking afterwards, is what keeps this program's
-memory use in proportion to the biggest guild instead of to the whole backup.
+{-| Built up while the backup is decoded, so that no more than one guild is ever
+alive at a time.
 -}
-type alias Sampling =
+type alias Collected =
     { users : NonemptyDict (Id UserId) BackendUser
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
-    , guilds : Sampler
-    , discordGuilds : Sampler
-    }
-
-
-type alias Sampler =
-    { seed : Random.Seed
-    , seen : Int
+    , guildsSeen : Int
+    , discordGuildsSeen : Int
     , picked : List ChannelToCheck
+    , discordPicked : List ChannelToCheck
+
+    -- Every channel in the backup, whether or not it was picked. A reference
+    -- export whose channel isn't in here belongs to a channel that's gone.
+    , channelsInBackup : Set String
     }
 
 
-decodeBackup : Config -> Bytes.Decode.Decoder (List ChannelToCheck)
-decodeBackup config =
-    let
-        ( guildSeed, discordSeed ) =
-            Random.step Random.independentSeed config.seed
-    in
+type alias Backup =
+    { channels : List ChannelToCheck
+    , channelsInBackup : Set String
+    }
+
+
+decodeBackup : Bytes.Decode.Decoder Backup
+decodeBackup =
     WireHelper.foldStreamedBackendModel
         { init =
             \backendModel ->
                 { users = backendModel.users
                 , discordUsers = backendModel.discordUsers
-                , guilds = { seed = guildSeed, seen = 0, picked = [] }
-                , discordGuilds = { seed = discordSeed, seen = 0, picked = [] }
+                , guildsSeen = 0
+                , discordGuildsSeen = 0
+                , picked = []
+                , discordPicked = []
+                , channelsInBackup = Set.empty
                 }
-        , guild = foldGuild config
-        , discordGuild = foldDiscordGuild config
+        , guild = foldGuild
+        , discordGuild = foldDiscordGuild
         }
         |> Bytes.Decode.map
-            (\sampling -> List.reverse sampling.guilds.picked ++ List.reverse sampling.discordGuilds.picked)
+            (\collected ->
+                { channels = List.reverse collected.picked ++ List.reverse collected.discordPicked
+                , channelsInBackup = collected.channelsInBackup
+                }
+            )
 
 
-foldGuild : Config -> ( Id GuildId, BackendGuild ) -> Sampling -> Sampling
-foldGuild config ( guildId, guild ) sampling =
-    { sampling
-        | guilds =
+foldGuild : ( Id GuildId, BackendGuild ) -> Collected -> Collected
+foldGuild ( guildId, guild ) collected =
+    { collected
+        | guildsSeen = collected.guildsSeen + 1
+        , channelsInBackup =
             SeqDict.foldl
-                (\channelId channel sampler ->
-                    sample
-                        (\() ->
-                            { name =
-                                "guild \""
-                                    ++ GuildName.toString guild.name
-                                    ++ "\" channel \""
-                                    ++ ChannelName.toString channel.name
-                                    ++ "\""
-                            , referencePath =
-                                config.referenceDir
-                                    ++ "/guild-"
-                                    ++ Id.toString guildId
-                                    ++ "-channel-"
-                                    ++ Id.toString channelId
-                                    ++ ".json"
-                            , json = ChannelExport.guildChannel sampling.users guild channel
-                            }
-                        )
-                        sampler
-                )
-                sampling.guilds
+                (\channelId _ names -> Set.insert (guildReferenceName guildId channelId) names)
+                collected.channelsInBackup
                 guild.channels
+        , picked =
+            case
+                ( collected.guildsSeen < guildsPerRun
+                , mostMessages guild.channels
+                )
+            of
+                ( True, Just ( channelId, channel ) ) ->
+                    { name =
+                        "guild \""
+                            ++ GuildName.toString guild.name
+                            ++ "\" channel \""
+                            ++ ChannelName.toString channel.name
+                            ++ "\""
+                    , referenceName = guildReferenceName guildId channelId
+                    , json = ChannelExport.guildChannel collected.users guild channel
+                    }
+                        :: collected.picked
+
+                _ ->
+                    collected.picked
     }
 
 
-foldDiscordGuild : Config -> ( Discord.Id Discord.GuildId, DiscordBackendGuild ) -> Sampling -> Sampling
-foldDiscordGuild config ( guildId, guild ) sampling =
-    { sampling
-        | discordGuilds =
+foldDiscordGuild : ( Discord.Id Discord.GuildId, DiscordBackendGuild ) -> Collected -> Collected
+foldDiscordGuild ( guildId, guild ) collected =
+    { collected
+        | discordGuildsSeen = collected.discordGuildsSeen + 1
+        , channelsInBackup =
             SeqDict.foldl
-                (\channelId channel sampler ->
-                    sample
-                        (\() ->
-                            { name =
-                                "Discord guild \""
-                                    ++ GuildName.toString guild.name
-                                    ++ "\" channel \""
-                                    ++ ChannelName.toString channel.name
-                                    ++ "\""
-                            , referencePath =
-                                config.referenceDir
-                                    ++ "/discord-guild-"
-                                    ++ Discord.idToString guildId
-                                    ++ "-channel-"
-                                    ++ Discord.idToString channelId
-                                    ++ ".json"
-                            , json = ChannelExport.discordGuildChannel sampling.discordUsers guildId guild channel
-                            }
-                        )
-                        sampler
-                )
-                sampling.discordGuilds
+                (\channelId _ names -> Set.insert (discordReferenceName guildId channelId) names)
+                collected.channelsInBackup
                 guild.channels
+        , discordPicked =
+            case
+                ( collected.discordGuildsSeen < guildsPerRun
+                , mostMessages guild.channels
+                )
+            of
+                ( True, Just ( channelId, channel ) ) ->
+                    { name =
+                        "Discord guild \""
+                            ++ GuildName.toString guild.name
+                            ++ "\" channel \""
+                            ++ ChannelName.toString channel.name
+                            ++ "\""
+                    , referenceName = discordReferenceName guildId channelId
+                    , json = ChannelExport.discordGuildChannel collected.discordUsers guildId guild channel
+                    }
+                        :: collected.discordPicked
+
+                _ ->
+                    collected.discordPicked
     }
 
 
-{-| Reservoir sampling. Every channel in the backup gets the same chance of being
-picked without knowing up front how many there are, and no more than
-`channelsPerRun` of them are ever held. The export is only generated for a channel
-that is actually kept, since generating one renders every message in the channel.
+{-| The busiest channel is the one worth checking, and picking by message count
+rather than at random means a run checks the same channel as the last one did.
+Ties go to whichever channel comes first in the backup, so the choice only moves
+when the guild's traffic does.
 -}
-sample : (() -> ChannelToCheck) -> Sampler -> Sampler
-sample toChannel sampler =
-    let
-        seen : Int
-        seen =
-            sampler.seen + 1
-    in
-    if List.length sampler.picked < channelsPerRun then
-        { sampler | seen = seen, picked = toChannel () :: sampler.picked }
+mostMessages :
+    SeqDict key { channel | messages : IdArray messageId message }
+    -> Maybe ( key, { channel | messages : IdArray messageId message } )
+mostMessages channels =
+    SeqDict.foldl
+        (\channelId channel best ->
+            case best of
+                Just ( _, bestSoFar ) ->
+                    if IdArray.length channel.messages > IdArray.length bestSoFar.messages then
+                        Just ( channelId, channel )
 
-    else
-        let
-            ( index, seed ) =
-                Random.step (Random.int 0 (seen - 1)) sampler.seed
-        in
-        { sampler
-            | seen = seen
-            , seed = seed
-            , picked =
-                if index < channelsPerRun then
-                    List.indexedMap
-                        (\pickedIndex picked ->
-                            if pickedIndex == index then
-                                toChannel ()
+                    else
+                        best
 
-                            else
-                                picked
-                        )
-                        sampler.picked
+                Nothing ->
+                    Just ( channelId, channel )
+        )
+        Nothing
+        channels
 
-                else
-                    sampler.picked
-        }
+
+guildReferenceName : Id GuildId -> Id ChannelId -> String
+guildReferenceName guildId channelId =
+    "guild-" ++ Id.toString guildId ++ "-channel-" ++ Id.toString channelId ++ ".json"
+
+
+discordReferenceName : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> String
+discordReferenceName guildId channelId =
+    "discord-guild-" ++ Discord.idToString guildId ++ "-channel-" ++ Discord.idToString channelId ++ ".json"
+
+
+{-| Reference exports left behind by channels that are no longer in the backup.
+Either the channel was deleted, which is worth saying out loud, or the backup
+lost it, which is exactly what this program is here to catch. It can't tell the
+two apart, so it reports and lets a human decide.
+-}
+orphanedReferences : Set String -> List String -> List String
+orphanedReferences channelsInBackup referenceFiles =
+    List.filter
+        (\file -> String.endsWith ".json" file && not (Set.member file channelsInBackup))
+        referenceFiles
 
 
 
