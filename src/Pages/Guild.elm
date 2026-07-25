@@ -3360,6 +3360,13 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
+                (case loggedIn.showEmojiSelector of
+                    EmojiSelectorForMessage _ ->
+                        True
+
+                    _ ->
+                        False
+                )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
@@ -3540,6 +3547,13 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Ok () ->
                     MessageInput.view
                         (Dom.id "messageMenu_channelInput")
+                        (case loggedIn.showEmojiSelector of
+                            EmojiSelectorForMessage _ ->
+                                True
+
+                            _ ->
+                                False
+                        )
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
                         channelTextInputId
@@ -3822,6 +3836,13 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
+                (case loggedIn.showEmojiSelector of
+                    EmojiSelectorForMessage _ ->
+                        True
+
+                    _ ->
+                        False
+                )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
@@ -3996,6 +4017,13 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
+                (case loggedIn.showEmojiSelector of
+                    EmojiSelectorForMessage _ ->
+                        True
+
+                    _ ->
+                        False
+                )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 channelTextInputId
@@ -4499,6 +4527,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
+                        (case loggedIn.showEmojiSelector of
+                            EmojiSelectorForEditMessage _ _ ->
+                                True
+
+                            _ ->
+                                False
+                        )
                         True
                         False
                         MessageMenu.editMessageTextInputId
@@ -4646,6 +4681,13 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
+                        (case loggedIn.showEmojiSelector of
+                            EmojiSelectorForEditMessage _ _ ->
+                                True
+
+                            _ ->
+                                False
+                        )
                         True
                         False
                         MessageMenu.editMessageTextInputId

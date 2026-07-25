@@ -34,7 +34,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
-import Types exposing (EditMessage, FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
+import Types exposing (EditMessage, EmojiSelector(..), FrontendMsg_(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -268,6 +268,13 @@ viewMobile offset extraOptions loggedIn local model =
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
+                                    (case loggedIn.showEmojiSelector of
+                                        EmojiSelectorForEditMessage _ _ ->
+                                            True
+
+                                        _ ->
+                                            False
+                                    )
                                     (mobileMenuMaxHeightHelper (List.length items) |> round |> (+) -32)
                                     True
                                     True

@@ -679,34 +679,6 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                 , Ui.clip
                 ]
                 [ Ui.row
-                    [ MyUi.noShrinking ]
-                    (searchInput searchHasFocus model emojis columns
-                        :: (if isSearching then
-                                -- This is here just so the header height doesn't change
-                                [ Ui.el [ Ui.opacity 0 ] (Ui.text "🔎") ]
-
-                            else
-                                List.filterMap
-                                    (\category ->
-                                        case category of
-                                            EmojiCategory Components ->
-                                                Nothing
-
-                                            _ ->
-                                                MyUi.elButton
-                                                    (categoryButtonId category)
-                                                    (PressedCategory category)
-                                                    [ Ui.Font.center
-                                                    , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-                                                    , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
-                                                    ]
-                                                    (categoryToEmojiString userData.skinTone category)
-                                                    |> Just
-                                    )
-                                    (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
-                           )
-                    )
-                , Ui.row
                     [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
                     (List.indexedMap
                         (\index item ->
@@ -807,6 +779,7 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                                     ]
                            ]
                     )
+                , Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Search area")
                 ]
 
         Nothing ->

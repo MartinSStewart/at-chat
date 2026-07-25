@@ -19,6 +19,7 @@ module MessageInput exposing
     )
 
 import Array
+import Color.Manipulate
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -452,6 +453,7 @@ disabledTextarea placeholderText text attachedFiles local =
 
 editView :
     HtmlId
+    -> Bool
     -> Int
     -> Bool
     -> Bool
@@ -466,7 +468,7 @@ editView :
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
+editView htmlId emojiSelectorOpened height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -505,7 +507,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelectorOpened htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -524,6 +526,8 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                          else
                             MyUi.buttonBackground
                         )
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.buttonBorder
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -542,6 +546,7 @@ view :
     HtmlId
     -> Bool
     -> Bool
+    -> Bool
     -> HtmlId
     -> String
     -> Int
@@ -557,7 +562,7 @@ view :
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+view htmlId emojiSelectorOpened roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -595,7 +600,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelectorOpened htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -614,6 +619,8 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                          else
                             MyUi.buttonBackground
                         )
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.buttonBorder
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -665,6 +672,8 @@ attachmentButton htmlIdPrefix =
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)
         , Ui.background MyUi.buttonBackground
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
         , Ui.contentCenterY
         , Ui.centerY
         , MyUi.hoverText "Attach file"
@@ -676,15 +685,23 @@ attachmentButton htmlIdPrefix =
         (Ui.html Icons.attachment)
 
 
-showEmojiSelectorButton : String -> Element Msg
-showEmojiSelectorButton htmlIdPrefix =
+showEmojiSelectorButton : Bool -> String -> Element Msg
+showEmojiSelectorButton emojiSelectorOpened htmlIdPrefix =
     Ui.el
         [ Ui.rounded 4
         , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
         , Ui.pointer
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)
-        , Ui.background MyUi.buttonBackground
+        , Ui.background
+            (if emojiSelectorOpened then
+                MyUi.buttonBackgroundHighlighted
+
+             else
+                MyUi.buttonBackground
+            )
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
         , Ui.contentCenterY
         , Ui.centerY
         , MyUi.hoverText "Add emoji"
@@ -732,6 +749,8 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
                     , Ui.paddingXY 6 0
                     , Ui.height (Ui.px 38)
                     , Ui.background MyUi.disabledButtonBackground
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.disabledButtonBorder
                     , Ui.move { x = 2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -746,6 +765,8 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background MyUi.disabledButtonBackground
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.disabledButtonBorder
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY

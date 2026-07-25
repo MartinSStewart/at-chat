@@ -11,6 +11,7 @@ module MyUi exposing
     , border2
     , bounceScroll
     , buttonBackground
+    , buttonBackgroundHighlighted
     , buttonBorder
     , buttonFontColor
     , cancelButtonBackground
@@ -29,9 +30,11 @@ module MyUi exposing
     , datestampDate
     , deleteButton
     , deleteButtonBackground
+    , deleteButtonBorder
     , deleteButtonFont
     , dimFont
     , disabledButtonBackground
+    , disabledButtonBorder
     , elButton
     , emailAddress
     , errorBox
@@ -1314,9 +1317,19 @@ buttonBackground =
     Ui.rgb 64 122 178
 
 
+buttonBackgroundHighlighted : Ui.Color
+buttonBackgroundHighlighted =
+    Ui.rgb 101 141 181
+
+
 disabledButtonBackground : Ui.Color
 disabledButtonBackground =
     Ui.rgb 130 133 135
+
+
+disabledButtonBorder : Ui.Color
+disabledButtonBorder =
+    Ui.rgb 158 162 165
 
 
 cancelButtonBackground : Ui.Color
@@ -1329,6 +1342,11 @@ deleteButtonBackground =
     Ui.rgb 180 50 40
 
 
+deleteButtonBorder : Ui.Color
+deleteButtonBorder =
+    Ui.rgb 179 67 59
+
+
 deleteButtonFont : Ui.Color
 deleteButtonFont =
     Ui.rgb 255 240 250
@@ -1336,7 +1354,7 @@ deleteButtonFont =
 
 buttonBorder : Ui.Color
 buttonBorder =
-    Ui.rgb 10 20 30
+    Ui.rgb 101 141 181
 
 
 buttonFontColor : Ui.Color
