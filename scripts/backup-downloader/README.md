@@ -112,7 +112,7 @@ rare, and a false alarm is cheap — delete that channel's file from
 | Environment variable     | Default                                         | Meaning                                   |
 | ------------------------ | ----------------------------------------------- | ----------------------------------------- |
 | `AT_CHAT_BACKUP_SOURCE`  | `root@at-chat.app:/var/lib/atchat/backups/`     | Remote rsync source (note trailing `/`).  |
-| `AT_CHAT_BACKUP_DEST`    | `./at-chat-backups`                             | Local directory to download backups into. |
+| `AT_CHAT_BACKUP_DEST`    | `./at-chat-backups`                             | Local directory to download backups into. Resolved against the working directory, and printed absolute so a run always says where it put things. |
 | `AT_CHAT_SSH_KEY`        | *(unset)*                                       | Path to an SSH private key to use.        |
 
 The remote source default matches `SERVER_BACKUPS_PATH` in

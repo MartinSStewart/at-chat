@@ -19,7 +19,12 @@ const { spawn } = require('node:child_process');
 
 const { Elm } = require('./BackupElm.js');
 
-const dest = process.env.AT_CHAT_BACKUP_DEST || './at-chat-backups';
+// Resolved up front so that every path the program prints is absolute. A
+// relative path is only meaningful next to the working directory it was run
+// from, which makes "where did my reference exports go?" needlessly hard to
+// answer — especially since at-chat-backups/ is gitignored and editors like to
+// hide ignored folders.
+const dest = path.resolve(process.env.AT_CHAT_BACKUP_DEST || './at-chat-backups');
 
 const app = Elm.Backup.init({
     flags: {
