@@ -9,3 +9,4 @@ rust-server/target/
 tests/var/lib/atchat/storage/
 tests/var/lib/atchat/backups/
 index.html
+at-chat-backups/
