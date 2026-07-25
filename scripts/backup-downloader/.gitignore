@@ -1,4 +1,4 @@
 elm-stuff/
-eco-stuff/
-# Compiled Eco executable
+# Compiled by `npm run backup-downloader`
+BackupElm.js
 at-chat-backups/

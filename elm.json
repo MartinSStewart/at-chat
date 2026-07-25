@@ -10,6 +10,7 @@
         "vendored/MartinSStewart/elm-discord/1.0.0/src",
         "vendored/MartinSStewart/elm-audio/4.0.4/src",
         "visual-testing/src",
+        "scripts/backup-downloader/src",
         "tests"
     ],
     "elm-version": "0.19.1",
