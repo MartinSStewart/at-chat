@@ -4,7 +4,11 @@ module GuildIcon exposing
     , addGuildButton
     , defaultUser
     , defaultUserHtml
+    , discordBadge
+    , discordLabel
+    , discordLogo
     , discordUserView
+    , discordView
     , fullWidth
     , notificationHelper
     , notificationView
@@ -99,8 +103,66 @@ notificationView xOffset yOffset borderColor notification =
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
+{-| The Discord logo on a blurple circle. Marks the guilds and users that come
+from Discord so they can be told apart from at-chat ones at a glance.
+-}
+discordLogo : List (Ui.Attribute msg) -> Element msg
+discordLogo attributes =
+    Ui.el
+        (Ui.background discordBlurple
+            :: Ui.rounded 99
+            :: Ui.padding 3
+            :: Ui.border 1
+            :: Ui.borderColor MyUi.background1
+            :: Ui.width Ui.shrink
+            :: MyUi.noShrinking
+            :: Ui.Accessibility.description discordLabel
+            :: attributes
+        )
+        (Ui.html Icons.discord)
+
+
+discordLabel : String
+discordLabel =
+    "Discord"
+
+
+discordBlurple : Ui.Color
+discordBlurple =
+    Ui.rgb 88 101 242
+
+
+{-| Puts `discordLogo` in the bottom right corner of a guild or user icon. The
+notification count sits in the top right corner, so this goes along the bottom
+to stay out of its way.
+-}
+discordBadge : Ui.Attribute msg
+discordBadge =
+    discordLogo
+        [ Ui.alignRight
+        , Ui.alignBottom
+        , Ui.move { x = 3, y = 3, z = 0 }
+        , -- The icon is inside a link. Letting the badge swallow clicks would
+          -- leave a dead spot in the corner of it.
+          MyUi.noPointerEvents
+        ]
+        |> Ui.inFront
+
+
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view mode guild =
+    viewHelper Ui.noAttr mode guild
+
+
+{-| Same as `view` but marked with the Discord logo.
+-}
+discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+discordView mode guild =
+    viewHelper discordBadge mode guild
+
+
+viewHelper : Ui.Attribute msg -> Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+viewHelper badge mode guild =
     let
         name : String
         name =
@@ -113,6 +175,7 @@ view mode guild =
 
             Normal notification ->
                 notificationView 0 -3 MyUi.background1 notification
+        , badge
         ]
         (case guild.icon of
             Just icon ->
@@ -179,7 +242,7 @@ discordUserView notification maybeIcon userId =
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
         |> iconView (Normal notification)
-        |> Ui.el [ notificationView 0 -3 MyUi.background1 notification ]
+        |> Ui.el [ notificationView 0 -3 MyUi.background1 notification, discordBadge ]
 
 
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg

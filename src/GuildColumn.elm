@@ -226,7 +226,7 @@ discordGuildIcon localUser route guildId guild =
                     |> DiscordGuildRoute
                 )
                 []
-                (GuildIcon.view
+                (GuildIcon.discordView
                     (case route of
                         DiscordGuildRoute data ->
                             if data.guildId == guildId then

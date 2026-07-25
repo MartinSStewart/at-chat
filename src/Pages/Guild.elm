@@ -7100,16 +7100,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             [ MyUi.hoverText guildName
             , Ui.spacing 4
             ]
-            [ Ui.el
-                [ Ui.background (Ui.rgb 88 101 242)
-                , Ui.rounded 99
-                , Ui.padding 3
-                , Ui.border 1
-                , Ui.borderColor MyUi.background1
-                , Ui.width Ui.shrink
-                , MyUi.noShrinking
-                ]
-                (Ui.html Icons.discord)
+            [ GuildIcon.discordLogo []
             , Ui.text guildName
             ]
         , GuildColumn.elLinkButton
@@ -8261,7 +8252,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
                                 [ Ui.el
-                                    [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                                    [ GuildIcon.notificationView 4 -3 MyUi.background2 notification
+                                    , GuildIcon.discordBadge
+                                    , Ui.width Ui.shrink
+                                    ]
                                     (User.discordProfileImage currentUserId otherUser.icon)
                                 , Ui.column
                                     []
@@ -8285,7 +8279,11 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             )
                             members2
                             |> User.multipleProfileImages
-                            |> Ui.el [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                            |> Ui.el
+                                [ GuildIcon.notificationView 4 -3 MyUi.background2 notification
+                                , GuildIcon.discordBadge
+                                , Ui.width Ui.shrink
+                                ]
                         , Ui.column
                             []
                             [ List.filterMap
