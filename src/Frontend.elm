@@ -3009,6 +3009,9 @@ updateLoaded msg model =
         PressedMemberListBack ->
             FrontendExtra.updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
+        PressedExportChannel exportChannelId ->
+            ( model, Lamdera.sendToBackend (ExportChannelRequest exportChannelId) )
+
         PageHasFocusChanged hasFocus ->
             let
                 ( model2, cmd ) =
@@ -6919,6 +6922,9 @@ updateLoadedFromBackend msg model =
               }
             , Command.none
             )
+
+        ExportChannelResponse { fileName, json } ->
+            ( model, Effect.File.Download.string fileName "application/json" json )
 
 
 view : AudioData -> FrontendModel_ -> Browser.Document FrontendMsg_

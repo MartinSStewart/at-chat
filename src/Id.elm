@@ -5,6 +5,7 @@ module Id exposing
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
+    , ExportChannelId(..)
     , GamePublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
@@ -53,6 +54,14 @@ type alias DiscordGuildOrDmId_DmData =
 type AnyGuildOrDmId
     = GuildOrDmId GuildOrDmId
     | DiscordGuildOrDmId DiscordGuildOrDmId
+
+
+{-| Identifies a guild channel that the user wants to export the messages of.
+Unlike `AnyGuildOrDmId` this can't refer to a DM channel.
+-}
+type ExportChannelId
+    = ExportChannel_Guild (Id GuildId) (Id ChannelId)
+    | ExportChannel_Discord (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
 
 
 type ThreadRoute

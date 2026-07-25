@@ -2197,6 +2197,9 @@ isPressMsg msg =
         PressedMemberListBack ->
             True
 
+        PressedExportChannel _ ->
+            True
+
         PageHasFocusChanged _ ->
             False
 

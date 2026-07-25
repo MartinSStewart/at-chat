@@ -122,7 +122,7 @@ import FileStatus
 import Game
 import Go
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, ExportChannelId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray
 import IdString
 import ImageEditor
@@ -2842,6 +2842,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         GetPublicGoMatchResponse _ ->
             False
 
+        ExportChannelResponse _ ->
+            True
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -2863,6 +2866,13 @@ allAttackerToBackendChanges =
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (Just (FileStatus.FileHash "fake-hash")))
     , AdminDataRequest Nothing
     , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
+    , ExportChannelRequest (ExportChannel_Guild legitGuildId (Id.fromInt 0))
+    , ExportChannelRequest
+        (ExportChannel_Discord
+            (Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035"))
+            (Discord.idFromUInt64 (Unsafe.uint64 "705745250815311942"))
+            (Discord.idFromUInt64 (Unsafe.uint64 "1072828564317159465"))
+        )
     , LogOutRequest sessionId0Hash
     , LogOutRequest sessionId1Hash
     , LogOutRequest sessionId2Hash

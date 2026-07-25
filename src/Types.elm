@@ -81,7 +81,7 @@ import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileS
 import Game
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, ExportChannelId, GamePublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -547,6 +547,7 @@ type FrontendMsg_
     | GotStartupData Ports.StartupData
     | PressedCloseImageInfo
     | PressedMemberListBack
+    | PressedExportChannel ExportChannelId
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
@@ -648,6 +649,7 @@ type ToBackend
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
     | GetPublicGoMatchRequest (SecretId GamePublicId)
+    | ExportChannelRequest ExportChannelId
 
 
 type BackendMsg
@@ -804,6 +806,7 @@ type ToFrontend
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
+    | ExportChannelResponse { fileName : String, json : String }
 
 
 type alias LoginData =

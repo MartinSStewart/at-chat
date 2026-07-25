@@ -42,7 +42,8 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers
@@ -439,10 +440,12 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy3
+                                    Ui.Lazy.lazy5
                                         memberColumnMobile
                                         canScroll2
                                         local.localUser
+                                        guildId
+                                        channelRoute
                                         guild.membersAndOwner
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -513,7 +516,12 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy2 memberColumnNotMobile local.localUser guild.membersAndOwner
+                            , Ui.Lazy.lazy4
+                                memberColumnNotMobile
+                                local.localUser
+                                guildId
+                                channelRoute
+                                guild.membersAndOwner
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -787,8 +795,57 @@ memberColumnWidth =
     200
 
 
-memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberColumnNotMobile localUser membersAndOwner =
+{-| The member column is also shown on routes where no channel is selected. In
+that case there's nothing to export.
+-}
+channelRouteToChannelId : ChannelRoute -> Maybe (Id ChannelId)
+channelRouteToChannelId channelRoute =
+    case channelRoute of
+        ChannelRoute channelId _ _ ->
+            Just channelId
+
+        NewChannelRoute ->
+            Nothing
+
+        EditChannelRoute _ ->
+            Nothing
+
+        GuildSettingsRoute ->
+            Nothing
+
+        JoinRoute _ ->
+            Nothing
+
+
+{-| Asks the backend for a JSON copy of every message in the channel and then
+downloads it.
+-}
+exportChannelButton : ExportChannelId -> Element FrontendMsg_
+exportChannelButton exportChannelId =
+    MyUi.elButton
+        (Dom.id "guild_exportChannel")
+        (PressedExportChannel exportChannelId)
+        [ Ui.paddingXY 8 4
+        , Ui.rounded 4
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.background MyUi.buttonBackground
+        , Ui.Font.color MyUi.font1
+        , Ui.Font.center
+        , Ui.Font.weight 500
+        , MyUi.focusEffect
+        , MyUi.noShrinking
+        ]
+        (Ui.text "Export channel")
+
+
+memberColumnNotMobile :
+    LocalUser
+    -> Id GuildId
+    -> ChannelRoute
+    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Element FrontendMsg_
+memberColumnNotMobile localUser guildId channelRoute membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
@@ -803,7 +860,15 @@ memberColumnNotMobile localUser membersAndOwner =
         , Ui.scrollable
         , Ui.heightMin 0
         ]
-        [ Ui.column
+        [ case channelRouteToChannelId channelRoute of
+            Just channelId ->
+                Ui.el
+                    [ Ui.paddingXY 8 8 ]
+                    (exportChannelButton (ExportChannel_Guild guildId channelId))
+
+            Nothing ->
+                Ui.none
+        , Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
             , memberLabel False localUser (MembersAndOwner.owner membersAndOwner)
@@ -853,7 +918,10 @@ discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channe
 
         Just members ->
             discordMemberColumnContainer
-                [ Ui.column
+                [ Ui.el
+                    [ Ui.paddingXY 0 4 ]
+                    (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                , Ui.column
                     []
                     [ Ui.text "Owner"
                     , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
@@ -884,8 +952,14 @@ discordMemberColumnContainer contents =
         contents
 
 
-memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberColumnMobile canScroll2 localUser membersAndOwner =
+memberColumnMobile :
+    Bool
+    -> LocalUser
+    -> Id GuildId
+    -> ChannelRoute
+    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Element FrontendMsg_
+memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
@@ -913,7 +987,15 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ Ui.column
+            [ case channelRouteToChannelId channelRoute of
+                Just channelId ->
+                    Ui.el
+                        [ Ui.paddingXY 8 4 ]
+                        (exportChannelButton (ExportChannel_Guild guildId channelId))
+
+                Nothing ->
+                    Ui.none
+            , Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text "Owner"
                 , memberLabel True localUser (MembersAndOwner.owner membersAndOwner)
@@ -967,7 +1049,10 @@ discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guil
                     ]
                     [ Ui.column
                         [ Ui.paddingXY 8 4 ]
-                        [ Ui.column
+                        [ Ui.el
+                            [ Ui.paddingXY 8 4 ]
+                            (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                        , Ui.column
                             [ Ui.paddingXY 8 4 ]
                             [ Ui.text "Owner"
                             , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
