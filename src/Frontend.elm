@@ -3619,8 +3619,17 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
-                MessageInput.TypedEmojiSearch string ->
-                    Debug.todo ""
+                MessageInput.TypedEmojiSearch text ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
+                        )
+                        model
+
+                -- The emoji picker is rendered by the message input's emoji button
+                -- now, so its messages arrive wrapped and get unwrapped here.
+                MessageInput.EmojiSelectorMsg emojiMsg ->
+                    updateLoaded (EmojiSelectorMsg emojiMsg) model
 
         PageUpGotViewport result ->
             case result of
@@ -3923,8 +3932,17 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
-                MessageInput.TypedEmojiSearch string ->
-                    Debug.todo ""
+                MessageInput.TypedEmojiSearch text ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
+                        )
+                        model
+
+                -- The emoji picker is rendered by the message input's emoji button
+                -- now, so its messages arrive wrapped and get unwrapped here.
+                MessageInput.EmojiSelectorMsg emojiMsg ->
+                    updateLoaded (EmojiSelectorMsg emojiMsg) model
 
         GotEmojiData result ->
             case result of

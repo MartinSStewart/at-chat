@@ -268,13 +268,21 @@ viewMobile offset extraOptions loggedIn local model =
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
-                                    (case loggedIn.showEmojiSelector of
-                                        EmojiSelectorForEditMessage _ _ ->
-                                            True
+                                    { isOpen =
+                                        case loggedIn.showEmojiSelector of
+                                            EmojiSelectorForEditMessage _ _ ->
+                                                True
 
-                                        _ ->
-                                            False
-                                    )
+                                            _ ->
+                                                False
+                                    , isMobile = MyUi.isMobile model
+                                    , windowSize = model.windowSize
+                                    , selector = loggedIn.emojiSelector
+                                    , emojiConfig = local.localUser.user.emojiConfig
+                                    , emojiData = model.emojiData
+                                    , availableCustomEmojis = local.localUser.user.availableCustomEmojis
+                                    , availableStickers = local.localUser.user.availableStickers
+                                    }
                                     (mobileMenuMaxHeightHelper (List.length items) |> round |> (+) -32)
                                     True
                                     True

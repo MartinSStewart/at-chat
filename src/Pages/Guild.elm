@@ -32,7 +32,7 @@ import DmChannelId
 import Drawing exposing (Drawing)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
@@ -1950,6 +1950,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         local.localUser.session.userId
                                         allUsers
                                         local
+                                        model
 
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
@@ -2251,6 +2252,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         currentDiscordUserId
                                         allUsers
                                         local
+                                        model
 
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
@@ -2572,6 +2574,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         local.localUser.session.userId
                                         allUsers
                                         local
+                                        model
 
                             Nothing ->
                                 case maybeRepliedTo2 of
@@ -2789,6 +2792,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         currentDiscordUserId
                                         allUsers
                                         local
+                                        model
 
                             Nothing ->
                                 case maybeRepliedTo2 of
@@ -2992,6 +2996,30 @@ decodeMessageView value =
 conversationContainerId : HtmlId
 conversationContainerId =
     Dom.id "conversationContainer"
+
+
+{-| Gathers what the emoji button needs to render the picker. The picker used to
+be an `Ui.inFront` on the conversation, but it's rendered by the button now so
+that the picker's search field can be the button itself.
+-}
+emojiSelectorConfig :
+    Bool
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqSet (Id StickerId)
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> MessageInput.EmojiSelectorConfig
+emojiSelectorConfig isOpen availableCustomEmojis availableStickers local loggedIn model =
+    { isOpen = isOpen
+    , isMobile = MyUi.isMobile model
+    , windowSize = model.windowSize
+    , selector = loggedIn.emojiSelector
+    , emojiConfig = local.localUser.user.emojiConfig
+    , emojiData = model.emojiData
+    , availableCustomEmojis = availableCustomEmojis
+    , availableStickers = availableStickers
+    }
 
 
 replyToHeader :
@@ -3241,12 +3269,19 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
-                (case loggedIn.showEmojiSelector of
-                    EmojiSelectorForMessage _ ->
-                        True
+                (emojiSelectorConfig
+                    (case loggedIn.showEmojiSelector of
+                        EmojiSelectorForMessage _ ->
+                            True
 
-                    _ ->
-                        False
+                        _ ->
+                            False
+                    )
+                    local.localUser.user.availableCustomEmojis
+                    local.localUser.user.availableStickers
+                    local
+                    loggedIn
+                    model
                 )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
@@ -3423,12 +3458,19 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Ok () ->
                     MessageInput.view
                         (Dom.id "messageMenu_channelInput")
-                        (case loggedIn.showEmojiSelector of
-                            EmojiSelectorForMessage _ ->
-                                True
+                        (emojiSelectorConfig
+                            (case loggedIn.showEmojiSelector of
+                                EmojiSelectorForMessage _ ->
+                                    True
 
-                            _ ->
-                                False
+                                _ ->
+                                    False
+                            )
+                            availableCustomEmojis
+                            availableStickers
+                            local
+                            loggedIn
+                            model
                         )
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
@@ -3701,12 +3743,19 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
-                (case loggedIn.showEmojiSelector of
-                    EmojiSelectorForMessage _ ->
-                        True
+                (emojiSelectorConfig
+                    (case loggedIn.showEmojiSelector of
+                        EmojiSelectorForMessage _ ->
+                            True
 
-                    _ ->
-                        False
+                        _ ->
+                            False
+                    )
+                    local.localUser.user.availableCustomEmojis
+                    local.localUser.user.availableStickers
+                    local
+                    loggedIn
+                    model
                 )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
@@ -3877,12 +3926,19 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
-                (case loggedIn.showEmojiSelector of
-                    EmojiSelectorForMessage _ ->
-                        True
+                (emojiSelectorConfig
+                    (case loggedIn.showEmojiSelector of
+                        EmojiSelectorForMessage _ ->
+                            True
 
-                    _ ->
-                        False
+                        _ ->
+                            False
+                    )
+                    availableCustomEmojis
+                    availableStickers
+                    local
+                    loggedIn
+                    model
                 )
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
@@ -3986,6 +4042,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             local.localUser.session.userId
                             allUsers
                             local
+                            model
 
                     else
                         messageView
@@ -4105,6 +4162,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             currentUserId
                             allUsers
                             local
+                            model
 
                     else
                         discordMessageView
@@ -4372,8 +4430,9 @@ messageEditingView :
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
+    -> LoadedFrontend
     -> Element FrontendMsg_
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local model =
     case message of
         UserTextMessage data ->
             let
@@ -4387,12 +4446,19 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
-                        (case loggedIn.showEmojiSelector of
-                            EmojiSelectorForEditMessage _ _ ->
-                                True
+                        (emojiSelectorConfig
+                            (case loggedIn.showEmojiSelector of
+                                EmojiSelectorForEditMessage _ _ ->
+                                    True
 
-                            _ ->
-                                False
+                                _ ->
+                                    False
+                            )
+                            local.localUser.user.availableCustomEmojis
+                            local.localUser.user.availableStickers
+                            local
+                            loggedIn
+                            model
                         )
                         True
                         False
@@ -4524,8 +4590,9 @@ threadMessageEditingView :
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
+    -> LoadedFrontend
     -> Element FrontendMsg_
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local model =
     case message of
         UserTextMessage data ->
             let
@@ -4541,12 +4608,19 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
-                        (case loggedIn.showEmojiSelector of
-                            EmojiSelectorForEditMessage _ _ ->
-                                True
+                        (emojiSelectorConfig
+                            (case loggedIn.showEmojiSelector of
+                                EmojiSelectorForEditMessage _ _ ->
+                                    True
 
-                            _ ->
-                                False
+                                _ ->
+                                    False
+                            )
+                            local.localUser.user.availableCustomEmojis
+                            local.localUser.user.availableStickers
+                            local
+                            loggedIn
+                            model
                         )
                         True
                         False
