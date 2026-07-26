@@ -1,5 +1,6 @@
 module MessageInput exposing
     ( EmojiSelectorConfig
+    , HtmlIdType(..)
     , MentionUserDropdown
     , Msg(..)
     , NameSoFar(..)
@@ -11,10 +12,12 @@ module MessageInput exposing
     , dropdownView
     , editView
     , emojiDropdownList
+    , emojiSelectorSearchId
     , isPress
     , largePastedText
     , pressedArrowInDropdown
     , pressedDropdownItem
+    , stringToEmojiSelectorSearchId
     , userDropdownList
     , view
     )
@@ -488,8 +491,7 @@ disabledTextarea placeholderText text attachedFiles local =
 
 
 editView :
-    HtmlId
-    -> EmojiSelectorConfig
+    EmojiSelectorConfig
     -> Int
     -> Bool
     -> Bool
@@ -504,11 +506,11 @@ editView :
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId emojiSelector height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
+editView emojiSelector height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
-            Dom.idToString htmlId
+            htmlIdTypeToString HtmlId_EditMobile
     in
     textarea
         isMobileKeyboard
@@ -543,7 +545,7 @@ editView htmlId emojiSelector height roundTopCorners isMobileKeyboard channelTex
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser htmlIdPrefix ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser HtmlId_EditMobile ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -578,8 +580,27 @@ editView htmlId emojiSelector height roundTopCorners isMobileKeyboard channelTex
             ]
 
 
+type HtmlIdType
+    = HtmlId_ChannelInput
+    | HtmlId_EditDesktop
+    | HtmlId_EditMobile
+
+
+htmlIdTypeToString : HtmlIdType -> String
+htmlIdTypeToString htmlId =
+    case htmlId of
+        HtmlId_ChannelInput ->
+            "messageMenu_channelInput"
+
+        HtmlId_EditDesktop ->
+            "messageMenu_editDesktop"
+
+        HtmlId_EditMobile ->
+            "messageMenu_editMobile"
+
+
 view :
-    HtmlId
+    HtmlIdType
     -> EmojiSelectorConfig
     -> Bool
     -> Bool
@@ -602,7 +623,7 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
     let
         htmlIdPrefix : String
         htmlIdPrefix =
-            Dom.idToString htmlId
+            htmlIdTypeToString htmlId
     in
     textarea
         isMobileKeyboard
@@ -636,7 +657,7 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser htmlIdPrefix ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser htmlId ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -721,6 +742,35 @@ attachmentButton htmlIdPrefix =
         (Ui.html Icons.attachment)
 
 
+emojiSelectorSearchId : HtmlIdType -> String
+emojiSelectorSearchId htmlIdType =
+    case htmlIdType of
+        HtmlId_ChannelInput ->
+            "messageMenu_channelInput_emojiSelectorSearch"
+
+        HtmlId_EditDesktop ->
+            "messageMenu_editDesktop_emojiSelectorSearch"
+
+        HtmlId_EditMobile ->
+            "messageMenu_editMobile_emojiSelectorSearch"
+
+
+stringToEmojiSelectorSearchId : HtmlId -> Maybe HtmlIdType
+stringToEmojiSelectorSearchId text =
+    case Dom.idToString text of
+        "messageMenu_channelInput_emojiSelectorSearch" ->
+            Just HtmlId_ChannelInput
+
+        "messageMenu_editDesktop_emojiSelectorSearch" ->
+            Just HtmlId_EditDesktop
+
+        "messageMenu_editMobile_emojiSelectorSearch" ->
+            Just HtmlId_EditMobile
+
+        _ ->
+            Nothing
+
+
 showEmojiSelectorButton :
     EmojiSelectorConfig
     ->
@@ -728,9 +778,9 @@ showEmojiSelectorButton :
             | stickers : SeqDict (Id StickerId) StickerData
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
         }
-    -> String
+    -> HtmlIdType
     -> Element Msg
-showEmojiSelectorButton emojiSelector localUser htmlIdPrefix =
+showEmojiSelectorButton emojiSelector localUser htmlId =
     let
         -- The picker hangs over the conversation, so it gets that much room.
         selectorWidth : Int
@@ -761,8 +811,7 @@ showEmojiSelectorButton emojiSelector localUser htmlIdPrefix =
                  else
                     Ui.fill
                 )
-            , Ui.Events.onClick PressedOpenEmojiSelector
-            , Ui.id (htmlIdPrefix ++ "_emojiSelectorSearch")
+            , Ui.id (emojiSelectorSearchId htmlId)
             , if emojiSelector.isOpen then
                 Ui.opacity 1
 
@@ -825,7 +874,7 @@ showEmojiSelectorButton emojiSelector localUser htmlIdPrefix =
              , MyUi.hoverText "Add emoji"
              ]
                 ++ (if emojiSelector.isOpen then
-                        [ Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
+                        [ Ui.id (htmlIdTypeToString htmlId ++ "_openEmojiSelector")
                         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
                         , Html.Events.preventDefaultOn
                             "touchend"

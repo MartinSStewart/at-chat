@@ -5133,7 +5133,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
             in
             ( { loggedIn
                 | showEmojiSelector =
-                    case loggedIn.showEmojiSelector of
+                    (case loggedIn.showEmojiSelector of
                         EmojiSelectorHidden ->
                             case loggedIn.previousTextInputFocus of
                                 Just textInputFocus ->
@@ -5148,6 +5148,8 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
 
                         _ ->
                             EmojiSelectorHidden
+                    )
+                        |> Debug.log "pressedOpenEmojiSelector"
                 , emojiSelector = { emojiSelectorModel | searchText = "" }
               }
             , Command.none
@@ -5442,6 +5444,25 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                                     Nothing ->
                                         Nothing
                             , previousTextInputFocus = loggedIn.textInputFocus
+                            , showEmojiSelector =
+                                case ( loggedIn.showEmojiSelector, maybeHtmlId ) of
+                                    ( EmojiSelectorHidden, Just htmlId ) ->
+                                        case MessageInput.stringToEmojiSelectorSearchId htmlId of
+                                            Just MessageInput.HtmlId_ChannelInput ->
+                                                EmojiSelectorForMessage (Maybe.map Tuple.first maybeSelection)
+
+                                            Just MessageInput.HtmlId_EditDesktop ->
+                                                Debug.todo ""
+
+                                            Just MessageInput.HtmlId_EditMobile ->
+                                                Debug.todo ""
+
+                                            --EmojiSelectorForEditMessage (Maybe.map Tuple.first maybeSelection)
+                                            Nothing ->
+                                                loggedIn.showEmojiSelector
+
+                                    _ ->
+                                        loggedIn.showEmojiSelector
                         }
               }
             , case maybeHtmlId of

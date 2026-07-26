@@ -54,7 +54,7 @@ import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (GameType(..), Message(..), UserTextMessageData)
 import MessageArray exposing (MessageArray)
-import MessageInput
+import MessageInput exposing (HtmlIdType(..))
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi exposing (Copied(..))
@@ -3268,9 +3268,9 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             ]
             [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
-                (Dom.id "messageMenu_channelInput")
+                HtmlId_ChannelInput
                 (emojiSelectorConfig
-                    (case loggedIn.showEmojiSelector of
+                    (case Debug.log "showEmojiSelector" loggedIn.showEmojiSelector of
                         EmojiSelectorForMessage _ ->
                             True
 
@@ -3457,7 +3457,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
                 Ok () ->
                     MessageInput.view
-                        (Dom.id "messageMenu_channelInput")
+                        HtmlId_ChannelInput
                         (emojiSelectorConfig
                             (case loggedIn.showEmojiSelector of
                                 EmojiSelectorForMessage _ ->
@@ -3742,7 +3742,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             ]
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
-                (Dom.id "messageMenu_channelInput")
+                HtmlId_ChannelInput
                 (emojiSelectorConfig
                     (case loggedIn.showEmojiSelector of
                         EmojiSelectorForMessage _ ->
@@ -3925,7 +3925,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             ]
             [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
-                (Dom.id "messageMenu_channelInput")
+                HtmlId_ChannelInput
                 (emojiSelectorConfig
                     (case loggedIn.showEmojiSelector of
                         EmojiSelectorForMessage _ ->
@@ -4445,7 +4445,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
 
                 messageInput =
                     MessageInput.view
-                        (Dom.id "messageMenu_editDesktop")
+                        HtmlId_EditDesktop
                         (emojiSelectorConfig
                             (case loggedIn.showEmojiSelector of
                                 EmojiSelectorForEditMessage _ _ ->
@@ -4607,7 +4607,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
 
                 messageInput =
                     MessageInput.view
-                        (Dom.id "messageMenu_editDesktop")
+                        HtmlId_EditDesktop
                         (emojiSelectorConfig
                             (case loggedIn.showEmojiSelector of
                                 EmojiSelectorForEditMessage _ _ ->

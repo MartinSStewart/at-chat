@@ -267,7 +267,6 @@ viewMobile offset extraOptions loggedIn local model =
                                 -> Element MessageInput.Msg
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
-                                    (Dom.id "messageMenu_editMobile")
                                     { isOpen =
                                         case loggedIn.showEmojiSelector of
                                             EmojiSelectorForEditMessage _ _ ->
