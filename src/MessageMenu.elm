@@ -18,11 +18,11 @@ import FileStatus
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
-import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import Message exposing (Message(..), MessageState(..))
+import Message exposing (Message(..))
+import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView
 import MyUi exposing (Copied(..))
@@ -424,10 +424,10 @@ menuItems :
     -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Id messageId -> { a | messages : IdArray messageId (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
+        helper : Id messageId -> { a | messages : MessageArray messageId (Message messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
-            case IdArray.get messageId thread.messages of
-                Just (MessageLoaded message) ->
+            case MessageArray.get messageId thread.messages of
+                Just message ->
                     ( case message of
                         UserTextMessage data ->
                             data.createdBy == local.localUser.session.userId
@@ -442,10 +442,10 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : IdArray messageId (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
+        discordHelper : Id messageId -> { a | messages : MessageArray messageId (Message messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         discordHelper messageId thread =
-            case IdArray.get messageId thread.messages of
-                Just (MessageLoaded message) ->
+            case MessageArray.get messageId thread.messages of
+                Just message ->
                     ( case message of
                         UserTextMessage data ->
                             LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers

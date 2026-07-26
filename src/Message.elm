@@ -5,8 +5,6 @@ module Message exposing
     , GameType(..)
     , Message(..)
     , MessageNoReply(..)
-    , MessageState(..)
-    , MessageStateNoReply(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
     , addEmbed
@@ -280,11 +278,6 @@ addEmbed ( url, result ) message =
             message
 
 
-type MessageState messageId userId
-    = MessageLoaded (Message messageId userId)
-    | MessageUnloaded
-
-
 type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
@@ -300,11 +293,6 @@ type alias UserTextMessageData messageId userId =
     , -- Keyed by the index of the embed the drawing is attached to
       embedDrawings : SeqDict Int (Drawing userId)
     }
-
-
-type MessageStateNoReply userId
-    = MessageLoaded_NoReply (MessageNoReply userId)
-    | MessageUnloaded_NoReply
 
 
 type MessageNoReply userId

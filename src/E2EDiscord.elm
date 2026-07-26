@@ -24,6 +24,7 @@ import Local exposing (ChangeId(..))
 import LocalState
 import MembersAndOwner
 import Message
+import MessageArray
 import MessageInput
 import Pages.Guild
 import PersonName
@@ -88,7 +89,7 @@ checkDmVisibleMessageCount admin isExpected data =
                             ("Discord DM visibleMessages.count="
                                 ++ String.fromInt dmChannel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (IdArray.length dmChannel.messages)
+                                ++ String.fromInt (MessageArray.length dmChannel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open DM, so they disappear from view."
                             )
 
@@ -130,7 +131,7 @@ checkGuildVisibleMessageCount admin isExpected data =
                             ("Discord guild channel visibleMessages.count="
                                 ++ String.fromInt channel.visibleMessages.count
                                 ++ " while the messages array still holds "
-                                ++ String.fromInt (IdArray.length channel.messages)
+                                ++ String.fromInt (MessageArray.length channel.messages)
                                 ++ " message(s). HandleReadyDataStep2 wiped the visible messages of the open guild channel, so they disappear from view."
                             )
 
@@ -338,8 +339,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     (\local ->
                                         case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
                                             Just ( _, channel ) ->
-                                                case IdArray.last channel.messages of
-                                                    Just (Message.MessageLoaded message) ->
+                                                case MessageArray.last channel.messages of
+                                                    Just message ->
                                                         case Message.reactionEmojis message |> SeqDict.keys of
                                                             [ EmojiOrCustomEmoji_CustomEmoji _ ] ->
                                                                 Ok ()
@@ -353,11 +354,12 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                                             _ ->
                                                                 Err "Expected exactly one reaction on the frontend's message"
 
-                                                    Just Message.MessageUnloaded ->
-                                                        Err "The frontend's copy of the message is unloaded"
-
                                                     Nothing ->
-                                                        Err "The Discord guild channel has no messages on the frontend"
+                                                        if MessageArray.isEmpty channel.messages then
+                                                            Err "The Discord guild channel has no messages on the frontend"
+
+                                                        else
+                                                            Err "The frontend's copy of the message is unloaded"
 
                                             Nothing ->
                                                 Err "The Discord guild channel is missing from the frontend"
