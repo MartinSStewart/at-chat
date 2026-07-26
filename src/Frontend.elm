@@ -3619,6 +3619,9 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
+                MessageInput.TypedEmojiSearch string ->
+                    Debug.todo ""
+
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -3919,6 +3922,9 @@ updateLoaded msg model =
 
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
+
+                MessageInput.TypedEmojiSearch string ->
+                    Debug.todo ""
 
         GotEmojiData result ->
             case result of

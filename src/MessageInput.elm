@@ -54,6 +54,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
+import Ui.Input
 import User exposing (FrontendUser, LocalUser)
 import UserAgent exposing (Browser(..), UserAgent)
 import UserSession exposing (DiscordFrontendUser)
@@ -91,6 +92,7 @@ type Msg
     | OnPasteFiles (Nonempty File)
     | TypedPageUp
     | TypedPageDown
+    | TypedEmojiSearch String
 
 
 counterThreshold : number
@@ -201,6 +203,9 @@ isPress msg =
             False
 
         TypedPageDown ->
+            False
+
+        TypedEmojiSearch string ->
             False
 
 
@@ -685,33 +690,101 @@ attachmentButton htmlIdPrefix =
         (Ui.html Icons.attachment)
 
 
-showEmojiSelectorButton : Bool -> String -> Element Msg
-showEmojiSelectorButton emojiSelectorOpened htmlIdPrefix =
+showEmojiSelectorButton : Bool -> Bool -> String -> Element Msg
+showEmojiSelectorButton isMobile emojiSelectorOpened htmlIdPrefix =
     Ui.el
-        [ Ui.rounded 4
-        , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
-        , Ui.pointer
-        , Ui.paddingXY 6 0
-        , Ui.height (Ui.px 40)
-        , Ui.background
-            (if emojiSelectorOpened then
-                MyUi.buttonBackgroundHighlighted
+        [ Ui.Input.text
+            [ Ui.width
+                (if emojiSelectorOpened then
+                    Ui.px 200
 
-             else
-                MyUi.buttonBackground
-            )
-        , Ui.border 1
-        , Ui.borderColor MyUi.buttonBorder
-        , Ui.contentCenterY
-        , Ui.centerY
-        , MyUi.hoverText "Add emoji"
-        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-        , Html.Events.preventDefaultOn
-            "touchend"
-            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-            |> Ui.htmlAttribute
+                 else
+                    Ui.fill
+                )
+            , Ui.height
+                (if emojiSelectorOpened then
+                    Ui.px 40
+
+                 else
+                    Ui.fill
+                )
+            , Ui.Events.onClick PressedOpenEmojiSelector
+            , Ui.id (htmlIdPrefix ++ "_emojiSelectorSearch")
+            , if emojiSelectorOpened then
+                Ui.opacity 1
+
+              else
+                Ui.opacity 0
+            , if emojiSelectorOpened then
+                Ui.noAttr
+
+              else
+                Ui.pointer
+            ]
+            { onChange = TypedEmojiSearch
+            , text = ""
+            , placeholder = Nothing
+            , label = Ui.Input.labelHidden "Add emoji"
+            }
+            |> Ui.inFront
+        , (Emoji.selector
+            isMobile
+            x
+            loggedIn.emojiSelector
+            emojiConfig
+            model.emojiData
+            availableCustomEmojis
+            local.localUser.customEmojis
+            availableStickers
+            local.localUser.stickers
+            |> Ui.el
+                [ Ui.alignBottom
+                , Ui.paddingXY paddingX 0
+                , if isMobile then
+                    Ui.width Ui.fill
+
+                  else
+                    Ui.width Ui.shrink
+                ]
+            |> Ui.map EmojiSelectorMsg
+          )
+            |> Ui.inFront
         ]
-        (Ui.html Icons.smile)
+        (Ui.el
+            ([ Ui.rounded 4
+
+             --, Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
+             , Ui.pointer
+             , Ui.paddingXY 6 0
+             , Ui.height (Ui.px 40)
+             , Ui.background
+                (if emojiSelectorOpened then
+                    MyUi.buttonBackgroundHighlighted
+
+                 else
+                    MyUi.buttonBackground
+                )
+             , Ui.border 1
+             , Ui.borderColor MyUi.buttonBorder
+             , Ui.contentCenterY
+             , Ui.centerY
+             , MyUi.hoverText "Add emoji"
+             ]
+                ++ (if emojiSelectorOpened then
+                        [ Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
+                        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+                        , Html.Events.preventDefaultOn
+                            "touchend"
+                            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+                            |> Ui.htmlAttribute
+                        ]
+
+                    else
+                        []
+                   )
+            )
+            (Ui.html Icons.smile)
+        )
 
 
 disabledView :

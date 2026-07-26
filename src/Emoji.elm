@@ -600,7 +600,6 @@ type EmojiOrSticker
 
 selector :
     Bool
-    -> Bool
     -> Int
     -> Model
     -> EmojiConfig
@@ -610,7 +609,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector searchHasFocus isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let

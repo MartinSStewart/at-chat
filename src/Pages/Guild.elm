@@ -2994,120 +2994,6 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-emojiSelector :
-    Bool
-    -> SeqSet (Id CustomEmojiId)
-    -> SeqSet (Id StickerId)
-    -> LocalState
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> Ui.Attribute FrontendMsg_
-emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model =
-    let
-        emojiConfig : EmojiConfig
-        emojiConfig =
-            local.localUser.user.emojiConfig
-
-        paddingX : number
-        paddingX =
-            4
-
-        x : Int
-        x =
-            if isMobile then
-                Coord.xRaw model.windowSize - paddingX * 2
-
-            else
-                Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
-    in
-    case loggedIn.showEmojiSelector of
-        EmojiSelectorHidden ->
-            Ui.noAttr
-
-        EmojiSelectorForReaction _ _ ->
-            Ui.inFront
-                (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
-                    isMobile
-                    x
-                    loggedIn.emojiSelector
-                    emojiConfig
-                    model.emojiData
-                    availableCustomEmojis
-                    local.localUser.customEmojis
-                    availableStickers
-                    local.localUser.stickers
-                    |> Ui.el
-                        [ Ui.alignBottom
-                        , Ui.paddingXY paddingX 0
-                        , if isMobile then
-                            Ui.width Ui.fill
-
-                          else
-                            Ui.width Ui.shrink
-                        ]
-                    |> Ui.map EmojiSelectorMsg
-                )
-
-        EmojiSelectorForMessage _ ->
-            Ui.inFront
-                (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
-                    isMobile
-                    x
-                    loggedIn.emojiSelector
-                    emojiConfig
-                    model.emojiData
-                    availableCustomEmojis
-                    local.localUser.customEmojis
-                    availableStickers
-                    local.localUser.stickers
-                    |> Ui.el
-                        [ Ui.alignBottom
-                        , Ui.paddingXY paddingX 0
-                        , if isMobile then
-                            Ui.width Ui.fill
-
-                          else
-                            Ui.width Ui.shrink
-                        ]
-                    |> Ui.map EmojiSelectorMsg
-                )
-
-        EmojiSelectorForEditMessage position _ ->
-            let
-                y =
-                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
-            in
-            Ui.inFront
-                (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
-                    isMobile
-                    x
-                    loggedIn.emojiSelector
-                    emojiConfig
-                    model.emojiData
-                    availableCustomEmojis
-                    local.localUser.customEmojis
-                    availableStickers
-                    local.localUser.stickers
-                    |> Ui.el
-                        [ Ui.paddingXY paddingX 0
-                        , Ui.move
-                            { x = 0
-                            , y =
-                                if y < 0 then
-                                    Coord.yRaw position
-
-                                else
-                                    y
-                            , z = 0
-                            }
-                        ]
-                    |> Ui.map EmojiSelectorMsg
-                )
-
-
 replyToHeader :
     ( AnyGuildOrDmId, ThreadRoute )
     -> Maybe (Id messageId)
@@ -3280,18 +3166,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ ChannelHeader.channel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            ([ emojiSelector
-                isMobile
-                local.localUser.user.availableCustomEmojis
-                local.localUser.user.availableStickers
-                local
-                loggedIn
-                model
-             , Ui.heightMin 0
-             , Ui.height Ui.fill
-             ]
-                ++ drawingModeAttributes model.route loggedIn.drawingMode
-            )
+            ([ Ui.heightMin 0, Ui.height Ui.fill ] ++ drawingModeAttributes model.route loggedIn.drawingMode)
             (Ui.Keyed.column
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
@@ -3470,12 +3345,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         ]
         [ ChannelHeader.discordChannel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            ([ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
-             , Ui.heightMin 0
-             , Ui.height Ui.fill
-             ]
-                ++ drawingModeAttributes model.route loggedIn.drawingMode
-            )
+            ([ Ui.heightMin 0, Ui.height Ui.fill ] ++ drawingModeAttributes model.route loggedIn.drawingMode)
             (Ui.Keyed.column
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
@@ -3736,18 +3606,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         ]
         [ ChannelHeader.thread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            ([ emojiSelector
-                isMobile
-                local.localUser.user.availableCustomEmojis
-                local.localUser.user.availableStickers
-                local
-                loggedIn
-                model
-             , Ui.heightMin 0
-             , Ui.height Ui.fill
-             ]
-                ++ drawingModeAttributes model.route loggedIn.drawingMode
-            )
+            ([ Ui.heightMin 0, Ui.height Ui.fill ] ++ drawingModeAttributes model.route loggedIn.drawingMode)
             (Ui.Keyed.column
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
@@ -3934,12 +3793,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         ]
         [ ChannelHeader.discordThread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
-            ([ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
-             , Ui.heightMin 0
-             , Ui.height Ui.fill
-             ]
-                ++ drawingModeAttributes model.route loggedIn.drawingMode
-            )
+            ([ Ui.heightMin 0, Ui.height Ui.fill ] ++ drawingModeAttributes model.route loggedIn.drawingMode)
             (Ui.Keyed.column
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
