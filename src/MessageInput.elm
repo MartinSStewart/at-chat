@@ -727,9 +727,9 @@ showEmojiSelectorButton isMobile emojiSelectorOpened htmlIdPrefix =
             , label = Ui.Input.labelHidden "Add emoji"
             }
             |> Ui.inFront
-        , (Emoji.selector
+        , Emoji.selector
             isMobile
-            x
+            0
             loggedIn.emojiSelector
             emojiConfig
             model.emojiData
@@ -747,7 +747,6 @@ showEmojiSelectorButton isMobile emojiSelectorOpened htmlIdPrefix =
                     Ui.width Ui.shrink
                 ]
             |> Ui.map EmojiSelectorMsg
-          )
             |> Ui.inFront
         ]
         (Ui.el
