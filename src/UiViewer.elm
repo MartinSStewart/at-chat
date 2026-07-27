@@ -15,7 +15,6 @@ import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
-import Emoji
 import FileName
 import FileStatus exposing (FileData, FileId)
 import GuildIcon
@@ -204,19 +203,6 @@ stickersSection =
             |> Ui.html
         , MessageInput.view
             (Dom.id "input")
-            { isOpen = False
-            , isMobile = False
-            , windowSize = Coord.xy 1000 800
-            , selector = Emoji.selectorInit
-            , emojiConfig =
-                { skinTone = Nothing
-                , category = Emoji.EmojiCategory Emoji.SmileysAndEmotion
-                , lastUsedEmojis = Array.empty
-                }
-            , emojiData = Nothing
-            , availableCustomEmojis = SeqSet.empty
-            , availableStickers = SeqSet.empty
-            }
             True
             False
             (Dom.id "channel")

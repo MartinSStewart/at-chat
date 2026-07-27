@@ -3619,21 +3619,6 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
-                MessageInput.TypedEmojiSearch text ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
-                        )
-                        model
-
-                -- The emoji picker is rendered by the message input's emoji button
-                -- now, so its messages arrive wrapped and get unwrapped here.
-                MessageInput.EmojiSelectorMsg emojiMsg ->
-                    updateLoaded (EmojiSelectorMsg emojiMsg) model
-
-                MessageInput.PressedEmojiSearchInput ->
-                    ( model, Command.none )
-
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -3934,21 +3919,6 @@ updateLoaded msg model =
 
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
-
-                MessageInput.TypedEmojiSearch text ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
-                        )
-                        model
-
-                -- The emoji picker is rendered by the message input's emoji button
-                -- now, so its messages arrive wrapped and get unwrapped here.
-                MessageInput.EmojiSelectorMsg emojiMsg ->
-                    updateLoaded (EmojiSelectorMsg emojiMsg) model
-
-                MessageInput.PressedEmojiSearchInput ->
-                    ( model, Command.none )
 
         GotEmojiData result ->
             case result of
@@ -5153,7 +5123,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
                                     emojiSelector Nothing
 
                         _ ->
-                            loggedIn.showEmojiSelector
+                            EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "" }
               }
             , Command.none
@@ -5448,26 +5418,6 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                                     Nothing ->
                                         Nothing
                             , previousTextInputFocus = loggedIn.textInputFocus
-
-                            --, showEmojiSelector =
-                            --    case ( loggedIn.showEmojiSelector, maybeHtmlId ) of
-                            --        ( EmojiSelectorHidden, Just htmlId ) ->
-                            --            case MessageInput.stringToEmojiSelectorSearchId htmlId of
-                            --                Just MessageInput.HtmlId_ChannelInput ->
-                            --                    EmojiSelectorForMessage (Maybe.map Tuple.first maybeSelection)
-                            --
-                            --                Just MessageInput.HtmlId_EditDesktop ->
-                            --                    Debug.todo ""
-                            --
-                            --                Just MessageInput.HtmlId_EditMobile ->
-                            --                    Debug.todo ""
-                            --
-                            --                --EmojiSelectorForEditMessage (Maybe.map Tuple.first maybeSelection)
-                            --                Nothing ->
-                            --                    loggedIn.showEmojiSelector
-                            --
-                            --        _ ->
-                            --            loggedIn.showEmojiSelector
                         }
               }
             , case maybeHtmlId of

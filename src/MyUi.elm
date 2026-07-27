@@ -11,7 +11,6 @@ module MyUi exposing
     , border2
     , bounceScroll
     , buttonBackground
-    , buttonBackgroundHighlighted
     , buttonBorder
     , buttonFontColor
     , cancelButtonBackground
@@ -1317,11 +1316,6 @@ selectedTextBackground =
 buttonBackground : Ui.Color
 buttonBackground =
     Ui.rgb 64 122 178
-
-
-buttonBackgroundHighlighted : Ui.Color
-buttonBackgroundHighlighted =
-    Ui.rgb 101 141 181
 
 
 disabledButtonBackground : Ui.Color

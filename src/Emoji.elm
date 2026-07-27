@@ -12,7 +12,6 @@ module Emoji exposing
     , SkinTone(..)
     , UnicodeEmoji(..)
     , emojiButtonId
-    , emojiSearchInputHeight
     , emojiWithSkinTone
     , fromString
     , heart
@@ -601,6 +600,7 @@ type EmojiOrSticker
 
 selector :
     Bool
+    -> Bool
     -> Int
     -> Model
     -> EmojiConfig
@@ -610,7 +610,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector searchHasFocus isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -679,6 +679,34 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                 , Ui.clip
                 ]
                 [ Ui.row
+                    [ MyUi.noShrinking ]
+                    (searchInput searchHasFocus model emojis columns
+                        :: (if isSearching then
+                                -- This is here just so the header height doesn't change
+                                [ Ui.el [ Ui.opacity 0 ] (Ui.text "🔎") ]
+
+                            else
+                                List.filterMap
+                                    (\category ->
+                                        case category of
+                                            EmojiCategory Components ->
+                                                Nothing
+
+                                            _ ->
+                                                MyUi.elButton
+                                                    (categoryButtonId category)
+                                                    (PressedCategory category)
+                                                    [ Ui.Font.center
+                                                    , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                                    , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
+                                                    ]
+                                                    (categoryToEmojiString userData.skinTone category)
+                                                    |> Just
+                                    )
+                                    (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
+                           )
+                    )
+                , Ui.row
                     [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
                     (List.indexedMap
                         (\index item ->
@@ -779,16 +807,10 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                                     ]
                            ]
                     )
-                , Ui.el [ Ui.height (Ui.px emojiSearchInputHeight) ] (Ui.text "Search area")
                 ]
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"
-
-
-emojiSearchInputHeight : number
-emojiSearchInputHeight =
-    40
 
 
 emojiWithSkinTone : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> String

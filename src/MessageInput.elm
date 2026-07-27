@@ -1,7 +1,5 @@
 module MessageInput exposing
-    ( EmojiSelectorConfig
-    , HtmlIdType(..)
-    , MentionUserDropdown
+    ( MentionUserDropdown
     , Msg(..)
     , NameSoFar(..)
     , NameSoFarData
@@ -12,20 +10,15 @@ module MessageInput exposing
     , dropdownView
     , editView
     , emojiDropdownList
-    , emojiSelectorSearchId
     , isPress
     , largePastedText
     , pressedArrowInDropdown
     , pressedDropdownItem
-    , stringToEmojiSelectorSearchId
     , userDropdownList
     , view
     )
 
 import Array
-import Color.Manipulate
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -60,7 +53,6 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import Ui.Input
 import User exposing (FrontendUser, LocalUser)
 import UserAgent exposing (Browser(..), UserAgent)
 import UserSession exposing (DiscordFrontendUser)
@@ -98,33 +90,6 @@ type Msg
     | OnPasteFiles (Nonempty File)
     | TypedPageUp
     | TypedPageDown
-    | TypedEmojiSearch String
-    | EmojiSelectorMsg Emoji.Msg
-    | PressedEmojiSearchInput
-
-
-{-| The emoji picker is rendered by the emoji button rather than by the page
-around it, so that the picker's search field can be the button itself. An input
-that stays in one place in the DOM is one that keeps its focus, and its keyboard
-on mobile, when the picker opens.
--}
-type alias EmojiSelectorConfig =
-    { isOpen : Bool
-    , isMobile : Bool
-    , windowSize : Coord CssPixels
-    , selector : Emoji.Model
-    , emojiConfig : Emoji.EmojiConfig
-    , emojiData : Maybe CachedEmojiData
-    , availableCustomEmojis : SeqSet (Id CustomEmojiId)
-    , availableStickers : SeqSet (Id StickerId)
-    }
-
-
-{-| Gap between the picker and the edge of the window.
--}
-emojiSelectorPadding : number
-emojiSelectorPadding =
-    4
 
 
 counterThreshold : number
@@ -236,15 +201,6 @@ isPress msg =
 
         TypedPageDown ->
             False
-
-        TypedEmojiSearch _ ->
-            False
-
-        EmojiSelectorMsg emojiMsg ->
-            Emoji.isPressed emojiMsg
-
-        PressedEmojiSearchInput ->
-            True
 
 
 textarea :
@@ -495,7 +451,7 @@ disabledTextarea placeholderText text attachedFiles local =
 
 
 editView :
-    EmojiSelectorConfig
+    HtmlId
     -> Int
     -> Bool
     -> Bool
@@ -510,11 +466,11 @@ editView :
     -> { c | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView emojiSelector height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles localUser loggedIn users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
-            htmlIdTypeToString HtmlId_EditMobile
+            Dom.idToString htmlId
     in
     textarea
         isMobileKeyboard
@@ -549,7 +505,7 @@ editView emojiSelector height roundTopCorners isMobileKeyboard channelTextInputI
             , Ui.inFront
                 (Ui.row
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser HtmlId_EditMobile ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -568,8 +524,6 @@ editView emojiSelector height roundTopCorners isMobileKeyboard channelTextInputI
                          else
                             MyUi.buttonBackground
                         )
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.buttonBorder
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -584,28 +538,8 @@ editView emojiSelector height roundTopCorners isMobileKeyboard channelTextInputI
             ]
 
 
-type HtmlIdType
-    = HtmlId_ChannelInput
-    | HtmlId_EditDesktop
-    | HtmlId_EditMobile
-
-
-htmlIdTypeToString : HtmlIdType -> String
-htmlIdTypeToString htmlId =
-    case htmlId of
-        HtmlId_ChannelInput ->
-            "messageMenu_channelInput"
-
-        HtmlId_EditDesktop ->
-            "messageMenu_editDesktop"
-
-        HtmlId_EditMobile ->
-            "messageMenu_editMobile"
-
-
 view :
-    HtmlIdType
-    -> EmojiSelectorConfig
+    HtmlId
     -> Bool
     -> Bool
     -> HtmlId
@@ -623,11 +557,11 @@ view :
     -> { a | typedTextCounter : Int, textInputFocus : Maybe TextInputFocus }
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles localUser loggedIn users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
-            htmlIdTypeToString htmlId
+            Dom.idToString htmlId
     in
     textarea
         isMobileKeyboard
@@ -660,8 +594,8 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
                 (Ui.row
-                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = -2, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
-                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser htmlId ]
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
@@ -680,11 +614,9 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
                          else
                             MyUi.buttonBackground
                         )
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.move { x = -2, y = -2, z = 0 }
+                    , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
-                    , Ui.alignBottom
+                    , Ui.centerY
                     , MyUi.hoverText "Send message"
                     , Html.Events.custom
                         "touchstart"
@@ -733,8 +665,6 @@ attachmentButton htmlIdPrefix =
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)
         , Ui.background MyUi.buttonBackground
-        , Ui.border 1
-        , Ui.borderColor MyUi.buttonBorder
         , Ui.contentCenterY
         , Ui.centerY
         , MyUi.hoverText "Attach file"
@@ -746,146 +676,25 @@ attachmentButton htmlIdPrefix =
         (Ui.html Icons.attachment)
 
 
-emojiSelectorSearchId : HtmlIdType -> String
-emojiSelectorSearchId htmlIdType =
-    case htmlIdType of
-        HtmlId_ChannelInput ->
-            "messageMenu_channelInput_emojiSelectorSearch"
-
-        HtmlId_EditDesktop ->
-            "messageMenu_editDesktop_emojiSelectorSearch"
-
-        HtmlId_EditMobile ->
-            "messageMenu_editMobile_emojiSelectorSearch"
-
-
-stringToEmojiSelectorSearchId : HtmlId -> Maybe HtmlIdType
-stringToEmojiSelectorSearchId text =
-    case Dom.idToString text of
-        "messageMenu_channelInput_emojiSelectorSearch" ->
-            Just HtmlId_ChannelInput
-
-        "messageMenu_editDesktop_emojiSelectorSearch" ->
-            Just HtmlId_EditDesktop
-
-        "messageMenu_editMobile_emojiSelectorSearch" ->
-            Just HtmlId_EditMobile
-
-        _ ->
-            Nothing
-
-
-showEmojiSelectorButton :
-    EmojiSelectorConfig
-    ->
-        { localUser
-            | stickers : SeqDict (Id StickerId) StickerData
-            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-        }
-    -> HtmlIdType
-    -> Element Msg
-showEmojiSelectorButton emojiSelector localUser htmlId =
-    let
-        -- The picker hangs over the conversation, so it gets that much room.
-        selectorWidth : Int
-        selectorWidth =
-            Coord.xRaw emojiSelector.windowSize
-                - (if emojiSelector.isMobile then
-                    0
-
-                   else
-                    MyUi.channelAndGuildColumnWidth emojiSelector.windowSize
-                  )
-                - emojiSelectorPadding
-                * 2
-    in
+showEmojiSelectorButton : String -> Element Msg
+showEmojiSelectorButton htmlIdPrefix =
     Ui.el
-        [ Ui.Input.text
-            [ Ui.width
-                (if emojiSelector.isOpen then
-                    Ui.px 200
-
-                 else
-                    Ui.fill
-                )
-            , Ui.height
-                (if emojiSelector.isOpen then
-                    Ui.px Emoji.emojiSearchInputHeight
-
-                 else
-                    Ui.fill
-                )
-            , Ui.id (emojiSelectorSearchId htmlId)
-            , if emojiSelector.isOpen then
-                Ui.opacity 1
-
-              else
-                Ui.opacity 0
-            , if emojiSelector.isOpen then
-                Ui.noAttr
-
-              else
-                Ui.pointer
-            , Ui.background MyUi.inputBackground
-            , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-            , if emojiSelector.isOpen then
-                Ui.move { x = 8, y = -Emoji.emojiSearchInputHeight, z = 0 }
-
-              else
-                Ui.noAttr
-            ]
-            { onChange = TypedEmojiSearch
-            , text = emojiSelector.selector.searchText
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden "Add emoji"
-            }
-            |> Ui.inFront
-        , (if emojiSelector.isOpen then
-            Emoji.selector
-                emojiSelector.isMobile
-                selectorWidth
-                emojiSelector.selector
-                emojiSelector.emojiConfig
-                emojiSelector.emojiData
-                emojiSelector.availableCustomEmojis
-                localUser.customEmojis
-                emojiSelector.availableStickers
-                localUser.stickers
-
-           else
-            Ui.none
-          )
-            |> Ui.el
-                [ Ui.move { x = 4, y = -Emoji.selectorHeight, z = 0 }
-                , if emojiSelector.isMobile then
-                    Ui.width Ui.fill
-
-                  else
-                    Ui.width Ui.shrink
-                ]
-            |> Ui.map EmojiSelectorMsg
-            |> Ui.inFront
+        [ Ui.rounded 4
+        , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
+        , Ui.pointer
+        , Ui.paddingXY 6 0
+        , Ui.height (Ui.px 40)
+        , Ui.background MyUi.buttonBackground
+        , Ui.contentCenterY
+        , Ui.centerY
+        , MyUi.hoverText "Add emoji"
+        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+        , Html.Events.preventDefaultOn
+            "touchend"
+            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+            |> Ui.htmlAttribute
         ]
-        (Ui.el
-            [ Ui.rounded 4
-            , Ui.pointer
-            , Ui.paddingXY 6 0
-            , Ui.height (Ui.px 40)
-            , Ui.background
-                (if emojiSelector.isOpen then
-                    MyUi.buttonBackgroundHighlighted
-
-                 else
-                    MyUi.buttonBackground
-                )
-            , Ui.border 1
-            , Ui.borderColor MyUi.buttonBorder
-            , Ui.contentCenterY
-            , Ui.centerY
-            , MyUi.hoverText "Add emoji"
-            ]
-            (Ui.html Icons.smile)
-        )
+        (Ui.html Icons.smile)
 
 
 disabledView :
@@ -923,8 +732,6 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
                     , Ui.paddingXY 6 0
                     , Ui.height (Ui.px 38)
                     , Ui.background MyUi.disabledButtonBackground
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.disabledButtonBorder
                     , Ui.move { x = 2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -939,8 +746,6 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background MyUi.disabledButtonBackground
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.disabledButtonBorder
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
