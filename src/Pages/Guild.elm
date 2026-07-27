@@ -43,7 +43,6 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
-import IdArray exposing (IdArray)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers
