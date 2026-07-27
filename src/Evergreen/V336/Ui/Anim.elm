@@ -1,0 +1,11 @@
+module Evergreen.V336.Ui.Anim exposing (..)
+
+import Evergreen.V336.Internal.Model2
+
+
+type alias Msg =
+    Evergreen.V336.Internal.Model2.Msg
+
+
+type alias State =
+    Evergreen.V336.Internal.Model2.State
