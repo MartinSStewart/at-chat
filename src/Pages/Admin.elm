@@ -2483,6 +2483,8 @@ voiceChatSection isMobile adminData model user =
             (Dom.id "admin_deleteCall")
             PressedDeleteCall
             [ Ui.background MyUi.deleteButtonBackground
+            , Ui.border 1
+            , Ui.borderColor MyUi.deleteButtonBorder
             , Ui.Font.color MyUi.deleteButtonFont
             , Ui.paddingXY 16 8
             , Ui.rounded 4

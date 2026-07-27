@@ -16,6 +16,7 @@ import Bytes.Decode
 import Bytes.Encode
 import Call exposing (RemoteCallData)
 import ChannelDescription
+import ChannelExport
 import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
@@ -41,7 +42,7 @@ import FileStatus exposing (FileData, FileId)
 import Game
 import Go
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GamePublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -5577,6 +5578,45 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Nothing ->
                     ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
+
+        ExportChannelRequest exportChannelId ->
+            case exportChannelId of
+                ExportChannel_Guild guildId channelId ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( model
+                            , case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    ExportChannelResponse
+                                        { fileName = ChannelExport.fileName channel.name
+                                        , json = ChannelExport.guildChannel model.users guild channel
+                                        }
+                                        |> Lamdera.sendToFrontend clientId
+
+                                Nothing ->
+                                    Command.none
+                            )
+                        )
+
+                ExportChannel_Discord currentDiscordUserId guildId channelId ->
+                    BackendExtra.asDiscordGuildChannelMember
+                        model
+                        sessionId
+                        guildId
+                        channelId
+                        currentDiscordUserId
+                        (\_ _ _ guild channel ->
+                            ( model
+                            , ExportChannelResponse
+                                { fileName = ChannelExport.fileName channel.name
+                                , json = ChannelExport.discordGuildChannel model.discordUsers guildId guild channel
+                                }
+                                |> Lamdera.sendToFrontend clientId
+                            )
+                        )
 
 
 handleGoMatchRequest :

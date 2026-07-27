@@ -233,7 +233,7 @@ view htmlId isSecret label validation msg value model =
                                 , Ui.contentCenterX
                                 , Ui.contentCenterY
                                 , Ui.height Ui.fill
-                                , Ui.borderColor MyUi.inputBorder
+                                , Ui.borderColor MyUi.deleteButtonBorder
                                 , Ui.border 1
                                 , Ui.background MyUi.deleteButtonBackground
                                 , Ui.Font.color MyUi.deleteButtonFont

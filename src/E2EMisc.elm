@@ -1,5 +1,6 @@
 module E2EMisc exposing
     ( channelSearchTest
+    , exportChannelTest
     , friendsSearchTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
@@ -88,6 +89,55 @@ largePasteBecomesAttachment config =
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.text "message.txt" ])
+                ]
+            )
+        ]
+
+
+{-| Pressing "Export channel" in the member column asks the backend for a JSON
+copy of the channel and downloads it. The JSON should contain every message plus
+the publicly available data of everyone with access to the channel.
+-}
+exportChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+exportChannelTest config =
+    E2EHelper.startTest
+        "Export a guild channel to a JSON file"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+                , admin.click 1000 (Dom.id "guild_exportChannel")
+                , T.checkState
+                    1000
+                    (\data ->
+                        case data.downloads of
+                            [ download ] ->
+                                case download.content of
+                                    T.StringFile content ->
+                                        case
+                                            List.filter
+                                                (\text -> not (String.contains text content))
+                                                [ "Hello everyone", "\"AT\"", "Stevie Steve" ]
+                                        of
+                                            [] ->
+                                                Ok ()
+
+                                            missing ->
+                                                Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+
+                                    T.BytesFile _ ->
+                                        Err "The exported channel should be a text file"
+
+                            downloads ->
+                                Err
+                                    ("Expected a single download, instead got "
+                                        ++ String.fromInt (List.length downloads)
+                                    )
+                    )
                 ]
             )
         ]

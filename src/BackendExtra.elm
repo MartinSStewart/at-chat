@@ -1840,6 +1840,9 @@ toBackendLog toBackend =
         GetPublicGoMatchRequest _ ->
             ToBackendLog_GetPublicGoMatchRequest
 
+        ExportChannelRequest _ ->
+            ToBackendLog_ExportChannelRequest
+
 
 asGuildMember :
     BackendModel

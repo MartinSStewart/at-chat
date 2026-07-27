@@ -475,6 +475,8 @@ view windowSize hasImage model =
                         , MyUi.hoverText "Remove profile image"
                         , Ui.paddingXY 8 0
                         , Ui.background MyUi.deleteButtonBackground
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.deleteButtonBorder
                         , Ui.Font.color MyUi.deleteButtonFont
                         , Ui.rounded 4
                         , Ui.width Ui.shrink

@@ -4,7 +4,11 @@ module GuildIcon exposing
     , addGuildButton
     , defaultUser
     , defaultUserHtml
+    , discordLabel
+    , discordLogo
+    , discordNotificationView
     , discordUserView
+    , discordView
     , fullWidth
     , notificationHelper
     , notificationView
@@ -45,6 +49,14 @@ maxNotifications =
     99
 
 
+{-| Height of the notification count, and of the Discord marker that shares its
+corner.
+-}
+notificationHeight : number
+notificationHeight =
+    17
+
+
 notificationHelper : Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
 notificationHelper color fontColor borderColor xOffset yOffset count =
     let
@@ -67,13 +79,13 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
             , Ui.width
                 (Ui.px
                     (if count2 < 10 then
-                        17
+                        notificationHeight
 
                      else
                         22
                     )
                 )
-            , Ui.height (Ui.px 17)
+            , Ui.height (Ui.px notificationHeight)
             , Ui.border 2
             , Ui.borderColor borderColor
             , Ui.move { x = xOffset, y = yOffset, z = 0 }
@@ -99,60 +111,146 @@ notificationView xOffset yOffset borderColor notification =
             notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
+{-| The Discord logo on a blurple circle. Marks the guilds and users that come
+from Discord so they can be told apart from at-chat ones at a glance.
+-}
+discordLogo : List (Ui.Attribute msg) -> Element msg
+discordLogo attributes =
+    Ui.el
+        (Ui.background discordBlurple
+            :: Ui.rounded 99
+            :: Ui.padding 3
+            :: Ui.border 1
+            :: Ui.borderColor MyUi.background1
+            :: Ui.width Ui.shrink
+            :: MyUi.noShrinking
+            :: Ui.Accessibility.description discordLabel
+            :: attributes
+        )
+        (Ui.html Icons.discord)
+
+
+discordLabel : String
+discordLabel =
+    "Discord"
+
+
+discordBlurple : Ui.Color
+discordBlurple =
+    Ui.rgb 88 101 242
+
+
+{-| Stands in for `notificationView` on guilds and users that come from Discord.
+The Discord logo takes the corner the notification count would use, and gives it
+back up whenever there is a count to show.
+-}
+discordNotificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
+discordNotificationView xOffset yOffset borderColor notification =
+    case notification of
+        NoNotification ->
+            Ui.el
+                [ Ui.rounded 99
+                , Ui.background discordBlurple
+                , Ui.width (Ui.px notificationHeight)
+                , Ui.height (Ui.px notificationHeight)
+                , Ui.move { x = xOffset, y = yOffset, z = 0 }
+                , Ui.alignRight
+                , Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.Font.color MyUi.white
+                , Ui.Accessibility.description discordLabel
+                , -- The icon is inside a link. Letting the marker swallow clicks
+                  -- would leave a dead spot in the corner of it.
+                  MyUi.noPointerEvents
+                ]
+                (Ui.html Icons.discord)
+                |> Ui.inFront
+
+        NewMessage count ->
+            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
+
+        NewMessageForUser count ->
+            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
+
+
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view mode guild =
-    let
-        name : String
-        name =
-            GuildName.toString guild.name
-    in
     Ui.el
-        [ case mode of
-            IsSelected ->
-                Ui.noAttr
+        [ notificationView
+            0
+            -3
+            MyUi.background1
+            (case mode of
+                IsSelected ->
+                    NoNotification
 
-            Normal notification ->
-                notificationView 0 -3 MyUi.background1 notification
+                Normal notification ->
+                    notification
+            )
         ]
-        (case guild.icon of
-            Just icon ->
-                iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+        (guildIcon guild mode (GuildName.toString guild.name))
 
-            Nothing ->
-                String.replace "-" " " name
-                    |> String.filter (\char -> Char.isAlphaNum char || char == ' ')
-                    |> String.words
-                    |> List.take 3
-                    |> List.map (String.left 1)
-                    |> String.concat
-                    |> Ui.text
-                    |> Ui.el
-                        [ Ui.contentCenterX
-                        , Ui.contentCenterY
-                        , case mode of
-                            IsSelected ->
-                                Ui.noAttr
 
-                            _ ->
-                                Ui.rounded (round (toFloat size * 8 / 50))
-                        , MyUi.notoSans
-                        , Ui.Font.weight 600
-                        , Ui.background MyUi.secondaryGray
-                        , Ui.border 1
-                        , Ui.borderColor MyUi.secondaryGrayBorder
-                        , Ui.centerX
-                        , case mode of
-                            IsSelected ->
-                                Ui.width (Ui.px fullWidth)
+{-| Same as `view` but marked as coming from Discord.
+-}
+discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+discordView mode guild =
+    Ui.el
+        [ discordNotificationView
+            0
+            -3
+            MyUi.background1
+            (case mode of
+                IsSelected ->
+                    NoNotification
 
-                            _ ->
-                                Ui.width (Ui.px size)
-                        , Ui.height (Ui.px size)
-                        , Ui.Font.size (round (toFloat size * 18 / 50))
-                        , Ui.Font.color iconFontColor
-                        , MyUi.hoverText name
-                        ]
-        )
+                Normal notification ->
+                    notification
+            )
+        ]
+        (guildIcon guild mode (GuildName.toString guild.name))
+
+
+guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg
+guildIcon guild mode name =
+    case guild.icon of
+        Just icon ->
+            iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+
+        Nothing ->
+            String.replace "-" " " name
+                |> String.filter (\char -> Char.isAlphaNum char || char == ' ')
+                |> String.words
+                |> List.take 3
+                |> List.map (String.left 1)
+                |> String.concat
+                |> Ui.text
+                |> Ui.el
+                    [ Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , case mode of
+                        IsSelected ->
+                            Ui.noAttr
+
+                        _ ->
+                            Ui.rounded (round (toFloat size * 8 / 50))
+                    , MyUi.notoSans
+                    , Ui.Font.weight 600
+                    , Ui.background MyUi.secondaryGray
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.secondaryGrayBorder
+                    , Ui.centerX
+                    , case mode of
+                        IsSelected ->
+                            Ui.width (Ui.px fullWidth)
+
+                        _ ->
+                            Ui.width (Ui.px size)
+                    , Ui.height (Ui.px size)
+                    , Ui.Font.size (round (toFloat size * 18 / 50))
+                    , Ui.Font.color iconFontColor
+                    , MyUi.hoverText name
+                    ]
 
 
 userView : ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
@@ -179,7 +277,7 @@ discordUserView notification maybeIcon userId =
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
         |> iconView (Normal notification)
-        |> Ui.el [ notificationView 0 -3 MyUi.background1 notification ]
+        |> Ui.el [ discordNotificationView 0 -3 MyUi.background1 notification ]
 
 
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg

@@ -42,7 +42,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), ExportChannelId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
 import LinkedAndOtherDiscordUsers
@@ -187,7 +187,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll model.drag)
+                                (GuildColumn.canScroll True model.drag)
                                 True
                                 model.time
                                 maybeOtherUserId
@@ -210,7 +210,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy False model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll model.drag)
+                                (GuildColumn.canScroll False model.drag)
                                 False
                                 model.time
                                 maybeOtherUserId
@@ -416,7 +416,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll model.drag
+                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -439,10 +439,12 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy3
+                                    Ui.Lazy.lazy5
                                         memberColumnMobile
                                         canScroll2
                                         local.localUser
+                                        guildId
+                                        channelRoute
                                         guild.membersAndOwner
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -513,7 +515,12 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy2 memberColumnNotMobile local.localUser guild.membersAndOwner
+                            , Ui.Lazy.lazy4
+                                memberColumnNotMobile
+                                local.localUser
+                                guildId
+                                channelRoute
+                                guild.membersAndOwner
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -599,7 +606,7 @@ discordGuildView model routeData loggedIn local =
                     else if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                GuildColumn.canScroll model.drag
+                                GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -787,8 +794,57 @@ memberColumnWidth =
     200
 
 
-memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberColumnNotMobile localUser membersAndOwner =
+{-| The member column is also shown on routes where no channel is selected. In
+that case there's nothing to export.
+-}
+channelRouteToChannelId : ChannelRoute -> Maybe (Id ChannelId)
+channelRouteToChannelId channelRoute =
+    case channelRoute of
+        ChannelRoute channelId _ _ ->
+            Just channelId
+
+        NewChannelRoute ->
+            Nothing
+
+        EditChannelRoute _ ->
+            Nothing
+
+        GuildSettingsRoute ->
+            Nothing
+
+        JoinRoute _ ->
+            Nothing
+
+
+{-| Asks the backend for a JSON copy of every message in the channel and then
+downloads it.
+-}
+exportChannelButton : ExportChannelId -> Element FrontendMsg_
+exportChannelButton exportChannelId =
+    MyUi.elButton
+        (Dom.id "guild_exportChannel")
+        (PressedExportChannel exportChannelId)
+        [ Ui.paddingXY 8 4
+        , Ui.rounded 4
+        , Ui.border 1
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.background MyUi.buttonBackground
+        , Ui.Font.color MyUi.font1
+        , Ui.Font.center
+        , Ui.Font.weight 500
+        , MyUi.focusEffect
+        , MyUi.noShrinking
+        ]
+        (Ui.text "Export channel")
+
+
+memberColumnNotMobile :
+    LocalUser
+    -> Id GuildId
+    -> ChannelRoute
+    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Element FrontendMsg_
+memberColumnNotMobile localUser guildId channelRoute membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
@@ -803,7 +859,15 @@ memberColumnNotMobile localUser membersAndOwner =
         , Ui.scrollable
         , Ui.heightMin 0
         ]
-        [ Ui.column
+        [ case channelRouteToChannelId channelRoute of
+            Just channelId ->
+                Ui.el
+                    [ Ui.paddingXY 8 8 ]
+                    (exportChannelButton (ExportChannel_Guild guildId channelId))
+
+            Nothing ->
+                Ui.none
+        , Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
             , memberLabel False localUser (MembersAndOwner.owner membersAndOwner)
@@ -853,7 +917,10 @@ discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channe
 
         Just members ->
             discordMemberColumnContainer
-                [ Ui.column
+                [ Ui.el
+                    [ Ui.paddingXY 0 4 ]
+                    (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                , Ui.column
                     []
                     [ Ui.text "Owner"
                     , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
@@ -884,8 +951,14 @@ discordMemberColumnContainer contents =
         contents
 
 
-memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberColumnMobile canScroll2 localUser membersAndOwner =
+memberColumnMobile :
+    Bool
+    -> LocalUser
+    -> Id GuildId
+    -> ChannelRoute
+    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Element FrontendMsg_
+memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
@@ -913,7 +986,15 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ Ui.column
+            [ case channelRouteToChannelId channelRoute of
+                Just channelId ->
+                    Ui.el
+                        [ Ui.paddingXY 8 4 ]
+                        (exportChannelButton (ExportChannel_Guild guildId channelId))
+
+                Nothing ->
+                    Ui.none
+            , Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text "Owner"
                 , memberLabel True localUser (MembersAndOwner.owner membersAndOwner)
@@ -967,7 +1048,10 @@ discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guil
                     ]
                     [ Ui.column
                         [ Ui.paddingXY 8 4 ]
-                        [ Ui.column
+                        [ Ui.el
+                            [ Ui.paddingXY 8 4 ]
+                            (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                        , Ui.column
                             [ Ui.paddingXY 8 4 ]
                             [ Ui.text "Owner"
                             , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
@@ -1301,7 +1385,7 @@ guildSettingsForm model loggedIn local guildId guild =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , MyUi.scrollable (GuildColumn.canScroll model.drag)
+            , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile False (Ui.text "Guild settings") Nothing
             , if isOwner then
@@ -1535,7 +1619,13 @@ deleteGuildSection guildId guild form =
             , Ui.rounded 8
             , Ui.Font.color MyUi.deleteButtonFont
             , Ui.Font.bold
-            , Ui.borderColor MyUi.buttonBorder
+            , Ui.borderColor
+                (if deleteEnabled then
+                    MyUi.deleteButtonBorder
+
+                 else
+                    MyUi.disabledButtonBorder
+                )
             , Ui.border 1
             ]
             (Ui.text "Delete guild")
@@ -3205,7 +3295,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3382,7 +3472,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3647,7 +3737,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -3832,7 +3922,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 ([ Ui.height Ui.fill
                  , Ui.width Ui.fill
                  , Ui.paddingWith { left = 0, right = 0, top = 200, bottom = 16 }
-                 , MyUi.scrollable (GuildColumn.canScroll model.drag)
+                 , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
                  , MyUi.htmlStyle "overflow-wrap" "break-word"
                  , Ui.id (Dom.idToString conversationContainerId)
                  , Ui.Events.on
@@ -4311,6 +4401,41 @@ reactionPopup customEmojis allUsers animationMode emoji users =
 
         nameCount =
             List.Nonempty.length names
+
+        maybeEmojiName : Maybe String
+        maybeEmojiName =
+            case emoji of
+                EmojiOrCustomEmoji_Emoji _ ->
+                    Nothing
+
+                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                    SeqDict.get customEmojiId customEmojis
+                        |> Maybe.map (\emojiData -> ":" ++ CustomEmoji.emojiNameToString emojiData.name ++ ":")
+
+        namesParagraph : Element msg
+        namesParagraph =
+            Ui.Prose.paragraph
+                [ Ui.Font.size 14, Ui.width Ui.fill ]
+                (if nameCount > 10 then
+                    let
+                        visible =
+                            List.Nonempty.take 8 names
+                                |> List.Nonempty.toList
+                                |> List.intersperse (Ui.text ", ")
+                    in
+                    visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
+
+                 else
+                    case List.Nonempty.tail names of
+                        [] ->
+                            [ List.Nonempty.head names ]
+
+                        [ two ] ->
+                            [ List.Nonempty.head names, Ui.text " and ", two ]
+
+                        rest ->
+                            List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
+                )
     in
     Ui.row
         [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
@@ -4336,28 +4461,16 @@ reactionPopup customEmojis allUsers animationMode emoji users =
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
                 CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
-        , Ui.Prose.paragraph
-            [ Ui.Font.size 14, Ui.width Ui.fill ]
-            (if nameCount > 10 then
-                let
-                    visible =
-                        List.Nonempty.take 8 names
-                            |> List.Nonempty.toList
-                            |> List.intersperse (Ui.text ", ")
-                in
-                visible ++ [ Ui.text ", and ", Ui.text (String.fromInt (nameCount - 8)), Ui.text " more" ]
+        , case maybeEmojiName of
+            Just emojiName ->
+                Ui.column
+                    [ Ui.spacing 2 ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.Font.color MyUi.font1 ] (Ui.text emojiName)
+                    , namesParagraph
+                    ]
 
-             else
-                case List.Nonempty.tail names of
-                    [] ->
-                        [ List.Nonempty.head names ]
-
-                    [ two ] ->
-                        [ List.Nonempty.head names, Ui.text " and ", two ]
-
-                    rest ->
-                        List.intersperse (Ui.text ", ") rest ++ [ Ui.text ", and ", List.Nonempty.head names ]
-            )
+            Nothing ->
+                namesParagraph
         ]
 
 
@@ -6992,16 +7105,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             [ MyUi.hoverText guildName
             , Ui.spacing 4
             ]
-            [ Ui.el
-                [ Ui.background (Ui.rgb 88 101 242)
-                , Ui.rounded 99
-                , Ui.padding 3
-                , Ui.border 1
-                , Ui.borderColor MyUi.background1
-                , Ui.width Ui.shrink
-                , MyUi.noShrinking
-                ]
-                (Ui.html Icons.discord)
+            [ GuildIcon.discordLogo []
             , Ui.text guildName
             ]
         , GuildColumn.elLinkButton
@@ -8153,7 +8257,9 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
                                 [ Ui.el
-                                    [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                                    [ GuildIcon.discordNotificationView 4 -3 MyUi.background2 notification
+                                    , Ui.width Ui.shrink
+                                    ]
                                     (User.discordProfileImage currentUserId otherUser.icon)
                                 , Ui.column
                                     []
@@ -8177,7 +8283,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             )
                             members2
                             |> User.multipleProfileImages
-                            |> Ui.el [ GuildIcon.notificationView 4 -3 MyUi.background2 notification, Ui.width Ui.shrink ]
+                            |> Ui.el
+                                [ GuildIcon.discordNotificationView 4 -3 MyUi.background2 notification
+                                , Ui.width Ui.shrink
+                                ]
                         , Ui.column
                             []
                             [ List.filterMap
@@ -8311,7 +8420,13 @@ editChannelFormView isMobile2 guildId channelId channel form =
                 , Ui.rounded 8
                 , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.Font.bold
-                , Ui.borderColor MyUi.buttonBorder
+                , Ui.borderColor
+                    (if deleteEnabled then
+                        MyUi.deleteButtonBorder
+
+                     else
+                        MyUi.disabledButtonBorder
+                    )
                 , Ui.border 1
                 ]
                 (Ui.text "Delete channel")
@@ -8573,6 +8688,8 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.background MyUi.deleteButtonBackground
+                            , Ui.border 1
+                            , Ui.borderColor MyUi.deleteButtonBorder
                             ]
                             (Ui.html Icons.delete)
                         )

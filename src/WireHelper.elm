@@ -5,6 +5,7 @@ module WireHelper exposing
     , encodeDiscordGuild
     , encodeDmChannel
     , encodeGuild
+    , foldStreamedBackendModel
     )
 
 {-| These functions are in a separate module because Intellij flags w3\_\* functions as missing and that's annoying to look at while doing other stuff.
@@ -111,18 +112,58 @@ decodeStreamedBackendModel =
         (decodeLengthPrefixedList decodeDiscordDmChannel)
 
 
+{-| Reads the same format as `decodeStreamedBackendModel`, but hands each guild
+to a fold function as it is decoded instead of collecting them all, and throws
+the DM channels away.
+
+A backup expands to more than twenty times its file size once it has been decoded
+into a `BackendModel`, so anything that only needs a part of one should fold it
+away here rather than decode the whole thing and pick through it afterwards. Only
+one guild is alive at a time, and `init` is the chance to keep whatever is needed
+from the rest of the model before that is dropped too.
+
+The DM channels still have to be decoded, since that is the only way to find
+where the next section starts, but each one is discarded immediately.
+
+-}
+foldStreamedBackendModel :
+    { init : BackendModel -> state
+    , guild : ( Id GuildId, LocalState.BackendGuild ) -> state -> state
+    , discordGuild : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> state -> state
+    }
+    -> Decoder state
+foldStreamedBackendModel config =
+    Bytes.Decode.map config.init decodeBackendModel
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeGuild config.guild)
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDmChannel discard)
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDiscordGuild config.discordGuild)
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDiscordDmChannel discard)
+
+
+discard : a -> state -> state
+discard _ state =
+    state
+
+
 decodeLengthPrefixedList : Decoder a -> Decoder (List a)
 decodeLengthPrefixedList itemDecoder =
+    foldLengthPrefixedList itemDecoder (::) [] |> Bytes.Decode.map List.reverse
+
+
+foldLengthPrefixedList : Decoder a -> (a -> state -> state) -> state -> Decoder state
+foldLengthPrefixedList itemDecoder func state =
     Bytes.Decode.unsignedInt32 Bytes.BE
         |> Bytes.Decode.andThen
             (\count ->
                 Bytes.Decode.loop
-                    ( count, [] )
-                    (\( remaining, acc ) ->
+                    ( count, state )
+                    (\( remaining, state2 ) ->
                         if remaining > 0 then
-                            Bytes.Decode.map (\item -> Bytes.Decode.Loop ( remaining - 1, item :: acc )) itemDecoder
+                            Bytes.Decode.map
+                                (\item -> Bytes.Decode.Loop ( remaining - 1, func item state2 ))
+                                itemDecoder
 
                         else
-                            Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse acc))
+                            Bytes.Decode.succeed (Bytes.Decode.Done state2)
                     )
             )
