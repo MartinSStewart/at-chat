@@ -1,5 +1,6 @@
 module MessageArray exposing
-    ( MessageArray
+    ( MessageArray(..)
+    , Run
     , empty
     , findRight
     , foldr
@@ -57,7 +58,7 @@ type MessageArray k v
         }
 
 
-{-| A group of values at consecutive indices. `values` is never empty.
+{-| Opaque. A group of values at consecutive indices. `values` is never empty.
 -}
 type alias Run v =
     { start : Int, values : Array v }
