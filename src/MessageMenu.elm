@@ -578,7 +578,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     in
                     Ui.el
                         [ Ui.paddingXY 0 4, Ui.width (Ui.px 1), Ui.height Ui.fill ]
-                        (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.buttonBorder ] Ui.none)
+                        (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.border1 ] Ui.none)
                         :: commonEmojis
                         |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking ]
 
