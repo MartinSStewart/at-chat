@@ -100,6 +100,7 @@ type Msg
     | TypedPageDown
     | TypedEmojiSearch String
     | EmojiSelectorMsg Emoji.Msg
+    | PressedEmojiSearchInput
 
 
 {-| The emoji picker is rendered by the emoji button rather than by the page
@@ -241,6 +242,9 @@ isPress msg =
 
         EmojiSelectorMsg emojiMsg ->
             Emoji.isPressed emojiMsg
+
+        PressedEmojiSearchInput ->
+            True
 
 
 textarea :
@@ -656,7 +660,7 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
             [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
                 (Ui.row
-                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = -2, z = 0 }, Ui.spacing 4, Ui.alignBottom ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton emojiSelector localUser htmlId ]
                 )
             , Ui.inFront (characterCounter charsLeft)
@@ -678,9 +682,9 @@ view htmlId emojiSelector roundTopCorners isMobileKeyboard channelTextInputId pl
                         )
                     , Ui.border 1
                     , Ui.borderColor MyUi.buttonBorder
-                    , Ui.move { x = -2, y = 0, z = 0 }
+                    , Ui.move { x = -2, y = -2, z = 0 }
                     , Ui.contentCenterY
-                    , Ui.centerY
+                    , Ui.alignBottom
                     , MyUi.hoverText "Send message"
                     , Html.Events.custom
                         "touchstart"
@@ -806,7 +810,7 @@ showEmojiSelectorButton emojiSelector localUser htmlId =
                 )
             , Ui.height
                 (if emojiSelector.isOpen then
-                    Ui.px 40
+                    Ui.px Emoji.emojiSearchInputHeight
 
                  else
                     Ui.fill
@@ -822,14 +826,21 @@ showEmojiSelectorButton emojiSelector localUser htmlId =
 
               else
                 Ui.pointer
+            , Ui.background MyUi.inputBackground
+            , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+            , if emojiSelector.isOpen then
+                Ui.move { x = 8, y = -Emoji.emojiSearchInputHeight, z = 0 }
+
+              else
+                Ui.noAttr
             ]
             { onChange = TypedEmojiSearch
-            , text = ""
+            , text = emojiSelector.selector.searchText
             , placeholder = Nothing
             , label = Ui.Input.labelHidden "Add emoji"
             }
             |> Ui.inFront
-        , if emojiSelector.isOpen then
+        , (if emojiSelector.isOpen then
             Emoji.selector
                 emojiSelector.isMobile
                 selectorWidth
@@ -840,52 +851,39 @@ showEmojiSelectorButton emojiSelector localUser htmlId =
                 localUser.customEmojis
                 emojiSelector.availableStickers
                 localUser.stickers
-                |> Ui.el
-                    [ Ui.alignBottom
-                    , Ui.paddingXY emojiSelectorPadding 0
-                    , if emojiSelector.isMobile then
-                        Ui.width Ui.fill
 
-                      else
-                        Ui.width Ui.shrink
-                    ]
-                |> Ui.map EmojiSelectorMsg
-                |> Ui.inFront
+           else
+            Ui.none
+          )
+            |> Ui.el
+                [ Ui.move { x = 4, y = -Emoji.selectorHeight, z = 0 }
+                , if emojiSelector.isMobile then
+                    Ui.width Ui.fill
 
-          else
-            Ui.noAttr
+                  else
+                    Ui.width Ui.shrink
+                ]
+            |> Ui.map EmojiSelectorMsg
+            |> Ui.inFront
         ]
         (Ui.el
-            ([ Ui.rounded 4
-             , Ui.pointer
-             , Ui.paddingXY 6 0
-             , Ui.height (Ui.px 40)
-             , Ui.background
+            [ Ui.rounded 4
+            , Ui.pointer
+            , Ui.paddingXY 6 0
+            , Ui.height (Ui.px 40)
+            , Ui.background
                 (if emojiSelector.isOpen then
                     MyUi.buttonBackgroundHighlighted
 
                  else
                     MyUi.buttonBackground
                 )
-             , Ui.border 1
-             , Ui.borderColor MyUi.buttonBorder
-             , Ui.contentCenterY
-             , Ui.centerY
-             , MyUi.hoverText "Add emoji"
-             ]
-                ++ (if emojiSelector.isOpen then
-                        [ Ui.id (htmlIdTypeToString htmlId ++ "_openEmojiSelector")
-                        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-                        , Html.Events.preventDefaultOn
-                            "touchend"
-                            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
-                            |> Ui.htmlAttribute
-                        ]
-
-                    else
-                        []
-                   )
-            )
+            , Ui.border 1
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.contentCenterY
+            , Ui.centerY
+            , MyUi.hoverText "Add emoji"
+            ]
             (Ui.html Icons.smile)
         )
 

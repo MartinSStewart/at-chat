@@ -3631,6 +3631,9 @@ updateLoaded msg model =
                 MessageInput.EmojiSelectorMsg emojiMsg ->
                     updateLoaded (EmojiSelectorMsg emojiMsg) model
 
+                MessageInput.PressedEmojiSearchInput ->
+                    ( model, Command.none )
+
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -3943,6 +3946,9 @@ updateLoaded msg model =
                 -- now, so its messages arrive wrapped and get unwrapped here.
                 MessageInput.EmojiSelectorMsg emojiMsg ->
                     updateLoaded (EmojiSelectorMsg emojiMsg) model
+
+                MessageInput.PressedEmojiSearchInput ->
+                    ( model, Command.none )
 
         GotEmojiData result ->
             case result of
@@ -5133,7 +5139,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
             in
             ( { loggedIn
                 | showEmojiSelector =
-                    (case loggedIn.showEmojiSelector of
+                    case loggedIn.showEmojiSelector of
                         EmojiSelectorHidden ->
                             case loggedIn.previousTextInputFocus of
                                 Just textInputFocus ->
@@ -5147,9 +5153,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
                                     emojiSelector Nothing
 
                         _ ->
-                            EmojiSelectorHidden
-                    )
-                        |> Debug.log "pressedOpenEmojiSelector"
+                            loggedIn.showEmojiSelector
                 , emojiSelector = { emojiSelectorModel | searchText = "" }
               }
             , Command.none
@@ -5444,25 +5448,26 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
                                     Nothing ->
                                         Nothing
                             , previousTextInputFocus = loggedIn.textInputFocus
-                            , showEmojiSelector =
-                                case ( loggedIn.showEmojiSelector, maybeHtmlId ) of
-                                    ( EmojiSelectorHidden, Just htmlId ) ->
-                                        case MessageInput.stringToEmojiSelectorSearchId htmlId of
-                                            Just MessageInput.HtmlId_ChannelInput ->
-                                                EmojiSelectorForMessage (Maybe.map Tuple.first maybeSelection)
 
-                                            Just MessageInput.HtmlId_EditDesktop ->
-                                                Debug.todo ""
-
-                                            Just MessageInput.HtmlId_EditMobile ->
-                                                Debug.todo ""
-
-                                            --EmojiSelectorForEditMessage (Maybe.map Tuple.first maybeSelection)
-                                            Nothing ->
-                                                loggedIn.showEmojiSelector
-
-                                    _ ->
-                                        loggedIn.showEmojiSelector
+                            --, showEmojiSelector =
+                            --    case ( loggedIn.showEmojiSelector, maybeHtmlId ) of
+                            --        ( EmojiSelectorHidden, Just htmlId ) ->
+                            --            case MessageInput.stringToEmojiSelectorSearchId htmlId of
+                            --                Just MessageInput.HtmlId_ChannelInput ->
+                            --                    EmojiSelectorForMessage (Maybe.map Tuple.first maybeSelection)
+                            --
+                            --                Just MessageInput.HtmlId_EditDesktop ->
+                            --                    Debug.todo ""
+                            --
+                            --                Just MessageInput.HtmlId_EditMobile ->
+                            --                    Debug.todo ""
+                            --
+                            --                --EmojiSelectorForEditMessage (Maybe.map Tuple.first maybeSelection)
+                            --                Nothing ->
+                            --                    loggedIn.showEmojiSelector
+                            --
+                            --        _ ->
+                            --            loggedIn.showEmojiSelector
                         }
               }
             , case maybeHtmlId of

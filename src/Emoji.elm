@@ -12,6 +12,7 @@ module Emoji exposing
     , SkinTone(..)
     , UnicodeEmoji(..)
     , emojiButtonId
+    , emojiSearchInputHeight
     , emojiWithSkinTone
     , fromString
     , heart
@@ -778,11 +779,16 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                                     ]
                            ]
                     )
-                , Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Search area")
+                , Ui.el [ Ui.height (Ui.px emojiSearchInputHeight) ] (Ui.text "Search area")
                 ]
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"
+
+
+emojiSearchInputHeight : number
+emojiSearchInputHeight =
+    40
 
 
 emojiWithSkinTone : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> String

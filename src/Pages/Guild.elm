@@ -3270,7 +3270,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             , MessageInput.view
                 HtmlId_ChannelInput
                 (emojiSelectorConfig
-                    (case Debug.log "showEmojiSelector" loggedIn.showEmojiSelector of
+                    (case loggedIn.showEmojiSelector of
                         EmojiSelectorForMessage _ ->
                             True
 
