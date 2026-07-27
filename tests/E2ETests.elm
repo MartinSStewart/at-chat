@@ -331,6 +331,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.friendsSearchTest normalConfig
     , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.exportChannelTest normalConfig
+    , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest

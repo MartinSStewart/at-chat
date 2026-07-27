@@ -123,6 +123,24 @@ type DmChannelSelection
     | NoDmChannelSelected
 
 
+dmShowMembersTab : DmChannelSelection -> ShowMembersTab
+dmShowMembersTab dmChannelSelection =
+    case dmChannelSelection of
+        SelectedDmChannel dmRoute ->
+            case dmRoute.threadRoute of
+                ViewThreadWithFriends _ _ showMembers ->
+                    showMembers
+
+                NoThreadWithFriends _ showMembers ->
+                    showMembers
+
+        SelectedDiscordDmChannel routeData ->
+            routeData.showMembersTab
+
+        NoDmChannelSelected ->
+            HideMembersTab
+
+
 homePageLoggedInView :
     DmChannelSelection
     -> LoadedFrontend
@@ -139,12 +157,76 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
 
         ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
+                let
+                    canScroll2 : Bool
+                    canScroll2 =
+                        GuildColumn.canScroll True model.drag
+
+                    showMembers : ShowMembersTab
+                    showMembers =
+                        dmShowMembersTab maybeOtherUserId
+
+                    memberColumn : Element FrontendMsg_
+                    memberColumn =
+                        case showMembers of
+                            ShowMembersTab ->
+                                case maybeOtherUserId of
+                                    SelectedDmChannel dmRoute ->
+                                        case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
+                                            Just otherUserId ->
+                                                dmMemberColumnMobile canScroll2 local.localUser otherUserId
+                                                    |> Ui.el
+                                                        [ Ui.height Ui.fill
+                                                        , Ui.background MyUi.background3
+                                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                                        , Ui.move
+                                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                            , y = 0
+                                                            , z = 0
+                                                            }
+                                                        , Ui.heightMin 0
+                                                        ]
+
+                                            Nothing ->
+                                                Ui.none
+
+                                    SelectedDiscordDmChannel routeData ->
+                                        case SeqDict.get routeData.channelId local.discordDmChannels of
+                                            Just dmChannel ->
+                                                discordDmMemberColumnMobile
+                                                    canScroll2
+                                                    local.localUser
+                                                    routeData.currentDiscordUserId
+                                                    routeData.channelId
+                                                    dmChannel
+                                                    |> Ui.el
+                                                        [ Ui.height Ui.fill
+                                                        , Ui.background MyUi.background3
+                                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                                        , Ui.move
+                                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                            , y = 0
+                                                            , z = 0
+                                                            }
+                                                        , Ui.heightMin 0
+                                                        ]
+
+                                            Nothing ->
+                                                Ui.none
+
+                                    NoDmChannelSelected ->
+                                        Ui.none
+
+                            HideMembersTab ->
+                                Ui.none
+                in
                 Ui.row
                     [ Ui.height Ui.fill
                     , Ui.background MyUi.background1
                     ]
                     [ Ui.column
                         [ Ui.height Ui.fill
+                        , Ui.inFront memberColumn
                         , case maybeOtherUserId of
                             SelectedDmChannel dmRoute ->
                                 dmChannelView dmRoute loggedIn local model
@@ -152,11 +234,16 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , Ui.move
-                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                            , y = 0
-                                            , z = 0
-                                            }
+                                        , case showMembers of
+                                            ShowMembersTab ->
+                                                Ui.noAttr
+
+                                            HideMembersTab ->
+                                                Ui.move
+                                                    { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                    , y = 0
+                                                    , z = 0
+                                                    }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -169,11 +256,16 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , Ui.move
-                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
-                                            , y = 0
-                                            , z = 0
-                                            }
+                                        , case showMembers of
+                                            ShowMembersTab ->
+                                                Ui.noAttr
+
+                                            HideMembersTab ->
+                                                Ui.move
+                                                    { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                    , y = 0
+                                                    , z = 0
+                                                    }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -187,7 +279,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ GuildColumn.guildColumnLazy True model local
                             , friendsColumnLazy
-                                (GuildColumn.canScroll True model.drag)
+                                canScroll2
                                 True
                                 model.time
                                 maybeOtherUserId
@@ -251,6 +343,40 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
 
                         NoDmChannelSelected ->
                             Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
+                    , case maybeOtherUserId of
+                        SelectedDmChannel dmRoute ->
+                            case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
+                                Just otherUserId ->
+                                    Ui.Lazy.lazy2 dmMemberColumnNotMobile local.localUser otherUserId
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                            ]
+
+                                Nothing ->
+                                    Ui.none
+
+                        SelectedDiscordDmChannel routeData ->
+                            case SeqDict.get routeData.channelId local.discordDmChannels of
+                                Just dmChannel ->
+                                    Ui.Lazy.lazy4
+                                        discordDmMemberColumnNotMobile
+                                        local.localUser
+                                        routeData.currentDiscordUserId
+                                        routeData.channelId
+                                        dmChannel
+                                        |> Ui.el
+                                            [ Ui.width Ui.shrink
+                                            , Ui.height Ui.fill
+                                            , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                            ]
+
+                                Nothing ->
+                                    Ui.none
+
+                        NoDmChannelSelected ->
+                            Ui.none
                     ]
 
 
@@ -1067,6 +1193,165 @@ discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guil
                         ]
                     ]
                 ]
+
+
+{-| A DM only contains the user and the person they are talking to, unless
+they're talking to themselves.
+-}
+dmMembers : LocalUser -> Id UserId -> List (Id UserId)
+dmMembers localUser otherUserId =
+    if localUser.session.userId == otherUserId then
+        [ otherUserId ]
+
+    else
+        [ localUser.session.userId, otherUserId ]
+
+
+dmMemberColumnNotMobile : LocalUser -> Id UserId -> Element FrontendMsg_
+dmMemberColumnNotMobile localUser otherUserId =
+    let
+        members : List (Id UserId)
+        members =
+            dmMembers localUser otherUserId
+    in
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.alignRight
+        , Ui.background MyUi.background2
+        , Ui.Font.color MyUi.font1
+        , Ui.width (Ui.px memberColumnWidth)
+        , Ui.scrollable
+        , Ui.heightMin 0
+        ]
+        [ Ui.el
+            [ Ui.paddingXY 8 8 ]
+            (exportChannelButton (ExportChannel_Dm otherUserId))
+        , Ui.column
+            [ Ui.paddingXY 8 4 ]
+            [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+            , Ui.column
+                [ Ui.height Ui.fill ]
+                (List.map (memberLabel False localUser) members)
+            ]
+        ]
+
+
+dmMemberColumnMobile : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_
+dmMemberColumnMobile canScroll2 localUser otherUserId =
+    let
+        members : List (Id UserId)
+        members =
+            dmMembers localUser otherUserId
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
+            , Ui.text "Channel members"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ Ui.el
+                [ Ui.paddingXY 8 4 ]
+                (exportChannelButton (ExportChannel_Dm otherUserId))
+            , Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (List.map (memberLabel True localUser) members)
+                ]
+            ]
+        ]
+
+
+discordDmMemberColumnNotMobile :
+    LocalUser
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordFrontendDmChannel
+    -> Element FrontendMsg_
+discordDmMemberColumnNotMobile localUser currentDiscordUserId channelId dmChannel =
+    let
+        members : List (Discord.Id Discord.UserId)
+        members =
+            NonemptyDict.keys dmChannel.members |> List.Nonempty.toList
+    in
+    discordMemberColumnContainer
+        [ Ui.el
+            [ Ui.paddingXY 0 4 ]
+            (exportChannelButton (ExportChannel_DiscordDm currentDiscordUserId channelId))
+        , Ui.column
+            []
+            [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+            , Ui.column
+                [ Ui.height Ui.fill ]
+                (List.map (discordMemberLabel False localUser currentDiscordUserId) members)
+            ]
+        ]
+
+
+discordDmMemberColumnMobile :
+    Bool
+    -> LocalUser
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
+    -> DiscordFrontendDmChannel
+    -> Element FrontendMsg_
+discordDmMemberColumnMobile canScroll2 localUser currentDiscordUserId channelId dmChannel =
+    let
+        members : List (Discord.Id Discord.UserId)
+        members =
+            NonemptyDict.keys dmChannel.members |> List.Nonempty.toList
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
+            , Ui.text "Channel members"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ Ui.el
+                [ Ui.paddingXY 8 4 ]
+                (exportChannelButton (ExportChannel_DiscordDm currentDiscordUserId channelId))
+            , Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (List.map (discordMemberLabel True localUser currentDiscordUserId) members)
+                ]
+            ]
+        ]
 
 
 memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_

@@ -1,6 +1,7 @@
 module E2EMisc exposing
     ( channelSearchTest
     , exportChannelTest
+    , exportDmChannelTest
     , friendsSearchTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
@@ -137,6 +138,67 @@ exportChannelTest config =
                                     ("Expected a single download, instead got "
                                         ++ String.fromInt (List.length downloads)
                                     )
+                    )
+                ]
+            )
+        ]
+
+
+{-| DM channels have a member column too, listing the two people in the DM and
+the same "Export channel" button that guild channels have.
+-}
+exportDmChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+exportDmChannelTest config =
+    E2EHelper.startTest
+        "Export a DM channel to a JSON file"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , E2EHelper.writeMessage user 100 "Hello in a DM"
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (2)" ])
+                        , user.click 1000 (Dom.id "guild_exportChannel")
+                        , T.checkState
+                            1000
+                            (\data ->
+                                case data.downloads of
+                                    [ download ] ->
+                                        case download.content of
+                                            T.StringFile content ->
+                                                case
+                                                    List.filter
+                                                        (\text -> not (String.contains text content))
+                                                        [ "Hello in a DM", "\"AT\"", "\"Sven\"" ]
+                                                of
+                                                    [] ->
+                                                        Ok ()
+
+                                                    missing ->
+                                                        Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+
+                                            T.BytesFile _ ->
+                                                Err "The exported channel should be a text file"
+
+                                    downloads ->
+                                        Err
+                                            ("Expected a single download, instead got "
+                                                ++ String.fromInt (List.length downloads)
+                                            )
+                            )
+                        ]
                     )
                 ]
             )
@@ -328,8 +390,9 @@ inviteUserAndDmChat config =
                         , user.checkView
                             100
                             (\html ->
+                                -- Twice in the conversation, plus once in the DM's member column
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
-                                    |> Test.Html.Query.count (Expect.equal 2)
+                                    |> Test.Html.Query.count (Expect.equal 3)
                             )
                         , E2EHelper.createThread user (Id.fromInt 1)
                         , E2EHelper.writeMessage user 100 "Writing in thread"

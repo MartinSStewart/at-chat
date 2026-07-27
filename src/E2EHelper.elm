@@ -2873,6 +2873,12 @@ allAttackerToBackendChanges =
             (Discord.idFromUInt64 (Unsafe.uint64 "705745250815311942"))
             (Discord.idFromUInt64 (Unsafe.uint64 "1072828564317159465"))
         )
+    , ExportChannelRequest (ExportChannel_Dm (Id.fromInt 1))
+    , ExportChannelRequest
+        (ExportChannel_DiscordDm
+            (Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035"))
+            (Discord.idFromUInt64 (Unsafe.uint64 "1215077285749858324"))
+        )
     , LogOutRequest sessionId0Hash
     , LogOutRequest sessionId1Hash
     , LogOutRequest sessionId2Hash

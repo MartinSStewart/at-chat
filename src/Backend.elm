@@ -5618,6 +5618,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                ExportChannel_Dm otherUserId ->
+                    BackendExtra.asDmUser
+                        model
+                        sessionId
+                        { otherUserId = otherUserId }
+                        (\session _ otherUser _ dmChannel ->
+                            ( model
+                            , ExportChannelResponse
+                                { fileName = ChannelExport.dmFileName (PersonName.toString otherUser.name)
+                                , json = ChannelExport.dmChannel model.users session.userId otherUserId dmChannel
+                                }
+                                |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
+                ExportChannel_DiscordDm currentDiscordUserId channelId ->
+                    BackendExtra.asDiscordDmUser
+                        model
+                        sessionId
+                        { currentUserId = currentDiscordUserId, channelId = channelId }
+                        (\_ _ _ dmChannel ->
+                            ( model
+                            , ExportChannelResponse
+                                { fileName =
+                                    ChannelExport.discordDmName model.discordUsers currentDiscordUserId dmChannel
+                                        |> ChannelExport.dmFileName
+                                , json = ChannelExport.discordDmChannel model.discordUsers currentDiscordUserId dmChannel
+                                }
+                                |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
 
 handleGoMatchRequest :
     Time.Posix

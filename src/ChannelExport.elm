@@ -1,12 +1,21 @@
-module ChannelExport exposing (discordGuildChannel, fileName, guildChannel)
+module ChannelExport exposing
+    ( discordDmChannel
+    , discordDmName
+    , discordGuildChannel
+    , dmChannel
+    , dmFileName
+    , fileName
+    , guildChannel
+    )
 
-{-| Turns a guild channel (either a normal channel or a channel belonging to a
-Discord guild that we've synced) into a JSON string so that the user can
+{-| Turns a channel (a guild channel, a channel belonging to a Discord guild
+that we've synced, or a DM channel) into a JSON string so that the user can
 download a copy of the conversation.
 
 Drawings are deliberately left out. Everything else that makes up a message is
 included, along with the publicly available data (name, when they joined, and a
-url to their profile image) of every member that has access to the channel.
+url to their profile image) of every member that has access to the channel. DM
+channels have no join times so those are left out there.
 
 -}
 
@@ -16,6 +25,7 @@ import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import DiscordUserData exposing (DiscordUserData)
+import DmChannel exposing (DiscordDmChannel, DmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -42,15 +52,28 @@ import User exposing (BackendUser)
 -}
 fileName : ChannelName -> String
 fileName channelName =
-    (ChannelName.toString channelName
-        |> String.map
-            (\char ->
-                if Char.isAlphaNum char || char == '-' || char == '_' || char == ' ' then
-                    char
+    ChannelName.toString channelName |> sanitizeFileName
 
-                else
-                    '_'
-            )
+
+{-| DM channels aren't named, so they get exported under the name of the people
+in them instead.
+-}
+dmFileName : String -> String
+dmFileName dmName =
+    sanitizeFileName dmName
+
+
+sanitizeFileName : String -> String
+sanitizeFileName text =
+    (String.map
+        (\char ->
+            if Char.isAlphaNum char || char == '-' || char == '_' || char == ' ' then
+                char
+
+            else
+                '_'
+        )
+        text
         |> String.trim
     )
         ++ ".json"
@@ -194,6 +217,142 @@ discordGuildChannel discordUsers guildId guild channel =
           )
         ]
         |> Json.Encode.encode 2
+
+
+{-| DM channels have no owner and no join times, so their members are only
+listed by name and profile image.
+-}
+dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> DmChannel -> String
+dmChannel users currentUserId otherUserId channel =
+    let
+        userNames : SeqDict (Id UserId) String
+        userNames =
+            NonemptyDict.toSeqDict users |> SeqDict.map (\_ user -> PersonName.toString user.name)
+
+        member : Id UserId -> Json.Encode.Value
+        member userId =
+            Json.Encode.object
+                [ ( "id", Json.Encode.string (Id.toString userId) )
+                , ( "name", Json.Encode.string (SeqDict.get userId userNames |> Maybe.withDefault unknownUserName) )
+                , ( "profileImageUrl"
+                  , NonemptyDict.get userId users
+                        |> Maybe.andThen .icon
+                        |> Maybe.map profileImageUrl
+                        |> encodeMaybe Json.Encode.string
+                  )
+                ]
+    in
+    Json.Encode.object
+        [ ( "channel"
+          , Json.Encode.object
+                [ ( "name"
+                  , SeqDict.get otherUserId userNames
+                        |> Maybe.withDefault unknownUserName
+                        |> Json.Encode.string
+                  )
+                ]
+          )
+        , ( "members"
+          , (if currentUserId == otherUserId then
+                [ member currentUserId ]
+
+             else
+                [ member currentUserId, member otherUserId ]
+            )
+                |> Json.Encode.list identity
+          )
+        , ( "messages"
+          , encodeMessages
+                Id.toString
+                userNames
+                (\messageId ->
+                    case SeqDict.get messageId channel.threads of
+                        Just thread ->
+                            encodeMessages Id.toString userNames (\_ -> Nothing) thread.messages |> Just
+
+                        Nothing ->
+                            Nothing
+                )
+                channel.messages
+          )
+        ]
+        |> Json.Encode.encode 2
+
+
+{-| Discord DM channels don't have threads, an owner, or join times, so their
+members are only listed by name and profile image.
+-}
+discordDmChannel :
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> Discord.Id Discord.UserId
+    -> DiscordDmChannel
+    -> String
+discordDmChannel discordUsers currentUserId channel =
+    let
+        userNames : SeqDict (Discord.Id Discord.UserId) String
+        userNames =
+            SeqDict.map (\_ discordUser -> DiscordUserData.username discordUser) discordUsers
+
+        member : Discord.Id Discord.UserId -> Json.Encode.Value
+        member userId =
+            Json.Encode.object
+                [ ( "id", Json.Encode.string (Discord.idToString userId) )
+                , ( "name", Json.Encode.string (SeqDict.get userId userNames |> Maybe.withDefault unknownUserName) )
+                , ( "profileImageUrl"
+                  , (case SeqDict.get userId discordUsers |> Maybe.andThen DiscordUserData.icon of
+                        Just fileHash ->
+                            profileImageUrl fileHash
+
+                        Nothing ->
+                            Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+                    )
+                        |> Json.Encode.string
+                  )
+                ]
+    in
+    Json.Encode.object
+        [ ( "channel"
+          , Json.Encode.object
+                [ ( "name", Json.Encode.string (discordDmName discordUsers currentUserId channel) ) ]
+          )
+        , ( "members"
+          , NonemptyDict.keys channel.members
+                |> List.Nonempty.toList
+                |> List.map member
+                |> Json.Encode.list identity
+          )
+        , ( "messages", encodeMessages Discord.idToString userNames (\_ -> Nothing) channel.messages )
+        ]
+        |> Json.Encode.encode 2
+
+
+{-| Discord DM channels are named after everyone in them except for the user
+that's viewing the channel. When the user is DMing themselves their own name is
+used instead.
+-}
+discordDmName :
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> Discord.Id Discord.UserId
+    -> DiscordDmChannel
+    -> String
+discordDmName discordUsers currentUserId channel =
+    (case List.filter (\userId -> userId /= currentUserId) (List.Nonempty.toList (NonemptyDict.keys channel.members)) of
+        [] ->
+            [ currentUserId ]
+
+        otherUserIds ->
+            otherUserIds
+    )
+        |> List.map
+            (\userId ->
+                case SeqDict.get userId discordUsers of
+                    Just discordUser ->
+                        DiscordUserData.username discordUser
+
+                    Nothing ->
+                        unknownUserName
+            )
+        |> String.join ", "
 
 
 unknownUserName : String
