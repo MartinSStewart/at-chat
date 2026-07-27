@@ -14,7 +14,7 @@ module Thread exposing
     , toFrontend
     )
 
-import Array
+import Array exposing (Array)
 import Date exposing (Date)
 import Discord
 import Drawing
@@ -139,8 +139,34 @@ loadMessages preloadMessages messages =
             else
                 -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
                 messageCount - 1 |> max 0
+
+        messagesToLoad : Array (Message messageId userId)
+        messagesToLoad =
+            IdArray.toArray messages |> Array.slice oldestLoaded messageCount
+
+        referencedMessages : List ( Id messageId, Message messageId userId )
+        referencedMessages =
+            Array.foldl
+                (\message list ->
+                    case message of
+                        Message.UserTextMessage message2 ->
+                            case message2.repliedTo of
+                                Just repliedToId ->
+                                    case IdArray.get repliedToId messages of
+                                        Just repliedTo ->
+                                            ( repliedToId, repliedTo ) :: list
+
+                                        Nothing ->
+                                            list
+
+                                Nothing ->
+                                    list
+
+                        _ ->
+                            list
+                )
+                []
+                messagesToLoad
     in
-    MessageArray.fromArray
-        messageCount
-        (Id.fromInt oldestLoaded)
-        (IdArray.toArray messages |> Array.slice oldestLoaded messageCount)
+    MessageArray.fromArray messageCount (Id.fromInt oldestLoaded) messagesToLoad
+        |> MessageArray.setMany referencedMessages

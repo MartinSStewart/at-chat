@@ -55,7 +55,7 @@ applyToMessageArray op array =
             MessageArray.set (Id.fromInt index) value array
 
         Update index ->
-            MessageArray.update (Id.fromInt index) negate array
+            MessageArray.updateIfExists (Id.fromInt index) negate array
 
         Push value ->
             MessageArray.push value array

@@ -13,7 +13,7 @@ module MessageArray exposing
     , setMany
     , slice
     , toList
-    , update
+    , updateIfExists
     )
 
 {-| An array indexed by `Id` where only some of the indices actually contain a
@@ -211,8 +211,8 @@ setMany entries (MessageArray array) =
 
 {-| Changes a value if it's loaded. Does nothing otherwise.
 -}
-update : Id k -> (v -> v) -> MessageArray k v -> MessageArray k v
-update id updateFunc array =
+updateIfExists : Id k -> (v -> v) -> MessageArray k v -> MessageArray k v
+updateIfExists id updateFunc array =
     case get id array of
         Just value ->
             set id (updateFunc value) array

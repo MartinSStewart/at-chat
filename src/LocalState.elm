@@ -1741,7 +1741,7 @@ addReactionEmojiFrontendHelper :
 addReactionEmojiFrontendHelper emoji userId messageId channel =
     { channel
         | messages =
-            MessageArray.update
+            MessageArray.updateIfExists
                 messageId
                 (Message.addReactionEmoji userId emoji)
                 channel.messages
@@ -2000,7 +2000,7 @@ removeReactionEmojiFrontendHelper :
 removeReactionEmojiFrontendHelper emoji userId messageId channel =
     { channel
         | messages =
-            MessageArray.update
+            MessageArray.updateIfExists
                 messageId
                 (Message.removeReactionEmoji userId emoji)
                 channel.messages
@@ -2290,7 +2290,7 @@ addEmbedFrontend :
 addEmbedFrontend messageId embed channel =
     { channel
         | messages =
-            MessageArray.update messageId
+            MessageArray.updateIfExists messageId
                 (Message.addEmbed embed)
                 channel.messages
     }
@@ -3114,7 +3114,7 @@ drawingHandleChangeNoThreadFrontend :
 drawingHandleChangeNoThreadFrontend changedBy anchor change messageId channel =
     { channel
         | messages =
-            MessageArray.update
+            MessageArray.updateIfExists
                 messageId
                 (Message.handleDrawingChange changedBy anchor change)
                 channel.messages
