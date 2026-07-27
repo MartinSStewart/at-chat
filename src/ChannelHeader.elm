@@ -21,10 +21,10 @@ import GuildIcon
 import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
-import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers
 import LocalState exposing (LocalState)
-import Message exposing (MessageState(..))
+import Message exposing (Message)
+import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
@@ -732,10 +732,10 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
 drawingCanUndoOrRedo : AnyGuildOrDmId -> Drawing.AnchorType -> LocalState -> ( Bool, Bool )
 drawingCanUndoOrRedo guildOrDmId anchor local =
     let
-        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : IdArray messageId (MessageState messageId userId) } -> ( Bool, Bool )
+        noThreadHelper : userId -> Drawing.MessageAnchor -> Id messageId -> { a | messages : MessageArray messageId (Message messageId userId) } -> ( Bool, Bool )
         noThreadHelper userId anchor2 messageId channel2 =
-            case IdArray.get messageId channel2.messages of
-                Just (MessageLoaded message) ->
+            case MessageArray.get messageId channel2.messages of
+                Just message ->
                     let
                         drawing : Drawing.Drawing userId
                         drawing =

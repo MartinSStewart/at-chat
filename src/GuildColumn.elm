@@ -15,13 +15,13 @@ import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
-import IdArray exposing (IdArray)
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
 import List.Extra
 import List.Nonempty
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
 import MembersAndOwner exposing (IsMember(..))
-import Message exposing (MessageState)
+import Message exposing (Message)
+import MessageArray exposing (MessageArray)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
@@ -422,7 +422,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : IdArray messageId (MessageState messageId userId) }
+    -> { a | messages : MessageArray messageId (Message messageId userId) }
     -> ChannelNotificationType
 channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -447,14 +447,14 @@ channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelI
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : IdArray messageId (MessageState messageId userId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : MessageArray messageId (Message messageId userId) } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
-            IdArray.length channel.messages - 1 - Id.toInt lastViewed
+            MessageArray.length channel.messages - 1 - Id.toInt lastViewed
 
         Nothing ->
-            IdArray.length channel.messages
+            MessageArray.length channel.messages
 
 
 channelNewMessageCount :
@@ -462,8 +462,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId) }
+            | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : MessageArray ThreadMessageId (Message ThreadMessageId userId) }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =

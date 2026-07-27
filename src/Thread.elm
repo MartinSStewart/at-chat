@@ -14,13 +14,15 @@ module Thread exposing
     , toFrontend
     )
 
+import Array exposing (Array)
 import Date exposing (Date)
 import Discord
 import Drawing
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import IdArray exposing (IdArray)
-import Message exposing (Message, MessageState(..))
+import Message exposing (Message)
+import MessageArray exposing (MessageArray)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import VisibleMessages exposing (VisibleMessages)
@@ -42,7 +44,7 @@ type alias DiscordBackendThread =
 
 
 type alias FrontendGenericThread userId =
-    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId userId)
+    { messages : MessageArray ThreadMessageId (Message ThreadMessageId userId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing userId)
@@ -50,7 +52,7 @@ type alias FrontendGenericThread userId =
 
 
 type alias FrontendThread =
-    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId (Id UserId))
+    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Id UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Id UserId))
@@ -58,7 +60,7 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : IdArray ThreadMessageId (MessageState ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : MessageArray ThreadMessageId (Message ThreadMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     , dateDividerDrawings : SeqDict Date (Drawing.Drawing (Discord.Id Discord.UserId))
@@ -79,7 +81,7 @@ backendInit =
 
 frontendInit : FrontendGenericThread userId
 frontendInit =
-    { messages = IdArray.empty
+    { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
@@ -97,7 +99,7 @@ discordBackendInit =
 
 discordFrontendInit : DiscordFrontendThread
 discordFrontendInit =
-    { messages = IdArray.empty
+    { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , dateDividerDrawings = SeqDict.empty
@@ -107,7 +109,7 @@ discordFrontendInit =
 toFrontend : Bool -> BackendThread -> FrontendThread
 toFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
-    , visibleMessages = VisibleMessages.init preloadMessages thread
+    , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length thread.messages)
     , lastTypedAt = thread.lastTypedAt
     , dateDividerDrawings = thread.dateDividerDrawings
     }
@@ -116,44 +118,55 @@ toFrontend preloadMessages thread =
 discordToFrontend : Bool -> DiscordBackendThread -> DiscordFrontendThread
 discordToFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
-    , visibleMessages = VisibleMessages.init preloadMessages thread
+    , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length thread.messages)
     , lastTypedAt = thread.lastTypedAt
     , dateDividerDrawings = thread.dateDividerDrawings
     }
 
 
-loadMessages : Bool -> IdArray messageId (Message messageId userId) -> IdArray messageId (MessageState messageId userId)
+loadMessages : Bool -> IdArray messageId (Message messageId userId) -> MessageArray messageId (Message messageId userId)
 loadMessages preloadMessages messages =
     let
         messageCount : Int
         messageCount =
             IdArray.length messages
-    in
-    if preloadMessages then
-        IdArray.initialize
-            messageCount
-            (\index ->
-                if messageCount - index <= VisibleMessages.pageSize then
-                    case IdArray.get (Id.fromInt index) messages of
-                        Just message ->
-                            MessageLoaded message
 
-                        Nothing ->
-                            MessageUnloaded
+        oldestLoaded : Int
+        oldestLoaded =
+            if preloadMessages then
+                messageCount - VisibleMessages.pageSize |> max 0
 
-                else
-                    MessageUnloaded
-            )
+            else
+                -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
+                messageCount - 1 |> max 0
 
-    else
-        -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
-        IdArray.initialize messageCount (\_ -> MessageUnloaded)
-            |> IdArray.set
-                (Id.fromInt (messageCount - 1))
-                (case IdArray.get (Id.fromInt (messageCount - 1)) messages of
-                    Just message ->
-                        MessageLoaded message
+        messagesToLoad : Array (Message messageId userId)
+        messagesToLoad =
+            IdArray.toArray messages |> Array.slice oldestLoaded messageCount
 
-                    Nothing ->
-                        MessageUnloaded
+        referencedMessages : List ( Id messageId, Message messageId userId )
+        referencedMessages =
+            Array.foldl
+                (\message list ->
+                    case message of
+                        Message.UserTextMessage message2 ->
+                            case message2.repliedTo of
+                                Just repliedToId ->
+                                    case IdArray.get repliedToId messages of
+                                        Just repliedTo ->
+                                            ( repliedToId, repliedTo ) :: list
+
+                                        Nothing ->
+                                            list
+
+                                Nothing ->
+                                    list
+
+                        _ ->
+                            list
                 )
+                []
+                messagesToLoad
+    in
+    MessageArray.fromArray messageCount (Id.fromInt oldestLoaded) messagesToLoad
+        |> MessageArray.setMany referencedMessages

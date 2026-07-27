@@ -771,7 +771,7 @@ discordDmChannelToFrontend :
 discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
     if List.any (\( linkedId, _ ) -> NonemptyDict.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
         { messages = DmChannel.toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
-        , visibleMessages = VisibleMessages.init preloadMessages dmChannel
+        , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length dmChannel.messages)
         , lastTypedAt = dmChannel.lastTypedAt
         , members = dmChannel.members
         , dateDividerDrawings = dmChannel.dateDividerDrawings

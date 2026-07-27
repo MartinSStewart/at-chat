@@ -11,20 +11,17 @@ module VisibleMessages exposing
     )
 
 import Id exposing (Id)
-import IdArray exposing (IdArray)
-import Message exposing (Message, MessageState)
+import MessageArray exposing (MessageArray)
 
 
 type alias VisibleMessages messageId =
     { oldest : Id messageId, count : Int }
 
 
-init : Bool -> { a | messages : IdArray messageId (Message messageId userId) } -> VisibleMessages messageId
-init preloadMessages channel =
+init : Bool -> Int -> VisibleMessages messageId
+init preloadMessages messageCount =
     if preloadMessages then
-        { oldest = IdArray.length channel.messages - pageSize |> max 0 |> Id.fromInt
-        , count = pageSize
-        }
+        firstLoad messageCount
 
     else
         empty
@@ -35,9 +32,9 @@ empty =
     { oldest = Id.fromInt 0, count = 0 }
 
 
-increment : { a | messages : IdArray messageId b } -> VisibleMessages messageId -> VisibleMessages messageId
-increment channel visibleMessages =
-    if Id.toInt visibleMessages.oldest + visibleMessages.count == IdArray.length channel.messages then
+increment : Int -> VisibleMessages messageId -> VisibleMessages messageId
+increment messageCount visibleMessages =
+    if Id.toInt visibleMessages.oldest + visibleMessages.count == messageCount then
         { oldest = visibleMessages.oldest, count = visibleMessages.count + 1 }
 
     else
@@ -56,18 +53,18 @@ loadOlder previousOldestVisibleMessage visibleMessages =
     }
 
 
-firstLoad : { a | messages : IdArray messageId b } -> VisibleMessages messageId
-firstLoad channel =
-    { oldest = IdArray.length channel.messages - pageSize |> max 0 |> Id.fromInt
+firstLoad : Int -> VisibleMessages messageId
+firstLoad messageCount =
+    { oldest = messageCount - pageSize |> max 0 |> Id.fromInt
     , count = pageSize
     }
 
 
 slice :
-    { a | visibleMessages : VisibleMessages messageId, messages : IdArray messageId (MessageState messageId userId) }
-    -> IdArray messageId (MessageState messageId userId)
+    { a | visibleMessages : VisibleMessages messageId, messages : MessageArray messageId message }
+    -> MessageArray messageId message
 slice { visibleMessages, messages } =
-    IdArray.slice
+    MessageArray.slice
         visibleMessages.oldest
         (Id.toInt visibleMessages.oldest + visibleMessages.count |> Id.fromInt)
         messages

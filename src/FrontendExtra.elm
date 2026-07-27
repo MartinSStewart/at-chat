@@ -33,7 +33,7 @@ module FrontendExtra exposing
     )
 
 import AiChat
-import Array exposing (Array)
+import Array
 import Audio exposing (Audio, AudioData)
 import Bytes.Encode
 import Call exposing (CallId(..), ChannelSidebarMode(..))
@@ -64,7 +64,6 @@ import Html exposing (Html)
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import IdArray exposing (IdArray)
 import ImageEditor
 import ImageViewer
 import Json.Decode
@@ -76,7 +75,8 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), GameType(..), Message(..), MessageNoReply(..), UserTextMessageDataNoReply)
+import MessageArray exposing (MessageArray)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -1147,7 +1147,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -1204,7 +1204,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -1767,7 +1767,7 @@ currentGamesTab local route =
                         { guildOrDmId = GuildOrDmId_Dm otherUserId
                         , maybeMatchId = maybeMatchId
                         , channelGames = dmChannel.games
-                        , newMatchId = DmChannel.latestMessageId dmChannel |> Id.increment
+                        , newMatchId = DmChannel.latestFrontendMessageId dmChannel |> Id.increment
                         }
 
                 _ ->
@@ -1780,7 +1780,7 @@ currentGamesTab local route =
                         { guildOrDmId = GuildOrDmId_Guild guildId channelId
                         , maybeMatchId = maybeMatchId
                         , channelGames = channel.games
-                        , newMatchId = DmChannel.latestMessageId channel |> Id.increment
+                        , newMatchId = DmChannel.latestFrontendMessageId channel |> Id.increment
                         }
 
                 Nothing ->
@@ -2497,7 +2497,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId guildOrDmId)
-                                                                (IdArray.length channel.messages |> Id.fromInt)
+                                                                (MessageArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2554,7 +2554,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         (GuildOrDmId guildOrDmId)
-                                                        (DmChannel.latestMessageId dmChannel2)
+                                                        (DmChannel.latestFrontendMessageId dmChannel2)
                                                         user.lastViewed
                                             }
                                     }
@@ -2592,7 +2592,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (IdArray.length channel.messages |> Id.fromInt)
+                                                                (MessageArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2643,7 +2643,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (IdArray.length dmChannel.messages |> Id.fromInt)
+                                                                (MessageArray.length dmChannel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -3471,7 +3471,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (GuildOrDmId guildOrDmId)
-                                                                    (IdArray.length channel.messages |> Id.fromInt)
+                                                                    (MessageArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3555,7 +3555,7 @@ changeUpdate localMsg local =
                                                     | lastViewed =
                                                         SeqDict.insert
                                                             (GuildOrDmId guildOrDmId)
-                                                            (DmChannel.latestMessageId dmChannel2)
+                                                            (DmChannel.latestFrontendMessageId dmChannel2)
                                                             user.lastViewed
                                                 }
 
@@ -3614,7 +3614,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (IdArray.length channel.messages |> Id.fromInt)
+                                                                    (MessageArray.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3693,7 +3693,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (DmChannel.latestMessageId dmChannel2)
+                                                                    (DmChannel.latestFrontendMessageId dmChannel2)
                                                                     user.lastViewed
                                                         }
 
@@ -3798,6 +3798,7 @@ changeUpdate localMsg local =
                                         , user =
                                             LocalState.markAllChannelsAsViewed
                                                 ok.guildId
+                                                DmChannel.latestFrontendMessageId
                                                 ok.guild
                                                 localUser.user
                                     }
@@ -4149,7 +4150,7 @@ changeUpdate localMsg local =
                                                                 LocalState.discordTopicToDescription
                                                                     topic
                                                                     ChannelDescription.empty
-                                                            , messages = IdArray.empty
+                                                            , messages = MessageArray.empty
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
@@ -4175,7 +4176,7 @@ changeUpdate localMsg local =
                                             maybeChannel
 
                                         Nothing ->
-                                            { messages = IdArray.empty
+                                            { messages = MessageArray.empty
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members
@@ -4673,14 +4674,14 @@ gameChangeUpdateChannel :
     -> Game.LocalChange
     ->
         { c
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
         }
     ->
         { c
-            | messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
+            | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages.VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (Thread.LastTypedAt ChannelMessageId)
             , games : SeqDict (Id ChannelMessageId) Game.MatchData
@@ -4706,7 +4707,7 @@ gameChangeUpdateChannel changeBy gameChange channel =
 
                         newMatchId : Id ChannelMessageId
                         newMatchId =
-                            DmChannel.latestMessageId channel2
+                            DmChannel.latestFrontendMessageId channel2
                     in
                     { channel2
                         | games =
@@ -4755,7 +4756,7 @@ gameChangeUpdateChannel changeBy gameChange channel =
 
                         newMatchId : Id ChannelMessageId
                         newMatchId =
-                            DmChannel.latestMessageId channel2
+                            DmChannel.latestFrontendMessageId channel2
                     in
                     { channel2
                         | games =
@@ -5601,6 +5602,14 @@ handleEscapeKeyHelper model loggedIn =
                     ( { loggedIn2 | showEmojiSelector = Types.EmojiSelectorHidden }, Command.none )
 
 
+{-| How many of the newest messages to look through when the user presses the up
+arrow in an empty message input in order to edit the last message they sent.
+-}
+editPreviousMessageLookback : number
+editPreviousMessageLookback =
+    5
+
+
 handlePressedArrowUpInEmptyInput :
     LoadedFrontend
     -> AnyGuildOrDmId
@@ -5617,57 +5626,39 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
             case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     let
-                        maybeMessages : Maybe (Array (MessageStateNoReply (Id UserId)))
+                        maybeMessages : Maybe (List ( Int, MessageNoReply (Id UserId) ))
                         maybeMessages =
-                            LocalState.guildOrDmIdToMessages ( guildOrDmId2, threadRoute ) local
+                            LocalState.guildOrDmIdToLatestMessages
+                                editPreviousMessageLookback
+                                ( guildOrDmId2, threadRoute )
+                                local
                     in
                     case maybeMessages of
                         Just messages ->
                             let
-                                messageCount : Int
-                                messageCount =
-                                    Array.length messages
-
                                 mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Id UserId) )
                                 mostRecentMessage =
-                                    (if messageCount < 5 then
-                                        Array.toList messages
-                                            |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
-
-                                     else
-                                        Array.slice (messageCount - 5) messageCount messages
-                                            |> Array.toList
-                                            |> List.indexedMap
-                                                (\index message ->
-                                                    ( messageCount + index - 5 |> Id.fromInt, message )
-                                                )
-                                    )
-                                        |> List.reverse
+                                    List.reverse messages
                                         |> List.Extra.findMap
                                             (\( index, message ) ->
                                                 case message of
-                                                    MessageLoaded_NoReply message2 ->
-                                                        case message2 of
-                                                            UserTextMessage_NoReply data ->
-                                                                if local.localUser.session.userId == data.createdBy then
-                                                                    Just ( index, data )
+                                                    UserTextMessage_NoReply data ->
+                                                        if local.localUser.session.userId == data.createdBy then
+                                                            Just ( Id.fromInt index, data )
 
-                                                                else
-                                                                    Nothing
+                                                        else
+                                                            Nothing
 
-                                                            UserJoinedMessage_NoReply _ _ _ ->
-                                                                Nothing
+                                                    UserJoinedMessage_NoReply _ _ _ ->
+                                                        Nothing
 
-                                                            DeletedMessage_NoReply _ ->
-                                                                Nothing
+                                                    DeletedMessage_NoReply _ ->
+                                                        Nothing
 
-                                                            CallStarted_NoReply _ _ _ ->
-                                                                Nothing
+                                                    CallStarted_NoReply _ _ _ ->
+                                                        Nothing
 
-                                                            GoMatchStarted_NoReply _ _ ->
-                                                                Nothing
-
-                                                    MessageUnloaded_NoReply ->
+                                                    GoMatchStarted_NoReply _ _ ->
                                                         Nothing
                                             )
                             in
@@ -5696,9 +5687,13 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     let
-                        maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id Discord.UserId)))
+                        maybeMessages : Maybe (List ( Int, MessageNoReply (Discord.Id Discord.UserId) ))
                         maybeMessages =
-                            LocalState.discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
+                            LocalState.discordGuildOrDmIdToLatestMessages
+                                editPreviousMessageLookback
+                                guildOrDmId2
+                                threadRoute
+                                local
                     in
                     case maybeMessages of
                         Just messages ->
@@ -5712,50 +5707,29 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                         DiscordGuildOrDmId_Dm data ->
                                             data.currentUserId
 
-                                messageCount : Int
-                                messageCount =
-                                    Array.length messages
-
                                 mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id Discord.UserId) )
                                 mostRecentMessage =
-                                    (if messageCount < 5 then
-                                        Array.toList messages
-                                            |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
-
-                                     else
-                                        Array.slice (messageCount - 5) messageCount messages
-                                            |> Array.toList
-                                            |> List.indexedMap
-                                                (\index message ->
-                                                    ( messageCount + index - 5 |> Id.fromInt, message )
-                                                )
-                                    )
-                                        |> List.reverse
+                                    List.reverse messages
                                         |> List.Extra.findMap
                                             (\( index, message ) ->
                                                 case message of
-                                                    MessageLoaded_NoReply message2 ->
-                                                        case message2 of
-                                                            UserTextMessage_NoReply data ->
-                                                                if currentUserId == data.createdBy then
-                                                                    Just ( index, data )
+                                                    UserTextMessage_NoReply data ->
+                                                        if currentUserId == data.createdBy then
+                                                            Just ( Id.fromInt index, data )
 
-                                                                else
-                                                                    Nothing
+                                                        else
+                                                            Nothing
 
-                                                            UserJoinedMessage_NoReply _ _ _ ->
-                                                                Nothing
+                                                    UserJoinedMessage_NoReply _ _ _ ->
+                                                        Nothing
 
-                                                            DeletedMessage_NoReply _ ->
-                                                                Nothing
+                                                    DeletedMessage_NoReply _ ->
+                                                        Nothing
 
-                                                            CallStarted_NoReply _ _ _ ->
-                                                                Nothing
+                                                    CallStarted_NoReply _ _ _ ->
+                                                        Nothing
 
-                                                            GoMatchStarted_NoReply _ _ ->
-                                                                Nothing
-
-                                                    MessageUnloaded_NoReply ->
+                                                    GoMatchStarted_NoReply _ _ ->
                                                         Nothing
                                             )
                             in

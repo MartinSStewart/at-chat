@@ -5,6 +5,7 @@ module DmChannel exposing
     , FrontendDmChannel
     , backendInit
     , frontendInit
+    , latestFrontendMessageId
     , latestMessageId
     , latestThreadMessageId
     , loadMessages
@@ -22,7 +23,8 @@ import Drawing exposing (Drawing)
 import Game exposing (BackendGameData)
 import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import IdArray exposing (IdArray)
-import Message exposing (Message, MessageState(..))
+import Message exposing (Message)
+import MessageArray exposing (MessageArray)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
@@ -51,7 +53,7 @@ type alias DiscordDmChannel =
 
 
 type alias DiscordFrontendDmChannel =
-    { messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
@@ -60,7 +62,7 @@ type alias DiscordFrontendDmChannel =
 
 
 type alias FrontendDmChannel =
-    { messages : IdArray ChannelMessageId (MessageState ChannelMessageId (Id UserId))
+    { messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -81,7 +83,7 @@ backendInit =
 
 frontendInit : FrontendDmChannel
 frontendInit =
-    { messages = IdArray.empty
+    { messages = MessageArray.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
@@ -102,7 +104,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
             Just NoThread == threadRoute
     in
     { messages = toFrontendHelper preloadMessages dmChannel
-    , visibleMessages = VisibleMessages.init preloadMessages dmChannel
+    , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length dmChannel.messages)
     , lastTypedAt = dmChannel.lastTypedAt
     , threads =
         SeqDict.map
@@ -133,6 +135,11 @@ latestMessageId channel =
     IdArray.length channel.messages - 1 |> Id.fromInt
 
 
+latestFrontendMessageId : { a | messages : MessageArray ChannelMessageId b } -> Id ChannelMessageId
+latestFrontendMessageId channel =
+    MessageArray.length channel.messages - 1 |> Id.fromInt
+
+
 latestThreadMessageId : { a | messages : IdArray ThreadMessageId b } -> Id ThreadMessageId
 latestThreadMessageId thread =
     IdArray.length thread.messages - 1 |> Id.fromInt
@@ -141,63 +148,53 @@ latestThreadMessageId thread =
 toFrontendHelper :
     Bool
     -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
-    -> IdArray messageId (MessageState messageId userId)
+    -> MessageArray messageId (Message messageId userId)
 toFrontendHelper preloadMessages channel =
-    SeqDict.foldl
-        (\threadId _ messages ->
-            IdArray.set
-                threadId
-                (case IdArray.get threadId channel.messages of
-                    Just message ->
-                        MessageLoaded message
-
-                    Nothing ->
-                        MessageUnloaded
-                )
-                messages
-        )
-        (Thread.loadMessages preloadMessages channel.messages)
-        channel.threads
+    loadThreadStarters channel.threads channel.messages (Thread.loadMessages preloadMessages channel.messages)
 
 
 toDiscordFrontendHelper :
     Bool
     -> { a | messages : IdArray messageId (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
-    -> IdArray messageId (MessageState messageId userId)
+    -> MessageArray messageId (Message messageId userId)
 toDiscordFrontendHelper preloadMessages channel =
-    SeqDict.foldl
-        (\threadId _ messages ->
-            IdArray.set
-                threadId
-                (case IdArray.get threadId channel.messages of
-                    Just message ->
-                        MessageLoaded message
+    loadThreadStarters channel.threads channel.messages (Thread.loadMessages preloadMessages channel.messages)
 
-                    Nothing ->
-                        MessageUnloaded
-                )
-                messages
+
+{-| The message a thread was started from is always loaded, even when the rest of
+the channel isn't, so that the thread can be previewed.
+-}
+loadThreadStarters :
+    SeqDict (Id messageId) thread
+    -> IdArray messageId (Message messageId userId)
+    -> MessageArray messageId (Message messageId userId)
+    -> MessageArray messageId (Message messageId userId)
+loadThreadStarters threads backendMessages messages =
+    SeqDict.foldl
+        (\threadId _ list ->
+            case IdArray.get threadId backendMessages of
+                Just message ->
+                    ( threadId, message ) :: list
+
+                Nothing ->
+                    list
         )
-        (Thread.loadMessages preloadMessages channel.messages)
-        channel.threads
+        []
+        threads
+        |> (\threadStarters -> MessageArray.setMany threadStarters messages)
 
 
 loadOlderMessages :
     Id messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel
                 | messages =
-                    SeqDict.foldl
-                        (\messageId message messages ->
-                            IdArray.set messageId (MessageLoaded message) messages
-                        )
-                        channel.messages
-                        messagesLoaded2
+                    MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
                 , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
             }
 
@@ -207,18 +204,15 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : IdArray messageId (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : MessageArray messageId (Message messageId userId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel
                 | messages =
-                    SeqDict.foldl
-                        (\messageId message messages -> IdArray.set messageId (MessageLoaded message) messages)
-                        channel.messages
-                        messagesLoaded2
-                , visibleMessages = VisibleMessages.firstLoad channel
+                    MessageArray.setMany (SeqDict.toList messagesLoaded2) channel.messages
+                , visibleMessages = VisibleMessages.firstLoad (MessageArray.length channel.messages)
             }
 
         EmptyPlaceholder ->
