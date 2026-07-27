@@ -5341,6 +5341,12 @@ decodeDispatchUserEvent eventName =
         "STATE_UPDATE" ->
             JD.succeed DispatchUser_StateUpdate
 
+        "PASSIVE_UPDATE_V2" ->
+            JD.succeed DispatchUser_PassiveUpdateV2
+
+        "QUESTS_USER_STATUS_UPDATE" ->
+            JD.succeed DispatchUser_QuestsUserStatusUpdate
+
         "GUILD_CREATE" ->
             JD.field "d" decodeGatewayGuild |> JD.map DispatchUser_GuildCreate
 
@@ -5675,6 +5681,8 @@ type OpDispatchUserEvent
     | DispatchUser_CallUpdate
     | DispatchUser_CallDelete
     | DispatchUser_StateUpdate
+    | DispatchUser_PassiveUpdateV2
+    | DispatchUser_QuestsUserStatusUpdate
     | DispatchUser_GuildCreate GatewayGuild
     | DispatchUser_ChannelUpdate Channel
     | DispatchUser_GuildRoleUpdate GuildRoleUpdate
@@ -6778,6 +6786,12 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_StateUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_PassiveUpdateV2 ->
+                            ( model, [] )
+
+                        DispatchUser_QuestsUserStatusUpdate ->
                             ( model, [] )
 
                         DispatchUser_GuildCreate gatewayGuild ->
