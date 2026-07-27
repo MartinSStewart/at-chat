@@ -17,6 +17,7 @@ module GuildIcon exposing
     , view
     )
 
+import Color.Manipulate
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus exposing (FileHash)
@@ -114,19 +115,18 @@ notificationView xOffset yOffset borderColor notification =
 {-| The Discord logo on a blurple circle. Marks the guilds and users that come
 from Discord so they can be told apart from at-chat ones at a glance.
 -}
-discordLogo : List (Ui.Attribute msg) -> Element msg
-discordLogo attributes =
+discordLogo : Element msg
+discordLogo =
     Ui.el
-        (Ui.background discordBlurple
-            :: Ui.rounded 99
-            :: Ui.padding 3
-            :: Ui.border 1
-            :: Ui.borderColor MyUi.background1
-            :: Ui.width Ui.shrink
-            :: MyUi.noShrinking
-            :: Ui.Accessibility.description discordLabel
-            :: attributes
-        )
+        [ Ui.background discordBlurple
+        , Ui.rounded 99
+        , Ui.padding 3
+        , Ui.border 1
+        , Ui.borderColor MyUi.background1
+        , Ui.width Ui.shrink
+        , MyUi.noShrinking
+        , Ui.Accessibility.description discordLabel
+        ]
         (Ui.html Icons.discord)
 
 
@@ -140,6 +140,16 @@ discordBlurple =
     Ui.rgb 88 101 242
 
 
+discordBlurpleDark : Ui.Color
+discordBlurpleDark =
+    Color.Manipulate.weightedMix MyUi.background1 discordBlurple 0.3
+
+
+discordBlurpleFont : Ui.Color
+discordBlurpleFont =
+    Ui.rgb 193 197 239
+
+
 {-| Stands in for `notificationView` on guilds and users that come from Discord.
 The Discord logo takes the corner the notification count would use, and gives it
 back up whenever there is a count to show.
@@ -150,14 +160,14 @@ discordNotificationView xOffset yOffset borderColor notification =
         NoNotification ->
             Ui.el
                 [ Ui.rounded 99
-                , Ui.background discordBlurple
+                , Ui.background discordBlurpleDark
                 , Ui.width (Ui.px notificationHeight)
                 , Ui.height (Ui.px notificationHeight)
                 , Ui.move { x = xOffset, y = yOffset, z = 0 }
                 , Ui.alignRight
                 , Ui.contentCenterX
                 , Ui.contentCenterY
-                , Ui.Font.color MyUi.white
+                , Ui.Font.color discordBlurpleFont
                 , Ui.Accessibility.description discordLabel
                 , -- The icon is inside a link. Letting the marker swallow clicks
                   -- would leave a dead spot in the corner of it.
@@ -167,10 +177,10 @@ discordNotificationView xOffset yOffset borderColor notification =
                 |> Ui.inFront
 
         NewMessage count ->
-            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
+            notificationHelper MyUi.white MyUi.black discordBlurpleDark xOffset yOffset count
 
         NewMessageForUser count ->
-            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
+            notificationHelper MyUi.alertColor MyUi.white discordBlurpleDark xOffset yOffset count
 
 
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg

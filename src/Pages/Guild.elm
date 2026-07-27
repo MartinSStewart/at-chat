@@ -7105,7 +7105,7 @@ discordChannelColumn isMobile time localUser routeData guild channelNameHover ca
             [ MyUi.hoverText guildName
             , Ui.spacing 4
             ]
-            [ GuildIcon.discordLogo []
+            [ GuildIcon.discordLogo
             , Ui.text guildName
             ]
         , GuildColumn.elLinkButton
