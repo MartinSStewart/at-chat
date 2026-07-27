@@ -154,12 +154,11 @@ discordNotificationView xOffset yOffset borderColor notification =
                 , Ui.background discordBlurple
                 , Ui.width (Ui.px notificationHeight)
                 , Ui.height (Ui.px notificationHeight)
-                , Ui.border 2
-                , Ui.borderColor borderColor
                 , Ui.move { x = xOffset, y = yOffset, z = 0 }
                 , Ui.alignRight
                 , Ui.contentCenterX
                 , Ui.contentCenterY
+                , Ui.Font.color MyUi.white
                 , Ui.Accessibility.description discordLabel
                 , -- The icon is inside a link. Letting the marker swallow clicks
                   -- would leave a dead spot in the corner of it.
@@ -169,37 +168,16 @@ discordNotificationView xOffset yOffset borderColor notification =
                 |> Ui.inFront
 
         NewMessage count ->
-            notificationHelper MyUi.white MyUi.black discordBlurple xOffset yOffset count
+            notificationHelper MyUi.white MyUi.black borderColor xOffset yOffset count
 
         NewMessageForUser count ->
-            notificationHelper MyUi.alertColor MyUi.white discordBlurple xOffset yOffset count
+            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
 view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view mode guild =
-    viewHelper notificationView mode guild
-
-
-{-| Same as `view` but marked as coming from Discord.
--}
-discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
-discordView mode guild =
-    viewHelper discordNotificationView mode guild
-
-
-viewHelper :
-    (Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg)
-    -> Mode
-    -> { a | name : GuildName, icon : Maybe FileHash }
-    -> Element msg
-viewHelper notificationAttribute mode guild =
-    let
-        name : String
-        name =
-            GuildName.toString guild.name
-    in
     Ui.el
-        [ notificationAttribute
+        [ notificationView
             0
             -3
             MyUi.background1
@@ -211,45 +189,69 @@ viewHelper notificationAttribute mode guild =
                     notification
             )
         ]
-        (case guild.icon of
-            Just icon ->
-                iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+        (guildIcon guild mode (GuildName.toString guild.name))
 
-            Nothing ->
-                String.replace "-" " " name
-                    |> String.filter (\char -> Char.isAlphaNum char || char == ' ')
-                    |> String.words
-                    |> List.take 3
-                    |> List.map (String.left 1)
-                    |> String.concat
-                    |> Ui.text
-                    |> Ui.el
-                        [ Ui.contentCenterX
-                        , Ui.contentCenterY
-                        , case mode of
-                            IsSelected ->
-                                Ui.noAttr
 
-                            _ ->
-                                Ui.rounded (round (toFloat size * 8 / 50))
-                        , MyUi.notoSans
-                        , Ui.Font.weight 600
-                        , Ui.background MyUi.secondaryGray
-                        , Ui.border 1
-                        , Ui.borderColor MyUi.secondaryGrayBorder
-                        , Ui.centerX
-                        , case mode of
-                            IsSelected ->
-                                Ui.width (Ui.px fullWidth)
+{-| Same as `view` but marked as coming from Discord.
+-}
+discordView : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+discordView mode guild =
+    Ui.el
+        [ discordNotificationView
+            0
+            -3
+            MyUi.background1
+            (case mode of
+                IsSelected ->
+                    NoNotification
 
-                            _ ->
-                                Ui.width (Ui.px size)
-                        , Ui.height (Ui.px size)
-                        , Ui.Font.size (round (toFloat size * 18 / 50))
-                        , Ui.Font.color iconFontColor
-                        , MyUi.hoverText name
-                        ]
-        )
+                Normal notification ->
+                    notification
+            )
+        ]
+        (guildIcon guild mode (GuildName.toString guild.name))
+
+
+guildIcon : { a | icon : Maybe FileHash } -> Mode -> String -> Element msg
+guildIcon guild mode name =
+    case guild.icon of
+        Just icon ->
+            iconView mode (FileStatus.fileUrl FileStatus.pngContent icon)
+
+        Nothing ->
+            String.replace "-" " " name
+                |> String.filter (\char -> Char.isAlphaNum char || char == ' ')
+                |> String.words
+                |> List.take 3
+                |> List.map (String.left 1)
+                |> String.concat
+                |> Ui.text
+                |> Ui.el
+                    [ Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , case mode of
+                        IsSelected ->
+                            Ui.noAttr
+
+                        _ ->
+                            Ui.rounded (round (toFloat size * 8 / 50))
+                    , MyUi.notoSans
+                    , Ui.Font.weight 600
+                    , Ui.background MyUi.secondaryGray
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.secondaryGrayBorder
+                    , Ui.centerX
+                    , case mode of
+                        IsSelected ->
+                            Ui.width (Ui.px fullWidth)
+
+                        _ ->
+                            Ui.width (Ui.px size)
+                    , Ui.height (Ui.px size)
+                    , Ui.Font.size (round (toFloat size * 18 / 50))
+                    , Ui.Font.color iconFontColor
+                    , MyUi.hoverText name
+                    ]
 
 
 userView : ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
