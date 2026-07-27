@@ -111,6 +111,8 @@ const cacheName = 'resource_cache_v1';
 const frontendCacheName = 'frontend_cache_v1';
 
 self.addEventListener('fetch', (event) => {
+    try
+    {
     // Check if this is a request for an image
     const url = event.request.url;
 
@@ -195,5 +197,10 @@ self.addEventListener('fetch', (event) => {
         }));
     } else {
     return;
+    }
+    }
+    catch (error)
+    {
+        log("Fetch event error: " + error.message);
     }
 });
