@@ -141,9 +141,8 @@ discordBlurple =
 
 
 {-| Stands in for `notificationView` on guilds and users that come from Discord.
-The Discord logo takes the corner the notification count would use, and when
-there is a count to show it takes the corner back and wears the Discord colour
-as its outline, so one glance still tells you where the icon came from.
+The Discord logo takes the corner the notification count would use, and gives it
+back up whenever there is a count to show.
 -}
 discordNotificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
 discordNotificationView xOffset yOffset borderColor notification =
