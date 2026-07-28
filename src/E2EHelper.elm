@@ -2890,6 +2890,7 @@ allAttackerToBackendChanges =
     , LogOutRequest sessionId1Hash
     , LogOutRequest sessionId2Hash
     , LogOutRequest sessionId4Hash
+    , LoginWithRecoveryPasswordRequest InitialLoadRequested_None "123" UserAgent.init
     , -- Make sure this one is last. It actually logs out the attacker
       LogOutRequest sessionIdAttackerHash
     ]
