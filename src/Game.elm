@@ -600,6 +600,7 @@ dragEnd time windowSize currentUserId touches matchId (MatchData matchData) mode
 view :
     Time.Posix
     -> Coord CssPixels
+    -> Bool
     -> Maybe (NonemptyDict Int Touch)
     -> Maybe MyUi.LastCopy
     -> LocalUser
@@ -608,7 +609,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Model
     -> Element Msg
-view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybeMatchId matches model =
+view currentTime windowSize showMemberTab maybeDragging lastCopied localUser guildOrDmId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -655,6 +656,7 @@ view currentTime windowSize maybeDragging lastCopied localUser guildOrDmId maybe
                                     WordSpellingGame.gameView
                                         currentTime
                                         windowSize
+                                        showMemberTab
                                         maybeDragging
                                         isPersonalDm
                                         localUser

@@ -23,7 +23,8 @@ import Call
 import ChannelDescription
 import ChannelHeader
 import ChannelName exposing (ChannelName)
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
@@ -497,30 +498,16 @@ discordDmChannelView routeData loggedIn local model =
 
 conversationWidth : LoadedFrontend -> Int
 conversationWidth model =
-    if MyUi.isMobile model then
-        Coord.xRaw model.windowSize
-            - (User.profileImageSize
-                + (messagePaddingX * 2)
-                + profileImagePaddingRight
-                + model.startupData.scrollbarWidth
-              )
+    MyUi.conversationWidthIgnoreScrollbar
+        model.windowSize
+        (case Route.toShowMembersTab model.route of
+            ( ShowMembersTab, _ ) ->
+                True
 
-    else
-        Coord.xRaw model.windowSize
-            - ((GuildIcon.fullWidth + 1)
-                + MyUi.channelColumnWidth model.windowSize
-                + (case Route.toShowMembersTab model.route of
-                    ( ShowMembersTab, _ ) ->
-                        memberColumnWidth
-
-                    ( HideMembersTab, _ ) ->
-                        0
-                  )
-                + User.profileImageSize
-                + (messagePaddingX * 2)
-                + profileImagePaddingRight
-                + model.startupData.scrollbarWidth
-              )
+            ( HideMembersTab, _ ) ->
+                False
+        )
+        + model.startupData.scrollbarWidth
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
@@ -905,11 +892,6 @@ guildErrorPage error local model =
             ]
 
 
-memberColumnWidth : number
-memberColumnWidth =
-    250
-
-
 {-| The member column is also shown on routes where no channel is selected. In
 that case there's nothing to export.
 -}
@@ -962,7 +944,7 @@ memberColumnContainer isThread contents =
         , Ui.alignRight
         , Ui.background MyUi.background2
         , Ui.Font.color MyUi.font1
-        , Ui.width (Ui.px memberColumnWidth)
+        , Ui.width (Ui.px MyUi.memberColumnWidth)
         , Ui.heightMin 0
         ]
         [ Ui.row
@@ -1102,7 +1084,7 @@ discordMemberColumnContainer contents =
         , Ui.alignRight
         , Ui.background MyUi.background2
         , Ui.Font.color MyUi.font1
-        , Ui.width (Ui.px memberColumnWidth)
+        , Ui.width (Ui.px MyUi.memberColumnWidth)
         , Ui.scrollable
         , Ui.heightMin 0
         , Ui.paddingXY 8 4
@@ -5276,11 +5258,6 @@ type HighlightMessage
     | UrlHighlight
 
 
-profileImagePaddingRight : number
-profileImagePaddingRight =
-    8
-
-
 messageView :
     Bool
     -> Int
@@ -5999,7 +5976,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = profileImagePaddingRight
+                    , right = MyUi.profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -6126,7 +6103,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = profileImagePaddingRight
+                    , right = MyUi.profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -6540,11 +6517,6 @@ eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon
         )
 
 
-messagePaddingX : number
-messagePaddingX =
-    8
-
-
 {-| Decodes a "contextmenu" event into a message that opens the message menu.
 If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
@@ -6668,8 +6640,8 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
          , Ui.paddingWith
-            { left = messagePaddingX
-            , right = messagePaddingX
+            { left = MyUi.messagePaddingX
+            , right = MyUi.messagePaddingX
             , top = 4
             , bottom =
                 if maybeReactions == Nothing then
@@ -6786,8 +6758,8 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
          , Ui.paddingWith
-            { left = messagePaddingX
-            , right = messagePaddingX
+            { left = MyUi.messagePaddingX
+            , right = MyUi.messagePaddingX
             , top = 4
             , bottom =
                 if maybeReactions == Nothing then

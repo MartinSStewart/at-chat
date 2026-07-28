@@ -22,6 +22,7 @@ module MyUi exposing
     , colorWithAlpha
     , column
     , container
+    , conversationWidthIgnoreScrollbar
     , copyBox
     , css
     , dangerRed
@@ -42,6 +43,7 @@ module MyUi exposing
     , font1
     , font2
     , font3
+    , guildIconFullWidth
     , heightAttr
     , highlightedBorder
     , hover
@@ -60,7 +62,9 @@ module MyUi exposing
     , isMobileAlt
     , label
     , matchSwitcherHeight
+    , memberColumnWidth
     , mentionColor
+    , messagePaddingX
     , monospace
     , monthToInt
     , noPointerEvents
@@ -68,6 +72,8 @@ module MyUi exposing
     , notoSans
     , outwardBottomCorner
     , prewrap
+    , profileImagePaddingRight
+    , profileImageSize
     , radioCircle
     , radioColumn
     , radioOption
@@ -1171,6 +1177,52 @@ channelHeaderHeight =
 matchSwitcherHeight : number
 matchSwitcherHeight =
     60
+
+
+conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int
+conversationWidthIgnoreScrollbar windowSize showMembersTab =
+    if isMobileAlt windowSize then
+        Coord.xRaw windowSize - (profileImageSize + (messagePaddingX * 2) + profileImagePaddingRight)
+
+    else
+        Coord.xRaw windowSize
+            - ((guildIconFullWidth + 1)
+                + channelColumnWidth windowSize
+                + (if showMembersTab then
+                    memberColumnWidth
+
+                   else
+                    0
+                  )
+                + profileImageSize
+                + (messagePaddingX * 2)
+                + profileImagePaddingRight
+              )
+
+
+guildIconFullWidth : number
+guildIconFullWidth =
+    58
+
+
+profileImageSize : number
+profileImageSize =
+    40
+
+
+messagePaddingX : number
+messagePaddingX =
+    8
+
+
+profileImagePaddingRight : number
+profileImagePaddingRight =
+    8
+
+
+memberColumnWidth : number
+memberColumnWidth =
+    250
 
 
 insetTop : String

@@ -738,6 +738,13 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
     Game.view
         model.time
         model.windowSize
+        (case Route.toShowMembersTab model.route of
+            ( ShowMembersTab, _ ) ->
+                True
+
+            ( HideMembersTab, _ ) ->
+                False
+        )
         -- Touches are reported from the viewport top (behind the safe-area
         -- inset); shift them to match the board laid out below the inset.
         ((case model.drag of

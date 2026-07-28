@@ -880,8 +880,8 @@ videoNode userId localUser id remoteCallData videoNodeState ( position, width ) 
         )
         [ Html.div
             [ Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "left" (String.fromInt ((width - User.profileImageSize) // 2) ++ "px")
-            , Html.Attributes.style "top" (String.fromFloat ((height - User.profileImageSize) / 2) ++ "px")
+            , Html.Attributes.style "left" (String.fromInt ((width - MyUi.profileImageSize) // 2) ++ "px")
+            , Html.Attributes.style "top" (String.fromFloat ((height - MyUi.profileImageSize) / 2) ++ "px")
             , Html.Attributes.style
                 "opacity"
                 (if remoteCallData.videoInputEnabled then

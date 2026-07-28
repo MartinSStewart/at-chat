@@ -9,7 +9,6 @@ module GuildIcon exposing
     , discordNotificationView
     , discordUserView
     , discordView
-    , fullWidth
     , notificationHelper
     , notificationView
     , showFriendsButton
@@ -251,7 +250,7 @@ guildIcon guild mode name =
                     , Ui.centerX
                     , case mode of
                         IsSelected ->
-                            Ui.width (Ui.px fullWidth)
+                            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
                         _ ->
                             Ui.width (Ui.px size)
@@ -330,7 +329,7 @@ iconView mode url =
             "width"
             (case mode of
                 IsSelected ->
-                    String.fromInt fullWidth ++ "px"
+                    String.fromInt MyUi.guildIconFullWidth ++ "px"
 
                 _ ->
                     String.fromInt size ++ "px"
@@ -384,11 +383,6 @@ size =
     50
 
 
-fullWidth : number
-fullWidth =
-    58
-
-
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
 addGuildButton htmlId isSelected onPress =
     MyUi.elButton
@@ -408,7 +402,7 @@ addGuildButton htmlId isSelected onPress =
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
-            Ui.width (Ui.px fullWidth)
+            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
           else
             Ui.width (Ui.px size)
@@ -439,7 +433,7 @@ showFriendsButton isSelected onPress =
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
-            Ui.width (Ui.px fullWidth)
+            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
           else
             Ui.width (Ui.px size)
