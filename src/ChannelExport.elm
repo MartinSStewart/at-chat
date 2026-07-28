@@ -396,7 +396,7 @@ encodeMessages userIdToString userNames threadMessages messages =
     IdArray.toList messages
         |> List.indexedMap
             (\index message ->
-                encodeMessage userIdToString userNames (threadMessages (Id.fromInt index)) index message
+                encodeMessage userIdToString userNames (threadMessages (Id.fromInt index)) message
             )
         |> Json.Encode.list identity
 
@@ -405,64 +405,62 @@ encodeMessage :
     (userId -> String)
     -> SeqDict userId String
     -> Maybe Json.Encode.Value
-    -> Int
     -> Message messageId userId
     -> Json.Encode.Value
-encodeMessage userIdToString userNames maybeThread index message =
-    (( "index", Json.Encode.int index )
-        :: (case message of
-                UserTextMessage data ->
-                    [ ( "type", Json.Encode.string "userTextMessage" )
-                    , ( "createdAt", encodeTime data.createdAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
-                    , ( "content", encodeContent userNames data.content )
-                    ]
-                        ++ optionalField "editedAt" encodeTime data.editedAt
-                        ++ optionalField
-                            "repliedTo"
-                            (\messageId -> Json.Encode.int (Id.toInt messageId))
-                            data.repliedTo
-                        ++ encodeReactions userIdToString data.reactions
-                        ++ encodeAttachedFiles data.attachedFiles
-                        ++ encodeEmbeds data.embeds
+encodeMessage userIdToString userNames maybeThread message =
+    ((case message of
+        UserTextMessage data ->
+            [ ( "type", Json.Encode.string "userTextMessage" )
+            , ( "createdAt", encodeTime data.createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
+            , ( "content", encodeContent userNames data.content )
+            ]
+                ++ optionalField "editedAt" encodeTime data.editedAt
+                ++ optionalField
+                    "repliedTo"
+                    (\messageId -> Json.Encode.int (Id.toInt messageId))
+                    data.repliedTo
+                ++ encodeReactions userIdToString data.reactions
+                ++ encodeAttachedFiles data.attachedFiles
+                ++ encodeEmbeds data.embeds
 
-                UserJoinedMessage createdAt userId reactions _ ->
-                    [ ( "type", Json.Encode.string "userJoined" )
-                    , ( "createdAt", encodeTime createdAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString userId) )
-                    ]
-                        ++ encodeReactions userIdToString reactions
+        UserJoinedMessage createdAt userId reactions _ ->
+            [ ( "type", Json.Encode.string "userJoined" )
+            , ( "createdAt", encodeTime createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString userId) )
+            ]
+                ++ encodeReactions userIdToString reactions
 
-                DeletedMessage deletedAt ->
-                    [ ( "type", Json.Encode.string "deleted" )
-                    , ( "deletedAt", encodeTime deletedAt )
-                    ]
+        DeletedMessage deletedAt ->
+            [ ( "type", Json.Encode.string "deleted" )
+            , ( "deletedAt", encodeTime deletedAt )
+            ]
 
-                CallStarted data ->
-                    [ ( "type", Json.Encode.string "callStarted" )
-                    , ( "createdAt", encodeTime data.startedAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
-                    ]
-                        ++ optionalField "endedAt" encodeTime data.endedAt
-                        ++ encodeReactions userIdToString data.reactions
+        CallStarted data ->
+            [ ( "type", Json.Encode.string "callStarted" )
+            , ( "createdAt", encodeTime data.startedAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
+            ]
+                ++ optionalField "endedAt" encodeTime data.endedAt
+                ++ encodeReactions userIdToString data.reactions
 
-                GameStarted data ->
-                    [ ( "type", Json.Encode.string "gameStarted" )
-                    , ( "createdAt", encodeTime data.startedAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
-                    , ( "gameType"
-                      , Json.Encode.string
-                            (case data.gameType of
-                                GameType_Go ->
-                                    "go"
+        GameStarted data ->
+            [ ( "type", Json.Encode.string "gameStarted" )
+            , ( "createdAt", encodeTime data.startedAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
+            , ( "gameType"
+              , Json.Encode.string
+                    (case data.gameType of
+                        GameType_Go ->
+                            "go"
 
-                                GameType_WordSpellingGame ->
-                                    "wordSpellingGame"
-                            )
-                      )
-                    ]
-                        ++ encodeReactions userIdToString data.reactions
-           )
+                        GameType_WordSpellingGame ->
+                            "wordSpellingGame"
+                    )
+              )
+            ]
+                ++ encodeReactions userIdToString data.reactions
+     )
         ++ (case maybeThread of
                 Just thread ->
                     [ ( "threadMessages", thread ) ]
