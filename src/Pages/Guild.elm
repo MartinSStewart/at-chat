@@ -8542,7 +8542,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
                                 [ Ui.el
-                                    [ GuildIcon.discordNotificationView 4 -3 MyUi.background2 notification
+                                    [ GuildIcon.discordNotificationView 4 -3 notification
                                     , Ui.width Ui.shrink
                                     ]
                                     (User.discordProfileImage currentUserId otherUser.icon)
@@ -8569,7 +8569,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                             members2
                             |> User.multipleProfileImages
                             |> Ui.el
-                                [ GuildIcon.discordNotificationView 4 -3 MyUi.background2 notification
+                                [ GuildIcon.discordNotificationView 4 -3 notification
                                 , Ui.width Ui.shrink
                                 ]
                         , Ui.column

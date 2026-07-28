@@ -25,6 +25,7 @@ import Set
 import Test exposing (Test, describe, test)
 import Time
 import Types exposing (BackendModel)
+import UInt64
 import Unsafe
 import User
 import WireHelper
@@ -113,7 +114,7 @@ backupWith dmChannels discordDmChannels =
             { baseModel
                 | users =
                     NonemptyDict.toSeqDict baseModel.users
-                        |> SeqDict.insert (Id.fromInt 1) (testUser "Sven")
+                        |> SeqDict.insert (Id.fromInt 1) testUser
                         |> SeqDict.toList
                         |> NonemptyDict.fromList
                         |> Maybe.withDefault baseModel.users
@@ -165,20 +166,22 @@ dmChannelsWithMessageCounts messageCounts =
         |> SeqDict.fromList
 
 
+unsafeUserId : Discord.Id Discord.UserId
+unsafeUserId =
+    Discord.idFromUInt64 (Unsafe.uint64 "1")
+
+
 discordDmChannelsWithMessageCounts :
     List Int
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
 discordDmChannelsWithMessageCounts messageCounts =
     List.map
         (\messageCount ->
-            ( Discord.idFromUInt64 (Unsafe.uint64 (String.fromInt messageCount))
+            ( Discord.idFromUInt64 (UInt64.fromInt messageCount)
             , { messages = messages messageCount
               , lastTypedAt = SeqDict.empty
               , linkedMessageIds = OneToOne.empty
-              , members =
-                    NonemptyDict.singleton
-                        (Discord.idFromUInt64 (Unsafe.uint64 "1"))
-                        { messagesSent = messageCount }
+              , members = NonemptyDict.singleton unsafeUserId { messagesSent = messageCount }
               , dateDividerDrawings = SeqDict.empty
               }
             )
@@ -218,6 +221,6 @@ pickedReferenceNames =
         )
 
 
-testUser : String -> User.BackendUser
-testUser name =
-    User.init (Time.millisToPosix 0) (Unsafe.personName name) (Unsafe.emailAddress "sven@example.com") False
+testUser : User.BackendUser
+testUser =
+    User.init (Time.millisToPosix 0) (Unsafe.personName "Sven") (Unsafe.emailAddress "sven@example.com") False

@@ -154,8 +154,8 @@ discordBlurpleFont =
 The Discord logo takes the corner the notification count would use, and gives it
 back up whenever there is a count to show.
 -}
-discordNotificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
-discordNotificationView xOffset yOffset borderColor notification =
+discordNotificationView : Int -> Int -> ChannelNotificationType -> Ui.Attribute msg
+discordNotificationView xOffset yOffset notification =
     case notification of
         NoNotification ->
             Ui.el
@@ -209,7 +209,6 @@ discordView mode guild =
         [ discordNotificationView
             0
             -3
-            MyUi.background1
             (case mode of
                 IsSelected ->
                     NoNotification
@@ -287,7 +286,7 @@ discordUserView notification maybeIcon userId =
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
         |> iconView (Normal notification)
-        |> Ui.el [ discordNotificationView 0 -3 MyUi.background1 notification ]
+        |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
