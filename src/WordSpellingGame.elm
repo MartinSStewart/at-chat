@@ -3821,7 +3821,7 @@ gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUs
 
 playerRowHeight : number
 playerRowHeight =
-    MyUi.profileImageSize
+    User.profileImageSize
 
 
 lettersLeftHeight : number

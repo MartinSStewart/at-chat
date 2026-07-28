@@ -27,6 +27,7 @@ module User exposing
     , profileImageHtml
     , profileImageNoRounding
     , profileImageRounding
+    , profileImageSize
     , sectionToString
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
@@ -676,6 +677,11 @@ toString userId allUsers =
             "<missing>"
 
 
+profileImageSize : number
+profileImageSize =
+    40
+
+
 smallProfileImageSize : number
 smallProfileImageSize =
     25
@@ -692,8 +698,8 @@ profileImage userId maybeFileHash =
         Just fileHash ->
             Ui.image
                 [ Ui.rounded profileImageRounding
-                , Ui.width (Ui.px MyUi.profileImageSize)
-                , Ui.height (Ui.px MyUi.profileImageSize)
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
                 , Ui.clip
                 , -- We need no pointer events here so drawing anchoring gets the offset of the parent
                   MyUi.noPointerEvents
@@ -704,7 +710,7 @@ profileImage userId maybeFileHash =
                 }
 
         Nothing ->
-            GuildIcon.defaultUser False MyUi.profileImageSize 8 userId
+            GuildIcon.defaultUser False profileImageSize 8 userId
 
 
 profileImageHtml : Id UserId -> Maybe FileHash -> Html msg
@@ -713,22 +719,22 @@ profileImageHtml userId maybeFileHash =
         Just fileHash ->
             Html.img
                 [ Html.Attributes.style "border-radius" (String.fromInt profileImageRounding ++ "px")
-                , Html.Attributes.style "width" (String.fromInt MyUi.profileImageSize ++ "px")
-                , Html.Attributes.style "height" (String.fromInt MyUi.profileImageSize ++ "px")
+                , Html.Attributes.style "width" (String.fromInt profileImageSize ++ "px")
+                , Html.Attributes.style "height" (String.fromInt profileImageSize ++ "px")
                 , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
                 ]
                 []
 
         Nothing ->
-            GuildIcon.defaultUserHtml MyUi.profileImageSize 8 userId
+            GuildIcon.defaultUserHtml profileImageSize 8 userId
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
 discordProfileImage userId maybeFileHash =
     Ui.image
         [ Ui.rounded profileImageRounding
-        , Ui.width (Ui.px MyUi.profileImageSize)
-        , Ui.height (Ui.px MyUi.profileImageSize)
+        , Ui.width (Ui.px profileImageSize)
+        , Ui.height (Ui.px profileImageSize)
         , Ui.clip
         ]
         { source =
@@ -748,8 +754,8 @@ profileImageNoRounding userId maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
-                [ Ui.width (Ui.px MyUi.profileImageSize)
-                , Ui.height (Ui.px MyUi.profileImageSize)
+                [ Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
                 ]
                 { source = FileStatus.fileUrl FileStatus.pngContent fileHash
                 , description = ""
@@ -757,7 +763,7 @@ profileImageNoRounding userId maybeFileHash =
                 }
 
         Nothing ->
-            GuildIcon.defaultUser False MyUi.profileImageSize 0 userId
+            GuildIcon.defaultUser False profileImageSize 0 userId
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg

@@ -508,6 +508,7 @@ conversationWidth model =
                 False
         )
         + model.startupData.scrollbarWidth
+        - (User.profileImageSize + (messagePaddingX * 2) + profileImagePaddingRight)
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_

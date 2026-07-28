@@ -1904,8 +1904,8 @@ clockChip maybeUser maybeTimeLeft isActive stone score =
 
             Nothing ->
                 Ui.el
-                    [ Ui.width (Ui.px MyUi.profileImageSize)
-                    , Ui.height (Ui.px MyUi.profileImageSize)
+                    [ Ui.width (Ui.px User.profileImageSize)
+                    , Ui.height (Ui.px User.profileImageSize)
                     ]
                     Ui.none
           )

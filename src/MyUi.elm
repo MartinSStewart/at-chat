@@ -73,7 +73,6 @@ module MyUi exposing
     , outwardBottomCorner
     , prewrap
     , profileImagePaddingRight
-    , profileImageSize
     , radioCircle
     , radioColumn
     , radioOption
@@ -1182,7 +1181,7 @@ matchSwitcherHeight =
 conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int
 conversationWidthIgnoreScrollbar windowSize showMembersTab =
     if isMobileAlt windowSize then
-        Coord.xRaw windowSize - (profileImageSize + (messagePaddingX * 2) + profileImagePaddingRight)
+        Coord.xRaw windowSize
 
     else
         Coord.xRaw windowSize
@@ -1194,20 +1193,12 @@ conversationWidthIgnoreScrollbar windowSize showMembersTab =
                    else
                     0
                   )
-                + profileImageSize
-                + (messagePaddingX * 2)
-                + profileImagePaddingRight
               )
 
 
 guildIconFullWidth : number
 guildIconFullWidth =
     58
-
-
-profileImageSize : number
-profileImageSize =
-    40
 
 
 messagePaddingX : number
