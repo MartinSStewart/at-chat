@@ -127,7 +127,7 @@ missing. This exists so that a backup can be uploaded again after the BackendMod
 -}
 recoveryPasswordHash : String
 recoveryPasswordHash =
-    "48d8aef158f10fae3877b40d54444a829f4652a5871d3b58c3cde52f29aed662"
+    "0e6a28a18a696783861f4eda27b09caa96718799deb31d701321cb3a9530d913"
 
 
 {-| Once an admin sets a Postmark API key, login emails work again and the recovery password is no
