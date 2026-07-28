@@ -144,19 +144,24 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     canScroll2 =
                         GuildColumn.canScroll True model.drag
 
-                    showMembers : ShowMembersTab
+                    showMembers : ( ShowMembersTab, Bool )
                     showMembers =
                         Route.toShowMembersTab model.route
 
                     memberColumn : Element FrontendMsg_
                     memberColumn =
                         case showMembers of
-                            ShowMembersTab ->
+                            ( ShowMembersTab, isThread ) ->
                                 case maybeOtherUserId of
                                     SelectedDmChannel dmRoute ->
                                         case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                             Just otherUserId ->
-                                                dmMemberColumnMobile canScroll2 local.localUser otherUserId
+                                                Ui.Lazy.lazy4
+                                                    dmMemberColumnMobile
+                                                    canScroll2
+                                                    local.localUser
+                                                    otherUserId
+                                                    isThread
                                                     |> Ui.el
                                                         [ Ui.height Ui.fill
                                                         , Ui.background MyUi.background3
@@ -199,7 +204,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     NoDmChannelSelected ->
                                         Ui.none
 
-                            HideMembersTab ->
+                            ( HideMembersTab, _ ) ->
                                 Ui.none
                 in
                 Ui.row
@@ -217,10 +222,10 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                         , case showMembers of
-                                            ShowMembersTab ->
+                                            ( ShowMembersTab, _ ) ->
                                                 Ui.noAttr
 
-                                            HideMembersTab ->
+                                            ( HideMembersTab, _ ) ->
                                                 Ui.move
                                                     { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                     , y = 0
@@ -239,10 +244,10 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                         , case showMembers of
-                                            ShowMembersTab ->
+                                            ( ShowMembersTab, _ ) ->
                                                 Ui.noAttr
 
-                                            HideMembersTab ->
+                                            ( HideMembersTab, _ ) ->
                                                 Ui.move
                                                     { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                     , y = 0
@@ -326,10 +331,10 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         NoDmChannelSelected ->
                             Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
                     , case ( Route.toShowMembersTab model.route, maybeOtherUserId ) of
-                        ( ShowMembersTab, SelectedDmChannel dmRoute ) ->
+                        ( ( ShowMembersTab, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                                 Just otherUserId ->
-                                    Ui.Lazy.lazy2 dmMemberColumnNotMobile local.localUser otherUserId
+                                    Ui.Lazy.lazy3 dmMemberColumnNotMobile local.localUser otherUserId isThread
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
@@ -339,7 +344,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 Nothing ->
                                     Ui.none
 
-                        ( ShowMembersTab, SelectedDiscordDmChannel routeData ) ->
+                        ( ( ShowMembersTab, _ ), SelectedDiscordDmChannel routeData ) ->
                             case SeqDict.get routeData.channelId local.discordDmChannels of
                                 Just dmChannel ->
                                     Ui.Lazy.lazy4
@@ -357,10 +362,10 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 Nothing ->
                                     Ui.none
 
-                        ( ShowMembersTab, NoDmChannelSelected ) ->
+                        ( ( ShowMembersTab, _ ), NoDmChannelSelected ) ->
                             Ui.none
 
-                        ( HideMembersTab, _ ) ->
+                        ( ( HideMembersTab, _ ), _ ) ->
                             Ui.none
                     ]
 
@@ -505,10 +510,10 @@ conversationWidth model =
             - ((GuildIcon.fullWidth + 1)
                 + MyUi.channelColumnWidth model.windowSize
                 + (case Route.toShowMembersTab model.route of
-                    ShowMembersTab ->
+                    ( ShowMembersTab, _ ) ->
                         memberColumnWidth
 
-                    HideMembersTab ->
+                    ( HideMembersTab, _ ) ->
                         0
                   )
                 + User.profileImageSize
@@ -535,7 +540,7 @@ guildView model guildId channelRoute loggedIn local =
                             canScroll2 =
                                 GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
-                            showMembers : ShowMembersTab
+                            showMembers : ( ShowMembersTab, Bool )
                             showMembers =
                                 Route.toShowMembersTab model.route
                         in
@@ -545,14 +550,15 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.heightMin 0
                             , Ui.clip
                             , (case showMembers of
-                                ShowMembersTab ->
-                                    Ui.Lazy.lazy5
+                                ( ShowMembersTab, isThread ) ->
+                                    Ui.Lazy.lazy6
                                         memberColumnMobile
                                         canScroll2
                                         local.localUser
                                         guildId
                                         channelRoute
                                         guild.membersAndOwner
+                                        isThread
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -565,7 +571,7 @@ guildView model guildId channelRoute loggedIn local =
                                             , Ui.heightMin 0
                                             ]
 
-                                HideMembersTab ->
+                                ( HideMembersTab, _ ) ->
                                     Ui.none
                               )
                                 |> Ui.inFront
@@ -575,10 +581,10 @@ guildView model guildId channelRoute loggedIn local =
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                     , case showMembers of
-                                        ShowMembersTab ->
+                                        ( ShowMembersTab, _ ) ->
                                             Ui.noAttr
 
-                                        HideMembersTab ->
+                                        ( HideMembersTab, _ ) ->
                                             Ui.move
                                                 { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
@@ -623,20 +629,21 @@ guildView model guildId channelRoute loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
                             , case Route.toShowMembersTab model.route of
-                                ShowMembersTab ->
-                                    Ui.Lazy.lazy4
+                                ( ShowMembersTab, isThread ) ->
+                                    Ui.Lazy.lazy5
                                         memberColumnNotMobile
                                         local.localUser
                                         guildId
                                         channelRoute
                                         guild.membersAndOwner
+                                        isThread
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
                                             , Ui.height Ui.fill
                                             , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                             ]
 
-                                HideMembersTab ->
+                                ( HideMembersTab, _ ) ->
                                     Ui.none
                             ]
 
@@ -720,7 +727,7 @@ discordGuildView model routeData loggedIn local =
                             canScroll2 =
                                 GuildColumn.canScroll (MyUi.isMobile model) model.drag
 
-                            showMembers : ShowMembersTab
+                            showMembers : ( ShowMembersTab, Bool )
                             showMembers =
                                 Route.toShowMembersTab model.route
                         in
@@ -730,16 +737,17 @@ discordGuildView model routeData loggedIn local =
                             , Ui.heightMin 0
                             , Ui.clip
                             , (case showMembers of
-                                ShowMembersTab ->
+                                ( ShowMembersTab, isThread ) ->
                                     case routeData.channelRoute of
                                         DiscordChannel_ChannelRoute channelId _ _ ->
-                                            discordMemberColumnMobile
+                                            Ui.Lazy.lazy6
+                                                discordMemberColumnMobile
                                                 canScroll2
                                                 local.localUser
-                                                routeData.guildId
-                                                routeData.currentDiscordUserId
+                                                routeData
                                                 guild
                                                 channelId
+                                                isThread
                                                 |> Ui.el
                                                     [ Ui.height Ui.fill
                                                     , Ui.background MyUi.background3
@@ -761,7 +769,7 @@ discordGuildView model routeData loggedIn local =
                                         DiscordChannel_GuildSettingsRoute ->
                                             discordMemberColumnContainer []
 
-                                HideMembersTab ->
+                                ( HideMembersTab, _ ) ->
                                     Ui.none
                               )
                                 |> Ui.inFront
@@ -771,10 +779,10 @@ discordGuildView model routeData loggedIn local =
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                     , case showMembers of
-                                        ShowMembersTab ->
+                                        ( ShowMembersTab, _ ) ->
                                             Ui.noAttr
 
-                                        HideMembersTab ->
+                                        ( HideMembersTab, _ ) ->
                                             Ui.move
                                                 { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
@@ -819,16 +827,17 @@ discordGuildView model routeData loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
                             , case Route.toShowMembersTab model.route of
-                                ShowMembersTab ->
+                                ( ShowMembersTab, isThread ) ->
                                     case routeData.channelRoute of
                                         DiscordChannel_ChannelRoute channelId _ _ ->
-                                            Ui.Lazy.lazy5
+                                            Ui.Lazy.lazy6
                                                 discordMemberColumnNotMobile
                                                 local.localUser
                                                 routeData.guildId
                                                 routeData.currentDiscordUserId
                                                 guild
                                                 channelId
+                                                isThread
                                                 |> Ui.el
                                                     [ Ui.width Ui.shrink
                                                     , Ui.height Ui.fill
@@ -844,7 +853,7 @@ discordGuildView model routeData loggedIn local =
                                         DiscordChannel_GuildSettingsRoute ->
                                             Ui.none
 
-                                HideMembersTab ->
+                                ( HideMembersTab, _ ) ->
                                     Ui.none
                             ]
 
@@ -898,7 +907,7 @@ guildErrorPage error local model =
 
 memberColumnWidth : number
 memberColumnWidth =
-    200
+    250
 
 
 {-| The member column is also shown on routes where no channel is selected. In
@@ -923,9 +932,6 @@ channelRouteToChannelId channelRoute =
             Nothing
 
 
-{-| Asks the backend for a JSON copy of every message in the channel and then
-downloads it.
--}
 exportChannelButton : ExportChannelId -> Element FrontendMsg_
 exportChannelButton exportChannelId =
     MyUi.elButton
@@ -949,8 +955,8 @@ exportChannelButton exportChannelId =
 so it carries the button that closes it again. The button lines up with the
 channel header next to it and stays put while the members scroll.
 -}
-memberColumnContainer : List (Element FrontendMsg_) -> Element FrontendMsg_
-memberColumnContainer contents =
+memberColumnContainer : Bool -> List (Element FrontendMsg_) -> Element FrontendMsg_
+memberColumnContainer isThread contents =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.alignRight
@@ -959,14 +965,19 @@ memberColumnContainer contents =
         , Ui.width (Ui.px memberColumnWidth)
         , Ui.heightMin 0
         ]
-        [ Ui.el
+        [ Ui.row
             [ Ui.height (Ui.px MyUi.channelHeaderHeight)
-            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor MyUi.border2
-            , Ui.background MyUi.background3
             , MyUi.noShrinking
             ]
-            (MyUi.elButton
+            [ Ui.el
+                [ Ui.Font.color MyUi.font3, Ui.paddingXY 8 0 ]
+                (if isThread then
+                    Ui.text "Thread settings"
+
+                 else
+                    Ui.text "Channel settings"
+                )
+            , MyUi.elButton
                 (Dom.id "guild_hideMembers")
                 PressedHideMembers
                 [ Ui.alignRight
@@ -978,7 +989,7 @@ memberColumnContainer contents =
                 , MyUi.hoverText "Hide members"
                 ]
                 (Ui.html Icons.x)
-            )
+            ]
         , Ui.column
             [ Ui.height Ui.fill
             , Ui.scrollable
@@ -993,21 +1004,21 @@ memberColumnNotMobile :
     -> Id GuildId
     -> ChannelRoute
     -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Bool
     -> Element FrontendMsg_
-memberColumnNotMobile localUser guildId channelRoute membersAndOwner =
+memberColumnNotMobile localUser guildId channelRoute membersAndOwner isThread =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
     in
     memberColumnContainer
-        [ case channelRouteToChannelId channelRoute of
-            Just channelId ->
-                Ui.el
-                    [ Ui.paddingXY 8 8 ]
-                    (exportChannelButton (ExportChannel_Guild guildId channelId))
+        isThread
+        [ case ( channelRouteToChannelId channelRoute, isThread ) of
+            ( Just channelId, False ) ->
+                Ui.el [ Ui.padding 8 ] (exportChannelButton (ExportChannel_Guild guildId channelId))
 
-            Nothing ->
+            _ ->
                 Ui.none
         , Ui.column
             [ Ui.paddingXY 8 4 ]
@@ -1051,19 +1062,25 @@ discordMemberColumnNotMobile :
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
+    -> Bool
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId =
+discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
     case discordChannelViewers guildId guild channelId of
         Nothing ->
             Ui.none
 
         Just members ->
             memberColumnContainer
+                isThread
                 [ Ui.column
                     [ Ui.paddingXY 8 4 ]
-                    [ Ui.el
-                        [ Ui.paddingXY 0 4 ]
-                        (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                    [ if isThread then
+                        Ui.none
+
+                      else
+                        Ui.el
+                            [ Ui.paddingXY 0 4 ]
+                            (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
                     , Ui.text "Owner"
                     , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
                     , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
@@ -1099,8 +1116,9 @@ memberColumnMobile :
     -> Id GuildId
     -> ChannelRoute
     -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> Bool
     -> Element FrontendMsg_
-memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
+memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner isThread =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
@@ -1118,7 +1136,11 @@ memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
             , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-            , Ui.text "Channel members"
+            , if isThread then
+                Ui.text "Thread settings"
+
+              else
+                Ui.text "Channel settings"
             ]
         , Ui.column
             [ Ui.height Ui.fill
@@ -1128,13 +1150,13 @@ memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ case channelRouteToChannelId channelRoute of
-                Just channelId ->
+            [ case ( channelRouteToChannelId channelRoute, isThread ) of
+                ( Just channelId, False ) ->
                     Ui.el
                         [ Ui.paddingXY 8 4 ]
                         (exportChannelButton (ExportChannel_Guild guildId channelId))
 
-                Nothing ->
+                _ ->
                     Ui.none
             , Ui.column
                 [ Ui.paddingXY 8 4 ]
@@ -1155,13 +1177,13 @@ memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner =
 discordMemberColumnMobile :
     Bool
     -> LocalUser
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.UserId
+    -> Route.DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
+    -> Bool
     -> Element FrontendMsg_
-discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guild channelId =
-    case discordChannelViewers guildId guild channelId of
+discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThread =
+    case discordChannelViewers routeData.guildId guild channelId of
         Nothing ->
             Ui.none
 
@@ -1178,7 +1200,11 @@ discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guil
                     ]
                     [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
                     , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-                    , Ui.text "Channel members"
+                    , if isThread then
+                        Ui.text "Thread members"
+
+                      else
+                        Ui.text "Channel members"
                     ]
                 , Ui.column
                     [ Ui.height Ui.fill
@@ -1190,19 +1216,23 @@ discordMemberColumnMobile canScroll2 localUser guildId currentDiscordUserId guil
                     ]
                     [ Ui.column
                         [ Ui.paddingXY 8 4 ]
-                        [ Ui.el
-                            [ Ui.paddingXY 8 4 ]
-                            (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+                        [ if isThread then
+                            Ui.none
+
+                          else
+                            Ui.el
+                                [ Ui.paddingXY 8 4 ]
+                                (exportChannelButton (ExportChannel_Discord routeData.currentDiscordUserId routeData.guildId channelId))
                         , Ui.column
                             [ Ui.paddingXY 8 4 ]
                             [ Ui.text "Owner"
-                            , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
+                            , discordMemberLabel False localUser routeData.currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
                             ]
                         , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
                         , Ui.column
                             [ Ui.height Ui.fill ]
                             (SeqDict.foldr
-                                (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
+                                (\userId _ list -> discordMemberLabel True localUser routeData.currentDiscordUserId userId :: list)
                                 []
                                 members
                             )
@@ -1223,17 +1253,20 @@ dmMembers localUser otherUserId =
         [ localUser.session.userId, otherUserId ]
 
 
-dmMemberColumnNotMobile : LocalUser -> Id UserId -> Element FrontendMsg_
-dmMemberColumnNotMobile localUser otherUserId =
+dmMemberColumnNotMobile : LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
+dmMemberColumnNotMobile localUser otherUserId isThread =
     let
         members : List (Id UserId)
         members =
             dmMembers localUser otherUserId
     in
     memberColumnContainer
-        [ Ui.el
-            [ Ui.paddingXY 8 8 ]
-            (exportChannelButton (ExportChannel_Dm otherUserId))
+        isThread
+        [ if isThread then
+            Ui.none
+
+          else
+            Ui.el [ Ui.paddingXY 8 8 ] (exportChannelButton (ExportChannel_Dm otherUserId))
         , Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
@@ -1244,8 +1277,8 @@ dmMemberColumnNotMobile localUser otherUserId =
         ]
 
 
-dmMemberColumnMobile : Bool -> LocalUser -> Id UserId -> Element FrontendMsg_
-dmMemberColumnMobile canScroll2 localUser otherUserId =
+dmMemberColumnMobile : Bool -> LocalUser -> Id UserId -> Bool -> Element FrontendMsg_
+dmMemberColumnMobile canScroll2 localUser otherUserId isThread =
     let
         members : List (Id UserId)
         members =
@@ -1263,7 +1296,11 @@ dmMemberColumnMobile canScroll2 localUser otherUserId =
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
             , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-            , Ui.text "Channel members"
+            , if isThread then
+                Ui.text "Thread settings"
+
+              else
+                Ui.text "Channel settings"
             ]
         , Ui.column
             [ Ui.height Ui.fill
@@ -1273,9 +1310,11 @@ dmMemberColumnMobile canScroll2 localUser otherUserId =
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ Ui.el
-                [ Ui.paddingXY 8 4 ]
-                (exportChannelButton (ExportChannel_Dm otherUserId))
+            [ if isThread then
+                Ui.none
+
+              else
+                Ui.el [ Ui.paddingXY 8 4 ] (exportChannelButton (ExportChannel_Dm otherUserId))
             , Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text ("Members (" ++ String.fromInt (List.length members) ++ ")")
@@ -1300,6 +1339,7 @@ discordDmMemberColumnNotMobile localUser currentDiscordUserId channelId dmChanne
             NonemptyDict.keys dmChannel.members |> List.Nonempty.toList
     in
     memberColumnContainer
+        False
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.el
@@ -1338,7 +1378,7 @@ discordDmMemberColumnMobile canScroll2 localUser currentDiscordUserId channelId 
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
             , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-            , Ui.text "Channel members"
+            , Ui.text "Channel settings"
             ]
         , Ui.column
             [ Ui.height Ui.fill

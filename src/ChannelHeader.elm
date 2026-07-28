@@ -51,7 +51,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Just)
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -90,7 +90,7 @@ thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFront
 thread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Just)
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -126,7 +126,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Just)
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 Ui.row
@@ -164,7 +164,7 @@ discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 
 discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Just)
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
@@ -398,7 +398,7 @@ privateChatWithYourself isMobile currentTab local =
             (Dom.id "guild_openDescription")
             ChannelHeaderTab_ChannelDescription
             currentTab
-            (Ui.text "Chat with yourself")
+            (Ui.text "Solo chat")
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls

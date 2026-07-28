@@ -1744,7 +1744,7 @@ updateLoaded msg model =
                                     offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
                             case Route.toShowMembersTab model.route of
-                                ShowMembersTab ->
+                                ( ShowMembersTab, _ ) ->
                                     if offset2 >= 1 then
                                         setShowMembers
                                             HideMembersTab
@@ -1766,7 +1766,7 @@ updateLoaded msg model =
                                         , Command.none
                                         )
 
-                                HideMembersTab ->
+                                ( HideMembersTab, _ ) ->
                                     ( { model
                                         | loginStatus =
                                             { loggedIn
