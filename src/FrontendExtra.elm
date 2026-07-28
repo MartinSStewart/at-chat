@@ -1642,6 +1642,15 @@ routeRequest previousRoute newRoute model =
                     let
                         local =
                             Local.model loggedIn.localState
+
+                        showMembers : ShowMembersTab
+                        showMembers =
+                            case dmRoute.threadRoute of
+                                ViewThreadWithFriends _ _ showMembers2 ->
+                                    showMembers2
+
+                                NoThreadWithFriends _ showMembers2 ->
+                                    showMembers2
                     in
                     case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
                         Just otherUserId ->
@@ -1651,7 +1660,13 @@ routeRequest previousRoute newRoute model =
                                 dmRoute.tab
                                 dmRoute.threadRoute
                                 local
-                                (startOpeningChannelSidebar loggedIn)
+                                (case showMembers of
+                                    ShowMembersTab ->
+                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+
+                                    HideMembersTab ->
+                                        startOpeningChannelSidebar loggedIn
+                                )
                                 model3
 
                         Nothing ->
@@ -1691,7 +1706,13 @@ routeRequest previousRoute newRoute model =
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
-                        (startOpeningChannelSidebar loggedIn)
+                        (case routeData.showMembersTab of
+                            ShowMembersTab ->
+                                startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+
+                            HideMembersTab ->
+                                startOpeningChannelSidebar loggedIn
+                        )
                         model3
                 )
                 model3
