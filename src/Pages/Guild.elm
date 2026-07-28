@@ -23,8 +23,7 @@ import Call
 import ChannelDescription
 import ChannelHeader
 import ChannelName exposing (ChannelName)
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
@@ -1160,7 +1159,7 @@ memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner isT
 discordMemberColumnMobile :
     Bool
     -> LocalUser
-    -> Route.DiscordGuildRouteData
+    -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
     -> Bool

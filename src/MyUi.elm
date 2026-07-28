@@ -15,7 +15,6 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , channelAndGuildColumnWidth
-    , channelColumnWidth
     , channelHeaderHeight
     , colorToHex
     , colorToStyle
