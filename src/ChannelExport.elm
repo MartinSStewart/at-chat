@@ -1,12 +1,21 @@
-module ChannelExport exposing (discordGuildChannel, fileName, guildChannel)
+module ChannelExport exposing
+    ( discordDmChannel
+    , discordDmName
+    , discordGuildChannel
+    , dmChannel
+    , dmFileName
+    , fileName
+    , guildChannel
+    )
 
-{-| Turns a guild channel (either a normal channel or a channel belonging to a
-Discord guild that we've synced) into a JSON string so that the user can
+{-| Turns a channel (a guild channel, a channel belonging to a Discord guild
+that we've synced, or a DM channel) into a JSON string so that the user can
 download a copy of the conversation.
 
 Drawings are deliberately left out. Everything else that makes up a message is
 included, along with the publicly available data (name, when they joined, and a
-url to their profile image) of every member that has access to the channel.
+url to their profile image) of every member that has access to the channel. DM
+channels have no join times so those are left out there.
 
 -}
 
@@ -16,6 +25,7 @@ import ChannelName exposing (ChannelName)
 import CustomEmoji
 import Discord
 import DiscordUserData exposing (DiscordUserData)
+import DmChannel exposing (DiscordDmChannel, DmChannel)
 import Effect.Time as Time
 import Embed exposing (Embed(..))
 import Emoji exposing (EmojiOrCustomEmoji(..))
@@ -42,15 +52,28 @@ import User exposing (BackendUser)
 -}
 fileName : ChannelName -> String
 fileName channelName =
-    (ChannelName.toString channelName
-        |> String.map
-            (\char ->
-                if Char.isAlphaNum char || char == '-' || char == '_' || char == ' ' then
-                    char
+    ChannelName.toString channelName |> sanitizeFileName
 
-                else
-                    '_'
-            )
+
+{-| DM channels aren't named, so they get exported under the name of the people
+in them instead.
+-}
+dmFileName : String -> String
+dmFileName dmName =
+    sanitizeFileName dmName
+
+
+sanitizeFileName : String -> String
+sanitizeFileName text =
+    (String.map
+        (\char ->
+            if Char.isAlphaNum char || char == '-' || char == '_' || char == ' ' then
+                char
+
+            else
+                '_'
+        )
+        text
         |> String.trim
     )
         ++ ".json"
@@ -196,6 +219,142 @@ discordGuildChannel discordUsers guildId guild channel =
         |> Json.Encode.encode 2
 
 
+{-| DM channels have no owner and no join times, so their members are only
+listed by name and profile image.
+-}
+dmChannel : NonemptyDict (Id UserId) BackendUser -> Id UserId -> Id UserId -> DmChannel -> String
+dmChannel users currentUserId otherUserId channel =
+    let
+        userNames : SeqDict (Id UserId) String
+        userNames =
+            NonemptyDict.toSeqDict users |> SeqDict.map (\_ user -> PersonName.toString user.name)
+
+        member : Id UserId -> Json.Encode.Value
+        member userId =
+            Json.Encode.object
+                [ ( "id", Json.Encode.string (Id.toString userId) )
+                , ( "name", Json.Encode.string (SeqDict.get userId userNames |> Maybe.withDefault unknownUserName) )
+                , ( "profileImageUrl"
+                  , NonemptyDict.get userId users
+                        |> Maybe.andThen .icon
+                        |> Maybe.map profileImageUrl
+                        |> encodeMaybe Json.Encode.string
+                  )
+                ]
+    in
+    Json.Encode.object
+        [ ( "channel"
+          , Json.Encode.object
+                [ ( "name"
+                  , SeqDict.get otherUserId userNames
+                        |> Maybe.withDefault unknownUserName
+                        |> Json.Encode.string
+                  )
+                ]
+          )
+        , ( "members"
+          , (if currentUserId == otherUserId then
+                [ member currentUserId ]
+
+             else
+                [ member currentUserId, member otherUserId ]
+            )
+                |> Json.Encode.list identity
+          )
+        , ( "messages"
+          , encodeMessages
+                Id.toString
+                userNames
+                (\messageId ->
+                    case SeqDict.get messageId channel.threads of
+                        Just thread ->
+                            encodeMessages Id.toString userNames (\_ -> Nothing) thread.messages |> Just
+
+                        Nothing ->
+                            Nothing
+                )
+                channel.messages
+          )
+        ]
+        |> Json.Encode.encode 2
+
+
+{-| Discord DM channels don't have threads, an owner, or join times, so their
+members are only listed by name and profile image.
+-}
+discordDmChannel :
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> Discord.Id Discord.UserId
+    -> DiscordDmChannel
+    -> String
+discordDmChannel discordUsers currentUserId channel =
+    let
+        userNames : SeqDict (Discord.Id Discord.UserId) String
+        userNames =
+            SeqDict.map (\_ discordUser -> DiscordUserData.username discordUser) discordUsers
+
+        member : Discord.Id Discord.UserId -> Json.Encode.Value
+        member userId =
+            Json.Encode.object
+                [ ( "id", Json.Encode.string (Discord.idToString userId) )
+                , ( "name", Json.Encode.string (SeqDict.get userId userNames |> Maybe.withDefault unknownUserName) )
+                , ( "profileImageUrl"
+                  , (case SeqDict.get userId discordUsers |> Maybe.andThen DiscordUserData.icon of
+                        Just fileHash ->
+                            profileImageUrl fileHash
+
+                        Nothing ->
+                            Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
+                    )
+                        |> Json.Encode.string
+                  )
+                ]
+    in
+    Json.Encode.object
+        [ ( "channel"
+          , Json.Encode.object
+                [ ( "name", Json.Encode.string (discordDmName discordUsers currentUserId channel) ) ]
+          )
+        , ( "members"
+          , NonemptyDict.keys channel.members
+                |> List.Nonempty.toList
+                |> List.map member
+                |> Json.Encode.list identity
+          )
+        , ( "messages", encodeMessages Discord.idToString userNames (\_ -> Nothing) channel.messages )
+        ]
+        |> Json.Encode.encode 2
+
+
+{-| Discord DM channels are named after everyone in them except for the user
+that's viewing the channel. When the user is DMing themselves their own name is
+used instead.
+-}
+discordDmName :
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> Discord.Id Discord.UserId
+    -> DiscordDmChannel
+    -> String
+discordDmName discordUsers currentUserId channel =
+    (case List.filter (\userId -> userId /= currentUserId) (List.Nonempty.toList (NonemptyDict.keys channel.members)) of
+        [] ->
+            [ currentUserId ]
+
+        otherUserIds ->
+            otherUserIds
+    )
+        |> List.map
+            (\userId ->
+                case SeqDict.get userId discordUsers of
+                    Just discordUser ->
+                        DiscordUserData.username discordUser
+
+                    Nothing ->
+                        unknownUserName
+            )
+        |> String.join ", "
+
+
 unknownUserName : String
 unknownUserName =
     "<unknown user>"
@@ -237,7 +396,7 @@ encodeMessages userIdToString userNames threadMessages messages =
     IdArray.toList messages
         |> List.indexedMap
             (\index message ->
-                encodeMessage userIdToString userNames (threadMessages (Id.fromInt index)) index message
+                encodeMessage userIdToString userNames (threadMessages (Id.fromInt index)) message
             )
         |> Json.Encode.list identity
 
@@ -246,61 +405,62 @@ encodeMessage :
     (userId -> String)
     -> SeqDict userId String
     -> Maybe Json.Encode.Value
-    -> Int
     -> Message messageId userId
     -> Json.Encode.Value
-encodeMessage userIdToString userNames maybeThread index message =
-    (( "index", Json.Encode.int index )
-        :: (case message of
-                UserTextMessage data ->
-                    [ ( "type", Json.Encode.string "userTextMessage" )
-                    , ( "createdAt", encodeTime data.createdAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
-                    , ( "content", encodeContent userNames data.content )
-                    , ( "editedAt", encodeMaybe encodeTime data.editedAt )
-                    , ( "repliedTo", encodeMaybe (\messageId -> Json.Encode.int (Id.toInt messageId)) data.repliedTo )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
-                    , ( "attachedFiles", encodeAttachedFiles data.attachedFiles )
-                    , ( "embeds", encodeEmbeds data.embeds )
-                    ]
+encodeMessage userIdToString userNames maybeThread message =
+    ((case message of
+        UserTextMessage data ->
+            [ ( "type", Json.Encode.string "userTextMessage" )
+            , ( "createdAt", encodeTime data.createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
+            , ( "content", encodeContent userNames data.content )
+            ]
+                ++ optionalField "editedAt" encodeTime data.editedAt
+                ++ optionalField
+                    "repliedTo"
+                    (\messageId -> Json.Encode.int (Id.toInt messageId))
+                    data.repliedTo
+                ++ encodeReactions userIdToString data.reactions
+                ++ encodeAttachedFiles data.attachedFiles
+                ++ encodeEmbeds data.embeds
 
-                UserJoinedMessage createdAt userId reactions _ ->
-                    [ ( "type", Json.Encode.string "userJoined" )
-                    , ( "createdAt", encodeTime createdAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString userId) )
-                    , ( "reactions", encodeReactions userIdToString reactions )
-                    ]
+        UserJoinedMessage createdAt userId reactions _ ->
+            [ ( "type", Json.Encode.string "userJoined" )
+            , ( "createdAt", encodeTime createdAt )
+            , ( "createdBy", Json.Encode.string (userIdToString userId) )
+            ]
+                ++ encodeReactions userIdToString reactions
 
-                DeletedMessage deletedAt ->
-                    [ ( "type", Json.Encode.string "deleted" )
-                    , ( "deletedAt", encodeTime deletedAt )
-                    ]
+        DeletedMessage deletedAt ->
+            [ ( "type", Json.Encode.string "deleted" )
+            , ( "deletedAt", encodeTime deletedAt )
+            ]
 
-                CallStarted data ->
-                    [ ( "type", Json.Encode.string "callStarted" )
-                    , ( "createdAt", encodeTime data.startedAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
-                    , ( "endedAt", encodeMaybe encodeTime data.endedAt )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
-                    ]
+        CallStarted data ->
+            [ ( "type", Json.Encode.string "callStarted" )
+            , ( "createdAt", encodeTime data.startedAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
+            ]
+                ++ optionalField "endedAt" encodeTime data.endedAt
+                ++ encodeReactions userIdToString data.reactions
 
-                GameStarted data ->
-                    [ ( "type", Json.Encode.string "gameStarted" )
-                    , ( "createdAt", encodeTime data.startedAt )
-                    , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
-                    , ( "gameType"
-                      , Json.Encode.string
-                            (case data.gameType of
-                                GameType_Go ->
-                                    "go"
+        GameStarted data ->
+            [ ( "type", Json.Encode.string "gameStarted" )
+            , ( "createdAt", encodeTime data.startedAt )
+            , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
+            , ( "gameType"
+              , Json.Encode.string
+                    (case data.gameType of
+                        GameType_Go ->
+                            "go"
 
-                                GameType_WordSpellingGame ->
-                                    "wordSpellingGame"
-                            )
-                      )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
-                    ]
-           )
+                        GameType_WordSpellingGame ->
+                            "wordSpellingGame"
+                    )
+              )
+            ]
+                ++ encodeReactions userIdToString data.reactions
+     )
         ++ (case maybeThread of
                 Just thread ->
                     [ ( "threadMessages", thread ) ]
@@ -317,7 +477,10 @@ encodeContent userNames content =
     RichText.toStringWithGetter identity False userNames content |> Json.Encode.string
 
 
-encodeReactions : (userId -> String) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Json.Encode.Value
+encodeReactions :
+    (userId -> String)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> List ( String, Json.Encode.Value )
 encodeReactions userIdToString reactions =
     SeqDict.toList reactions
         |> List.map
@@ -331,7 +494,7 @@ encodeReactions userIdToString reactions =
                       )
                     ]
             )
-        |> Json.Encode.list identity
+        |> optionalListField "reactions"
 
 
 emojiToString : EmojiOrCustomEmoji -> String
@@ -344,7 +507,7 @@ emojiToString emoji =
             CustomEmoji.idToString customEmojiId
 
 
-encodeAttachedFiles : SeqDict (Id FileId) FileData -> Json.Encode.Value
+encodeAttachedFiles : SeqDict (Id FileId) FileData -> List ( String, Json.Encode.Value )
 encodeAttachedFiles attachedFiles =
     SeqDict.toList attachedFiles
         |> List.map
@@ -356,10 +519,10 @@ encodeAttachedFiles attachedFiles =
                     , ( "url", Json.Encode.string (FileStatus.fileUrl fileData.contentType fileData.fileHash) )
                     ]
             )
-        |> Json.Encode.list identity
+        |> optionalListField "attachedFiles"
 
 
-encodeEmbeds : Array Embed -> Json.Encode.Value
+encodeEmbeds : Array Embed -> List ( String, Json.Encode.Value )
 encodeEmbeds embeds =
     Array.toList embeds
         |> List.filterMap
@@ -377,7 +540,7 @@ encodeEmbeds embeds =
                     EmbedLoading ->
                         Nothing
             )
-        |> Json.Encode.list identity
+        |> optionalListField "embeds"
 
 
 encodeTime : Time.Posix -> Json.Encode.Value
@@ -393,3 +556,27 @@ encodeMaybe encoder maybe =
 
         Nothing ->
             Json.Encode.null
+
+
+{-| Most of what a message can carry (a reply, an edit, reactions, files,
+embeds) is missing from the average message. Those fields are left out entirely
+rather than exported as nulls and empty lists.
+-}
+optionalField : String -> (a -> Json.Encode.Value) -> Maybe a -> List ( String, Json.Encode.Value )
+optionalField key encoder maybe =
+    case maybe of
+        Just a ->
+            [ ( key, encoder a ) ]
+
+        Nothing ->
+            []
+
+
+optionalListField : String -> List Json.Encode.Value -> List ( String, Json.Encode.Value )
+optionalListField key values =
+    case values of
+        [] ->
+            []
+
+        _ ->
+            [ ( key, Json.Encode.list identity values ) ]

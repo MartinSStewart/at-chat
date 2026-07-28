@@ -9,7 +9,6 @@ module GuildIcon exposing
     , discordNotificationView
     , discordUserView
     , discordView
-    , fullWidth
     , notificationHelper
     , notificationView
     , showFriendsButton
@@ -154,8 +153,8 @@ discordBlurpleFont =
 The Discord logo takes the corner the notification count would use, and gives it
 back up whenever there is a count to show.
 -}
-discordNotificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
-discordNotificationView xOffset yOffset borderColor notification =
+discordNotificationView : Int -> Int -> ChannelNotificationType -> Ui.Attribute msg
+discordNotificationView xOffset yOffset notification =
     case notification of
         NoNotification ->
             Ui.el
@@ -209,7 +208,6 @@ discordView mode guild =
         [ discordNotificationView
             0
             -3
-            MyUi.background1
             (case mode of
                 IsSelected ->
                     NoNotification
@@ -252,7 +250,7 @@ guildIcon guild mode name =
                     , Ui.centerX
                     , case mode of
                         IsSelected ->
-                            Ui.width (Ui.px fullWidth)
+                            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
                         _ ->
                             Ui.width (Ui.px size)
@@ -287,7 +285,7 @@ discordUserView notification maybeIcon userId =
             Discord.defaultUserAvatarUrl (Discord.TwoToNthPower 7) userId
     )
         |> iconView (Normal notification)
-        |> Ui.el [ discordNotificationView 0 -3 MyUi.background1 notification ]
+        |> Ui.el [ discordNotificationView 0 -3 notification ]
 
 
 defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
@@ -331,7 +329,7 @@ iconView mode url =
             "width"
             (case mode of
                 IsSelected ->
-                    String.fromInt fullWidth ++ "px"
+                    String.fromInt MyUi.guildIconFullWidth ++ "px"
 
                 _ ->
                     String.fromInt size ++ "px"
@@ -385,11 +383,6 @@ size =
     50
 
 
-fullWidth : number
-fullWidth =
-    58
-
-
 addGuildButton : HtmlId -> Bool -> msg -> Element msg
 addGuildButton htmlId isSelected onPress =
     MyUi.elButton
@@ -409,7 +402,7 @@ addGuildButton htmlId isSelected onPress =
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
-            Ui.width (Ui.px fullWidth)
+            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
           else
             Ui.width (Ui.px size)
@@ -440,7 +433,7 @@ showFriendsButton isSelected onPress =
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
         , if isSelected then
-            Ui.width (Ui.px fullWidth)
+            Ui.width (Ui.px MyUi.guildIconFullWidth)
 
           else
             Ui.width (Ui.px size)

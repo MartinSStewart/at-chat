@@ -73,8 +73,9 @@ goMatchTest normalConfig =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        [ E2EHelper.openDm user 1000 "0"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
                         , admin.click 100 (Dom.id "guild_openGamesTab")
                         , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                         , admin.click 100 (Dom.id "go_start")
@@ -165,8 +166,9 @@ goTimeoutTest normalConfig =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        [ E2EHelper.openDm user 1000 "0"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
                         , admin.click 100 (Dom.id "guild_openGamesTab")
                         , admin.click 100 (Dom.id "game_select_Go (Baduk)")
 
@@ -348,8 +350,9 @@ publicGoMatchViewTest normalConfig =
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
                                 ]
                             )
-                        , user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        , E2EHelper.openDm user 1000 "0"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
                         , admin.click 100 (Dom.id "guild_openGamesTab")
                         , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                         , admin.click 100 (Dom.id "go_start")

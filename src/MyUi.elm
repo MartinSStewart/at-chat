@@ -15,13 +15,13 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , channelAndGuildColumnWidth
-    , channelColumnWidth
     , channelHeaderHeight
     , colorToHex
     , colorToStyle
     , colorWithAlpha
     , column
     , container
+    , conversationWidthIgnoreScrollbar
     , copyBox
     , css
     , dangerRed
@@ -42,6 +42,7 @@ module MyUi exposing
     , font1
     , font2
     , font3
+    , guildIconFullWidth
     , heightAttr
     , highlightedBorder
     , hover
@@ -60,6 +61,7 @@ module MyUi exposing
     , isMobileAlt
     , label
     , matchSwitcherHeight
+    , memberColumnWidth
     , mentionColor
     , monospace
     , monthToInt
@@ -1171,6 +1173,34 @@ channelHeaderHeight =
 matchSwitcherHeight : number
 matchSwitcherHeight =
     60
+
+
+conversationWidthIgnoreScrollbar : Coord CssPixels -> Bool -> Int
+conversationWidthIgnoreScrollbar windowSize showMembersTab =
+    if isMobileAlt windowSize then
+        Coord.xRaw windowSize
+
+    else
+        Coord.xRaw windowSize
+            - ((guildIconFullWidth + 1)
+                + channelColumnWidth windowSize
+                + (if showMembersTab then
+                    memberColumnWidth
+
+                   else
+                    0
+                  )
+              )
+
+
+guildIconFullWidth : number
+guildIconFullWidth =
+    58
+
+
+memberColumnWidth : number
+memberColumnWidth =
+    250
 
 
 insetTop : String

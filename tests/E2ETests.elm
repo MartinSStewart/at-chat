@@ -331,6 +331,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.friendsSearchTest normalConfig
     , E2EMisc.channelSearchTest normalConfig
     , E2EMisc.exportChannelTest normalConfig
+    , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
@@ -612,7 +613,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin user ->
-                [ admin.click 100 (Dom.id "guild_openDm_2")
+                [ E2EHelper.openDm admin 100 "2"
                 , E2EHelper.writeMessage admin 100 "Hello from admin"
                 , user.click 100 (Dom.id "guildIcon_showFriends")
                 , user.checkView
@@ -1228,7 +1229,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello from user"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_2")
                         , E2EHelper.writeMessage admin 100 "First DM"
@@ -1498,7 +1499,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , E2EHelper.checkNotification "AT" "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                , admin.click 100 (Dom.id "guild_openDm_2")
+                , E2EHelper.openDm admin 100 "2"
                 , E2EHelper.writeMessage admin 100 "Here's a DM to you"
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , E2EHelper.writeMessage user 100 "Here's a reply!"
@@ -1538,7 +1539,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 -- `user` has push notifications enabled and is currently viewing the guild channel (not the DM).
-                [ admin.click 100 (Dom.id "guild_openDm_2")
+                [ E2EHelper.openDm admin 100 "2"
 
                 -- Positive control: while the user isn't viewing the DM they should get a push notification.
                 , E2EHelper.writeMessage admin 100 "DM while away"
@@ -1595,7 +1596,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- DM case: admin opens the DM with the other user and starts a Go match there. The user
                 -- isn't viewing the DM either, so starting the game should push a notification to them.
-                , admin.click 100 (Dom.id "guild_openDm_2")
+                , E2EHelper.openDm admin 100 "2"
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id "game_select_Go (Baduk)")
                 , admin.click 100 (Dom.id "go_start")
@@ -1881,7 +1882,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 [ E2EHelper.writeMessage admin 100 "Hello export test!"
-                , user.click 100 (Dom.id "guild_openDm_0")
+                , E2EHelper.openDm user 100 "0"
                 , E2EHelper.writeMessage user 100 "Hello!"
                 , E2EHelper.linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
@@ -1998,7 +1999,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 [ E2EHelper.writeMessage admin 100 "Hello export test!"
-                , user.click 100 (Dom.id "guild_openDm_0")
+                , E2EHelper.openDm user 100 "0"
                 , E2EHelper.writeMessage user 100 "Hello!"
                 , E2EHelper.linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
@@ -2791,7 +2792,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                         [ E2EHelper.writeMessage user 100 "sensitive guild message"
                         , admin.click 100 (Dom.id "guild_openChannel_0")
                         , E2EHelper.writeMessage admin 100 "sensitive guild message 2"
-                        , user.click 1000 (Dom.id "guild_openDm_0")
+                        , E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "sensitive DM message"
                         , T.connectFrontend
                             100

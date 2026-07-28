@@ -26,8 +26,8 @@ voiceChatTest normalConfig =
                 E2EHelper.desktopWindow
                 (\admin user ->
                     [ E2EHelper.addCloudflareRealtimeApiKeys admin
-                    , admin.click 100 (Dom.id "guild_openDm_0")
-                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm admin 100 "0"
+                    , E2EHelper.openDm user 100 "0"
                     , admin.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
@@ -41,9 +41,13 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
                     , E2EHelper.tallSnapshot admin 100 { name = "Ended a DM call with self" }
+
+                    -- Three steps back to the channel each time: the voice chat tab, the
+                    -- DM, and opening the member column the DM was opened from.
                     , admin.navigateBack 100
                     , admin.navigateBack 100
-                    , admin.click 100 (Dom.id "guild_openDm_2")
+                    , admin.navigateBack 100
+                    , E2EHelper.openDm admin 100 "2"
                     , user.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
@@ -57,7 +61,8 @@ voiceChatTest normalConfig =
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
                     , admin.navigateBack 100
                     , admin.navigateBack 100
-                    , admin.click 100 (Dom.id "guild_openDm_0")
+                    , admin.navigateBack 100
+                    , E2EHelper.openDm admin 100 "0"
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])

@@ -153,7 +153,7 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
         ]
         (Ui.column
             [ Ui.spacing 4
-            , Ui.width (Ui.px GuildIcon.fullWidth)
+            , Ui.width (Ui.px MyUi.guildIconFullWidth)
             , Ui.height Ui.fill
             , Ui.background MyUi.background1
             , MyUi.scrollable canScroll2

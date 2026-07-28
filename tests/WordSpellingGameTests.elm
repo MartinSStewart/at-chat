@@ -170,6 +170,25 @@ tests =
                 \_ ->
                     WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 14, 7 ) False a [ b ])
                         |> Expect.equal Nothing
+            , Test.test "a lone tile on an empty board forms a one letter word" <|
+                \_ ->
+                    -- (7,7) is the centre square (double word), so A(1) scores 2.
+                    WordSpellingGame.placeWord testSetup SeqDict.empty (placedWord ( 7, 7 ) False a [])
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
+                        |> Expect.equal (Just ( [ word [ a ] ], 2 ))
+            , Test.test "a lone tile that extends a word forms only that word" <|
+                \_ ->
+                    -- "CA" runs down column 7. Placing T below it horizontally leaves the main word
+                    -- one tile long, but the word being played is the cross word "CAT", so the T
+                    -- isn't also treated as a one letter word.
+                    let
+                        existing : SeqDict ( Int, Int ) LetterOrWildcard
+                        existing =
+                            board [ ( ( 7, 6 ), c ), ( ( 7, 7 ), a ) ]
+                    in
+                    WordSpellingGame.placeWord testSetup existing (placedWord ( 7, 8 ) False t [])
+                        |> Maybe.map (\( _, result ) -> ( List.map .letters result.words, result.score ))
+                        |> Expect.equal (Just ( [ word [ c, a, t ] ], 5 ))
             , Test.test "each formed word reports how many of the newly placed tiles it uses" <|
                 \_ ->
                     -- Existing "HELLO" runs along row 4. Placing T then O vertically at column 10
@@ -229,6 +248,25 @@ tests =
                         (placedWord ( 6, 4 ) False c [ a, t ])
                         |> Result.map (\( result, _ ) -> ( List.map .letters result.words, result.score ))
                         |> Expect.equal (Ok ( [ word [ c, a, t ], word [ c, a ], word [ a, a ], word [ t, a ] ], 13 ))
+            , Test.test "accepts a one letter word the word list has" <|
+                \_ ->
+                    -- Swedish has single letter words, English doesn't, so whether a lone tile
+                    -- plays is left to the word list.
+                    WordSpellingGame.validatePlacement
+                        (Set.singleton "A")
+                        testSetup
+                        SeqDict.empty
+                        (placedWord ( 7, 7 ) False a [])
+                        |> Result.map (\( result, _ ) -> ( List.map .letters result.words, result.score ))
+                        |> Expect.equal (Ok ( [ word [ a ] ], 2 ))
+            , Test.test "rejects a one letter word the word list doesn't have" <|
+                \_ ->
+                    WordSpellingGame.validatePlacement
+                        (Set.singleton "CAT")
+                        testSetup
+                        SeqDict.empty
+                        (placedWord ( 7, 7 ) False a [])
+                        |> Expect.equal (Err ())
             , Test.test "rejects when a cross word does not exist even if the main word does" <|
                 \_ ->
                     let

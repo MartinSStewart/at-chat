@@ -1,6 +1,7 @@
 module E2EMisc exposing
     ( channelSearchTest
     , exportChannelTest
+    , exportDmChannelTest
     , friendsSearchTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
@@ -110,6 +111,7 @@ exportChannelTest config =
             E2EHelper.desktopWindow
             (\admin _ ->
                 [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+                , admin.click 1000 (Dom.id "guild_showMembers")
                 , admin.click 1000 (Dom.id "guild_exportChannel")
                 , T.checkState
                     1000
@@ -124,7 +126,28 @@ exportChannelTest config =
                                                 [ "Hello everyone", "\"AT\"", "Stevie Steve" ]
                                         of
                                             [] ->
-                                                Ok ()
+                                                -- None of these messages were replied to, edited,
+                                                -- reacted to or given files, so those fields should
+                                                -- be left out instead of exported as nulls and
+                                                -- empty lists.
+                                                case
+                                                    List.filter
+                                                        (\text -> String.contains text content)
+                                                        [ "\"editedAt\""
+                                                        , "\"repliedTo\""
+                                                        , "\"reactions\""
+                                                        , "\"attachedFiles\""
+                                                        , "\"embeds\""
+                                                        ]
+                                                of
+                                                    [] ->
+                                                        Ok ()
+
+                                                    empty ->
+                                                        Err
+                                                            ("Empty fields in the exported JSON: "
+                                                                ++ String.join ", " empty
+                                                            )
 
                                             missing ->
                                                 Err ("Missing from the exported JSON: " ++ String.join ", " missing)
@@ -137,6 +160,71 @@ exportChannelTest config =
                                     ("Expected a single download, instead got "
                                         ++ String.fromInt (List.length downloads)
                                     )
+                    )
+                ]
+            )
+        ]
+
+
+{-| DM channels have a member column too, listing the two people in the DM and
+the same "Export channel" button that guild channels have.
+-}
+exportDmChannelTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+exportDmChannelTest config =
+    E2EHelper.startTest
+        "Export a DM channel to a JSON file"
+        E2EHelper.startTime
+        config
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ E2EHelper.handleLogin E2EHelper.firefoxDesktop E2EHelper.adminEmail admin
+                , E2EHelper.inviteUser
+                    admin
+                    (\user ->
+                        [ E2EHelper.openDm user 1000 "0"
+                        , E2EHelper.writeMessage user 100 "Hello in a DM"
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Members (2)" ])
+                        , user.click 100 (Dom.id "guild_showMembers")
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (2)" ])
+                        , user.click 1000 (Dom.id "guild_exportChannel")
+                        , T.checkState
+                            1000
+                            (\data ->
+                                case data.downloads of
+                                    [ download ] ->
+                                        case download.content of
+                                            T.StringFile content ->
+                                                case
+                                                    List.filter
+                                                        (\text -> not (String.contains text content))
+                                                        [ "Hello in a DM", "\"AT\"", "\"Sven\"" ]
+                                                of
+                                                    [] ->
+                                                        Ok ()
+
+                                                    missing ->
+                                                        Err ("Missing from the exported JSON: " ++ String.join ", " missing)
+
+                                            T.BytesFile _ ->
+                                                Err "The exported channel should be a text file"
+
+                                    downloads ->
+                                        Err
+                                            ("Expected a single download, instead got "
+                                                ++ String.fromInt (List.length downloads)
+                                            )
+                            )
+                        ]
                     )
                 ]
             )
@@ -180,9 +268,10 @@ friendsSearchTest config =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello admin!"
-                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
 
                         -- The search input is transparent until it gets focus, so its placeholder
                         -- text is used to detect whether it is shown or not.
@@ -320,7 +409,7 @@ inviteUserAndDmChat config =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_2")
                         , E2EHelper.writeMessage user 100 "Hello 2"

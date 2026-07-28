@@ -1387,13 +1387,24 @@ placeWord setup board placedWord =
 
                 allWords : List (List ( Int, Int ))
                 allWords =
-                    (if List.length mainWord >= 2 then
-                        [ mainWord ]
+                    case mainWord of
+                        [] ->
+                            crossWords
 
-                     else
-                        []
-                    )
-                        ++ crossWords
+                        [ _ ] ->
+                            -- A lone tile standing on its own is a one letter word, which the
+                            -- word list then accepts or rejects like any other ("A" is a word in
+                            -- Swedish but not in English). When the tile touches other tiles the
+                            -- words being played are the ones running through it, so the letter
+                            -- isn't also checked on its own.
+                            if List.isEmpty crossWords then
+                                [ mainWord ]
+
+                            else
+                                crossWords
+
+                        _ ->
+                            mainWord :: crossWords
             in
             ( newBoard
             , { words =
@@ -3679,6 +3690,7 @@ passBehavior setup shared =
 gameView :
     Time.Posix
     -> Coord CssPixels
+    -> Bool
     -> Maybe (NonemptyDict Int Touch)
     -> Bool
     -> LocalUser
@@ -3687,7 +3699,7 @@ gameView :
     -> Shared
     -> GameData
     -> Element GameMsg
-gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actions shared oldModel =
+gameView currentTime windowSize showMemberTab maybeDragging isPersonalDm localUser setup actions shared oldModel =
     let
         -- Tiles that another player's move covered belong back in the tray; render that
         -- corrected state instead of the raw stored tiles.
@@ -3744,7 +3756,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
                     [ Ui.width (Ui.px 40)
                     , Ui.padding 8
                     , Ui.alignRight
-                    , case ( wideEnoughForDefinitionColumn windowSize, model.wordDefinition ) of
+                    , case ( wideEnoughForDefinitionColumn windowSize showMemberTab, model.wordDefinition ) of
                         ( True, WordDefinition_Open _ _ ) ->
                             Ui.move { x = -wordDefinitionColumnWidth, y = 0, z = 0 }
 
@@ -3771,7 +3783,7 @@ gameView currentTime windowSize maybeDragging isPersonalDm localUser setup actio
 
             wideEnough : Bool
             wideEnough =
-                wideEnoughForDefinitionColumn windowSize
+                wideEnoughForDefinitionColumn windowSize showMemberTab
 
             overlayAttr : Ui.Attribute GameMsg
             overlayAttr =
@@ -4433,9 +4445,10 @@ wordDefinitionColumnWidth =
 {-| Whether the window is wide enough to show the word definition in its own column beside the
 status view. Below this the definition is overlaid on the board instead. Mobile always overlays.
 -}
-wideEnoughForDefinitionColumn : Coord CssPixels -> Bool
-wideEnoughForDefinitionColumn windowSize =
-    not (MyUi.isMobileAlt windowSize) && Coord.xRaw windowSize >= (1200 + wordDefinitionColumnWidth)
+wideEnoughForDefinitionColumn : Coord CssPixels -> Bool -> Bool
+wideEnoughForDefinitionColumn windowSize showMemberTab =
+    (MyUi.conversationWidthIgnoreScrollbar windowSize showMemberTab >= (700 + wordDefinitionColumnWidth))
+        && not (MyUi.isMobileAlt windowSize)
 
 
 {-| The word definition shown as a column to the right of the status view (wide screens).

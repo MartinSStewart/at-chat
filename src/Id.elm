@@ -56,12 +56,13 @@ type AnyGuildOrDmId
     | DiscordGuildOrDmId DiscordGuildOrDmId
 
 
-{-| Identifies a guild channel that the user wants to export the messages of.
-Unlike `AnyGuildOrDmId` this can't refer to a DM channel.
+{-| Identifies a channel that the user wants to export the messages of.
 -}
 type ExportChannelId
     = ExportChannel_Guild (Id GuildId) (Id ChannelId)
     | ExportChannel_Discord (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
+    | ExportChannel_Dm (Id UserId)
+    | ExportChannel_DiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
 
 
 type ThreadRoute

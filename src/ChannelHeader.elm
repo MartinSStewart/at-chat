@@ -29,7 +29,7 @@ import MyUi
 import NonemptyDict
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..))
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import Thread
@@ -51,7 +51,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        True
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -90,7 +90,7 @@ thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFront
 thread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        True
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -126,7 +126,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        True
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 Ui.row
@@ -164,7 +164,7 @@ discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 
 discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        True
+        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
@@ -238,8 +238,17 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
-channelHeader : Bool -> Bool -> Element FrontendMsg_ -> Maybe (Element FrontendMsg_) -> Element FrontendMsg_
-channelHeader isMobile2 includeShowMembers content tabContent =
+{-| `showMembers` is `Nothing` on the routes that have no member column to open,
+so those never get a "Show members" button. When the column is already open the
+button is left out too, since the column carries its own close button.
+-}
+channelHeader :
+    Bool
+    -> Maybe ShowMembersTab
+    -> Element FrontendMsg_
+    -> Maybe (Element FrontendMsg_)
+    -> Element FrontendMsg_
+channelHeader isMobile2 showMembers content tabContent =
     Ui.column
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
@@ -269,21 +278,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
             (if isMobile2 then
                 [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
                 , Ui.el [ Ui.height Ui.fill, Ui.contentCenterY ] content
-                , if includeShowMembers then
-                    MyUi.elButton
-                        (Dom.id "guild_showMembers")
-                        PressedShowMembers
-                        [ Ui.alignRight
-                        , Ui.width (Ui.px (24 + 24))
-                        , Ui.height Ui.fill
-                        , Ui.paddingXY 12 0
-                        , Ui.contentCenterY
-                        , MyUi.hoverText "Show members"
-                        ]
-                        (Ui.html Icons.users)
-
-                  else
-                    Ui.none
+                , showMembersButton showMembers
                 ]
 
              else
@@ -293,9 +288,33 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                     , Ui.height Ui.fill
                     ]
                     content
+                , showMembersButton showMembers
                 ]
             )
         ]
+
+
+showMembersButton : Maybe ShowMembersTab -> Element FrontendMsg_
+showMembersButton showMembers =
+    case showMembers of
+        Just HideMembersTab ->
+            MyUi.elButton
+                (Dom.id "guild_showMembers")
+                PressedShowMembers
+                [ Ui.alignRight
+                , Ui.width (Ui.px (24 + 24))
+                , Ui.height Ui.fill
+                , Ui.paddingXY 12 0
+                , Ui.contentCenterY
+                , MyUi.hoverText "Show members"
+                ]
+                (Ui.html Icons.users)
+
+        Just ShowMembersTab ->
+            Ui.none
+
+        Nothing ->
+            Ui.none
 
 
 headerBackButton : HtmlId -> msg -> Element msg
@@ -379,7 +398,7 @@ privateChatWithYourself isMobile currentTab local =
             (Dom.id "guild_openDescription")
             ChannelHeaderTab_ChannelDescription
             currentTab
-            (Ui.text "Chat with yourself")
+            (Ui.text "Solo chat")
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
@@ -397,7 +416,14 @@ privateChatWith isMobile currentTab otherUserId local name =
             (Dom.id "guild_openDescription")
             ChannelHeaderTab_ChannelDescription
             currentTab
-            (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
+            (if isMobile then
+                Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name)
+
+             else
+                Ui.row
+                    [ Ui.Font.exactWhitespace ]
+                    [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
+            )
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
@@ -488,7 +514,14 @@ discordPrivateChatWith isMobile currentTab name =
             (Dom.id "guild_openDescription")
             ChannelHeaderTab_ChannelDescription
             currentTab
-            (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
+            (if isMobile then
+                Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name)
+
+             else
+                Ui.row
+                    [ Ui.Font.exactWhitespace ]
+                    [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
+            )
         ]
 
 
@@ -705,6 +738,13 @@ gameTabBody guildOrDmId maybeMatchId local loggedIn matchData model =
     Game.view
         model.time
         model.windowSize
+        (case Route.toShowMembersTab model.route of
+            ( ShowMembersTab, _ ) ->
+                True
+
+            ( HideMembersTab, _ ) ->
+                False
+        )
         -- Touches are reported from the viewport top (behind the safe-area
         -- inset); shift them to match the board laid out below the inset.
         ((case model.drag of

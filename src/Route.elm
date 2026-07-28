@@ -17,6 +17,7 @@ module Route exposing
     , setChannelHeaderTab
     , toChannelHeaderTab
     , toGuildOrDmId
+    , toShowMembersTab
     )
 
 import AppUrl exposing (AppUrl)
@@ -442,6 +443,81 @@ toChannelHeaderTab route =
 
         PublicGoMatchRoute _ ->
             Nothing
+
+
+{-| Whether the member column is open. Routes that have no member column to
+open are treated as having it closed.
+-}
+toShowMembersTab : Route -> ( ShowMembersTab, Bool )
+toShowMembersTab route =
+    case route of
+        DmRoute dmRoute ->
+            threadRouteToShowMembersTab dmRoute.threadRoute
+
+        HomePageRoute ->
+            ( HideMembersTab, False )
+
+        AdminRoute _ ->
+            ( HideMembersTab, False )
+
+        GuildRoute _ channelRoute ->
+            case channelRoute of
+                ChannelRoute _ threadRoute _ ->
+                    threadRouteToShowMembersTab threadRoute
+
+                NewChannelRoute ->
+                    ( HideMembersTab, False )
+
+                EditChannelRoute _ ->
+                    ( HideMembersTab, False )
+
+                GuildSettingsRoute ->
+                    ( HideMembersTab, False )
+
+                JoinRoute _ ->
+                    ( HideMembersTab, False )
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute _ threadRoute _ ->
+                    threadRouteToShowMembersTab threadRoute
+
+                DiscordChannel_NewChannelRoute ->
+                    ( HideMembersTab, False )
+
+                DiscordChannel_EditChannelRoute _ ->
+                    ( HideMembersTab, False )
+
+                DiscordChannel_GuildSettingsRoute ->
+                    ( HideMembersTab, False )
+
+        DiscordDmRoute routeData ->
+            ( routeData.showMembersTab, False )
+
+        AiChatRoute ->
+            ( HideMembersTab, False )
+
+        SlackOAuthRedirect _ ->
+            ( HideMembersTab, False )
+
+        TextEditorRoute ->
+            ( HideMembersTab, False )
+
+        LinkDiscord _ ->
+            ( HideMembersTab, False )
+
+        PublicGoMatchRoute _ ->
+            ( HideMembersTab, False )
+
+
+threadRouteToShowMembersTab : ThreadRouteWithFriends -> ( ShowMembersTab, Bool )
+threadRouteToShowMembersTab threadRoute =
+    case threadRoute of
+        ViewThreadWithFriends _ _ showMembers ->
+            ( showMembers, True )
+
+        NoThreadWithFriends _ showMembers ->
+            ( showMembers, False )
 
 
 {-| Replaces the channel header tab for routes that can have one, leaves other routes unchanged.

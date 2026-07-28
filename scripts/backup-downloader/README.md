@@ -55,10 +55,11 @@ Because `Backup.elm` is compiled against the main project it lives in the root
 5. Decodes the newest `backend-export-*.bin` with
    `WireHelper.foldStreamedBackendModel`, and as it goes takes the first five
    normal guilds and the first five Discord guilds and exports the busiest
-   channel of each to JSON with `ChannelExport`, the same code behind the
-   "Export channel" button. Failing to decode is itself a failure — it means the
-   backup is corrupt, or that this program was built from a different version of
-   at-chat than the one that wrote it.
+   channel of each, plus the five longest normal DM channels and the five
+   longest Discord DM channels, to JSON with `ChannelExport`, the same code
+   behind the "Export channel" button. Failing to decode is itself a failure —
+   it means the backup is corrupt, or that this program was built from a
+   different version of at-chat than the one that wrote it.
 6. Compares each export against that channel's reference export (see below).
 7. Prints a summary and exits `0` on success, or non-zero on failure — so the
    systemd timer records whether the run worked.
@@ -72,21 +73,28 @@ it spent turning base64 into `Bytes`.
 
 Two things keep that down. The file crosses the port as `Bytes` rather than
 base64, which Lamdera allows and which costs nothing beyond the file itself.
-And `foldStreamedBackendModel` throws away the DM channels and hands over one
-guild at a time, so the picked channels' exports are all that survive.
+And `foldStreamedBackendModel` hands over one guild or DM channel at a time, so
+the picked channels' exports are all that survive.
 
 That puts the peak in proportion to the largest single guild rather than to the
 whole backup — a 21 MB backup peaks at around 280 MB and a 58 MB one spread over
 20 guilds at around 500 MB. A single guild holding most of the history is still
 the worst case, since a guild has to be decoded in one piece.
 
+A DM channel is only exported once it's longer than the shortest of the five
+kept so far, which keeps the wasted renders down when most DM channels are
+short. The exports themselves are what's held on to, not the channels.
+
 ## Which channels get checked
 
 The first five guilds of each kind, in the order they appear in the backup, and
-within each of those the channel with the most messages. Nothing is random, so a
-run checks the same channels the last run did and a reference export stays
-comparable from one day to the next. Ties on message count go to whichever
-channel comes first, so the choice only moves when the guild's traffic does.
+within each of those the channel with the most messages. There's no guild to
+pick a busiest channel out of for DMs, so instead the five longest normal DM
+channels and the five longest Discord DM channels in the whole backup are
+checked. Nothing is random, so a run checks the same channels the last run did
+and a reference export stays comparable from one day to the next. Ties on
+message count go to whichever channel comes first, so the choice only moves when
+the traffic does.
 
 ## The integrity check
 
@@ -102,9 +110,10 @@ new reply to an old message doesn't look like the old message changed.
 
 **A channel with a reference export is no longer in the backup.** Every channel
 in the backup is noted while it's decoded, including ones in guilds past the
-first five, so a leftover reference export means that channel is genuinely gone.
-That's either a deleted channel or a backup that lost one, and the program can't
-tell which — so it reports and lets you decide.
+first five and DM channels that aren't among the longest, so a leftover
+reference export means that channel is genuinely gone. That's either a deleted
+channel or a backup that lost one, and the program can't tell which — so it
+reports and lets you decide.
 
 When a channel passes, its reference is rewritten from the fresh export. Old
 messages are identical either way, and it means messages that have since aged

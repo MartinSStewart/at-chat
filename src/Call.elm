@@ -69,7 +69,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Route exposing (Route(..))
+import Route exposing (Route(..), ShowMembersTab(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -457,7 +457,17 @@ videoNodes localUser config loggedIn local =
 
         maxWidth : Int
         maxWidth =
-            Coord.xRaw config.windowSize - voiceChatX - padding
+            MyUi.conversationWidthIgnoreScrollbar
+                config.windowSize
+                (case Route.toShowMembersTab config.route of
+                    ( ShowMembersTab, _ ) ->
+                        True
+
+                    ( HideMembersTab, _ ) ->
+                        False
+                )
+                - padding
+                * 2
 
         maxHeight : Int
         maxHeight =
