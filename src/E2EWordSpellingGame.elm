@@ -79,7 +79,7 @@ tests normalConfig =
                     , user.portEvent 0 "audioPortFromJs" popLoadedEvent
 
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
-                    , admin.click 100 (Dom.id "guild_openDm_2")
+                    , E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
 
@@ -137,7 +137,7 @@ tests normalConfig =
                         ]
 
                     -- The other user opens the same match and joins it.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
@@ -236,7 +236,7 @@ tests normalConfig =
                     , user.portEvent 0 "audioPortFromJs" popLoadedEvent
 
                     -- Admin creates a Word Spelling Game match in the DM with the other user.
-                    , admin.click 100 (Dom.id "guild_openDm_2")
+                    , E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_advancedSection")
@@ -244,7 +244,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "wsg_start")
 
                     -- The other user opens the same match and joins it.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "wordSpellingGame_joinGame" ])
@@ -310,7 +310,7 @@ tests normalConfig =
                     [ -- Admin creates a match with a 2-tile tray and a bag of exactly four A tiles:
                       -- admin draws two, the joining user draws the other two, and the bag is empty.
                       -- (The bingo bonus is zeroed so the final score stays easy to read.)
-                      admin.click 100 (Dom.id "guild_openDm_2")
+                      E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_advancedSection")
@@ -321,7 +321,7 @@ tests normalConfig =
 
                     -- The other user opens the same match and joins before the first move,
                     -- emptying the bag.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
@@ -436,7 +436,7 @@ tests normalConfig =
                     [ -- Admin creates a match whose bag is all Q tiles (so the only word the players
                       -- can spell, "QQ", is a legal placement but never valid) and gives each turn
                       -- two attempts to place a valid word.
-                      admin.click 100 (Dom.id "guild_openDm_2")
+                      E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_advancedSection")
@@ -448,7 +448,7 @@ tests normalConfig =
 
                     -- The other user opens the same match and joins, so turns alternate between the
                     -- two players.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
@@ -561,17 +561,14 @@ tests normalConfig =
                         10
                         (\data -> [ user.portEvent 100 "load_startup_data_from_js" (E2EHelper.startupDataJsonWithInset data.time E2EHelper.firefoxDesktop safeAreaInsetTop False) ])
 
-                    -- Both players open the DM and the match. On mobile the "open DM" buttons live
-                    -- behind the show-members button in the channel header.
-                    , admin.click 0 (Dom.id "guild_showMembers")
-                    , admin.click 100 (Dom.id "guild_openDm_2")
+                    -- Both players open the DM and the match.
+                    , E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_advancedSection")
                     , admin.input 100 (Dom.id "wsg_lettersInput") "AADEEIILMNNOORRSSTT"
                     , admin.click 100 (Dom.id "wsg_start")
-                    , user.click 2000 (Dom.id "guild_showMembers")
-                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2100 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
@@ -786,7 +783,7 @@ tests normalConfig =
                 (\admin user ->
                     -- `user` has push notifications enabled (see connectTwoUsersAndJoinNewGuild).
                     [ -- Admin creates a Word Spelling Game match in the DM with the other user.
-                      admin.click 100 (Dom.id "guild_openDm_2")
+                      E2EHelper.openDm admin 100 "2"
                     , admin.click 100 (Dom.id "guild_openGamesTab")
                     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
                     , admin.click 100 (Dom.id "wsg_advancedSection")
@@ -794,7 +791,7 @@ tests normalConfig =
                     , admin.click 100 (Dom.id "wsg_start")
 
                     -- The other user opens the match, joins it, and then navigates away.
-                    , user.click 2000 (Dom.id "guild_openDm_0")
+                    , E2EHelper.openDm user 2000 "0"
                     , user.click 100 (Dom.id "guild_openGamesTab")
                     , user.input 100 (Dom.id "go_matchSwitcher") "0"
                     , user.click 100 (Dom.id "wordSpellingGame_joinGame")
@@ -1077,7 +1074,7 @@ placeLoadSolo boardXOffset admin =
     in
     [ -- Admin creates a Word Spelling Game match in the DM and places LOAD solo (their fresh tray is
       -- "A O A L D O M", so LOAD is slots 3,1,0,4 across the centre row).
-      admin.click 100 (Dom.id "guild_openDm_2")
+      E2EHelper.openDm admin 100 "2"
     , admin.click 100 (Dom.id "guild_openGamesTab")
     , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
     , admin.click 100 (Dom.id "wsg_advancedSection")
@@ -1437,7 +1434,7 @@ wordSpellingGamePremove normalConfig =
                 , user.portEvent 0 "audioPortFromJs" popLoadedEvent
 
                 -- Admin creates a Word Spelling Game match in the DM with the other user.
-                , admin.click 100 (Dom.id "guild_openDm_2")
+                , E2EHelper.openDm admin 100 "2"
                 , admin.click 100 (Dom.id "guild_openGamesTab")
                 , admin.click 100 (Dom.id ("game_select_" ++ Game.gameToString Message.GameType_WordSpellingGame))
 
@@ -1480,7 +1477,7 @@ wordSpellingGamePremove normalConfig =
                     ]
 
                 -- The other user opens the same match and joins it.
-                , user.click 2000 (Dom.id "guild_openDm_0")
+                , E2EHelper.openDm user 2000 "0"
                 , user.click 100 (Dom.id "guild_openGamesTab")
                 , user.input 100 (Dom.id "go_matchSwitcher") "0"
                 , user.click 100 (Dom.id "wordSpellingGame_joinGame")

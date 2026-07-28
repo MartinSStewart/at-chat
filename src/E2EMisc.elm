@@ -111,6 +111,7 @@ exportChannelTest config =
             E2EHelper.desktopWindow
             (\admin _ ->
                 [ E2EHelper.writeMessage admin 1000 "Hello everyone"
+                , admin.click 1000 (Dom.id "guild_showMembers")
                 , admin.click 1000 (Dom.id "guild_exportChannel")
                 , T.checkState
                     1000
@@ -186,8 +187,12 @@ exportDmChannelTest config =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello in a DM"
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Members (2)" ])
+                        , user.click 100 (Dom.id "guild_showMembers")
                         , user.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Members (2)" ])
@@ -263,9 +268,10 @@ friendsSearchTest config =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello admin!"
-                        , admin.click 100 (Dom.id "guild_openDm_2")
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , E2EHelper.openDm admin 100 "2"
 
                         -- The search input is transparent until it gets focus, so its placeholder
                         -- text is used to detect whether it is shown or not.
@@ -403,7 +409,7 @@ inviteUserAndDmChat config =
                 , E2EHelper.inviteUser
                     admin
                     (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        [ E2EHelper.openDm user 1000 "0"
                         , E2EHelper.writeMessage user 100 "Hello"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_2")
                         , E2EHelper.writeMessage user 100 "Hello 2"
@@ -411,9 +417,8 @@ inviteUserAndDmChat config =
                         , user.checkView
                             100
                             (\html ->
-                                -- Twice in the conversation, plus once in the DM's member column
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
-                                    |> Test.Html.Query.count (Expect.equal 3)
+                                    |> Test.Html.Query.count (Expect.equal 2)
                             )
                         , E2EHelper.createThread user (Id.fromInt 1)
                         , E2EHelper.writeMessage user 100 "Writing in thread"

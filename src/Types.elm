@@ -507,6 +507,7 @@ type FrontendMsg_
     | SetScrollToBottom
     | PressedChannelHeaderBackButton
     | PressedShowMembers
+    | PressedHideMembers
     | UserScrolled AnyGuildOrDmId ThreadRoute ScrollPosition
     | PressedBody
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage

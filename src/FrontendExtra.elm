@@ -1378,11 +1378,17 @@ enterChannelRoute guildOrDmId tab threadRoute sameGuild sameChannel previousRout
                 tab
                 threadRoute
                 (Local.model loggedIn.localState)
-                (case showMembers of
-                    ShowMembersTab ->
+                (case ( showMembers, MyUi.isMobile model ) of
+                    ( ShowMembersTab, True ) ->
+                        -- Parking the sidebar off screen is what makes the member
+                        -- column slide in. The column doesn't slide on desktop, so
+                        -- there's nothing to park there.
                         startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                    HideMembersTab ->
+                    ( ShowMembersTab, False ) ->
+                        startOpeningChannelSidebar loggedIn
+
+                    ( HideMembersTab, _ ) ->
                         if sameGuild || previousRoute == Nothing then
                             startOpeningChannelSidebar loggedIn
 
@@ -1660,11 +1666,11 @@ routeRequest previousRoute newRoute model =
                                 dmRoute.tab
                                 dmRoute.threadRoute
                                 local
-                                (case showMembers of
-                                    ShowMembersTab ->
+                                (case ( showMembers, MyUi.isMobile model3 ) of
+                                    ( ShowMembersTab, True ) ->
                                         startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                                    HideMembersTab ->
+                                    _ ->
                                         startOpeningChannelSidebar loggedIn
                                 )
                                 model3
@@ -1706,11 +1712,11 @@ routeRequest previousRoute newRoute model =
                         Nothing
                         (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab)
                         (Local.model loggedIn.localState)
-                        (case routeData.showMembersTab of
-                            ShowMembersTab ->
+                        (case ( routeData.showMembersTab, MyUi.isMobile model3 ) of
+                            ( ShowMembersTab, True ) ->
                                 startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                            HideMembersTab ->
+                            _ ->
                                 startOpeningChannelSidebar loggedIn
                         )
                         model3
@@ -2213,6 +2219,9 @@ isPressMsg msg =
             True
 
         PressedShowMembers ->
+            True
+
+        PressedHideMembers ->
             True
 
         PressedMemberListBack ->

@@ -65,6 +65,7 @@ module E2EHelper exposing
     , logoutOtherSessionButtonId
     , mockCloudflareSfu
     , noMissingMessages
+    , openDm
     , privateDiscordChannelCreateEvent
     , privateDiscordChannelId
     , privateDiscordChannelMessageEvent
@@ -1095,27 +1096,12 @@ dmCallTest isMobile normalConfig =
                     expectedThumbnailX : Float
                     expectedThumbnailX =
                         clamp 0 1 (1 - dragDistanceX / availableWidth)
-
-                    -- The member list (which holds the "open DM" buttons) is always
-                    -- visible on desktop, but on mobile it lives behind the
-                    -- "show members" button in the channel header. The extra click
-                    -- uses a 0ms delay so the overall timeline matches the desktop
-                    -- variant (a single 100ms click), keeping the timing-sensitive
-                    -- voice_chat_from_js snapshots identical across both variants.
-                    openDm actions dmUserId =
-                        (if isMobile then
-                            [ actions.click 0 (Dom.id "guild_showMembers") ]
-
-                         else
-                            []
-                        )
-                            ++ [ actions.click 100 (Dom.id ("guild_openDm_" ++ dmUserId)) ]
                 in
                 [ T.collapsableGroup
                     "Voice chat"
                     [ addCloudflareRealtimeApiKeys admin
-                    , T.group (openDm admin "2")
-                    , T.group (openDm user "0")
+                    , openDm admin 100 "2"
+                    , openDm user 100 "0"
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
                     , user.click 100 (Dom.id "guild_voiceChat")
@@ -3293,6 +3279,24 @@ inviteUser admin continueWith =
         )
     ]
         |> T.collapsableGroup "Invite user"
+
+
+{-| Opens a DM with another user by clicking their name in the member column.
+The column holds the "open DM" buttons and starts closed on both mobile and
+desktop, so it has to be opened first. Opening it spends no time of its own, so
+the overall timeline matches what a single click on the member cost before the
+column became closable.
+-}
+openDm :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> DelayInMs
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+openDm actions delay dmUserId =
+    T.group
+        [ actions.click delay (Dom.id "guild_showMembers")
+        , actions.click 100 (Dom.id ("guild_openDm_" ++ dmUserId))
+        ]
 
 
 {-| Checks that the single polyline in the view is scaled by the given amount.
