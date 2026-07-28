@@ -125,7 +125,28 @@ exportChannelTest config =
                                                 [ "Hello everyone", "\"AT\"", "Stevie Steve" ]
                                         of
                                             [] ->
-                                                Ok ()
+                                                -- None of these messages were replied to, edited,
+                                                -- reacted to or given files, so those fields should
+                                                -- be left out instead of exported as nulls and
+                                                -- empty lists.
+                                                case
+                                                    List.filter
+                                                        (\text -> String.contains text content)
+                                                        [ "\"editedAt\""
+                                                        , "\"repliedTo\""
+                                                        , "\"reactions\""
+                                                        , "\"attachedFiles\""
+                                                        , "\"embeds\""
+                                                        ]
+                                                of
+                                                    [] ->
+                                                        Ok ()
+
+                                                    empty ->
+                                                        Err
+                                                            ("Empty fields in the exported JSON: "
+                                                                ++ String.join ", " empty
+                                                            )
 
                                             missing ->
                                                 Err ("Missing from the exported JSON: " ++ String.join ", " missing)

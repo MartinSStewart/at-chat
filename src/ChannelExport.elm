@@ -416,19 +416,22 @@ encodeMessage userIdToString userNames maybeThread index message =
                     , ( "createdAt", encodeTime data.createdAt )
                     , ( "createdBy", Json.Encode.string (userIdToString data.createdBy) )
                     , ( "content", encodeContent userNames data.content )
-                    , ( "editedAt", encodeMaybe encodeTime data.editedAt )
-                    , ( "repliedTo", encodeMaybe (\messageId -> Json.Encode.int (Id.toInt messageId)) data.repliedTo )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
-                    , ( "attachedFiles", encodeAttachedFiles data.attachedFiles )
-                    , ( "embeds", encodeEmbeds data.embeds )
                     ]
+                        ++ optionalField "editedAt" encodeTime data.editedAt
+                        ++ optionalField
+                            "repliedTo"
+                            (\messageId -> Json.Encode.int (Id.toInt messageId))
+                            data.repliedTo
+                        ++ encodeReactions userIdToString data.reactions
+                        ++ encodeAttachedFiles data.attachedFiles
+                        ++ encodeEmbeds data.embeds
 
                 UserJoinedMessage createdAt userId reactions _ ->
                     [ ( "type", Json.Encode.string "userJoined" )
                     , ( "createdAt", encodeTime createdAt )
                     , ( "createdBy", Json.Encode.string (userIdToString userId) )
-                    , ( "reactions", encodeReactions userIdToString reactions )
                     ]
+                        ++ encodeReactions userIdToString reactions
 
                 DeletedMessage deletedAt ->
                     [ ( "type", Json.Encode.string "deleted" )
@@ -439,9 +442,9 @@ encodeMessage userIdToString userNames maybeThread index message =
                     [ ( "type", Json.Encode.string "callStarted" )
                     , ( "createdAt", encodeTime data.startedAt )
                     , ( "createdBy", Json.Encode.string (userIdToString data.startedBy) )
-                    , ( "endedAt", encodeMaybe encodeTime data.endedAt )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
                     ]
+                        ++ optionalField "endedAt" encodeTime data.endedAt
+                        ++ encodeReactions userIdToString data.reactions
 
                 GameStarted data ->
                     [ ( "type", Json.Encode.string "gameStarted" )
@@ -457,8 +460,8 @@ encodeMessage userIdToString userNames maybeThread index message =
                                     "wordSpellingGame"
                             )
                       )
-                    , ( "reactions", encodeReactions userIdToString data.reactions )
                     ]
+                        ++ encodeReactions userIdToString data.reactions
            )
         ++ (case maybeThread of
                 Just thread ->
@@ -476,7 +479,10 @@ encodeContent userNames content =
     RichText.toStringWithGetter identity False userNames content |> Json.Encode.string
 
 
-encodeReactions : (userId -> String) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> Json.Encode.Value
+encodeReactions :
+    (userId -> String)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> List ( String, Json.Encode.Value )
 encodeReactions userIdToString reactions =
     SeqDict.toList reactions
         |> List.map
@@ -490,7 +496,7 @@ encodeReactions userIdToString reactions =
                       )
                     ]
             )
-        |> Json.Encode.list identity
+        |> optionalListField "reactions"
 
 
 emojiToString : EmojiOrCustomEmoji -> String
@@ -503,7 +509,7 @@ emojiToString emoji =
             CustomEmoji.idToString customEmojiId
 
 
-encodeAttachedFiles : SeqDict (Id FileId) FileData -> Json.Encode.Value
+encodeAttachedFiles : SeqDict (Id FileId) FileData -> List ( String, Json.Encode.Value )
 encodeAttachedFiles attachedFiles =
     SeqDict.toList attachedFiles
         |> List.map
@@ -515,28 +521,28 @@ encodeAttachedFiles attachedFiles =
                     , ( "url", Json.Encode.string (FileStatus.fileUrl fileData.contentType fileData.fileHash) )
                     ]
             )
-        |> Json.Encode.list identity
+        |> optionalListField "attachedFiles"
 
 
-encodeEmbeds : Array Embed -> Json.Encode.Value
+encodeEmbeds : Array Embed -> List ( String, Json.Encode.Value )
 encodeEmbeds embeds =
     Array.toList embeds
         |> List.filterMap
             (\embed ->
                 case embed of
                     EmbedLoaded embedData ->
-                        Json.Encode.object
-                            [ ( "title", encodeMaybe Json.Encode.string embedData.title )
-                            , ( "description", encodeMaybe Json.Encode.string embedData.description )
-                            , ( "imageUrl", encodeMaybe (\image -> Json.Encode.string image.url) embedData.image )
-                            , ( "createdAt", encodeMaybe encodeTime embedData.createdAt )
-                            ]
+                        (optionalField "title" Json.Encode.string embedData.title
+                            ++ optionalField "description" Json.Encode.string embedData.description
+                            ++ optionalField "imageUrl" (\image -> Json.Encode.string image.url) embedData.image
+                            ++ optionalField "createdAt" encodeTime embedData.createdAt
+                        )
+                            |> Json.Encode.object
                             |> Just
 
                     EmbedLoading ->
                         Nothing
             )
-        |> Json.Encode.list identity
+        |> optionalListField "embeds"
 
 
 encodeTime : Time.Posix -> Json.Encode.Value
@@ -552,3 +558,27 @@ encodeMaybe encoder maybe =
 
         Nothing ->
             Json.Encode.null
+
+
+{-| Most of what a message can carry (a reply, an edit, reactions, files,
+embeds) is missing from the average message. Those fields are left out entirely
+rather than exported as nulls and empty lists.
+-}
+optionalField : String -> (a -> Json.Encode.Value) -> Maybe a -> List ( String, Json.Encode.Value )
+optionalField key encoder maybe =
+    case maybe of
+        Just a ->
+            [ ( key, encoder a ) ]
+
+        Nothing ->
+            []
+
+
+optionalListField : String -> List Json.Encode.Value -> List ( String, Json.Encode.Value )
+optionalListField key values =
+    case values of
+        [] ->
+            []
+
+        _ ->
+            [ ( key, Json.Encode.list identity values ) ]
