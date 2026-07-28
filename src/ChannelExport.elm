@@ -531,12 +531,12 @@ encodeEmbeds embeds =
             (\embed ->
                 case embed of
                     EmbedLoaded embedData ->
-                        (optionalField "title" Json.Encode.string embedData.title
-                            ++ optionalField "description" Json.Encode.string embedData.description
-                            ++ optionalField "imageUrl" (\image -> Json.Encode.string image.url) embedData.image
-                            ++ optionalField "createdAt" encodeTime embedData.createdAt
-                        )
-                            |> Json.Encode.object
+                        Json.Encode.object
+                            [ ( "title", encodeMaybe Json.Encode.string embedData.title )
+                            , ( "description", encodeMaybe Json.Encode.string embedData.description )
+                            , ( "imageUrl", encodeMaybe (\image -> Json.Encode.string image.url) embedData.image )
+                            , ( "createdAt", encodeMaybe encodeTime embedData.createdAt )
+                            ]
                             |> Just
 
                     EmbedLoading ->
