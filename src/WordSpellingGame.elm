@@ -1387,13 +1387,24 @@ placeWord setup board placedWord =
 
                 allWords : List (List ( Int, Int ))
                 allWords =
-                    (if List.length mainWord >= 2 then
-                        [ mainWord ]
+                    case mainWord of
+                        [] ->
+                            crossWords
 
-                     else
-                        []
-                    )
-                        ++ crossWords
+                        [ _ ] ->
+                            -- A lone tile standing on its own is a one letter word, which the
+                            -- word list then accepts or rejects like any other ("A" is a word in
+                            -- Swedish but not in English). When the tile touches other tiles the
+                            -- words being played are the ones running through it, so the letter
+                            -- isn't also checked on its own.
+                            if List.isEmpty crossWords then
+                                [ mainWord ]
+
+                            else
+                                crossWords
+
+                        _ ->
+                            mainWord :: crossWords
             in
             ( newBoard
             , { words =
