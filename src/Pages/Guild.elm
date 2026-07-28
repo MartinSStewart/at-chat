@@ -507,7 +507,7 @@ conversationWidth model =
             ( HideMembersTab, _ ) ->
                 False
         )
-        + model.startupData.scrollbarWidth
+        - model.startupData.scrollbarWidth
         - (User.profileImageSize + (messagePaddingX * 2) + profileImagePaddingRight)
 
 
@@ -5259,6 +5259,11 @@ type HighlightMessage
     | UrlHighlight
 
 
+profileImagePaddingRight : number
+profileImagePaddingRight =
+    8
+
+
 messageView :
     Bool
     -> Int
@@ -5977,7 +5982,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = MyUi.profileImagePaddingRight
+                    , right = profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -6104,7 +6109,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
             |> Ui.el
                 [ Ui.paddingWith
                     { left = 0
-                    , right = MyUi.profileImagePaddingRight
+                    , right = profileImagePaddingRight
                     , top =
                         case maybeRepliedTo2 of
                             Just _ ->
@@ -6518,6 +6523,11 @@ eventCard userIdToColor isSelectingAnchor messageId drawings htmlId onPress icon
         )
 
 
+messagePaddingX : number
+messagePaddingX =
+    8
+
+
 {-| Decodes a "contextmenu" event into a message that opens the message menu.
 If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
@@ -6641,8 +6651,8 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
          , Ui.paddingWith
-            { left = MyUi.messagePaddingX
-            , right = MyUi.messagePaddingX
+            { left = messagePaddingX
+            , right = messagePaddingX
             , top = 4
             , bottom =
                 if maybeReactions == Nothing then
@@ -6759,8 +6769,8 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
          , Ui.paddingWith
-            { left = MyUi.messagePaddingX
-            , right = MyUi.messagePaddingX
+            { left = messagePaddingX
+            , right = messagePaddingX
             , top = 4
             , bottom =
                 if maybeReactions == Nothing then

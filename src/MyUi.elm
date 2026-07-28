@@ -64,7 +64,6 @@ module MyUi exposing
     , matchSwitcherHeight
     , memberColumnWidth
     , mentionColor
-    , messagePaddingX
     , monospace
     , monthToInt
     , noPointerEvents
@@ -72,7 +71,6 @@ module MyUi exposing
     , notoSans
     , outwardBottomCorner
     , prewrap
-    , profileImagePaddingRight
     , radioCircle
     , radioColumn
     , radioOption
@@ -1199,16 +1197,6 @@ conversationWidthIgnoreScrollbar windowSize showMembersTab =
 guildIconFullWidth : number
 guildIconFullWidth =
     58
-
-
-messagePaddingX : number
-messagePaddingX =
-    8
-
-
-profileImagePaddingRight : number
-profileImagePaddingRight =
-    8
 
 
 memberColumnWidth : number
