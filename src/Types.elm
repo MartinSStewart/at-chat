@@ -89,7 +89,7 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
-import LoginForm exposing (LoginForm)
+import LoginForm exposing (LoginForm, LoginType)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
@@ -146,6 +146,7 @@ type alias LoadingFrontend =
     , windowSize : Coord CssPixels
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
+    , loginType : LoginType
     , timezone : Time.Zone
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
@@ -168,6 +169,7 @@ type alias LoadedFrontend =
     , windowSize : Coord CssPixels
     , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
+    , loginType : LoginType
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe MyUi.LastCopy
     , drag : Drag
@@ -636,6 +638,7 @@ type ToBackend
     = CheckLoginRequest InitialLoadRequest
     | LoginWithTokenRequest InitialLoadRequest Int UserAgent
     | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
+    | LoginWithRecoveryPasswordRequest InitialLoadRequest String UserAgent
     | GetLoginTokenRequest (Untrusted EmailAddress)
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest SessionIdHash
@@ -789,10 +792,11 @@ type LoginResult
     | LoginTokenInvalid Int
     | NeedsTwoFactorToken
     | NeedsAccountSetup
+    | RecoveryPasswordInvalid
 
 
 type ToFrontend
-    = CheckLoginResponse (Result () LoginData)
+    = CheckLoginResponse LoginType (Result () LoginData)
     | LoginWithTokenResponse LoginResult
     | GetLoginTokenRateLimited
     | SignupsDisabledResponse

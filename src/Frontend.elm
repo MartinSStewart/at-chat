@@ -304,6 +304,7 @@ init url key =
         , time = Nothing
         , timezone = Time.utc
         , loginStatus = LoadingData
+        , loginType = LoginForm.LoginWithEmail
         , startupData = Nothing
         , publicGoMatch =
             case route of
@@ -368,6 +369,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
             , loginStatus = loginStatus
+            , loginType = loading.loginType
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
             , drag = NoDrag
@@ -708,7 +710,7 @@ updateLoaded msg model =
                                                 notLoggedIn.loginForm
 
                                             Nothing ->
-                                                Just LoginForm.init
+                                                Just (LoginForm.init model.loginType)
                                 }
                       }
                     , Command.none
@@ -790,8 +792,12 @@ updateLoaded msg model =
                                 FinishUserCreationRequest requestMessagesFor name model.startupData.userAgent
                                     |> Lamdera.sendToBackend
                             )
+                            (\password ->
+                                LoginWithRecoveryPasswordRequest requestMessagesFor password model.startupData.userAgent
+                                    |> Lamdera.sendToBackend
+                            )
                             loginFormMsg
-                            (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
+                            (Maybe.withDefault (LoginForm.init model.loginType) notLoggedIn.loginForm)
                     of
                         Just ( newLoginForm, cmd ) ->
                             ( { model
@@ -6082,13 +6088,15 @@ updateFromBackend _ msg model =
     case model of
         Loading loading ->
             case msg of
-                CheckLoginResponse result ->
+                CheckLoginResponse loginType result ->
                     case result of
                         Ok loginData ->
-                            tryInitLoadedFrontend { loading | loginStatus = LoadSuccess loginData }
+                            tryInitLoadedFrontend
+                                { loading | loginStatus = LoadSuccess loginData, loginType = loginType }
 
                         Err _ ->
-                            tryInitLoadedFrontend { loading | loginStatus = LoadError }
+                            tryInitLoadedFrontend
+                                { loading | loginStatus = LoadError, loginType = loginType }
 
                 YouConnected clientId ->
                     tryInitLoadedFrontend { loading | clientId = Just clientId }
@@ -6134,8 +6142,8 @@ updateFromBackend _ msg model =
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
 updateLoadedFromBackend msg model =
     case msg of
-        CheckLoginResponse _ ->
-            ( model, Command.none )
+        CheckLoginResponse loginType _ ->
+            ( { model | loginType = loginType }, Command.none )
 
         LoginWithTokenResponse result ->
             case model.loginStatus of
@@ -6205,6 +6213,18 @@ updateLoadedFromBackend msg model =
                                 | loginStatus =
                                     NotLoggedIn
                                         { notLoggedIn | loginForm = Just LoginForm.needsUserData }
+                              }
+                            , Command.none
+                            )
+
+                        RecoveryPasswordInvalid ->
+                            ( { model
+                                | loginStatus =
+                                    NotLoggedIn
+                                        { notLoggedIn
+                                            | loginForm =
+                                                Maybe.map LoginForm.invalidRecoveryPassword notLoggedIn.loginForm
+                                        }
                               }
                             , Command.none
                             )
@@ -6973,7 +6993,7 @@ view _ model =
                             NotLoggedIn notLoggedIn ->
                                 LoginForm.view
                                     notLoggedIn.textInputFocus
-                                    (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
+                                    (Maybe.withDefault (LoginForm.init loaded.loginType) notLoggedIn.loginForm)
                                     loaded.windowSize
                                     loaded.startupData.pwaStatus
                                     |> Ui.map LoginFormMsg
@@ -7137,7 +7157,7 @@ view _ model =
                                             (Ui.text "You aren't logged in here. Please log in and then we can link your Discord account.")
                                         , LoginForm.view
                                             notLoggedIn.textInputFocus
-                                            (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
+                                            (Maybe.withDefault (LoginForm.init loaded.loginType) notLoggedIn.loginForm)
                                             loaded.windowSize
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa

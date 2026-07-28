@@ -35,6 +35,14 @@ loginTests isMobile normalConfig =
 
             else
                 E2EHelper.firefoxDesktop
+
+        {- Unlike the other tests, this one uses `Backend.app_` as-is. A freshly initialized backend
+           has no Postmark API key, so it can't email login codes to anyone and the login page asks
+           for the recovery password instead.
+        -}
+        noPostmarkApiKeyConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        noPostmarkApiKeyConfig =
+            { normalConfig | backendApp = Backend.app_ }
     in
     [ E2EHelper.startTest
         (if isMobile then
@@ -215,6 +223,45 @@ loginTests isMobile normalConfig =
 
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Pending login not found") ]
+                    )
+                ]
+            )
+        ]
+    , T.start
+        (if isMobile then
+            "Recovery password login mobile"
+
+         else
+            "Recovery password login"
+        )
+        E2EHelper.startTime
+        noPostmarkApiKeyConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/"
+            windowSize
+            (\client ->
+                [ T.andThen
+                    10
+                    (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time userAgent) ])
+                , client.click 100 Pages.Home.loginButtonId
+                , client.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Recovery login" ])
+                , client.input 100 LoginForm.recoveryPasswordInputId "not the recovery password"
+                , client.click 100 LoginForm.submitRecoveryPasswordButtonId
+                , client.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Incorrect password" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if SeqDict.member E2EHelper.sessionId0 data.backend.sessions then
+                            Err "The wrong recovery password shouldn't have logged anyone in"
+
+                        else
+                            Ok ()
                     )
                 ]
             )

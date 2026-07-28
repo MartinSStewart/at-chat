@@ -73,6 +73,7 @@ import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import Sha256
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -118,6 +119,27 @@ app_ =
 adminUser : BackendUser
 adminUser =
     User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.se") True
+
+
+{-| Sha256 hash of the password that logs you in as the admin user when the Postmark API key is
+missing. This exists so that a backup can be uploaded again after the BackendModel has been reset
+(at which point no one can receive a login email).
+-}
+recoveryPasswordHash : String
+recoveryPasswordHash =
+    "48d8aef158f10fae3877b40d54444a829f4652a5871d3b58c3cde52f29aed662"
+
+
+{-| Once an admin sets a Postmark API key, login emails work again and the recovery password is no
+longer accepted.
+-}
+loginType : BackendModel -> LoginForm.LoginType
+loginType model =
+    if model.postmarkApiKey == Postmark.apiKey "" then
+        LoginForm.LoginWithRecoveryPassword
+
+    else
+        LoginForm.LoginWithEmail
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -2361,12 +2383,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                               }
                             , BackendExtra.getLoginData sessionId clientId currentlyViewing session user requestMessagesFor model
                                 |> Ok
-                                |> CheckLoginResponse
+                                |> CheckLoginResponse (loginType model)
                                 |> Lamdera.sendToFrontend clientId
                             )
 
                         Nothing ->
-                            ( model, CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId )
+                            ( model
+                            , CheckLoginResponse (loginType model) (Err ()) |> Lamdera.sendToFrontend clientId
+                            )
             in
             if model2.isInitialized then
                 ( model2, cmd )
@@ -2392,6 +2416,61 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
         LoginWithTokenRequest requestMessagesFor loginCode userAgent ->
             BackendExtra.loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model
+
+        LoginWithRecoveryPasswordRequest requestMessagesFor password userAgent ->
+            case ( loginType model, NonemptyDict.get Broadcast.adminUserId model.users ) of
+                ( LoginForm.LoginWithRecoveryPassword, Just user ) ->
+                    if Sha256.sha256 password == recoveryPasswordHash then
+                        let
+                            currentlyViewing : UserSession.Viewing
+                            currentlyViewing =
+                                BackendExtra.requestedForToGuildOrDmId Broadcast.adminUserId requestMessagesFor
+
+                            session : UserSession
+                            session =
+                                UserSession.init time sessionId Broadcast.adminUserId userAgent
+                        in
+                        ( { model
+                            | sessions = SeqDict.insert sessionId session model.sessions
+                            , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                          }
+                        , Command.batch
+                            [ BackendExtra.getLoginData
+                                sessionId
+                                clientId
+                                currentlyViewing
+                                session
+                                user
+                                requestMessagesFor
+                                model
+                                |> LoginSuccess
+                                |> LoginWithTokenResponse
+                                |> Lamdera.sendToFrontends sessionId
+                            , Broadcast.toUser
+                                (Just clientId)
+                                Nothing
+                                Broadcast.adminUserId
+                                (Server_NewSession
+                                    session.sessionIdHash
+                                    { notificationMode = session.notificationMode
+                                    , currentlyViewing = SeqDict.singleton clientId currentlyViewing
+                                    , userAgent = session.userAgent
+                                    }
+                                    |> ServerChange
+                                )
+                                model
+                            ]
+                        )
+
+                    else
+                        ( model
+                        , RecoveryPasswordInvalid |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
+                        )
+
+                _ ->
+                    ( model
+                    , RecoveryPasswordInvalid |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
+                    )
 
         FinishUserCreationRequest requestMessagesFor personName userAgent ->
             case SeqDict.get sessionId model.pendingLogins of
