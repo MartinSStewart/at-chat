@@ -1,4 +1,4 @@
-port module Backup exposing (Config, Flags, Model, Msg, Step, main)
+port module Backup exposing (Backup, ChannelToCheck, Config, Flags, Model, Msg, Step, decodeBackup, main)
 
 {-| Downloads any new backups from the production server and then checks that the
 newest one still decodes and still contains the same old messages it did last
@@ -11,11 +11,11 @@ the Lamdera compiler) to read a backup. So the program is now compiled by
 `lamdera make` and run by `run.js`, which provides the same capabilities over
 ports.
 
-The check works by exporting the busiest channel of each of the first few guilds
-with the same `ChannelExport` code the "Export channel" button uses, and comparing
-each export against a reference stored alongside the backups. The first time a
-channel is picked there's nothing to compare against, so its export becomes the
-reference.
+The check works by exporting the busiest channel of each of the first few guilds,
+plus the longest few DM channels of each kind, with the same `ChannelExport` code
+the "Export channel" button uses, and comparing each export against a reference
+stored alongside the backups. The first time a channel is picked there's nothing
+to compare against, so its export becomes the reference.
 
 -}
 
@@ -25,6 +25,8 @@ import ChannelExport
 import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserData)
+import DmChannel exposing (DiscordDmChannel, DmChannel)
+import DmChannelId exposing (DmChannelId)
 import ExportComparison
 import GuildName
 import Id exposing (ChannelId, GuildId, Id, UserId)
@@ -33,6 +35,7 @@ import Json.Decode
 import Json.Encode
 import LocalState exposing (BackendGuild, DiscordBackendGuild)
 import NonemptyDict exposing (NonemptyDict)
+import PersonName
 import Platform
 import SeqDict exposing (SeqDict)
 import Set exposing (Set)
@@ -68,6 +71,15 @@ entire history on every run.
 -}
 guildsPerRun : Int
 guildsPerRun =
+    5
+
+
+{-| How many DM channels of each kind (normal and Discord) to check per run.
+There's no guild to pick a busiest channel out of here, so the longest DM
+channels in the whole backup are checked instead.
+-}
+dmChannelsPerRun : Int
+dmChannelsPerRun =
     5
 
 
@@ -376,9 +388,9 @@ startVerifying backup referenceFiles model =
             (\cmd ->
                 Cmd.batch
                     [ stdout
-                        ("Exporting the busiest channel of "
+                        ("Exporting "
                             ++ String.fromInt (List.length backup.channels)
-                            ++ " guilds to compare against their reference exports"
+                            ++ " channels to compare against their reference exports"
                         )
                     , cmd
                     ]
@@ -510,10 +522,21 @@ type alias Collected =
     , discordGuildsSeen : Int
     , picked : List ChannelToCheck
     , discordPicked : List ChannelToCheck
+    , dmPicked : List LongestDmChannel
+    , discordDmPicked : List LongestDmChannel
 
     -- Every channel in the backup, whether or not it was picked. A reference
     -- export whose channel isn't in here belongs to a channel that's gone.
     , channelsInBackup : Set String
+    }
+
+
+{-| The message count is only kept while the backup is being read, to work out
+which DM channels are the longest ones.
+-}
+type alias LongestDmChannel =
+    { messageCount : Int
+    , channel : ChannelToCheck
     }
 
 
@@ -534,14 +557,22 @@ decodeBackup =
                 , discordGuildsSeen = 0
                 , picked = []
                 , discordPicked = []
+                , dmPicked = []
+                , discordDmPicked = []
                 , channelsInBackup = Set.empty
                 }
         , guild = foldGuild
+        , dmChannel = foldDmChannel
         , discordGuild = foldDiscordGuild
+        , discordDmChannel = foldDiscordDmChannel
         }
         |> Bytes.Decode.map
             (\collected ->
-                { channels = List.reverse collected.picked ++ List.reverse collected.discordPicked
+                { channels =
+                    List.reverse collected.picked
+                        ++ List.reverse collected.discordPicked
+                        ++ List.map .channel collected.dmPicked
+                        ++ List.map .channel collected.discordDmPicked
                 , channelsInBackup = collected.channelsInBackup
                 }
             )
@@ -577,6 +608,106 @@ foldGuild ( guildId, guild ) collected =
                 _ ->
                     collected.picked
     }
+
+
+foldDmChannel : ( DmChannelId, DmChannel ) -> Collected -> Collected
+foldDmChannel ( dmChannelId, channel ) collected =
+    let
+        messageCount : Int
+        messageCount =
+            IdArray.length channel.messages
+
+        ( userIdA, userIdB ) =
+            DmChannelId.toUserIds dmChannelId
+    in
+    { collected
+        | channelsInBackup = Set.insert (dmReferenceName dmChannelId) collected.channelsInBackup
+        , dmPicked =
+            if isLongEnough messageCount collected.dmPicked then
+                longestDmChannels
+                    { messageCount = messageCount
+                    , channel =
+                        { name =
+                            "DM between \""
+                                ++ userName collected.users userIdA
+                                ++ "\" and \""
+                                ++ userName collected.users userIdB
+                                ++ "\""
+                        , referenceName = dmReferenceName dmChannelId
+                        , json = ChannelExport.dmChannel collected.users userIdA userIdB channel
+                        }
+                    }
+                    collected.dmPicked
+
+            else
+                collected.dmPicked
+    }
+
+
+foldDiscordDmChannel : ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel ) -> Collected -> Collected
+foldDiscordDmChannel ( channelId, channel ) collected =
+    let
+        messageCount : Int
+        messageCount =
+            IdArray.length channel.messages
+
+        -- A backup has no user viewing it, so the first member stands in for
+        -- one. All that changes is which name the channel is labelled with;
+        -- every member is exported either way.
+        firstMember : Discord.Id Discord.UserId
+        firstMember =
+            NonemptyDict.head channel.members |> Tuple.first
+    in
+    { collected
+        | channelsInBackup = Set.insert (discordDmReferenceName channelId) collected.channelsInBackup
+        , discordDmPicked =
+            if isLongEnough messageCount collected.discordDmPicked then
+                longestDmChannels
+                    { messageCount = messageCount
+                    , channel =
+                        { name =
+                            "Discord DM with \""
+                                ++ ChannelExport.discordDmName collected.discordUsers firstMember channel
+                                ++ "\""
+                        , referenceName = discordDmReferenceName channelId
+                        , json = ChannelExport.discordDmChannel collected.discordUsers firstMember channel
+                        }
+                    }
+                    collected.discordDmPicked
+
+            else
+                collected.discordDmPicked
+    }
+
+
+{-| Checked before a DM channel is exported, since rendering every DM channel in
+the backup only to throw most of them away is the expensive part.
+-}
+isLongEnough : Int -> List LongestDmChannel -> Bool
+isLongEnough messageCount picked =
+    (List.length picked < dmChannelsPerRun)
+        || List.any (\channel -> messageCount > channel.messageCount) picked
+
+
+{-| Keeps the longest `dmChannelsPerRun` channels, longest first. The sort is
+stable, so ties go to whichever channel came first in the backup and the choice
+only moves when the traffic does.
+-}
+longestDmChannels : LongestDmChannel -> List LongestDmChannel -> List LongestDmChannel
+longestDmChannels channel picked =
+    (picked ++ [ channel ])
+        |> List.sortBy (\a -> -a.messageCount)
+        |> List.take dmChannelsPerRun
+
+
+userName : NonemptyDict (Id UserId) BackendUser -> Id UserId -> String
+userName users userId =
+    case NonemptyDict.get userId users of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<unknown user>"
 
 
 foldDiscordGuild : ( Discord.Id Discord.GuildId, DiscordBackendGuild ) -> Collected -> Collected
@@ -645,6 +776,16 @@ guildReferenceName guildId channelId =
 discordReferenceName : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> String
 discordReferenceName guildId channelId =
     "discord-guild-" ++ Discord.idToString guildId ++ "-channel-" ++ Discord.idToString channelId ++ ".json"
+
+
+dmReferenceName : DmChannelId -> String
+dmReferenceName dmChannelId =
+    "dm-" ++ DmChannelId.toString dmChannelId ++ ".json"
+
+
+discordDmReferenceName : Discord.Id Discord.PrivateChannelId -> String
+discordDmReferenceName channelId =
+    "discord-dm-" ++ Discord.idToString channelId ++ ".json"
 
 
 {-| Reference exports left behind by channels that are no longer in the backup.

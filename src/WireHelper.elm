@@ -113,36 +113,32 @@ decodeStreamedBackendModel =
 
 
 {-| Reads the same format as `decodeStreamedBackendModel`, but hands each guild
-to a fold function as it is decoded instead of collecting them all, and throws
-the DM channels away.
+and DM channel to a fold function as it is decoded instead of collecting them
+all.
 
 A backup expands to more than twenty times its file size once it has been decoded
 into a `BackendModel`, so anything that only needs a part of one should fold it
 away here rather than decode the whole thing and pick through it afterwards. Only
 one guild is alive at a time, and `init` is the chance to keep whatever is needed
-from the rest of the model before that is dropped too.
-
-The DM channels still have to be decoded, since that is the only way to find
-where the next section starts, but each one is discarded immediately.
+from the rest of the model before that is dropped too. A fold function that hangs
+on to what it is handed gives up that guarantee, so it should keep a bounded
+amount.
 
 -}
 foldStreamedBackendModel :
     { init : BackendModel -> state
     , guild : ( Id GuildId, LocalState.BackendGuild ) -> state -> state
+    , dmChannel : ( DmChannelId, DmChannel.DmChannel ) -> state -> state
     , discordGuild : ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild ) -> state -> state
+    , discordDmChannel : ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel ) -> state -> state
     }
     -> Decoder state
 foldStreamedBackendModel config =
     Bytes.Decode.map config.init decodeBackendModel
         |> Bytes.Decode.andThen (foldLengthPrefixedList decodeGuild config.guild)
-        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDmChannel discard)
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDmChannel config.dmChannel)
         |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDiscordGuild config.discordGuild)
-        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDiscordDmChannel discard)
-
-
-discard : a -> state -> state
-discard _ state =
-    state
+        |> Bytes.Decode.andThen (foldLengthPrefixedList decodeDiscordDmChannel config.discordDmChannel)
 
 
 decodeLengthPrefixedList : Decoder a -> Decoder (List a)
