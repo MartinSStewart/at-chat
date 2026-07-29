@@ -38,7 +38,6 @@ module MyUi exposing
     , emailAddress
     , errorBox
     , errorColor
-    , focusEffect
     , font1
     , font2
     , font3
@@ -830,17 +829,11 @@ simpleButton htmlId onPress content =
         , Ui.background buttonBackground
         , Ui.rounded 4
         , id htmlId
-        , focusEffect
         , Ui.width Ui.shrink
         , Ui.paddingXY 16 8
         , Ui.Font.weight 500
         ]
         content
-
-
-focusEffect : Ui.Attribute msg
-focusEffect =
-    Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.outlineColor white ]
 
 
 touchPress : msg -> Ui.Attribute msg
@@ -869,7 +862,6 @@ secondaryButton htmlId onPress label2 =
         [ Ui.Input.button onPress
         , id htmlId
         , Ui.background secondaryGray
-        , focusEffect
         , Ui.border 1
         , Ui.Font.color black
         , Ui.rounded 4
@@ -886,7 +878,6 @@ secondaryButtonTall htmlId onPress label2 =
         [ Ui.Input.button onPress
         , id htmlId
         , Ui.background secondaryGray
-        , focusEffect
         , Ui.border 1
         , Ui.Font.color black
         , Ui.rounded 4
@@ -1045,6 +1036,17 @@ body {
   scrollbar-color: """
                 ++ colorToStyle font1
                 ++ """ transparent
+}
+/* elm-ui hides the native focus ring with `.s:focus { outline: none; }` for
+   every element it renders. This puts it back, but only for focus the browser
+   considers worth showing (keyboard navigation, not mouse clicks). The
+   .elm-ui-root prefix is there to outrank elm-ui's rule no matter which
+   stylesheet the browser sees first. The offset is negative so that the
+   outline is drawn inside the element and doesn't get clipped by scrollable
+   or clipping parents. */
+.elm-ui-root .s:focus-visible {
+  outline: rgb(96,165,250) solid 2px;
+  outline-offset: -2px;
 }
 .drawing-anchor-select {
   cursor: pointer;

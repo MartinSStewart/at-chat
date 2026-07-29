@@ -464,7 +464,6 @@ view textSelection loginForm windowSize pwaStatus =
                         , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
                         , Ui.Font.color MyUi.font1
-                        , MyUi.focusEffect
                         ]
                         (Ui.text "Submit")
                     ]

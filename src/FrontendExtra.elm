@@ -1090,7 +1090,6 @@ externalLinkWarning domainWhitelist isMobile url =
                     , Ui.rounded 4
                     , Ui.width Ui.shrink
                     , Ui.paddingXY 16 8
-                    , MyUi.focusEffect
                     , Ui.Font.weight 500
                     , Ui.Font.color MyUi.white
                     , MyUi.htmlStyle "text-decoration" "none"

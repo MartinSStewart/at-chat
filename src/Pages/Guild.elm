@@ -918,7 +918,6 @@ exportChannelButton exportChannelId =
         , Ui.Font.color MyUi.font1
         , Ui.Font.center
         , Ui.Font.weight 500
-        , MyUi.focusEffect
         , MyUi.noShrinking
         ]
         (Ui.text "Export channel")

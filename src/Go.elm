@@ -1538,7 +1538,6 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                 [ Ui.Input.button pressedCancel
                 , Ui.id (domIdPrefix ++ "_cancel")
                 , Ui.background MyUi.secondaryGray
-                , MyUi.focusEffect
                 , Ui.border 1
                 , Ui.Font.color MyUi.black
                 , Ui.contentCenterX
@@ -1573,7 +1572,6 @@ startOrCancel domIdPrefix isMobile pressedCancel pressedStart =
                         8
                     )
                 , Ui.contentCenterX
-                , MyUi.focusEffect
                 , Ui.Font.weight 500
                 ]
                 (Ui.text "Start game")
