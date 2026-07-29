@@ -3051,6 +3051,9 @@ changeUpdate localMsg local =
                                             local.discordGuilds
                             }
 
+                        ViewOverview ->
+                            { local | localUser = { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing } }
+
                 Local_SetName name ->
                     let
                         localUser =

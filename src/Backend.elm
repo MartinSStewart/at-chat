@@ -4728,6 +4728,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                        ViewOverview ->
+                            -- TODO: Send necessary data
+                            BackendExtra.asUser
+                                model
+                                sessionId
+                                (\session _ ->
+                                    ( { model
+                                        | connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
+                                    )
+                                )
+
                 Local_SetName name ->
                     BackendExtra.asUser
                         model

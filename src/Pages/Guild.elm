@@ -328,72 +328,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
 
                         NoDmChannelSelected ->
-                            let
-                                unreads : List (Message ChannelMessageId (Id UserId))
-                                unreads =
-                                    List.concatMap
-                                        (\( guildId, guild ) ->
-                                            List.filterMap
-                                                (\( channelId, channel ) ->
-                                                    case
-                                                        SeqDict.get
-                                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                                            local.localUser.user.lastViewed
-                                                    of
-                                                        Just lastViewedMessageId ->
-                                                            if lastViewedMessageId == DmChannel.latestMessageId channel then
-                                                                Nothing
-
-                                                            else
-                                                                case IdArray.get lastViewedMessageId channel.messages of
-                                                                    Just message ->
-                                                                        case message of
-                                                                            MessageLoaded message2 ->
-                                                                                Just message2
-
-                                                                            MessageUnloaded ->
-                                                                                Nothing
-
-                                                                    Nothing ->
-                                                                        Nothing
-
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                (SeqDict.toList guild.channels)
-                                        )
-                                        (SeqDict.toList local.guilds)
-                                        |> List.sortBy (\message -> Message.createdAt message |> Time.posixToMillis)
-
-                                containerWidth =
-                                    conversationWidth model
-
-                                allUsers =
-                                    LocalState.allUsers local.localUser
-                            in
-                            Ui.column
-                                [ Ui.Font.color MyUi.font1 ]
-                                (List.map
-                                    (\message ->
-                                        messageView
-                                            isMobile
-                                            containerWidth
-                                            False
-                                            SeqDict.empty
-                                            NoHighlight
-                                            IsNotHovered
-                                            False
-                                            local.localUser.session.userId
-                                            allUsers
-                                            local.localUser
-                                            Nothing
-                                            Nothing
-                                            (Id.fromInt 0)
-                                            message
-                                            |> Ui.map (\_ -> FrontendNoOp)
-                                    )
-                                    unreads
-                                )
+                            unreadOverviewNotMobile local model
                     , case ( Route.toShowMembersTab model.route, maybeOtherUserId ) of
                         ( ( ShowMembersTab, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
@@ -432,6 +367,70 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ( ( HideMembersTab, _ ), _ ) ->
                             Ui.none
                     ]
+
+
+unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
+unreadOverviewNotMobile local model =
+    let
+        unreads : List (Message ChannelMessageId (Id UserId))
+        unreads =
+            List.concatMap
+                (\( guildId, guild ) ->
+                    List.filterMap
+                        (\( channelId, channel ) ->
+                            case
+                                SeqDict.get
+                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                    local.localUser.user.lastViewed
+                            of
+                                Just lastViewedMessageId ->
+                                    --if lastViewedMessageId == MessageArray.length channel then
+                                    --    Nothing
+                                    --
+                                    --else
+                                    MessageArray.get lastViewedMessageId channel.messages
+
+                                Nothing ->
+                                    MessageArray.last channel.messages
+                        )
+                        (SeqDict.toList guild.channels)
+                )
+                (SeqDict.toList local.guilds)
+                |> List.sortBy (\message -> Message.createdAt message |> Time.posixToMillis)
+
+        containerWidth =
+            conversationWidth model
+
+        allUsers =
+            LocalState.allUsers local.localUser
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.text "Overview"
+        , Ui.column
+            [ Ui.Font.color MyUi.font1 ]
+            (List.map
+                (\message ->
+                    messageView
+                        False
+                        containerWidth
+                        False
+                        SeqDict.empty
+                        NoHighlight
+                        IsNotHovered
+                        False
+                        local.localUser.session.userId
+                        allUsers
+                        local.localUser
+                        Nothing
+                        Nothing
+                        (Id.fromInt 0)
+                        message
+                        |> Ui.map (\_ -> FrontendNoOp)
+                )
+                unreads
+            )
+        ]
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_

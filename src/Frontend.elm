@@ -6515,6 +6515,9 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
+                                ViewOverview ->
+                                    Command.none
+
                         Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
                             if SeqDict.isEmpty messagesLoaded then
                                 Command.none
