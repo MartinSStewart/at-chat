@@ -2783,6 +2783,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordUpdateRole _ _ _ ->
                             True
 
+                        Types.Server_DiscordUpdateGuildCustomEmojis _ _ ->
+                            True
+
                         Types.Server_UpdateDiscordMembers _ _ ->
                             True
 
