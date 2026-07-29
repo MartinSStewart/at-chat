@@ -14,7 +14,6 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
-    , submitButtonWide
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -1126,7 +1125,7 @@ discordMemberListView isMobile currentUserId localUser guildId guild channelId =
         Just members ->
             Ui.column
                 []
-                [ Ui.el [ Ui.paddingXY 8 4 ] (Ui.text ("Members (" ++ String.fromInt (SeqDict.size members + 1) ++ ")"))
+                [ Ui.el [ Ui.paddingXY 8 4 ] (Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")"))
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr
@@ -7481,7 +7480,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
             , Ui.contentCenterY
             , MyUi.hoverText "Invite users"
             ]
-            (Ui.html Icons.inviteUserIcon)
+            (Ui.html Icons.gear)
         ]
         (if showSearch then
             channelSearchRow isMobile channelSearch
