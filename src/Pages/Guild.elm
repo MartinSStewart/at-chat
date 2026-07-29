@@ -3580,6 +3580,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
                           else
                             Ui.width Ui.shrink
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
@@ -3605,6 +3606,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
                           else
                             Ui.width Ui.shrink
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
@@ -3638,9 +3640,15 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                                     y
                             , z = 0
                             }
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
+
+
+emojiSelectorZIndex : Ui.Attribute msg
+emojiSelectorZIndex =
+    MyUi.htmlStyle "z-index" "30"
 
 
 replyToHeader :
