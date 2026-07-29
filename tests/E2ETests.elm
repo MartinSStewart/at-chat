@@ -608,6 +608,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     admin
                     100
                     (Dom.id "channel_textinput")
+                    (selectionAround "/)\n```el")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text partial selection over a code block" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
                     (selectionAround "First bullet point\n* Second bullet with *bold* text")
                 , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across bullet points" }
 
