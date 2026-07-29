@@ -566,9 +566,6 @@ tabBodyView local loggedIn model =
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute _ ->
-                    Nothing
-
                 GuildSettingsRoute ->
                     Nothing
 
@@ -645,9 +642,6 @@ tabBodyView local loggedIn model =
                     Nothing
 
                 DiscordChannel_NewChannelRoute ->
-                    Nothing
-
-                DiscordChannel_EditChannelRoute _ ->
                     Nothing
 
                 DiscordChannel_GuildSettingsRoute ->

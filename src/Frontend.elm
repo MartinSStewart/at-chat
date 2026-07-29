@@ -78,7 +78,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -452,7 +452,6 @@ loadedInitHelper timezone userAgent loginData loading =
             , editChannelForm = SeqDict.empty
             , editGuildForm = SeqDict.empty
             , newGuildForm = Nothing
-            , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
             , textInputFocus = Nothing
             , previousTextInputFocus = Nothing
@@ -934,52 +933,6 @@ updateLoaded msg model =
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
-
-        MouseEnteredChannelName guildId channelId threadRoute ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | channelNameHover = GuildChannelNameHover guildId channelId threadRoute }, Command.none )
-                )
-                model
-
-        MouseExitedChannelName guildId channelId threadRoute ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | channelNameHover =
-                            if loggedIn.channelNameHover == GuildChannelNameHover guildId channelId threadRoute then
-                                NoChannelNameHover
-
-                            else
-                                loggedIn.channelNameHover
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        MouseEnteredDiscordChannelName guildId channelId threadRoute ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | channelNameHover = DiscordGuildChannelNameHover guildId channelId threadRoute }, Command.none )
-                )
-                model
-
-        MouseExitedDiscordChannelName guildId channelId threadRoute ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | channelNameHover =
-                            if loggedIn.channelNameHover == DiscordGuildChannelNameHover guildId channelId threadRoute then
-                                NoChannelNameHover
-
-                            else
-                                loggedIn.channelNameHover
-                      }
-                    , Command.none
-                    )
-                )
-                model
 
         EditChannelFormChanged guildId channelId form ->
             FrontendExtra.updateLoggedIn

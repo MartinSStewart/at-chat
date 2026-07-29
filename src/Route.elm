@@ -79,7 +79,6 @@ type alias DiscordGuildRouteData =
 type ChannelRoute
     = ChannelRoute (Id ChannelId) ThreadRouteWithFriends (Maybe ChannelHeaderTab)
     | NewChannelRoute
-    | EditChannelRoute (Id ChannelId)
     | GuildSettingsRoute
     | JoinRoute (SecretId InviteLinkId)
 
@@ -87,7 +86,6 @@ type ChannelRoute
 type DiscordChannelRoute
     = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends (Maybe ChannelHeaderTab)
     | DiscordChannel_NewChannelRoute
-    | DiscordChannel_EditChannelRoute (Discord.Id Discord.ChannelId)
     | DiscordChannel_GuildSettingsRoute
 
 
@@ -178,9 +176,6 @@ decode url =
                                             (decodeChannelHeaderTab url2)
                                         )
 
-                                ( Just channelId2, [ "edit" ] ) ->
-                                    GuildRoute guildId2 (EditChannelRoute channelId2)
-
                                 _ ->
                                     HomePageRoute
 
@@ -247,10 +242,6 @@ decode url =
                                             (NoThreadWithFriends Nothing showMembers)
                                             (decodeChannelHeaderTab url2)
                                         )
-                                        |> DiscordGuildRoute
-
-                                ( Just channelId2, [ "edit" ] ) ->
-                                    DiscordGuildRouteData userId2 guildId2 (DiscordChannel_EditChannelRoute channelId2)
                                         |> DiscordGuildRoute
 
                                 _ ->
@@ -403,9 +394,6 @@ toChannelHeaderTab route =
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute _ ->
-                    Nothing
-
                 GuildSettingsRoute ->
                     Nothing
 
@@ -418,9 +406,6 @@ toChannelHeaderTab route =
                     maybeTab
 
                 DiscordChannel_NewChannelRoute ->
-                    Nothing
-
-                DiscordChannel_EditChannelRoute _ ->
                     Nothing
 
                 DiscordChannel_GuildSettingsRoute ->
@@ -468,9 +453,6 @@ toShowMembersTab route =
                 NewChannelRoute ->
                     ( HideMembersTab, False )
 
-                EditChannelRoute _ ->
-                    ( HideMembersTab, False )
-
                 GuildSettingsRoute ->
                     ( HideMembersTab, False )
 
@@ -483,9 +465,6 @@ toShowMembersTab route =
                     threadRouteToShowMembersTab threadRoute
 
                 DiscordChannel_NewChannelRoute ->
-                    ( HideMembersTab, False )
-
-                DiscordChannel_EditChannelRoute _ ->
                     ( HideMembersTab, False )
 
                 DiscordChannel_GuildSettingsRoute ->
@@ -631,9 +610,6 @@ encode route =
                                     , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
 
-                        EditChannelRoute channelId ->
-                            ( [ "g", Id.toString guildId, "c", Id.toString channelId, "edit" ], [] )
-
                         NewChannelRoute ->
                             ( [ "g", Id.toString guildId, "new" ], [] )
 
@@ -670,17 +646,6 @@ encode route =
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
-
-                        DiscordChannel_EditChannelRoute channelId ->
-                            ( [ "dg"
-                              , Discord.idToString currentDiscordUserId
-                              , Discord.idToString guildId
-                              , "c"
-                              , Discord.idToString channelId
-                              , "edit"
-                              ]
-                            , []
-                            )
 
                         DiscordChannel_NewChannelRoute ->
                             ( [ "dg", Discord.idToString currentDiscordUserId, Discord.idToString guildId, "new" ]
