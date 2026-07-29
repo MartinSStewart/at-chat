@@ -569,6 +569,8 @@ test =
             , selectionHighlightTest "https://abc.com/x"
             , selectionHighlightTest "* bullet1\n* bullet2"
             , selectionHighlightTest "a||*b*||c"
+            , selectionHighlightTest "a```elm\nfoo = 1\n```b"
+            , selectionHighlightTest "a```\nplain\n```b"
             ]
         ]
 
