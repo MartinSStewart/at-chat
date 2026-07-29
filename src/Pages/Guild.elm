@@ -925,12 +925,8 @@ exportChannelButton exportChannelId =
         (Ui.text "Export channel")
 
 
-{-| The member column on desktop is opened and closed from the channel header,
-so it carries the button that closes it again. The button lines up with the
-channel header next to it and stays put while the members scroll.
--}
-memberColumnContainer : Bool -> List (Element FrontendMsg_) -> Element FrontendMsg_
-memberColumnContainer isThread contents =
+memberColumnContainerNotMobile : Bool -> List (Element FrontendMsg_) -> Element FrontendMsg_
+memberColumnContainerNotMobile isThread contents =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.alignRight
@@ -962,6 +958,7 @@ memberColumnContainer isThread contents =
                 , Ui.paddingXY 12 0
                 , Ui.contentCenterY
                 , Ui.Font.color MyUi.font3
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
                 , MyUi.hoverText "Hide members"
                 ]
                 (Ui.html Icons.x)
@@ -979,58 +976,58 @@ memberColumnContainer isThread contents =
 don't have an edit form so nothing is shown for them.
 -}
 channelSettingsForm :
-    Id GuildId
+    LocalUser
+    -> Id GuildId
     -> ChannelRoute
     -> FrontendGuild
     -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     -> Bool
     -> Element FrontendMsg_
-channelSettingsForm guildId channelRoute guild editChannelForm isThread =
+channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread =
     case ( channelRouteToChannelId channelRoute, isThread ) of
         ( Just channelId, False ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    let
-                        form : EditChannelForm
-                        form =
-                            SeqDict.get ( guildId, channelId ) editChannelForm
-                                |> Maybe.withDefault (editChannelFormInit channel)
+                    (if localUser.session.userId == MembersAndOwner.owner guild.membersAndOwner then
+                        let
+                            form : EditChannelForm
+                            form =
+                                SeqDict.get ( guildId, channelId ) editChannelForm
+                                    |> Maybe.withDefault (editChannelFormInit channel)
 
-                        isEmpty : Bool
-                        isEmpty =
-                            MessageArray.isEmpty channel.messages
+                            isEmpty : Bool
+                            isEmpty =
+                                MessageArray.isEmpty channel.messages
 
-                        channelNameString : String
-                        channelNameString =
-                            ChannelName.toString channel.name
+                            channelNameString : String
+                            channelNameString =
+                                ChannelName.toString channel.name
 
-                        channelDescriptionString : String
-                        channelDescriptionString =
-                            ChannelDescription.toString channel.description
+                            channelDescriptionString : String
+                            channelDescriptionString =
+                                ChannelDescription.toString channel.description
 
-                        hasChanges : Bool
-                        hasChanges =
-                            form.name /= channelNameString || form.description /= channelDescriptionString
+                            hasChanges : Bool
+                            hasChanges =
+                                form.name /= channelNameString || form.description /= channelDescriptionString
 
-                        confirmationMatches : Bool
-                        confirmationMatches =
-                            form.deleteConfirmation == channelNameString
+                            confirmationMatches : Bool
+                            confirmationMatches =
+                                form.deleteConfirmation == channelNameString
 
-                        ( deleteOnPress, deleteEnabled ) =
-                            if isEmpty then
-                                ( PressedDeleteChannel guildId channelId, True )
+                            ( deleteOnPress, deleteEnabled ) =
+                                if isEmpty then
+                                    ( PressedDeleteChannel guildId channelId, True )
 
-                            else if not form.showDeleteConfirmation then
-                                ( EditChannelFormChanged guildId channelId { form | showDeleteConfirmation = True }, True )
+                                else if not form.showDeleteConfirmation then
+                                    ( EditChannelFormChanged guildId channelId { form | showDeleteConfirmation = True }, True )
 
-                            else if confirmationMatches then
-                                ( PressedDeleteChannel guildId channelId, True )
+                                else if confirmationMatches then
+                                    ( PressedDeleteChannel guildId channelId, True )
 
-                            else
-                                ( FrontendNoOp, False )
-                    in
-                    Ui.column
-                        [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
+                                else
+                                    ( FrontendNoOp, False )
+                        in
                         [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
                         , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
                         , if hasChanges then
@@ -1082,6 +1079,11 @@ channelSettingsForm guildId channelRoute guild editChannelForm isThread =
                             ]
                             (Ui.text "Delete channel")
                         ]
+
+                     else
+                        [ exportChannelButton (ExportChannel_Guild guildId channelId) ]
+                    )
+                        |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
                 Nothing ->
                     Ui.none
@@ -1144,9 +1146,15 @@ memberColumnNotMobile :
     -> Bool
     -> Element FrontendMsg_
 memberColumnNotMobile localUser guildId channelRoute guild editChannelForm isThread =
-    memberColumnContainer
+    memberColumnContainerNotMobile
         isThread
-        [ channelSettingsForm guildId channelRoute guild editChannelForm isThread
+        [ channelSettingsForm
+            localUser
+            guildId
+            channelRoute
+            guild
+            editChannelForm
+            isThread
         , Ui.Lazy.lazy3 memberListView False localUser guild.membersAndOwner
         ]
 
@@ -1181,7 +1189,7 @@ discordMemberColumnNotMobile :
     -> Bool
     -> Element FrontendMsg_
 discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
-    memberColumnContainer
+    memberColumnContainerNotMobile
         isThread
         [ if isThread then
             Ui.none
@@ -1230,7 +1238,6 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
             , if isThread then
                 Ui.text "Thread settings"
 
@@ -1245,7 +1252,7 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ channelSettingsForm guildId channelRoute guild editChannelForm isThread
+            [ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread
             , Ui.Lazy.lazy3 memberListView True localUser guild.membersAndOwner
             ]
         ]
@@ -1271,7 +1278,6 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThrea
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
             , if isThread then
                 Ui.text "Thread members"
 
@@ -1317,7 +1323,7 @@ dmMemberColumnNotMobile localUser otherUserId isThread =
         members =
             dmMembers localUser otherUserId
     in
-    memberColumnContainer
+    memberColumnContainerNotMobile
         isThread
         [ if isThread then
             Ui.none
@@ -1352,7 +1358,6 @@ dmMemberColumnMobile canScroll2 localUser otherUserId isThread =
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
             , if isThread then
                 Ui.text "Thread settings"
 
@@ -1395,7 +1400,7 @@ discordDmMemberColumnNotMobile localUser currentDiscordUserId channelId dmChanne
         members =
             NonemptyDict.keys dmChannel.members |> List.Nonempty.toList
     in
-    memberColumnContainer
+    memberColumnContainerNotMobile
         False
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
@@ -1434,7 +1439,6 @@ discordDmMemberColumnMobile canScroll2 localUser currentDiscordUserId channelId 
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
             , Ui.text "Channel settings"
             ]
         , Ui.column
@@ -4687,7 +4691,7 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode re
                             )
                         , Ui.border 1
                         , Ui.width Ui.shrink
-                        , Ui.Font.bold
+                        , Ui.Font.weight 500
                         , case isHovered of
                             IsHovered ->
                                 reactionPopup customEmojis allUsers animationMode emoji users |> Ui.above
@@ -7242,7 +7246,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
             , Ui.contentCenterY
             , MyUi.hoverText "Invite users"
             ]
-            (Ui.html Icons.inviteUserIcon)
+            (Ui.html Icons.gear)
         ]
         (if showSearch then
             channelSearchRow isMobile channelSearch

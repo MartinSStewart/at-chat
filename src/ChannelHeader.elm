@@ -51,7 +51,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
+        (Route.toShowMembersTab model.route |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -90,7 +90,7 @@ thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFront
 thread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
+        (Route.toShowMembersTab model.route |> Just)
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
                 Ui.row
@@ -126,7 +126,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
     in
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
+        (Route.toShowMembersTab model.route |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 Ui.row
@@ -164,7 +164,7 @@ discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 
 discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
-        (Route.toShowMembersTab model.route |> Tuple.first |> Just)
+        (Route.toShowMembersTab model.route |> Just)
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
                 if chattingWithYourself data local then
@@ -244,11 +244,11 @@ button is left out too, since the column carries its own close button.
 -}
 channelHeader :
     Bool
-    -> Maybe ShowMembersTab
+    -> Maybe ( ShowMembersTab, Bool )
     -> Element FrontendMsg_
     -> Maybe (Element FrontendMsg_)
     -> Element FrontendMsg_
-channelHeader isMobile2 showMembers content tabContent =
+channelHeader isMobile showMembers content tabContent =
     Ui.column
         [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
@@ -275,10 +275,10 @@ channelHeader isMobile2 showMembers content tabContent =
             , Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
             ]
-            (if isMobile2 then
+            (if isMobile then
                 [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
                 , Ui.el [ Ui.height Ui.fill, Ui.contentCenterY ] content
-                , showMembersButton showMembers
+                , channelSettings isMobile showMembers
                 ]
 
              else
@@ -288,16 +288,16 @@ channelHeader isMobile2 showMembers content tabContent =
                     , Ui.height Ui.fill
                     ]
                     content
-                , showMembersButton showMembers
+                , channelSettings isMobile showMembers
                 ]
             )
         ]
 
 
-showMembersButton : Maybe ShowMembersTab -> Element FrontendMsg_
-showMembersButton showMembers =
+channelSettings : Bool -> Maybe ( ShowMembersTab, Bool ) -> Element FrontendMsg_
+channelSettings isMobile showMembers =
     case showMembers of
-        Just HideMembersTab ->
+        Just ( HideMembersTab, isThread ) ->
             MyUi.elButton
                 (Dom.id "guild_showMembers")
                 PressedShowMembers
@@ -306,11 +306,19 @@ showMembersButton showMembers =
                 , Ui.height Ui.fill
                 , Ui.paddingXY 12 0
                 , Ui.contentCenterY
-                , MyUi.hoverText "Show members"
-                ]
-                (Ui.html Icons.users)
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText
+                    (if isThread then
+                        "Thread settings"
 
-        Just ShowMembersTab ->
+                     else
+                        "Channel settings"
+                    )
+                ]
+                (Ui.html Icons.gear)
+
+        Just ( ShowMembersTab, _ ) ->
             Ui.none
 
         Nothing ->
