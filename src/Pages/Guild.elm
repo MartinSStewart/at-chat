@@ -14,6 +14,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
+    , submitButtonWide
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -937,6 +938,8 @@ memberColumnContainer isThread contents =
         , Ui.Font.color MyUi.font1
         , Ui.width (Ui.px MyUi.memberColumnWidth)
         , Ui.heightMin 0
+        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+        , Ui.borderColor MyUi.border2
         ]
         [ Ui.row
             [ Ui.height (Ui.px MyUi.channelHeaderHeight)
@@ -987,13 +990,98 @@ channelSettingsForm guildId channelRoute guild editChannelForm isThread =
         ( Just channelId, False ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    editChannelFormView
-                        guildId
-                        channelId
-                        channel
-                        (SeqDict.get ( guildId, channelId ) editChannelForm
-                            |> Maybe.withDefault (editChannelFormInit channel)
-                        )
+                    let
+                        form : EditChannelForm
+                        form =
+                            SeqDict.get ( guildId, channelId ) editChannelForm
+                                |> Maybe.withDefault (editChannelFormInit channel)
+
+                        isEmpty : Bool
+                        isEmpty =
+                            MessageArray.isEmpty channel.messages
+
+                        channelNameString : String
+                        channelNameString =
+                            ChannelName.toString channel.name
+
+                        channelDescriptionString : String
+                        channelDescriptionString =
+                            ChannelDescription.toString channel.description
+
+                        hasChanges : Bool
+                        hasChanges =
+                            form.name /= channelNameString || form.description /= channelDescriptionString
+
+                        confirmationMatches : Bool
+                        confirmationMatches =
+                            form.deleteConfirmation == channelNameString
+
+                        ( deleteOnPress, deleteEnabled ) =
+                            if isEmpty then
+                                ( PressedDeleteChannel guildId channelId, True )
+
+                            else if not form.showDeleteConfirmation then
+                                ( EditChannelFormChanged guildId channelId { form | showDeleteConfirmation = True }, True )
+
+                            else if confirmationMatches then
+                                ( PressedDeleteChannel guildId channelId, True )
+
+                            else
+                                ( FrontendNoOp, False )
+                    in
+                    Ui.column
+                        [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
+                        [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+                        , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+                        , if hasChanges then
+                            Ui.row
+                                [ Ui.spacing 8 ]
+                                [ MyUi.secondaryButton
+                                    (Dom.id "guild_resetEditChannel")
+                                    (PressedResetEditChannelChanges guildId channelId)
+                                    "Reset"
+                                , submitButtonWide
+                                    (Dom.id "guild_submitEditChannel")
+                                    (PressedSubmitEditChannelChanges guildId channelId form)
+                                    "Save changes"
+                                ]
+
+                          else
+                            Ui.none
+                        , exportChannelButton (ExportChannel_Guild guildId channelId)
+                        , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none
+                        , if not isEmpty && form.showDeleteConfirmation then
+                            deleteConfirmationInput channelNameString form
+                                |> Ui.map (EditChannelFormChanged guildId channelId)
+
+                          else
+                            Ui.none
+                        , MyUi.elButton
+                            (Dom.id "guild_deleteChannel")
+                            deleteOnPress
+                            [ Ui.background
+                                (if deleteEnabled then
+                                    MyUi.deleteButtonBackground
+
+                                 else
+                                    MyUi.disabledButtonBackground
+                                )
+                            , Ui.paddingXY 8 4
+                            , Ui.rounded 4
+                            , Ui.Font.color MyUi.deleteButtonFont
+                            , Ui.Font.weight 500
+                            , Ui.Font.center
+                            , Ui.borderColor
+                                (if deleteEnabled then
+                                    MyUi.deleteButtonBorder
+
+                                 else
+                                    MyUi.disabledButtonBorder
+                                )
+                            , Ui.border 1
+                            ]
+                            (Ui.text "Delete channel")
+                        ]
 
                 Nothing ->
                     Ui.none
@@ -1002,39 +1090,49 @@ channelSettingsForm guildId channelRoute guild editChannelForm isThread =
             Ui.none
 
 
-{-| The member list is the only part of the member column that's expensive to
-render, so it's the part that gets lazily rendered.
--}
-memberListNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberListNotMobile localUser membersAndOwner =
+memberListView : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
+memberListView isMobile localUser membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
     in
     Ui.column
-        [ Ui.paddingXY 8 4 ]
-        [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+        []
+        [ Ui.el [ Ui.paddingXY 8 4 ] (Ui.text ("Members (" ++ String.fromInt (SeqDict.size members + 1) ++ ")"))
         , Ui.column
             [ Ui.height Ui.fill ]
-            (SeqDict.foldr (\userId _ list -> memberLabel False localUser userId :: list) [] members)
+            (memberLabel isMobile localUser (MembersAndOwner.owner membersAndOwner)
+                :: SeqDict.foldr (\userId _ list -> memberLabel isMobile localUser userId :: list) [] members
+            )
         ]
 
 
-memberListMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
-memberListMobile localUser membersAndOwner =
-    let
-        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-        members =
-            MembersAndOwner.members membersAndOwner
-    in
-    Ui.column
-        [ Ui.paddingXY 8 4 ]
-        [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-        , Ui.column
-            [ Ui.height Ui.fill ]
-            (SeqDict.foldr (\userId _ list -> memberLabel True localUser userId :: list) [] members)
-        ]
+discordMemberListView :
+    Bool
+    -> Discord.Id Discord.UserId
+    -> LocalUser
+    -> Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> Discord.Id Discord.ChannelId
+    -> Element FrontendMsg_
+discordMemberListView isMobile currentUserId localUser guildId guild channelId =
+    case discordChannelViewers guildId guild channelId of
+        Nothing ->
+            Ui.none
+
+        Just members ->
+            Ui.column
+                []
+                [ Ui.el [ Ui.paddingXY 8 4 ] (Ui.text ("Members (" ++ String.fromInt (SeqDict.size members + 1) ++ ")"))
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (SeqDict.foldr
+                        (\userId _ list -> discordMemberLabel isMobile localUser currentUserId userId :: list)
+                        []
+                        members
+                    )
+                ]
 
 
 memberColumnNotMobile :
@@ -1048,19 +1146,8 @@ memberColumnNotMobile :
 memberColumnNotMobile localUser guildId channelRoute guild editChannelForm isThread =
     memberColumnContainer
         isThread
-        [ case ( channelRouteToChannelId channelRoute, isThread ) of
-            ( Just channelId, False ) ->
-                Ui.el [ Ui.padding 8 ] (exportChannelButton (ExportChannel_Guild guildId channelId))
-
-            _ ->
-                Ui.none
-        , channelSettingsForm guildId channelRoute guild editChannelForm isThread
-        , Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ Ui.text "Owner"
-            , memberLabel False localUser (MembersAndOwner.owner guild.membersAndOwner)
-            ]
-        , Ui.Lazy.lazy2 memberListNotMobile localUser guild.membersAndOwner
+        [ channelSettingsForm guildId channelRoute guild editChannelForm isThread
+        , Ui.Lazy.lazy3 memberListView False localUser guild.membersAndOwner
         ]
 
 
@@ -1094,34 +1181,20 @@ discordMemberColumnNotMobile :
     -> Bool
     -> Element FrontendMsg_
 discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
-    case discordChannelViewers guildId guild channelId of
-        Nothing ->
-            Ui.none
+    memberColumnContainer
+        isThread
+        [ Ui.column
+            [ Ui.paddingXY 8 4 ]
+            [ if isThread then
+                Ui.none
 
-        Just members ->
-            memberColumnContainer
-                isThread
-                [ Ui.column
-                    [ Ui.paddingXY 8 4 ]
-                    [ if isThread then
-                        Ui.none
-
-                      else
-                        Ui.el
-                            [ Ui.paddingXY 0 4 ]
-                            (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
-                    , Ui.text "Owner"
-                    , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
-                    , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-                    , Ui.column
-                        [ Ui.height Ui.fill ]
-                        (SeqDict.foldr
-                            (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
-                            []
-                            members
-                        )
-                    ]
-                ]
+              else
+                Ui.el
+                    [ Ui.paddingXY 0 4 ]
+                    (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+            , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
+            ]
+        ]
 
 
 discordMemberColumnContainer : List (Element msg) -> Element msg
@@ -1175,21 +1248,13 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ case ( channelRouteToChannelId channelRoute, isThread ) of
-                ( Just channelId, False ) ->
-                    Ui.el
-                        [ Ui.paddingXY 8 4 ]
-                        (exportChannelButton (ExportChannel_Guild guildId channelId))
-
-                _ ->
-                    Ui.none
-            , channelSettingsForm guildId channelRoute guild editChannelForm isThread
+            [ channelSettingsForm guildId channelRoute guild editChannelForm isThread
             , Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text "Owner"
                 , memberLabel True localUser (MembersAndOwner.owner guild.membersAndOwner)
                 ]
-            , Ui.Lazy.lazy2 memberListMobile localUser guild.membersAndOwner
+            , Ui.Lazy.lazy3 memberListView True localUser guild.membersAndOwner
             ]
         ]
 
@@ -1433,7 +1498,7 @@ memberLabel isMobile localUser userId =
             }
         )
         [ Ui.spacing 8
-        , Ui.paddingXY 0 4
+        , Ui.paddingXY 8 4
         , MyUi.hover
             isMobile
             [ Ui.Anim.backgroundColor MyUi.weakHoverHighlight
@@ -1462,7 +1527,7 @@ discordMemberLabel isMobile localUser currentUserId userId =
         (Dom.id ("guild_openDiscordDm_" ++ Discord.idToString userId))
         (PressedDiscordGuildMemberLabel { currentUserId = currentUserId, otherUserId = userId })
         [ Ui.spacing 8
-        , Ui.paddingXY 0 4
+        , Ui.paddingXY 8 4
         , MyUi.hover
             isMobile
             [ Ui.Anim.backgroundColor MyUi.weakHoverHighlight
@@ -1880,20 +1945,11 @@ editGuildNameSection guildId guild form =
                 Ui.none
         , if hasChanges then
             Ui.row
-                [ Ui.spacing 16 ]
-                [ MyUi.elButton
+                [ Ui.spacing 8 ]
+                [ MyUi.secondaryButton
                     (Dom.id "guild_resetEditGuild")
                     (PressedResetEditGuildChanges guildId)
-                    [ Ui.paddingXY 16 8
-                    , Ui.background MyUi.cancelButtonBackground
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 8
-                    , Ui.Font.color MyUi.buttonFontColor
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    ]
-                    (Ui.text "Reset")
+                    "Reset"
                 , submitButton
                     (Dom.id "guild_submitEditGuild")
                     (PressedSubmitEditGuildChanges guildId form)
@@ -1937,7 +1993,7 @@ deleteGuildSection guildId guild form =
         , MyUi.elButton
             (Dom.id "guild_deleteGuild")
             deleteOnPress
-            [ Ui.paddingXY 16 8
+            [ Ui.paddingXY 16 4
             , Ui.background
                 (if deleteEnabled then
                     MyUi.deleteButtonBackground
@@ -1946,7 +2002,7 @@ deleteGuildSection guildId guild form =
                     MyUi.disabledButtonBackground
                 )
             , Ui.width Ui.shrink
-            , Ui.rounded 8
+            , Ui.rounded 4
             , Ui.Font.color MyUi.deleteButtonFont
             , Ui.Font.bold
             , Ui.borderColor
@@ -8548,105 +8604,6 @@ editChannelFormInit channel =
     }
 
 
-editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg_
-editChannelFormView guildId channelId channel form =
-    let
-        isEmpty : Bool
-        isEmpty =
-            MessageArray.isEmpty channel.messages
-
-        channelNameString : String
-        channelNameString =
-            ChannelName.toString channel.name
-
-        channelDescriptionString : String
-        channelDescriptionString =
-            ChannelDescription.toString channel.description
-
-        hasChanges : Bool
-        hasChanges =
-            form.name /= channelNameString || form.description /= channelDescriptionString
-
-        confirmationMatches : Bool
-        confirmationMatches =
-            form.deleteConfirmation == channelNameString
-
-        ( deleteOnPress, deleteEnabled ) =
-            if isEmpty then
-                ( PressedDeleteChannel guildId channelId, True )
-
-            else if not form.showDeleteConfirmation then
-                ( EditChannelFormChanged guildId channelId { form | showDeleteConfirmation = True }, True )
-
-            else if confirmationMatches then
-                ( PressedDeleteChannel guildId channelId, True )
-
-            else
-                ( FrontendNoOp, False )
-    in
-    Ui.column
-        [ Ui.Font.color MyUi.font1, Ui.alignTop, Ui.padding 16, Ui.spacing 16 ]
-        [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
-        , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
-        , if hasChanges then
-            Ui.row
-                [ Ui.spacing 16 ]
-                [ MyUi.elButton
-                    (Dom.id "guild_resetEditChannel")
-                    (PressedResetEditChannelChanges guildId channelId)
-                    [ Ui.paddingXY 16 8
-                    , Ui.background MyUi.cancelButtonBackground
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 8
-                    , Ui.Font.color MyUi.buttonFontColor
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    ]
-                    (Ui.text "Reset")
-                , submitButton
-                    (Dom.id "guild_submitEditChannel")
-                    (PressedSubmitEditChannelChanges guildId channelId form)
-                    "Save changes"
-                ]
-
-          else
-            Ui.none
-        , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
-        , if not isEmpty && form.showDeleteConfirmation then
-            deleteConfirmationInput channelNameString form
-                |> Ui.map (EditChannelFormChanged guildId channelId)
-
-          else
-            Ui.none
-        , MyUi.elButton
-            (Dom.id "guild_deleteChannel")
-            deleteOnPress
-            [ Ui.paddingXY 16 8
-            , Ui.background
-                (if deleteEnabled then
-                    MyUi.deleteButtonBackground
-
-                 else
-                    MyUi.disabledButtonBackground
-                )
-            , Ui.width Ui.shrink
-            , Ui.rounded 8
-            , Ui.Font.color MyUi.deleteButtonFont
-            , Ui.Font.bold
-            , Ui.borderColor
-                (if deleteEnabled then
-                    MyUi.deleteButtonBorder
-
-                 else
-                    MyUi.disabledButtonBorder
-                )
-            , Ui.border 1
-            ]
-            (Ui.text "Delete channel")
-        ]
-
-
 deleteConfirmationInput : String -> EditChannelForm -> Element EditChannelForm
 deleteConfirmationInput channelNameString form =
     let
@@ -8692,11 +8649,27 @@ submitButton htmlId onPress text =
     MyUi.elButton
         htmlId
         onPress
-        [ Ui.paddingXY 16 8
+        [ Ui.paddingXY 16 4
         , Ui.background MyUi.buttonBackground
         , Ui.width Ui.shrink
-        , Ui.rounded 8
-        , Ui.Font.bold
+        , Ui.rounded 4
+        , Ui.Font.weight 500
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.border 1
+        ]
+        (Ui.text text)
+
+
+submitButtonWide : HtmlId -> msg -> String -> Element msg
+submitButtonWide htmlId onPress text =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.paddingXY 8 4
+        , Ui.background MyUi.buttonBackground
+        , Ui.Font.center
+        , Ui.rounded 4
+        , Ui.Font.weight 500
         , Ui.borderColor MyUi.buttonBorder
         , Ui.border 1
         ]
@@ -8710,7 +8683,7 @@ channelNameInput form =
             Ui.Input.label
                 "newChannelName"
                 [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
-                (Ui.text "Channel name")
+                (Ui.text "Name")
     in
     Ui.column
         []
@@ -8742,7 +8715,7 @@ channelDescriptionInput form =
             Ui.Input.label
                 "channelDescription"
                 [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
-                (Ui.text "Channel description")
+                (Ui.text "Description")
     in
     Ui.column
         []

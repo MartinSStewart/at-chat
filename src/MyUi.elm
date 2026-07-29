@@ -873,7 +873,7 @@ secondaryButton htmlId onPress label2 =
         , Ui.Font.color black
         , Ui.rounded 4
         , Ui.width Ui.shrink
-        , Ui.paddingXY 16 8
+        , Ui.paddingXY 16 4
         , Ui.Font.weight 500
         ]
         (Ui.text label2)
