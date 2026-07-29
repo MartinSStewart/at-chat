@@ -538,13 +538,13 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ( ShowMembersTab, isThread ) ->
-                                    Ui.Lazy.lazy6
-                                        memberColumnMobile
+                                    memberColumnMobile
                                         canScroll2
                                         local.localUser
                                         guildId
                                         channelRoute
-                                        guild.membersAndOwner
+                                        guild
+                                        loggedIn.editChannelForm
                                         isThread
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -617,12 +617,12 @@ guildView model guildId channelRoute loggedIn local =
                                     ]
                             , case Route.toShowMembersTab model.route of
                                 ( ShowMembersTab, isThread ) ->
-                                    Ui.Lazy.lazy5
-                                        memberColumnNotMobile
+                                    memberColumnNotMobile
                                         local.localUser
                                         guildId
                                         channelRoute
-                                        guild.membersAndOwner
+                                        guild
+                                        loggedIn.editChannelForm
                                         isThread
                                         |> Ui.el
                                             [ Ui.width Ui.shrink
@@ -972,19 +972,80 @@ memberColumnContainer isThread contents =
         ]
 
 
-memberColumnNotMobile :
-    LocalUser
-    -> Id GuildId
+{-| Only actual channels can be edited. Threads and the other channel routes
+don't have an edit form so nothing is shown for them.
+-}
+channelSettingsForm :
+    Id GuildId
     -> ChannelRoute
-    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> FrontendGuild
+    -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     -> Bool
     -> Element FrontendMsg_
-memberColumnNotMobile localUser guildId channelRoute membersAndOwner isThread =
+channelSettingsForm guildId channelRoute guild editChannelForm isThread =
+    case ( channelRouteToChannelId channelRoute, isThread ) of
+        ( Just channelId, False ) ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    editChannelFormView
+                        guildId
+                        channelId
+                        channel
+                        (SeqDict.get ( guildId, channelId ) editChannelForm
+                            |> Maybe.withDefault (editChannelFormInit channel)
+                        )
+
+                Nothing ->
+                    Ui.none
+
+        _ ->
+            Ui.none
+
+
+{-| The member list is the only part of the member column that's expensive to
+render, so it's the part that gets lazily rendered.
+-}
+memberListNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
+memberListNotMobile localUser membersAndOwner =
     let
         members : SeqDict (Id UserId) { joinedAt : Time.Posix }
         members =
             MembersAndOwner.members membersAndOwner
     in
+    Ui.column
+        [ Ui.paddingXY 8 4 ]
+        [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+        , Ui.column
+            [ Ui.height Ui.fill ]
+            (SeqDict.foldr (\userId _ list -> memberLabel False localUser userId :: list) [] members)
+        ]
+
+
+memberListMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg_
+memberListMobile localUser membersAndOwner =
+    let
+        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+        members =
+            MembersAndOwner.members membersAndOwner
+    in
+    Ui.column
+        [ Ui.paddingXY 8 4 ]
+        [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
+        , Ui.column
+            [ Ui.height Ui.fill ]
+            (SeqDict.foldr (\userId _ list -> memberLabel True localUser userId :: list) [] members)
+        ]
+
+
+memberColumnNotMobile :
+    LocalUser
+    -> Id GuildId
+    -> ChannelRoute
+    -> FrontendGuild
+    -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
+    -> Bool
+    -> Element FrontendMsg_
+memberColumnNotMobile localUser guildId channelRoute guild editChannelForm isThread =
     memberColumnContainer
         isThread
         [ case ( channelRouteToChannelId channelRoute, isThread ) of
@@ -993,19 +1054,13 @@ memberColumnNotMobile localUser guildId channelRoute membersAndOwner isThread =
 
             _ ->
                 Ui.none
-        , editChannelFormView guildId channelId channel form
+        , channelSettingsForm guildId channelRoute guild editChannelForm isThread
         , Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
-            , memberLabel False localUser (MembersAndOwner.owner membersAndOwner)
+            , memberLabel False localUser (MembersAndOwner.owner guild.membersAndOwner)
             ]
-        , Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-            , Ui.column
-                [ Ui.height Ui.fill ]
-                (SeqDict.foldr (\userId _ list -> memberLabel False localUser userId :: list) [] members)
-            ]
+        , Ui.Lazy.lazy2 memberListNotMobile localUser guild.membersAndOwner
         ]
 
 
@@ -1089,15 +1144,11 @@ memberColumnMobile :
     -> LocalUser
     -> Id GuildId
     -> ChannelRoute
-    -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
+    -> FrontendGuild
+    -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     -> Bool
     -> Element FrontendMsg_
-memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner isThread =
-    let
-        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-        members =
-            MembersAndOwner.members membersAndOwner
-    in
+memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelForm isThread =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.row
@@ -1132,19 +1183,13 @@ memberColumnMobile canScroll2 localUser guildId channelRoute membersAndOwner isT
 
                 _ ->
                     Ui.none
-            , editChannelFormView guildId channelId channel form
+            , channelSettingsForm guildId channelRoute guild editChannelForm isThread
             , Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text "Owner"
-                , memberLabel True localUser (MembersAndOwner.owner membersAndOwner)
+                , memberLabel True localUser (MembersAndOwner.owner guild.membersAndOwner)
                 ]
-            , Ui.column
-                [ Ui.paddingXY 8 4 ]
-                [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-                , Ui.column
-                    [ Ui.height Ui.fill ]
-                    (SeqDict.foldr (\userId _ list -> memberLabel True localUser userId :: list) [] members)
-                ]
+            , Ui.Lazy.lazy2 memberListMobile localUser guild.membersAndOwner
             ]
         ]
 
