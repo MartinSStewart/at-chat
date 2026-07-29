@@ -7633,9 +7633,7 @@ channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThr
     GuildColumn.elLinkButton
         htmlId
         route
-        [ Ui.height Ui.fill
-        , Ui.contentCenterY
-        , Ui.paddingWith { left = 28, right = 8, top = 0, bottom = 0 }
+        [ Ui.paddingWith { left = 28, right = 8, top = 0, bottom = 0 }
         , Ui.el
             [ (if isSelected && not isMobile then
                 NoNotification
@@ -7784,9 +7782,7 @@ channelColumnRow isMobile hasNotification channelRoute guildId channelId channel
     GuildColumn.elLinkButton
         (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
         (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
-        [ Ui.height Ui.fill
-        , Ui.contentCenterY
-        , Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
+        [ Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
         , Ui.el
             [ (if isSelected && not isMobile then
                 NoNotification
@@ -7847,9 +7843,7 @@ discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
                     Nothing
             }
         )
-        [ Ui.height Ui.fill
-        , Ui.contentCenterY
-        , Ui.paddingWith
+        [ Ui.paddingWith
             { left = 26
             , right = 8
             , top = 0
