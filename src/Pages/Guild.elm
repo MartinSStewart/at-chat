@@ -1183,17 +1183,14 @@ discordMemberColumnNotMobile :
 discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
     memberColumnContainer
         isThread
-        [ Ui.column
-            [ Ui.paddingXY 8 4 ]
-            [ if isThread then
-                Ui.none
+        [ if isThread then
+            Ui.none
 
-              else
-                Ui.el
-                    [ Ui.paddingXY 0 4 ]
-                    (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
-            , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
-            ]
+          else
+            Ui.el
+                [ Ui.paddingXY 8 4 ]
+                (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+        , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
         ]
 
 
@@ -1249,11 +1246,6 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , Ui.heightMin 0
             ]
             [ channelSettingsForm guildId channelRoute guild editChannelForm isThread
-            , Ui.column
-                [ Ui.paddingXY 8 4 ]
-                [ Ui.text "Owner"
-                , memberLabel True localUser (MembersAndOwner.owner guild.membersAndOwner)
-                ]
             , Ui.Lazy.lazy3 memberListView True localUser guild.membersAndOwner
             ]
         ]
@@ -1268,62 +1260,42 @@ discordMemberColumnMobile :
     -> Bool
     -> Element FrontendMsg_
 discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThread =
-    case discordChannelViewers routeData.guildId guild channelId of
-        Nothing ->
-            Ui.none
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
+            , if isThread then
+                Ui.text "Thread members"
 
-        Just members ->
-            Ui.column
-                [ Ui.height Ui.fill ]
-                [ Ui.row
-                    [ Ui.contentCenterY
-                    , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-                    , Ui.borderColor MyUi.border2
-                    , Ui.background MyUi.background3
-                    , Ui.height (Ui.px MyUi.channelHeaderHeight)
-                    , MyUi.noShrinking
-                    ]
-                    [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-                    , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
-                    , if isThread then
-                        Ui.text "Thread members"
+              else
+                Ui.text "Channel members"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
+            , MyUi.scrollable canScroll2
+            , Ui.heightMin 0
+            ]
+            [ if isThread then
+                Ui.none
 
-                      else
-                        Ui.text "Channel members"
-                    ]
-                , Ui.column
-                    [ Ui.height Ui.fill
-                    , Ui.background MyUi.background2
-                    , Ui.Font.color MyUi.font1
-                    , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
-                    , MyUi.scrollable canScroll2
-                    , Ui.heightMin 0
-                    ]
-                    [ Ui.column
-                        [ Ui.paddingXY 8 4 ]
-                        [ if isThread then
-                            Ui.none
-
-                          else
-                            Ui.el
-                                [ Ui.paddingXY 8 4 ]
-                                (exportChannelButton (ExportChannel_Discord routeData.currentDiscordUserId routeData.guildId channelId))
-                        , Ui.column
-                            [ Ui.paddingXY 8 4 ]
-                            [ Ui.text "Owner"
-                            , discordMemberLabel False localUser routeData.currentDiscordUserId (MembersAndOwner.owner guild.membersAndOwner)
-                            ]
-                        , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
-                        , Ui.column
-                            [ Ui.height Ui.fill ]
-                            (SeqDict.foldr
-                                (\userId _ list -> discordMemberLabel True localUser routeData.currentDiscordUserId userId :: list)
-                                []
-                                members
-                            )
-                        ]
-                    ]
-                ]
+              else
+                Ui.el
+                    [ Ui.paddingXY 8 4 ]
+                    (exportChannelButton (ExportChannel_Discord routeData.currentDiscordUserId routeData.guildId channelId))
+            , discordMemberListView True routeData.currentDiscordUserId localUser routeData.guildId guild channelId
+            ]
+        ]
 
 
 {-| A DM only contains the user and the person they are talking to, unless
@@ -1752,9 +1724,12 @@ guildSettingsForm model loggedIn local guildId guild =
         isMobile =
             MyUi.isMobile model
 
+        owner =
+            MembersAndOwner.owner guild.membersAndOwner
+
         isOwner : Bool
         isOwner =
-            MembersAndOwner.owner guild.membersAndOwner == local.localUser.session.userId
+            owner == local.localUser.session.userId
 
         editGuildForm : EditGuildForm
         editGuildForm =
@@ -1783,6 +1758,11 @@ guildSettingsForm model loggedIn local guildId guild =
             , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
             ]
             [ ChannelHeader.channelHeader isMobile Nothing (Ui.text "Guild settings") Nothing
+            , Ui.column
+                [ Ui.paddingXY 8 0 ]
+                [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
+                , memberLabel isMobile local.localUser owner
+                ]
             , if isOwner then
                 editGuildNameSection guildId guild editGuildForm
 
@@ -1916,7 +1896,7 @@ editGuildNameSection guildId guild form =
         nameLabel =
             Ui.Input.label
                 "editGuildName"
-                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                [ Ui.Font.bold, Ui.paddingXY 2 0 ]
                 (Ui.text "Guild name")
 
         hasChanges : Bool
