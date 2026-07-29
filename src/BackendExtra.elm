@@ -30,6 +30,7 @@ module BackendExtra exposing
     , sendLoginEmail
     , shouldRateLimit
     , toBackendLog
+    , unreadOverviewDiscordUsers
     , validateAttachedFiles
     )
 
@@ -57,14 +58,14 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import IdArray
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -303,6 +304,187 @@ requestedForToGuildOrDmId userId requestMessagesFor =
 
                 Nothing ->
                     UserSession.Viewing_None
+
+
+{-| The Discord users that the unread overview needs to know the names and icons of:
+whoever wrote, or is mentioned by, the newest message in each Discord channel the user
+has unread messages in.
+
+The messages themselves are already on the frontend, since the newest message of every
+channel is loaded when the client starts up (see `Thread.loadMessages`). Discord users
+are the exception: only the ones in the guild the user is currently looking at get sent,
+so without these the overview would show "<missing>" where their names should be.
+
+Only channels the user is allowed to see are included, and only the channel messages,
+not the messages in the threads a channel contains.
+
+-}
+unreadOverviewDiscordUsers :
+    Id UserId
+    -> BackendUser
+    -> BackendModel
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+unreadOverviewDiscordUsers userId user model =
+    let
+        linkedDiscordUserIds : List (Discord.Id Discord.UserId)
+        linkedDiscordUserIds =
+            SeqDict.foldr
+                (\discordUserId userData list ->
+                    case userData of
+                        FullData data ->
+                            if data.linkedTo == userId then
+                                discordUserId :: list
+
+                            else
+                                list
+
+                        NeedsAuthAgain data ->
+                            if data.linkedTo == userId then
+                                discordUserId :: list
+
+                            else
+                                list
+
+                        BasicData _ ->
+                            list
+                )
+                []
+                model.discordUsers
+
+        addMessageUsers :
+            Message ChannelMessageId (Discord.Id Discord.UserId)
+            -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+            -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+        addMessageUsers message dict =
+            List.foldl
+                (\discordUserId dict2 ->
+                    case SeqDict.get discordUserId model.discordUsers of
+                        Just discordUser ->
+                            SeqDict.insert discordUserId (User.discordUserDataToFrontendUser discordUser) dict2
+
+                        Nothing ->
+                            dict2
+                )
+                dict
+                (messageUserIds message)
+
+        fromGuilds : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+        fromGuilds =
+            SeqDict.foldl
+                (\guildId guild dict ->
+                    -- The frontend shows a Discord guild as whichever of our linked Discord
+                    -- users is a member of it, and that's the user the unread state is
+                    -- tracked for, so pick the same one here.
+                    case
+                        List.Extra.find
+                            (\discordUserId -> MembersAndOwner.isMember discordUserId guild.membersAndOwner /= IsNotMember)
+                            linkedDiscordUserIds
+                    of
+                        Just discordUserId ->
+                            SeqDict.foldl
+                                (\channelId channel dict2 ->
+                                    if LocalState.canViewDiscordChannel guildId channel guild discordUserId then
+                                        case
+                                            ( channel.status
+                                            , latestUnreadMessage
+                                                (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId))
+                                                user
+                                                channel
+                                            )
+                                        of
+                                            ( ChannelActive, Just message ) ->
+                                                addMessageUsers message dict2
+
+                                            _ ->
+                                                dict2
+
+                                    else
+                                        dict2
+                                )
+                                dict
+                                guild.channels
+
+                        Nothing ->
+                            dict
+                )
+                SeqDict.empty
+                model.discordGuilds
+    in
+    SeqDict.foldl
+        (\channelId dmChannel dict ->
+            case
+                List.Extra.find
+                    (\discordUserId -> NonemptyDict.member discordUserId dmChannel.members)
+                    linkedDiscordUserIds
+            of
+                Just currentUserId ->
+                    case
+                        latestUnreadMessage
+                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                            user
+                            dmChannel
+                    of
+                        Just message ->
+                            addMessageUsers message dict
+
+                        Nothing ->
+                            dict
+
+                Nothing ->
+                    dict
+        )
+        fromGuilds
+        model.discordDmChannels
+
+
+{-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
+-}
+messageUserIds : Message messageId userId -> List userId
+messageUserIds message =
+    case message of
+        UserTextMessage data ->
+            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content)
+
+        UserJoinedMessage _ userId _ _ ->
+            [ userId ]
+
+        DeletedMessage _ ->
+            []
+
+        CallStarted data ->
+            [ data.startedBy ]
+
+        GameStarted data ->
+            [ data.startedBy ]
+
+
+{-| The newest message in a channel, if the user hasn't read all of it yet.
+-}
+latestUnreadMessage :
+    AnyGuildOrDmId
+    -> BackendUser
+    -> { a | messages : IdArray ChannelMessageId (Message ChannelMessageId userId) }
+    -> Maybe (Message ChannelMessageId userId)
+latestUnreadMessage guildOrDmId user channel =
+    let
+        lastMessageIndex : Int
+        lastMessageIndex =
+            IdArray.length channel.messages - 1
+
+        isUnread : Bool
+        isUnread =
+            case SeqDict.get guildOrDmId user.lastViewed of
+                Just lastViewed ->
+                    Id.toInt lastViewed < lastMessageIndex
+
+                Nothing ->
+                    lastMessageIndex >= 0
+    in
+    if isUnread then
+        IdArray.last channel.messages
+
+    else
+        Nothing
 
 
 loginWithToken :
@@ -917,7 +1099,10 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 visibleDmUsers
 
             UserSession.Viewing_Overview ->
-                Debug.todo ""
+                -- The Discord users the overview needs are sent along with the overview
+                -- itself (see `unreadOverviewDiscordUsers`), since which guilds they come
+                -- from depends on which channels have unread messages.
+                visibleDmUsers
         )
         linkedUsers
 

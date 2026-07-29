@@ -1427,6 +1427,41 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Unread overview shows the latest message of each unread channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- Leave the channel so that the messages the admin writes stay unread.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "Older unread message"
+                , E2EHelper.writeMessage admin 100 "Newest unread message"
+
+                -- A client that connects after the messages were sent hasn't scrolled
+                -- through the channel, so the only message of it the client holds is the
+                -- newest one, which is exactly what the overview shows.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Newest unread message" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Older unread message" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
         E2EHelper.startTime
         normalConfig

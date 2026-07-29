@@ -4728,12 +4728,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewOverview ->
-                            -- TODO: Send necessary data
+                        ViewOverview _ ->
                             BackendExtra.asUser
                                 model
                                 sessionId
-                                (\session _ ->
+                                (\session user ->
                                     ( { model
                                         | connections =
                                             SeqDict.updateIfExists
@@ -4745,7 +4744,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model.connections
                                       }
                                     , Command.batch
-                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        [ ViewOverview
+                                            (BackendExtra.unreadOverviewDiscordUsers session.userId user model
+                                                |> FilledInByBackend
+                                            )
+                                            |> Local_CurrentlyViewing
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
                                         , broadcastCmd session
                                         ]
                                     )

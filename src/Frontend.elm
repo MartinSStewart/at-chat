@@ -6515,7 +6515,7 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewOverview ->
+                                ViewOverview _ ->
                                     Command.none
 
                         Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->

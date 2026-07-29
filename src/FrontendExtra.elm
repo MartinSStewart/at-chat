@@ -3051,8 +3051,23 @@ changeUpdate localMsg local =
                                             local.discordGuilds
                             }
 
-                        ViewOverview ->
-                            { local | localUser = { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing } }
+                        ViewOverview newDiscordUsers ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
+                                        , discordUsers =
+                                            case newDiscordUsers of
+                                                FilledInByBackend newDiscordUsers2 ->
+                                                    SeqDict.foldl
+                                                        LinkedAndOtherDiscordUsers.addOtherUser
+                                                        localUser.discordUsers
+                                                        newDiscordUsers2
+
+                                                EmptyPlaceholder ->
+                                                    localUser.discordUsers
+                                    }
+                            }
 
                 Local_SetName name ->
                     let

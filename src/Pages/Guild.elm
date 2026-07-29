@@ -369,34 +369,95 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     ]
 
 
+{-| The newest message in a channel the user hasn't read everything in. Discord messages
+are kept apart from the rest because they are written by Discord users rather than our
+own users.
+-}
+type UnreadOverviewMessage
+    = UnreadOverviewMessage (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))
+    | UnreadOverviewDiscordMessage (Discord.Id Discord.UserId) (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))
+
+
 unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
 unreadOverviewNotMobile local model =
     let
-        unreads : List (Message ChannelMessageId (Id UserId))
+        currentUser : FrontendCurrentUser
+        currentUser =
+            local.localUser.user
+
+        unreads : List UnreadOverviewMessage
         unreads =
             List.concatMap
                 (\( guildId, guild ) ->
                     List.filterMap
                         (\( channelId, channel ) ->
-                            case
-                                SeqDict.get
-                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                    local.localUser.user.lastViewed
-                            of
-                                Just lastViewedMessageId ->
-                                    --if lastViewedMessageId == MessageArray.length channel then
-                                    --    Nothing
-                                    --
-                                    --else
-                                    MessageArray.get lastViewedMessageId channel.messages
-
-                                Nothing ->
-                                    MessageArray.last channel.messages
+                            latestUnreadMessage
+                                (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                currentUser
+                                channel
+                                |> Maybe.map
+                                    (\( messageId, message ) -> UnreadOverviewMessage messageId message)
                         )
                         (SeqDict.toList guild.channels)
                 )
                 (SeqDict.toList local.guilds)
-                |> List.sortBy (\message -> Message.createdAt message |> Time.posixToMillis)
+                ++ List.filterMap
+                    (\( otherUserId, dmChannel ) ->
+                        latestUnreadMessage (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel
+                            |> Maybe.map (\( messageId, message ) -> UnreadOverviewMessage messageId message)
+                    )
+                    (SeqDict.toList local.dmChannels)
+                ++ List.concatMap
+                    (\( guildId, guild ) ->
+                        case GuildColumn.discordGuildCurrentUserId local.localUser guild of
+                            Just currentDiscordUserId ->
+                                List.filterMap
+                                    (\( channelId, channel ) ->
+                                        latestUnreadMessage
+                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId))
+                                            currentUser
+                                            channel
+                                            |> Maybe.map
+                                                (\( messageId, message ) ->
+                                                    UnreadOverviewDiscordMessage currentDiscordUserId messageId message
+                                                )
+                                    )
+                                    (SeqDict.toList guild.channels)
+
+                            Nothing ->
+                                []
+                    )
+                    (SeqDict.toList local.discordGuilds)
+                ++ List.filterMap
+                    (\( channelId, dmChannel ) ->
+                        case GuildColumn.discordDmCurrentUserId local.localUser dmChannel of
+                            Just currentDiscordUserId ->
+                                latestUnreadMessage
+                                    (DiscordGuildOrDmId
+                                        (DiscordGuildOrDmId_Dm
+                                            { currentUserId = currentDiscordUserId, channelId = channelId }
+                                        )
+                                    )
+                                    currentUser
+                                    dmChannel
+                                    |> Maybe.map
+                                        (\( messageId, message ) ->
+                                            UnreadOverviewDiscordMessage currentDiscordUserId messageId message
+                                        )
+
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqDict.toList local.discordDmChannels)
+                |> List.sortBy
+                    (\unread ->
+                        case unread of
+                            UnreadOverviewMessage _ message ->
+                                Message.createdAt message |> Time.posixToMillis
+
+                            UnreadOverviewDiscordMessage _ _ message ->
+                                Message.createdAt message |> Time.posixToMillis
+                    )
 
         containerWidth =
             conversationWidth model
@@ -410,27 +471,64 @@ unreadOverviewNotMobile local model =
         , Ui.column
             [ Ui.Font.color MyUi.font1 ]
             (List.map
-                (\message ->
-                    messageView
-                        False
-                        containerWidth
-                        False
-                        SeqDict.empty
-                        NoHighlight
-                        IsNotHovered
-                        False
-                        local.localUser.session.userId
-                        allUsers
-                        local.localUser
-                        Nothing
-                        Nothing
-                        (Id.fromInt 0)
-                        message
-                        |> Ui.map (\_ -> FrontendNoOp)
+                (\unread ->
+                    case unread of
+                        UnreadOverviewMessage messageId message ->
+                            messageView
+                                False
+                                containerWidth
+                                False
+                                SeqDict.empty
+                                NoHighlight
+                                IsNotHovered
+                                False
+                                local.localUser.session.userId
+                                allUsers
+                                local.localUser
+                                Nothing
+                                Nothing
+                                messageId
+                                message
+                                |> Ui.map (\_ -> FrontendNoOp)
+
+                        UnreadOverviewDiscordMessage currentDiscordUserId messageId message ->
+                            discordMessageView
+                                False
+                                containerWidth
+                                False
+                                SeqDict.empty
+                                NoHighlight
+                                IsNotHovered
+                                currentDiscordUserId
+                                (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                                local.localUser
+                                Nothing
+                                Nothing
+                                messageId
+                                message
+                                |> Ui.map (\_ -> FrontendNoOp)
                 )
                 unreads
             )
         ]
+
+
+{-| The newest message in a channel, if the user hasn't read all of it yet. The newest
+message of every channel is loaded when the client starts up (see `Thread.loadMessages`),
+so this is only `Nothing` for a channel the user has read to the end.
+-}
+latestUnreadMessage :
+    AnyGuildOrDmId
+    -> FrontendCurrentUser
+    -> { a | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId) }
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
+latestUnreadMessage guildOrDmId currentUser channel =
+    if GuildColumn.newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel > 0 then
+        MessageArray.last channel.messages
+            |> Maybe.map (Tuple.pair (MessageArray.length channel.messages - 1 |> Id.fromInt))
+
+    else
+        Nothing
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_

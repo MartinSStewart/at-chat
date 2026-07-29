@@ -1,9 +1,12 @@
 module GuildColumn exposing
     ( canScroll
     , channelOrThreadHasNotifications
+    , discordDmCurrentUserId
     , discordDmHasNotifications
+    , discordGuildCurrentUserId
     , elLinkButton
     , guildColumnLazy
+    , newMessageCount
     , rowLinkButton
     )
 
@@ -15,7 +18,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
-import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser)
+import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty
 import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
@@ -188,21 +191,23 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
         )
 
 
+{-| Find the linked Discord user that is a member of this Discord guild (i.e. "us").
+-}
+discordGuildCurrentUserId : LocalUser -> DiscordFrontendGuild -> Maybe (Discord.Id Discord.UserId)
+discordGuildCurrentUserId localUser guild =
+    SeqDict.filter
+        (\linkedUserId _ ->
+            MembersAndOwner.isMember linkedUserId guild.membersAndOwner /= IsNotMember
+        )
+        (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
+        |> SeqDict.keys
+        |> List.head
+
+
 discordGuildIcon : LocalUser -> Route -> Discord.Id Discord.GuildId -> DiscordFrontendGuild -> Element FrontendMsg_
 discordGuildIcon localUser route guildId guild =
-    let
-        maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, DiscordFrontendCurrentUser )
-        maybeDiscordUserId =
-            SeqDict.filter
-                (\linkedUserId _ ->
-                    MembersAndOwner.isMember linkedUserId guild.membersAndOwner /= IsNotMember
-                )
-                (LinkedAndOtherDiscordUsers.linkedUsers localUser.discordUsers)
-                |> SeqDict.toList
-                |> List.head
-    in
-    case maybeDiscordUserId of
-        Just ( discordUserId, _ ) ->
+    case discordGuildCurrentUserId localUser guild of
+        Just discordUserId ->
             elLinkButton
                 (Dom.id ("guild_openDiscordGuild_" ++ Discord.idToString guildId))
                 ({ currentDiscordUserId = discordUserId

@@ -2566,6 +2566,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         StopViewingChannel ->
                             False
 
+                        -- The overview response only contains the Discord users behind
+                        -- the unread messages of whoever requested it, so there's nothing
+                        -- here the attacker shouldn't get.
+                        ViewOverview _ ->
+                            False
+
                 Local_SetName _ ->
                     False
 

@@ -76,7 +76,11 @@ type SetViewing
     | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
-    | ViewOverview
+      -- The unread overview shows the newest message of every channel the user hasn't
+      -- read everything in, and the frontend already has those messages. What it's
+      -- missing is the Discord users that wrote them, so that's what the backend fills
+      -- in (see `BackendExtra.unreadOverviewDiscordUsers`).
+    | ViewOverview (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser))
 
 
 type Viewing
@@ -130,7 +134,7 @@ setViewingToCurrentlyViewing viewing =
         StopViewingChannel ->
             Viewing_None
 
-        ViewOverview ->
+        ViewOverview _ ->
             Viewing_Overview
 
 

@@ -2111,6 +2111,35 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , viewer.checkModel 200 (checkDiscordUserLoaded "Discord guild member AT" True guildOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)
+
+                -- Leave the channel so that the message AT writes next stays unread.
+                , viewer.click 100 (Dom.id "guildIcon_showFriends")
+                ]
+            )
+
+        -- (3) The unread overview on the home page shows the newest message of the Bot Test
+        -- channel, which AT wrote, so AT gets loaded for a client that isn't viewing the
+        -- guild at all.
+        , E2EHelper.andThenWebsocket
+            (\connection _ ->
+                [ T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":300,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1500000000000000300","flags":0,"embeds":[],"edited_timestamp":null,"content":"Unread message written by AT","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"AT","public_flags":0,"primary_guild":null,"id":"1401255355928936478","global_name":null,"display_name_styles":null,"discriminator":"0275","collectibles":null,"bot":true,"avatar_decoration_data":null,"avatar":"34f894fcc2d53b98b2d6c99228b814a7"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                ]
+            )
+        , T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            (Route.encode Route.HomePageRoute)
+            E2EHelper.desktopWindow
+            (\overviewViewer ->
+                [ T.andThen
+                    10
+                    (\data -> [ overviewViewer.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                , overviewViewer.checkModel
+                    200
+                    (checkDiscordUserLoaded "Discord guild-only member AT" True guildOnlyDiscordUserId)
+                , overviewViewer.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Unread message written by AT" ])
                 ]
             )
         ]
