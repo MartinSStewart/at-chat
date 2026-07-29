@@ -80,6 +80,7 @@ module MyUi exposing
     , scrim
     , scrollable
     , secondaryButton
+    , secondaryButtonTall
     , secondaryGray
     , secondaryGrayBorder
     , selectedHighlight
@@ -823,7 +824,7 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
 simpleButton : HtmlId -> msg -> Element msg -> Element msg
 simpleButton htmlId onPress content =
     Ui.el
-        [ Ui.Input.button onPress
+        (focusEffect ++ [ Ui.Input.button onPress
         , Ui.borderColor buttonBorder
         , Ui.border 1
         , Ui.background buttonBackground
@@ -831,15 +832,15 @@ simpleButton htmlId onPress content =
         , id htmlId
         , Ui.width Ui.shrink
         , Ui.paddingXY 16 8
-        , focusEffect
+
         , Ui.Font.weight 500
-        ]
+        ])
         content
 
 
-focusEffect : Ui.Attribute msg
+focusEffect : List (Ui.Attribute msg)
 focusEffect =
-    Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.borderColor white ]
+    [ Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.outlineColor white ], ]
 
 
 touchPress : msg -> Ui.Attribute msg
@@ -874,6 +875,23 @@ secondaryButton htmlId onPress label2 =
         , Ui.rounded 4
         , Ui.width Ui.shrink
         , Ui.paddingXY 16 4
+        , Ui.Font.weight 500
+        ]
+        (Ui.text label2)
+
+
+secondaryButtonTall : HtmlId -> msg -> String -> Element msg
+secondaryButtonTall htmlId onPress label2 =
+    Ui.el
+        [ Ui.Input.button onPress
+        , id htmlId
+        , Ui.background secondaryGray
+        , focusEffect
+        , Ui.border 1
+        , Ui.Font.color black
+        , Ui.rounded 4
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 8
         , Ui.Font.weight 500
         ]
         (Ui.text label2)
