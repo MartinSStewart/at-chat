@@ -931,6 +931,8 @@ memberColumnContainerNotMobile isThread contents =
         [ Ui.row
             [ Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
             ]
             [ Ui.el
                 [ Ui.Font.color MyUi.font3, Ui.paddingXY 8 0 ]
