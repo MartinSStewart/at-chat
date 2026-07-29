@@ -824,23 +824,23 @@ container isExpanded htmlId onPressedExpand backgroundColor isMobile2 label2 con
 simpleButton : HtmlId -> msg -> Element msg -> Element msg
 simpleButton htmlId onPress content =
     Ui.el
-        (focusEffect ++ [ Ui.Input.button onPress
+        [ Ui.Input.button onPress
         , Ui.borderColor buttonBorder
         , Ui.border 1
         , Ui.background buttonBackground
         , Ui.rounded 4
         , id htmlId
+        , focusEffect
         , Ui.width Ui.shrink
         , Ui.paddingXY 16 8
-
         , Ui.Font.weight 500
-        ])
+        ]
         content
 
 
-focusEffect : List (Ui.Attribute msg)
+focusEffect : Ui.Attribute msg
 focusEffect =
-    [ Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.outlineColor white ], ]
+    Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.outlineColor white ]
 
 
 touchPress : msg -> Ui.Attribute msg
