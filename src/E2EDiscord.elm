@@ -1615,6 +1615,38 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Clicking a Discord profile image opens the one-on-one DM with that user"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A group DM containing the linked account, at0232 and kess is created and
+                          -- at0232 writes a message in it.
+                          T.websocketSendString 100 connection discordGroupDmChannelCreate
+                        , discordGroupDmMessage connection "Hello everyone in the group!"
+                        , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1500000000000000099")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello everyone in the group!" ])
+
+                        -- Clicking at0232's profile image leaves the group DM and opens the
+                        -- one-on-one Discord DM channel shared with them instead.
+                        , admin.click 100 (Pages.Guild.profileImageButtonId (Id.fromInt 0))
+                        , admin.checkModel 100 (checkDiscordDmRoute at0232DiscordDmChannelId)
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Private Discord channel is hidden from a user without access"
         E2EHelper.startTime
         normalConfig
@@ -2322,6 +2354,36 @@ checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
 
         Types.Loading _ ->
             Err (label ++ ": expected the frontend to have finished loading")
+
+
+{-| The one-on-one Discord DM channel the linked account shares with `at0232`. It's listed
+in the READY payload's private channels, separately from the group DM that `at0232` is also
+a member of.
+-}
+at0232DiscordDmChannelId : Discord.Id Discord.PrivateChannelId
+at0232DiscordDmChannelId =
+    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+
+
+{-| Check that the frontend is viewing the given Discord DM channel.
+-}
+checkDiscordDmRoute : Discord.Id Discord.PrivateChannelId -> FrontendModel -> Result String ()
+checkDiscordDmRoute channelId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.DiscordDmRoute discordDmRoute ->
+                    if discordDmRoute.channelId == channelId then
+                        Ok ()
+
+                    else
+                        Err "Opened the wrong Discord DM channel"
+
+                _ ->
+                    Err "Expected to be viewing a Discord DM channel"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 {-| The Discord DM channel `discordDmMessage` sends messages to.

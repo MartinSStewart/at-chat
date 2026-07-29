@@ -4,13 +4,14 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
+import Discord
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (CustomEmojiId, Id)
+import Id exposing (CustomEmojiId, Id, UserId)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -50,6 +51,8 @@ type MessageViewMsg
     | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedCardAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedProfileImage (Id UserId)
+    | MessageView_PressedDiscordProfileImage (Discord.Id Discord.UserId)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -122,6 +125,12 @@ isPressMsg msg =
             True
 
         MessageView_PressedCardAnchor _ _ ->
+            True
+
+        MessageView_PressedProfileImage _ ->
+            True
+
+        MessageView_PressedDiscordProfileImage _ ->
             True
 
 

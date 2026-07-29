@@ -2780,6 +2780,46 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
+                MessageView.MessageView_PressedProfileImage otherUserId ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            FrontendExtra.routePush
+                                model
+                                (DmRoute
+                                    { channelId =
+                                        DmChannelId.fromUserIds
+                                            (Local.model loggedIn.localState).localUser.session.userId
+                                            otherUserId
+                                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                    , tab = Nothing
+                                    }
+                                )
+
+                        NotLoggedIn _ ->
+                            ( model, Command.none )
+
+                MessageView.MessageView_PressedDiscordProfileImage otherUserId ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            case LocalState.discordDmChannelWithUser otherUserId (Local.model loggedIn.localState) of
+                                Just ( currentDiscordUserId, channelId ) ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (DiscordDmRoute
+                                            { currentDiscordUserId = currentDiscordUserId
+                                            , channelId = channelId
+                                            , viewingMessage = Nothing
+                                            , showMembersTab = HideMembersTab
+                                            , tab = Nothing
+                                            }
+                                        )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        NotLoggedIn _ ->
+                            ( model, Command.none )
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

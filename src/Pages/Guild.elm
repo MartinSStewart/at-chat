@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , newGuildFormInit
     , newGuildFormView
+    , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -6003,6 +6004,23 @@ isHoveredToAnimationMode isHovered =
             Sticker.ResetAndLoopAFewTimes
 
 
+profileImageButtonId : Id messageId -> HtmlId
+profileImageButtonId messageId =
+    Dom.id ("guild_profileImage_" ++ Id.toString messageId)
+
+
+{-| Makes a message's profile image open the DM channel with whoever wrote the message.
+Only used when the user isn't picking a drawing anchor, since then the profile image is an
+anchor to attach drawings to instead.
+-}
+openDmButton : Id messageId -> MessageViewMsg -> List (Ui.Attribute MessageViewMsg)
+openDmButton messageId onPress =
+    [ Ui.pointer
+    , profileImageButtonId messageId |> Dom.idToString |> Ui.id
+    , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
+    ]
+
+
 userTextMessageContent :
     HtmlId
     -> Int
@@ -6033,6 +6051,12 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     MessageView_PressedUserIcon
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
+                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                            []
+
+                        else
+                            openDmButton messageId (MessageView_PressedProfileImage message2.createdBy)
+                       )
                 )
             |> Ui.el
                 [ Ui.paddingWith
@@ -6160,6 +6184,12 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     MessageView_PressedUserIcon
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
+                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                            []
+
+                        else
+                            openDmButton messageId (MessageView_PressedDiscordProfileImage message2.createdBy)
+                       )
                 )
             |> Ui.el
                 [ Ui.paddingWith

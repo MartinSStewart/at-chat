@@ -6,9 +6,11 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , profileImageOpensDm
     )
 
 import Audio
+import DmChannelId
 import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
@@ -18,7 +20,10 @@ import FileStatus
 import Html.Attributes
 import Id
 import Json.Encode
+import Local
+import Message
 import Pages.Guild
+import Route
 import SeqDict
 import String.Nonempty
 import Test.Html.Query
@@ -436,6 +441,66 @@ inviteUserAndDmChat config =
                 ]
             )
         ]
+
+
+{-| Clicking the profile image next to a message in a guild channel opens the DM channel
+with whoever wrote it.
+-}
+profileImageOpensDm : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+profileImageOpensDm config =
+    E2EHelper.startTest
+        "Clicking a profile image opens the DM channel with that user"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage user 100 "Click on my profile image!"
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, Message.UserTextMessage message ) ->
+                                [ admin.click 100 (Pages.Guild.profileImageButtonId messageId)
+                                , admin.checkModel 100 (checkDmRouteWithUser message.createdBy)
+                                ]
+
+                            _ ->
+                                [ admin.checkModel
+                                    100
+                                    (\_ -> Err "Expected the guild channel to contain the other user's message")
+                                ]
+                    )
+                ]
+            )
+        ]
+
+
+checkDmRouteWithUser : Id.Id Id.UserId -> FrontendModel -> Result String ()
+checkDmRouteWithUser otherUserId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case ( loaded.loginStatus, loaded.route ) of
+                ( Types.LoggedIn loggedIn, Route.DmRoute dmRoute ) ->
+                    let
+                        currentUserId : Id.Id Id.UserId
+                        currentUserId =
+                            (Local.model loggedIn.localState).localUser.session.userId
+                    in
+                    if DmChannelId.otherUserId currentUserId dmRoute.channelId == Just otherUserId then
+                        Ok ()
+
+                    else
+                        Err "Opened a DM channel with the wrong user"
+
+                ( Types.LoggedIn _, _ ) ->
+                    Err "Expected to be viewing a DM channel"
+
+                ( Types.NotLoggedIn _, _ ) ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
