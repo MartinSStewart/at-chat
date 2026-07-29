@@ -747,7 +747,16 @@ notification time userToNotify title senderIcon userToString plainText message n
                 Just user ->
                     case user.emailNotifications of
                         NotifyMeWhenMentioned ->
-                            [ messageNotificationEmail time user.email title userToString plainText message model.postmarkApiKey ]
+                            [ messageNotificationEmail
+                                time
+                                user.email
+                                title
+                                userToString
+                                navigateTo
+                                plainText
+                                message
+                                model.postmarkApiKey
+                            ]
 
                         NeverNotifyMe ->
                             []
@@ -876,11 +885,12 @@ messageNotificationEmail :
     -> EmailAddress
     -> String
     -> (userId -> String)
+    -> Maybe Route
     -> String
     -> Message messageId userId
     -> Postmark.ApiKey
     -> Command BackendOnly toMsg BackendMsg
-messageNotificationEmail time email senderName userToString plainText message postmarkApiKey =
+messageNotificationEmail time email senderName userToString navigateTo plainText message postmarkApiKey =
     let
         helper subject body =
             Postmark.sendEmail
@@ -892,14 +902,22 @@ messageNotificationEmail time email senderName userToString plainText message po
                 , body = body
                 , messageStream = "outbound"
                 }
+
+        link =
+            case navigateTo of
+                Just navigateTo2 ->
+                    Env.domain ++ Route.encode navigateTo2
+
+                Nothing ->
+                    Env.domain
     in
     case message of
         UserTextMessage data ->
             helper
                 (notificationEmailSubject senderName)
                 (Postmark.BodyBoth
-                    (notificationEmailContent userToString senderName data)
-                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ Env.domain ++ " to reply.")
+                    (notificationEmailContent userToString senderName link data)
+                    (senderName ++ ": " ++ plainText ++ "\n\nOpen " ++ link ++ " to reply.")
                 )
 
         UserJoinedMessage _ _ _ _ ->
@@ -931,8 +949,8 @@ at-chat: a dark message card with the sender's name in bold above the message
 text. Email clients only support a small subset of CSS, so this sticks to inline
 styles and basic block elements.
 -}
-notificationEmailContent : (userId -> String) -> String -> UserTextMessageData messageId userId -> Email.Html.Html
-notificationEmailContent userToString senderName message =
+notificationEmailContent : (userId -> String) -> String -> String -> UserTextMessageData messageId userId -> Email.Html.Html
+notificationEmailContent userToString senderName link message =
     Email.Html.div
         [ Email.Html.Attributes.backgroundColor (MyUi.colorToStyle MyUi.background3)
         , Email.Html.Attributes.padding "8px"
@@ -957,7 +975,7 @@ notificationEmailContent userToString senderName message =
             [ Email.Html.b
                 []
                 [ Email.Html.a
-                    [ Email.Html.Attributes.href Env.domain
+                    [ Email.Html.Attributes.href link
                     , Email.Html.Attributes.backgroundColor (MyUi.colorToHex MyUi.buttonBackground)
                     , Email.Html.Attributes.color (MyUi.colorToHex MyUi.white)
                     , Email.Html.Attributes.fontSize "14px"
@@ -1137,32 +1155,6 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-{-| The url opened when the user taps a push notification. A `push-id` query parameter (ignored by
-Route.decode) makes the url unique per notification. Without it, iOS treats a declarative web push
-whose navigate url matches the url it has on record for the already-open web app as "already
-there" and only brings the app to the foreground, without navigating. No page load or event
-reaches the app, so it stays on whatever route it was on. The app keeps window.location pinned to
-the url it booted at (see the UrlChanged handler in Frontend.elm), so this happened for any
-notification targeting the route the app was launched or installed from.
--}
-notificationNavigateUrl : Time.Posix -> Route -> String
-notificationNavigateUrl time route =
-    let
-        url : String
-        url =
-            Env.domain ++ Route.encode route
-    in
-    url
-        ++ (if String.contains "?" url then
-                "&"
-
-            else
-                "?"
-           )
-        ++ "push-id="
-        ++ String.fromInt (Time.posixToMillis time)
-
-
 pushNotification :
     SessionId
     -> Id UserId
@@ -1175,6 +1167,16 @@ pushNotification :
     -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
     -> Command restriction toFrontend BackendMsg
 pushNotification sessionId userId time title body icon navigateTo subscribeData model =
+    let
+        link : Maybe String
+        link =
+            case navigateTo of
+                Just navigateTo2 ->
+                    Env.domain ++ Route.encode navigateTo2 |> Just
+
+                Nothing ->
+                    Nothing
+    in
     Http.request
         { method = "POST"
         , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
@@ -1189,20 +1191,8 @@ pushNotification sessionId userId time title body icon navigateTo subscribeData 
                 , title = title
                 , body = body
                 , icon = icon
-                , navigate =
-                    case navigateTo of
-                        Just navigateTo2 ->
-                            notificationNavigateUrl time navigateTo2
-
-                        Nothing ->
-                            Env.domain
-                , data =
-                    case navigateTo of
-                        Just navigateTo2 ->
-                            notificationNavigateUrl time navigateTo2 |> Just
-
-                        Nothing ->
-                            Nothing
+                , navigate = Maybe.withDefault Env.domain link
+                , data = link
                 , mutable = False
                 , isDeclarative = False
                 }
