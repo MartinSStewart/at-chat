@@ -247,6 +247,21 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                                 Json.Decode.fail ""
                         )
                 )
+
+        selection : Maybe Range
+        selection =
+            case loggedIn.textInputFocus of
+                Just textInputFocus ->
+                    -- Only this input's selection gets drawn. Otherwise text in every message input
+                    -- on screen is highlighted when one of them is focused.
+                    if textInputFocus.htmlId == channelTextInputId then
+                        Just textInputFocus.selection
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
     in
     Html.div
         [ Html.Attributes.style "display" "flex"
@@ -263,9 +278,23 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                 "0"
             )
         , RichText.bigEmojiFont
+
+        -- Keeps the textarea's z-index from escaping this div and covering the buttons that are
+        -- placed in front of the message input.
+        , Html.Attributes.style "isolation" "isolate"
         ]
-        [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
+        [ -- The textarea is drawn on top of the rich text, otherwise the caret is hidden behind
+          -- backgrounds the rich text draws (spoilers and inline code are opaque). The text it
+          -- contains is transparent so that the rich text below is what you actually see, and the
+          -- selection highlight is translucent so it doesn't hide the rich text either (see the
+          -- rich-text-input rules in MyUi.css).
+          Html.textarea
+            [ Html.Attributes.class "rich-text-input"
+            , Html.Attributes.style "z-index" "1"
+            , Html.Attributes.style "color" "transparent"
+
+            -- Safari uses this instead of color when filling in glyphs
+            , Html.Attributes.style "-webkit-text-fill-color" "transparent"
             , Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "font-family" "inherit"
@@ -363,7 +392,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
-                        (Maybe.map .selection loggedIn.textInputFocus)
+                        selection
                         richText2
                         ++ [ Html.text "\n" ]
 

@@ -78,6 +78,7 @@ module E2EHelper exposing
     , scrollToTop
     , secondDiscordToken
     , secondDiscordUserId
+    , selectionEvent
     , sessionId0
     , sessionId1
     , sessionId2
@@ -1512,6 +1513,29 @@ focusEvent user delayInMs maybeHtmlId maybeSelection =
                         []
                )
             |> Json.Encode.object
+        )
+
+
+{-| Sent from js when the text selection changes. The message input draws the selection highlight
+itself (the textarea drawn on top of the rich text has a transparent one) so this is what makes text
+actually look selected in a test.
+-}
+selectionEvent :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> DelayInMs
+    -> HtmlId
+    -> Range
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+selectionEvent user delayInMs htmlId selection =
+    user.portEvent
+        delayInMs
+        "selection_changed_from_js"
+        (Json.Encode.object
+            [ ( "id", Json.Encode.string (Dom.idToString htmlId) )
+            , ( "selectionStart", Json.Encode.int selection.start )
+            , ( "selectionEnd", Json.Encode.int selection.end )
+            , ( "selectionDirection", Json.Encode.string "forward" )
+            ]
         )
 
 

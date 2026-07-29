@@ -39,6 +39,7 @@ import MembersAndOwner
 import NonemptyDict
 import Pages.Home
 import PersonName
+import Range exposing (Range)
 import RateLimit
 import RichText
 import Route
@@ -561,16 +562,60 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin _ ->
-                [ -- Focus the channel text input and type a message that uses bullet
-                  -- points along with various other rich text formatting.
+                let
+                    -- Uses bullet points along with various other rich text formatting.
+                    messageText : String
+                    messageText =
+                        "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)\n```elm\nadd a b =\n    a + b\n```"
+
+                    -- Selections are looked up by substring so that they stay on the text they are
+                    -- meant to highlight when messageText is edited.
+                    selectionAround : String -> Range
+                    selectionAround substring =
+                        case String.indexes substring messageText of
+                            index :: _ ->
+                                { start = index, end = index + String.length substring }
+
+                            [] ->
+                                Debug.todo (substring ++ " isn't part of messageText so it can't be selected")
+                in
+                [ -- Focus the channel text input and type the message.
                   E2EHelper.focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.click 100 (Dom.id "channel_textinput")
                 , admin.input 100 (Dom.id "channel_textinput") "# Rich text demo"
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                , admin.input 100 (Dom.id "channel_textinput") "This line has *bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler|| and `inline code`.\n* First bullet point\n* Second bullet with *bold* text\n* Third bullet with a [link](https://elm-lang.org/)"
+                , admin.input 100 (Dom.id "channel_textinput") messageText
 
                 -- Snapshot the formatted preview while the message is still in the text input.
                 , E2EHelper.tallSnapshot admin 100 { name = "Rich text message in text input" }
+
+                -- The textarea is drawn on top of the rich text so that the caret stays visible,
+                -- which means the rich text draws the selection highlight itself. Check that the
+                -- highlight lands on the right text for a few different selections.
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "*bold*, _italic_, __underline__, ~~strikethrough~~, ||spoiler||")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across inline formatting" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "```elm\nadd a b =\n    a + b\n```")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection over a code block" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "/)\n```el")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text partial selection over a code block" }
+                , E2EHelper.selectionEvent
+                    admin
+                    100
+                    (Dom.id "channel_textinput")
+                    (selectionAround "First bullet point\n* Second bullet with *bold* text")
+                , E2EHelper.tallSnapshot admin 100 { name = "Rich text selection across bullet points" }
 
                 -- Send the message and snapshot how it renders in the channel.
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []

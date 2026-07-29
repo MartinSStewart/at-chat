@@ -4247,7 +4247,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
                                     , Html.Attributes.style "border-radius" "2px"
                                     ]
-                                    [ Html.text text ]
+                                    (textWithSelection selection index2 text)
                                 )
                                 output2
                             )
@@ -4260,27 +4260,41 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                         text2 =
                             String.cons char text
 
-                        helper text4 =
+                        helper startIndex text4 =
                             Html.span
                                 [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
                                 ]
-                                [ Html.text text4 ]
+                                (textWithSelection selection startIndex text4)
                     in
-                    ( index2 + String.length text2
-                    , Array.append
-                        output2
-                        (if inBlockQuote then
-                            List.map helper (String.split "\n" text2)
-                                |> List.intersperse (formatText "\n> ")
-                                |> Array.fromList
+                    if inBlockQuote then
+                        -- Each line after the first starts with "\n> " in the text the user typed but
+                        -- parseBlockQuoteContent drops the "> ", so the index has to skip 3 characters
+                        -- per line here even though this text only contains the "\n".
+                        case String.split "\n" text2 of
+                            first :: rest ->
+                                List.foldl
+                                    (\line ( index3, output3 ) ->
+                                        ( index3 + 3 + String.length line
+                                        , Array.push
+                                            (helper (index3 + 3) line)
+                                            (Array.push (formatText selection index3 "\n> ") output3)
+                                        )
+                                    )
+                                    ( index2 + String.length first
+                                    , Array.push (helper index2 first) output2
+                                    )
+                                    rest
 
-                         else
-                            Array.fromList [ helper text2 ]
+                            [] ->
+                                ( index2, output2 )
+
+                    else
+                        ( index2 + String.length text2
+                        , Array.push (helper index2 text2) output2
                         )
-                    )
 
                 Italic nonempty2 ->
                     let
@@ -4295,9 +4309,9 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 (List.Nonempty.toList nonempty2)
                                 inBlockQuote
-                                (Array.push (formatText "_") output2)
+                                (Array.push (formatText selection index2 "_") output2)
                     in
-                    ( index3 + 1, Array.push (formatText "_") output3 )
+                    ( index3 + 1, Array.push (formatText selection index3 "_") output3 )
 
                 Underline nonempty2 ->
                     let
@@ -4312,9 +4326,9 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 (List.Nonempty.toList nonempty2)
                                 inBlockQuote
-                                (Array.push (formatText "__") output2)
+                                (Array.push (formatText selection index2 "__") output2)
                     in
-                    ( index3 + 2, Array.push (formatText "__") output3 )
+                    ( index3 + 2, Array.push (formatText selection index3 "__") output3 )
 
                 Bold nonempty2 ->
                     let
@@ -4329,9 +4343,9 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 (List.Nonempty.toList nonempty2)
                                 inBlockQuote
-                                (Array.push (formatText "*") output2)
+                                (Array.push (formatText selection index2 "*") output2)
                     in
-                    ( index3 + 1, Array.push (formatText "*") output3 )
+                    ( index3 + 1, Array.push (formatText selection index3 "*") output3 )
 
                 Strikethrough nonempty2 ->
                     let
@@ -4346,9 +4360,9 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 (List.Nonempty.toList nonempty2)
                                 inBlockQuote
-                                (Array.push (formatText "~~") output2)
+                                (Array.push (formatText selection index2 "~~") output2)
                     in
-                    ( index3 + 2, Array.push (formatText "~~") output3 )
+                    ( index3 + 2, Array.push (formatText selection index3 "~~") output3 )
 
                 Spoiler nonempty2 ->
                     let
@@ -4363,33 +4377,32 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 (List.Nonempty.toList nonempty2)
                                 inBlockQuote
-                                (Array.push (formatText "||") output2)
+                                (Array.push (formatText selection index2 "||") output2)
                     in
-                    ( index3 + 2, Array.push (formatText "||") output3 )
+                    ( index3 + 2, Array.push (formatText selection index3 "||") output3 )
 
                 BlockQuote hasLeadingLineBreak nonempty2 ->
+                    let
+                        marker : String
+                        marker =
+                            case hasLeadingLineBreak of
+                                HasLeadingLineBreak ->
+                                    "\n> "
+
+                                NoLeadingLineBreak ->
+                                    "> "
+                    in
                     textInputViewHelper
                         state
                         allUsers
                         attachedFiles
                         customEmojis
                         stickers2
-                        (index2 + 3)
+                        (index2 + String.length marker)
                         selection
                         nonempty2
                         True
-                        (Array.push
-                            (formatText
-                                (case hasLeadingLineBreak of
-                                    HasLeadingLineBreak ->
-                                        "\n> "
-
-                                    NoLeadingLineBreak ->
-                                        "> "
-                                )
-                            )
-                            output2
-                        )
+                        (Array.push (formatText selection index2 marker) output2)
 
                 Heading level hasLeadingLineBreak nonempty2 ->
                     let
@@ -4414,7 +4427,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                         selection
                         (List.Nonempty.toList nonempty2)
                         inBlockQuote
-                        (Array.push (formatText marker) output2)
+                        (Array.push (formatText selection index2 marker) output2)
 
                 Hyperlink data ->
                     let
@@ -4430,7 +4443,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
                             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
-                            [ Html.text text ]
+                            (textWithSelection selection index2 text)
                         )
                         output2
                     )
@@ -4449,7 +4462,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" spoilerBackground)
                             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColor)
                             ]
-                            [ Html.text text ]
+                            (textWithSelection selection index2 text)
                         )
                         output2
                     )
@@ -4459,7 +4472,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     , Array.append
                         output2
                         (Array.fromList
-                            [ formatText "`"
+                            [ formatText selection index2 "`"
                             , Html.span
                                 [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
@@ -4470,8 +4483,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                   else
                                     Html.Attributes.style "background-color" codeBackground
                                 ]
-                                [ Html.text (String.cons char rest) ]
-                            , formatText "`"
+                                (textWithSelection selection (index2 + 1) (String.cons char rest))
+                            , formatText selection (index2 + 2 + String.length rest) "`"
                             ]
                         )
                     )
@@ -4488,7 +4501,13 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     ""
                     in
                     ( index2 + String.length string + String.length language2 + 6
-                    , Array.append output2 (Array.fromList [ formatText ("```" ++ language2), Html.text string, formatText "```" ])
+                    , Array.append output2
+                        (Array.fromList
+                            [ formatText selection index2 ("```" ++ language2)
+                            , Html.span [] (textWithSelection selection (index2 + 3 + String.length language2) string)
+                            , formatText selection (index2 + 3 + String.length language2 + String.length string) "```"
+                            ]
+                        )
                     )
 
                 AttachedFile fileId ->
@@ -4500,17 +4519,22 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     ( index2 + String.length text
                     , Array.push
                         (if SeqDict.member fileId attachedFiles then
-                            formatText text
+                            formatText selection index2 text
 
                          else
-                            Html.text text
+                            Html.span [] (textWithSelection selection index2 text)
                         )
                         output2
                     )
 
                 EscapedChar char ->
                     ( index2 + 2
-                    , Array.append output2 (Array.fromList [ formatText "\\", Html.text (escapedCharToString char) ])
+                    , Array.append output2
+                        (Array.fromList
+                            [ formatText selection index2 "\\"
+                            , Html.span [] (textWithSelection selection (index2 + 1) (escapedCharToString char))
+                            ]
+                        )
                     )
 
                 Sticker stickerId ->
@@ -4638,7 +4662,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 selection
                                 bulletItem
                                 inBlockQuote
-                                (Array.push (formatText marker) output3)
+                                (Array.push (formatText selection index3 marker) output3)
                         )
                         ( index2, output2 )
                         (List.indexedMap Tuple.pair (List.Nonempty.toList items))
@@ -4647,9 +4671,46 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
         list
 
 
-formatText : String -> Html msg
-formatText text =
-    Html.span [ Html.Attributes.style "color" "rgb(140,140,140)" ] [ Html.text text ]
+formatText : Maybe Range -> Int -> String -> Html msg
+formatText selection startIndex text =
+    Html.span
+        [ Html.Attributes.style "color" "rgb(140,140,140)" ]
+        (textWithSelection selection startIndex text)
+
+
+{-| The message input's textarea is drawn on top of the rich text so that the caret stays visible.
+That means the textarea's own selection highlight would cover the rich text, so it's transparent
+(see the rich-text-input rules in MyUi.css) and the highlight is drawn here instead.
+
+`startIndex` is where `text` starts within the text the user typed.
+
+-}
+textWithSelection : Maybe Range -> Int -> String -> List (Html msg)
+textWithSelection selection startIndex text =
+    case selection of
+        Just { start, end } ->
+            let
+                selectionStart : Int
+                selectionStart =
+                    clamp 0 (String.length text) (start - startIndex)
+
+                selectionEnd : Int
+                selectionEnd =
+                    clamp 0 (String.length text) (end - startIndex)
+            in
+            if selectionEnd <= selectionStart then
+                [ Html.text text ]
+
+            else
+                [ Html.text (String.left selectionStart text)
+                , Html.span
+                    [ Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground) ]
+                    [ Html.text (String.slice selectionStart selectionEnd text) ]
+                , Html.text (String.dropLeft selectionEnd text)
+                ]
+
+        Nothing ->
+            [ Html.text text ]
 
 
 
