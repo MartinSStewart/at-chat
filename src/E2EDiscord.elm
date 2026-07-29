@@ -774,7 +774,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "at0232"
-                        , Test.Html.Selector.exactText "a@a.se"
+                        , Test.Html.Selector.exactText "a@a.aa"
                         ]
                     )
                 ]

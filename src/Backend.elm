@@ -118,7 +118,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.se") True
+    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.aa") True
 
 
 {-| Sha256 hash of the password that logs you in as the admin user when the Postmark API key is
