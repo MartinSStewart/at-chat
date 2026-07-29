@@ -370,6 +370,9 @@ displayMode currentUserId route local =
         AdminRoute _ ->
             thumbnailOrNoVideo
 
+        NewGuildRoute ->
+            thumbnailOrNoVideo
+
         GuildRoute _ _ ->
             thumbnailOrNoVideo
 

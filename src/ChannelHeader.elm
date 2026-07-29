@@ -625,6 +625,9 @@ tabBodyView local loggedIn model =
         AdminRoute _ ->
             Nothing
 
+        NewGuildRoute ->
+            Nothing
+
         DiscordGuildRoute routeData ->
             case routeData.channelRoute of
                 DiscordChannel_ChannelRoute channelId _ (Just tab) ->

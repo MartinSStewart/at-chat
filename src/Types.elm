@@ -483,10 +483,8 @@ type FrontendMsg_
     | FrontendNoOp
     | PressedCopyText String
     | PressedCopyImage String
-    | PressedCreateGuild
     | NewGuildFormChanged NewGuildForm
     | PressedSubmitNewGuild NewGuildForm
-    | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
     | SetFocus

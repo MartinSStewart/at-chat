@@ -1147,15 +1147,6 @@ updateLoaded msg model =
             , Ports.copyImageToClipboard imageUrl
             )
 
-        PressedCreateGuild ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | newGuildForm = Just Pages.Guild.newGuildFormInit }
-                    , Command.none
-                    )
-                )
-                model
-
         NewGuildFormChanged newGuildForm ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -1173,22 +1164,15 @@ updateLoaded msg model =
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Local_NewGuild model.time guildName EmptyPlaceholder |> Just)
-                                { loggedIn | newGuildForm = Nothing }
+                                -- The form is left as is until the backend replies with the new
+                                -- guild and we navigate to it
+                                loggedIn
                                 Command.none
 
                         Err _ ->
                             ( { loggedIn | newGuildForm = Just { newGuildForm | pressedSubmit = True } }
                             , Command.none
                             )
-                )
-                model
-
-        PressedCancelNewGuild ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | newGuildForm = Nothing }
-                    , Command.none
-                    )
                 )
                 model
 
@@ -2692,6 +2676,9 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         AdminRoute _ ->
+                            ( model, Command.none )
+
+                        NewGuildRoute ->
                             ( model, Command.none )
 
                         GuildRoute _ _ ->
@@ -4369,6 +4356,9 @@ updateLoaded msg model =
                 AdminRoute _ ->
                     ( model, Command.none )
 
+                NewGuildRoute ->
+                    ( model, Command.none )
+
                 GuildRoute guildId channelRoute ->
                     case channelRoute of
                         ChannelRoute channelId threadRoute currentTab ->
@@ -5449,6 +5439,9 @@ setShowMembers showMembers model =
             ( model, Command.none )
 
         AdminRoute _ ->
+            ( model, Command.none )
+
+        NewGuildRoute ->
             ( model, Command.none )
 
         AiChatRoute ->
@@ -7071,6 +7064,13 @@ view _ model =
                                             _ ->
                                                 errorPage loaded "Admin access required to view this page"
                                     )
+
+                    NewGuildRoute ->
+                        requiresLogin
+                            (\loggedIn _ ->
+                                Maybe.withDefault Pages.Guild.newGuildFormInit loggedIn.newGuildForm
+                                    |> Pages.Guild.newGuildFormView
+                            )
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel

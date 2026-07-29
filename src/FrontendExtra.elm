@@ -542,6 +542,9 @@ canDropFiles currentUserId route =
         AdminRoute _ ->
             Nothing
 
+        NewGuildRoute ->
+            Nothing
+
         GuildRoute guildId channelRoute ->
             case channelRoute of
                 ChannelRoute channelId threadRoute _ ->
@@ -1479,6 +1482,10 @@ routeRequest previousRoute newRoute model =
                 )
                 model2
 
+        NewGuildRoute ->
+            -- Opening the create guild page always starts with a blank form
+            updateLoggedIn (\loggedIn -> ( { loggedIn | newGuildForm = Nothing }, Command.none )) model2
+
         GuildRoute guildId channelRoute ->
             let
                 model3 : LoadedFrontend
@@ -2025,16 +2032,10 @@ isPressMsg msg =
         PressedCopyImage _ ->
             True
 
-        PressedCreateGuild ->
-            True
-
         NewGuildFormChanged _ ->
             False
 
         PressedSubmitNewGuild _ ->
-            True
-
-        PressedCancelNewGuild ->
             True
 
         DebouncedTyping ->
