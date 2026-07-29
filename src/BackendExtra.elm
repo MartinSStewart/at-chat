@@ -1670,6 +1670,9 @@ toBackendLog toBackend =
         LoginWithTwoFactorRequest _ _ _ ->
             ToBackendLog_LoginWithTwoFactorRequest
 
+        LoginWithRecoveryPasswordRequest _ _ _ ->
+            ToBackendLog_LoginWithRecoveryPasswordRequest
+
         GetLoginTokenRequest _ ->
             ToBackendLog_GetLoginTokenRequest
 

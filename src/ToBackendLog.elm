@@ -12,6 +12,7 @@ type ToBackendLog
     = ToBackendLog_CheckLoginRequest
     | ToBackendLog_LoginWithTokenRequest
     | ToBackendLog_LoginWithTwoFactorRequest
+    | ToBackendLog_LoginWithRecoveryPasswordRequest
     | ToBackendLog_GetLoginTokenRequest
     | ToBackendLog_AdminToBackend
     | ToBackendLog_LogOutRequest
@@ -82,6 +83,9 @@ toBackendLogToString log =
 
         ToBackendLog_LoginWithTwoFactorRequest ->
             "LoginWithTwoFactorRequest"
+
+        ToBackendLog_LoginWithRecoveryPasswordRequest ->
+            "LoginWithRecoveryPasswordRequest"
 
         ToBackendLog_GetLoginTokenRequest ->
             "GetLoginTokenRequest"

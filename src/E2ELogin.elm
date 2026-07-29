@@ -8,6 +8,7 @@ import EmailAddress
 import LoginForm
 import Pages.Home
 import PersonName
+import RecoveryLogin
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -215,6 +216,44 @@ loginTests isMobile normalConfig =
 
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Pending login not found") ]
+                    )
+                ]
+            )
+        ]
+    , T.start
+        (if isMobile then
+            "Recovery password login mobile"
+
+         else
+            "Recovery password login"
+        )
+        E2EHelper.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            "/admin"
+            windowSize
+            (\client ->
+                [ T.andThen
+                    10
+                    (\data -> [ client.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time userAgent) ])
+                , client.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Recovery login" ])
+                , client.input 100 RecoveryLogin.passwordInputId "not the recovery password"
+                , client.click 100 RecoveryLogin.submitButtonId
+                , client.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "Incorrect password" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if SeqDict.member E2EHelper.sessionId0 data.backend.sessions then
+                            Err "The wrong recovery password shouldn't have logged anyone in"
+
+                        else
+                            Ok ()
                     )
                 ]
             )
