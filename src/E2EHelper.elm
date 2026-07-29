@@ -10,7 +10,6 @@ module E2EHelper exposing
     , attackerEmail
     , attackerPrivateDiscordChannelChanges
     , attackerShouldNotGetThisToFrontend
-    , backendApp
     , botTestGuild
     , botTestGuild_ChannelA
     , checkNoErrorLogs
@@ -143,7 +142,6 @@ import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import Ports exposing (RegisterPushSubscription(..))
-import Postmark
 import Range exposing (Range)
 import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
@@ -469,25 +467,6 @@ handleLoginFromLoginPage emailAddress client =
         )
     ]
         |> T.collapsableGroup "Login from login page"
-
-
-{-| `Backend.init` starts without a Postmark API key, which makes the login page ask for the
-recovery password instead of emailing a login code. Almost every test logs in by email, so give the
-backend an API key like a properly configured server would have.
--}
-backendApp : T.BackendApp ToBackend ToFrontend BackendMsg BackendModel
-backendApp =
-    let
-        app : T.BackendApp ToBackend ToFrontend BackendMsg BackendModel
-        app =
-            Backend.app_
-    in
-    { app
-        | init =
-            Tuple.mapFirst
-                (\model -> { model | postmarkApiKey = Postmark.apiKey "test-postmark-api-key" })
-                app.init
-    }
 
 
 startTime : Time.Posix

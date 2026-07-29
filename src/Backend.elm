@@ -82,7 +82,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -133,13 +133,13 @@ recoveryPasswordHash =
 {-| Once an admin sets a Postmark API key, login emails work again and the recovery password is no
 longer accepted.
 -}
-loginType : BackendModel -> LoginForm.LoginType
+loginType : BackendModel -> LoginType
 loginType model =
     if model.postmarkApiKey == Postmark.apiKey "" then
-        LoginForm.LoginWithRecoveryPassword
+        LoginWithRecoveryPassword
 
     else
-        LoginForm.LoginWithEmail
+        LoginWithEmail
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -2409,7 +2409,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
         LoginWithRecoveryPasswordRequest requestMessagesFor password userAgent ->
             case ( loginType model, NonemptyDict.get Broadcast.adminUserId model.users ) of
-                ( LoginForm.LoginWithRecoveryPassword, Just user ) ->
+                ( LoginWithRecoveryPassword, Just user ) ->
                     if Sha256.sha256 password == recoveryPasswordHash then
                         let
                             currentlyViewing : UserSession.Viewing

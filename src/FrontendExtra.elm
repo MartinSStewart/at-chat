@@ -89,6 +89,7 @@ import Pagination
 import PersonName
 import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
+import RecoveryLogin
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
@@ -1116,7 +1117,12 @@ logout model =
                 model2 =
                     { model
                         | loginStatus =
-                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing, textInputFocus = Nothing }
+                            NotLoggedIn
+                                { loginForm = Nothing
+                                , recoveryLogin = RecoveryLogin.init
+                                , useInviteAfterLoggedIn = Nothing
+                                , textInputFocus = Nothing
+                                }
                     }
             in
             if Route.requiresLogin model2.route then
@@ -1962,6 +1968,9 @@ isPressMsg msg =
 
         LoginFormMsg loginFormMsg ->
             LoginForm.isPressMsg loginFormMsg
+
+        RecoveryLoginMsg recoveryLoginMsg ->
+            RecoveryLogin.isPressMsg recoveryLoginMsg
 
         PressedShowLogin ->
             True

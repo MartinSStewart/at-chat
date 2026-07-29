@@ -237,7 +237,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         normalConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 handleNormalHttpRequests
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -250,7 +250,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         nonImageUploadConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -261,7 +261,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         imageUploadConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 handleNormalHttpRequests
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -278,7 +278,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         wideImageUploadConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 (handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 800 100)))
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -295,7 +295,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         videoUploadConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -312,7 +312,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         audioUploadConfig =
             T.Config
                 Frontend.app_
-                E2EHelper.backendApp
+                Backend.app_
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -1858,7 +1858,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         E2EHelper.startTime
         (T.Config
             Frontend.app_
-            E2EHelper.backendApp
+            Backend.app_
             handleNormalHttpRequests
             E2EHelper.handlePortToJs
             (\requestData ->
@@ -1967,7 +1967,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         E2EHelper.startTime
         (T.Config
             Frontend.app_
-            E2EHelper.backendApp
+            Backend.app_
             handleNormalHttpRequests
             E2EHelper.handlePortToJs
             (\requestData ->

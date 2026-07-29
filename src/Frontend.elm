@@ -63,6 +63,7 @@ import Point2d exposing (Point2d)
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
+import RecoveryLogin
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll exposing (ScrollPosition(..))
@@ -77,7 +78,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -304,7 +305,7 @@ init url key =
         , time = Nothing
         , timezone = Time.utc
         , loginStatus = LoadingData
-        , loginType = LoginForm.LoginWithEmail
+        , loginType = LoginWithEmail
         , startupData = Nothing
         , publicGoMatch =
             case route of
@@ -350,6 +351,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
                 Err () ->
                     ( NotLoggedIn
                         { loginForm = Nothing
+                        , recoveryLogin = RecoveryLogin.init
                         , useInviteAfterLoggedIn = Nothing
                         , textInputFocus = Nothing
                         }
@@ -710,7 +712,7 @@ updateLoaded msg model =
                                                 notLoggedIn.loginForm
 
                                             Nothing ->
-                                                Just (LoginForm.init model.loginType)
+                                                Just LoginForm.init
                                 }
                       }
                     , Command.none
@@ -792,12 +794,8 @@ updateLoaded msg model =
                                 FinishUserCreationRequest requestMessagesFor name model.startupData.userAgent
                                     |> Lamdera.sendToBackend
                             )
-                            (\password ->
-                                LoginWithRecoveryPasswordRequest requestMessagesFor password model.startupData.userAgent
-                                    |> Lamdera.sendToBackend
-                            )
                             loginFormMsg
-                            (Maybe.withDefault (LoginForm.init model.loginType) notLoggedIn.loginForm)
+                            (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                     of
                         Just ( newLoginForm, cmd ) ->
                             ( { model
@@ -817,6 +815,29 @@ updateLoaded msg model =
 
                             else
                                 ( model2, Command.none )
+
+        RecoveryLoginMsg recoveryLoginMsg ->
+            case model.loginStatus of
+                LoggedIn _ ->
+                    ( model, Command.none )
+
+                NotLoggedIn notLoggedIn ->
+                    let
+                        ( recoveryLogin, cmd ) =
+                            RecoveryLogin.update
+                                (\password ->
+                                    LoginWithRecoveryPasswordRequest
+                                        (routeToInitialDataRequest model.route)
+                                        password
+                                        model.startupData.userAgent
+                                        |> Lamdera.sendToBackend
+                                )
+                                recoveryLoginMsg
+                                notLoggedIn.recoveryLogin
+                    in
+                    ( { model | loginStatus = NotLoggedIn { notLoggedIn | recoveryLogin = recoveryLogin } }
+                    , Command.map identity RecoveryLoginMsg cmd
+                    )
 
         PressedLogOut sessionId ->
             ( model, Lamdera.sendToBackend (LogOutRequest sessionId) )
@@ -6222,8 +6243,8 @@ updateLoadedFromBackend msg model =
                                 | loginStatus =
                                     NotLoggedIn
                                         { notLoggedIn
-                                            | loginForm =
-                                                Maybe.map LoginForm.invalidRecoveryPassword notLoggedIn.loginForm
+                                            | recoveryLogin =
+                                                RecoveryLogin.incorrectPassword notLoggedIn.recoveryLogin
                                         }
                               }
                             , Command.none
@@ -6993,7 +7014,7 @@ view _ model =
                             NotLoggedIn notLoggedIn ->
                                 LoginForm.view
                                     notLoggedIn.textInputFocus
-                                    (Maybe.withDefault (LoginForm.init loaded.loginType) notLoggedIn.loginForm)
+                                    (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     loaded.windowSize
                                     loaded.startupData.pwaStatus
                                     |> Ui.map LoginFormMsg
@@ -7059,31 +7080,44 @@ view _ model =
                             )
 
                     AdminRoute _ ->
-                        requiresLogin
-                            (\loggedIn local ->
-                                case local.adminData of
-                                    IsAdmin adminData ->
-                                        case NonemptyDict.get local.localUser.session.userId adminData.users of
-                                            Just user ->
-                                                Pages.Admin.view
-                                                    (MyUi.isMobile loaded)
-                                                    loaded.versionNumber
-                                                    loaded.time
-                                                    local
-                                                    adminData
-                                                    user
-                                                    loggedIn.admin
-                                                    |> Ui.map AdminPageMsg
+                        case ( loaded.loginStatus, loaded.loginType ) of
+                            -- The backend can't email a login code to anyone when it has no
+                            -- Postmark API key, so offer the recovery password instead. It's only
+                            -- shown here to keep it off the normal login page.
+                            ( NotLoggedIn notLoggedIn, LoginWithRecoveryPassword ) ->
+                                RecoveryLogin.view notLoggedIn.recoveryLogin
+                                    |> Ui.map RecoveryLoginMsg
+                                    |> FrontendExtra.layout loaded
+                                        [ Ui.background MyUi.background3
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.route loaded.loginStatus)
+                                        ]
 
-                                            Nothing ->
-                                                Ui.text "User not found"
+                            _ ->
+                                requiresLogin
+                                    (\loggedIn local ->
+                                        case local.adminData of
+                                            IsAdmin adminData ->
+                                                case NonemptyDict.get local.localUser.session.userId adminData.users of
+                                                    Just user ->
+                                                        Pages.Admin.view
+                                                            (MyUi.isMobile loaded)
+                                                            loaded.versionNumber
+                                                            loaded.time
+                                                            local
+                                                            adminData
+                                                            user
+                                                            loggedIn.admin
+                                                            |> Ui.map AdminPageMsg
 
-                                    IsAdminButDataNotLoaded ->
-                                        Ui.text "Loading admin page..."
+                                                    Nothing ->
+                                                        Ui.text "User not found"
 
-                                    _ ->
-                                        errorPage loaded "Admin access required to view this page"
-                            )
+                                            IsAdminButDataNotLoaded ->
+                                                Ui.text "Loading admin page..."
+
+                                            _ ->
+                                                errorPage loaded "Admin access required to view this page"
+                                    )
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel
@@ -7157,7 +7191,7 @@ view _ model =
                                             (Ui.text "You aren't logged in here. Please log in and then we can link your Discord account.")
                                         , LoginForm.view
                                             notLoggedIn.textInputFocus
-                                            (Maybe.withDefault (LoginForm.init loaded.loginType) notLoggedIn.loginForm)
+                                            (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                             loaded.windowSize
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa

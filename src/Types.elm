@@ -29,6 +29,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , LoginType(..)
     , MessageFromGuildOrDm(..)
     , MessageHover(..)
     , MessageHoverMobileMode(..)
@@ -89,7 +90,7 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
-import LoginForm exposing (LoginForm, LoginType)
+import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
@@ -107,6 +108,7 @@ import Ports exposing (NotificationPermission, RegisterPushSubscription, Subscri
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
+import RecoveryLogin
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (Route)
 import Scroll exposing (ScrollPosition)
@@ -160,6 +162,15 @@ type LoadStatus
     | LoadError
 
 
+{-| The backend can't email login codes to anyone if it doesn't have a Postmark API key. That
+happens when the BackendModel has been reset, which is also when we most need to log in (in order
+to upload a backup). In that situation the admin page asks for the recovery password instead.
+-}
+type LoginType
+    = LoginWithEmail
+    | LoginWithRecoveryPassword
+
+
 type alias LoadedFrontend =
     { navigationKey : Key
     , clientId : ClientId
@@ -210,6 +221,7 @@ type LoginStatus
     = LoggedIn LoggedIn2
     | NotLoggedIn
         { loginForm : Maybe LoginForm
+        , recoveryLogin : RecoveryLogin.Model
         , useInviteAfterLoggedIn : Maybe (SecretId InviteLinkId)
         , textInputFocus : Maybe { htmlId : HtmlId, selection : Range, direction : SelectionDirection }
         }
@@ -455,6 +467,7 @@ type FrontendMsg_
     | GotWindowSize Int Int
     | GotTimezone Time.Zone
     | LoginFormMsg LoginForm.Msg
+    | RecoveryLoginMsg RecoveryLogin.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg
     | PressedLogOut SessionIdHash

@@ -2,11 +2,9 @@ module LoginForm exposing
     ( CodeStatus(..)
     , EnterEmail2
     , EnterLoginCode2
-    , EnterRecoveryPassword2
     , EnterTwoFactorCode2
     , EnterUserData2
     , LoginForm(..)
-    , LoginType(..)
     , Msg(..)
     , SubmitStatus(..)
     , cancelButtonId
@@ -14,7 +12,6 @@ module LoginForm exposing
     , errorView
     , init
     , invalidCode
-    , invalidRecoveryPassword
     , isPressMsg
     , loginCodeInput
     , loginCodeInputId
@@ -24,10 +21,8 @@ module LoginForm exposing
     , needsTwoFactor
     , needsUserData
     , rateLimited
-    , recoveryPasswordInputId
     , signupsDisabled
     , submitEmailButtonId
-    , submitRecoveryPasswordButtonId
     , twoFactorCodeLength
     , typedCode
     , update
@@ -67,8 +62,6 @@ type Msg
     | TypedTwoFactorCode String
     | TypedName String
     | PressedSubmitUserData
-    | TypedRecoveryPassword String
-    | PressedSubmitRecoveryPassword
 
 
 isPressMsg : Msg -> Bool
@@ -95,21 +88,6 @@ isPressMsg msg =
         PressedSubmitUserData ->
             True
 
-        TypedRecoveryPassword _ ->
-            False
-
-        PressedSubmitRecoveryPassword ->
-            True
-
-
-{-| The backend can't email login codes to anyone if it doesn't have a Postmark API key. That
-happens when the BackendModel has been reset, which is also when we most need to log in (in order
-to upload a backup). In that situation the login page asks for the recovery password instead.
--}
-type LoginType
-    = LoginWithEmail
-    | LoginWithRecoveryPassword
-
 
 {-| Opaque
 -}
@@ -118,7 +96,6 @@ type LoginForm
     | EnterLoginCode EnterLoginCode2
     | EnterTwoFactorCode EnterTwoFactorCode2
     | EnterUserData EnterUserData2
-    | EnterRecoveryPassword EnterRecoveryPassword2
 
 
 {-| Opaque
@@ -145,12 +122,6 @@ type alias EnterUserData2 =
     { name : String, pressedSubmit : SubmitStatus }
 
 
-{-| Opaque
--}
-type alias EnterRecoveryPassword2 =
-    { password : String, pressedSubmit : SubmitStatus, incorrectPassword : Bool }
-
-
 {-| OpaqueVariants
 -}
 type SubmitStatus
@@ -170,11 +141,10 @@ update :
     -> (Int -> Command FrontendOnly toBackend Msg)
     -> (Int -> Command FrontendOnly toBackend Msg)
     -> (PersonName -> Command FrontendOnly toBackend Msg)
-    -> (String -> Command FrontendOnly toBackend Msg)
     -> Msg
     -> LoginForm
     -> Maybe ( LoginForm, Command FrontendOnly toBackend Msg )
-update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode onSubmitUserData onSubmitRecoveryPassword msg model =
+update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode onSubmitUserData msg model =
     case msg of
         PressedSubmitEmail ->
             (case model of
@@ -270,41 +240,6 @@ update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode onSubmitUserData on
 
                 _ ->
                     Just ( model, Command.none )
-
-        TypedRecoveryPassword text ->
-            ( case model of
-                EnterRecoveryPassword enterRecoveryPassword ->
-                    case enterRecoveryPassword.pressedSubmit of
-                        NotSubmitted _ ->
-                            EnterRecoveryPassword { enterRecoveryPassword | password = text }
-
-                        Submitting ->
-                            model
-
-                _ ->
-                    model
-            , Command.none
-            )
-                |> Just
-
-        PressedSubmitRecoveryPassword ->
-            (case model of
-                EnterRecoveryPassword enterRecoveryPassword ->
-                    if String.isEmpty enterRecoveryPassword.password then
-                        ( EnterRecoveryPassword { enterRecoveryPassword | pressedSubmit = NotSubmitted True }
-                        , Command.none
-                        )
-
-                    else
-                        ( EnterRecoveryPassword
-                            { enterRecoveryPassword | pressedSubmit = Submitting, incorrectPassword = False }
-                        , onSubmitRecoveryPassword enterRecoveryPassword.password
-                        )
-
-                _ ->
-                    ( model, Command.none )
-            )
-                |> Just
 
 
 typedCode :
@@ -480,9 +415,6 @@ view textSelection loginForm windowSize pwaStatus =
         , case loginForm of
             EnterEmail enterEmail2 ->
                 enterEmailView enterEmail2
-
-            EnterRecoveryPassword enterRecoveryPassword ->
-                enterRecoveryPasswordView enterRecoveryPassword
 
             EnterLoginCode enterLoginCode ->
                 enterLoginCodeView windowSize textSelection enterLoginCode
@@ -830,16 +762,6 @@ cancelButtonId =
     Dom.id "loginForm_cancelButton"
 
 
-recoveryPasswordInputId : HtmlId
-recoveryPasswordInputId =
-    Dom.id "loginForm_recoveryPasswordInput"
-
-
-submitRecoveryPasswordButtonId : HtmlId
-submitRecoveryPasswordButtonId =
-    Dom.id "loginForm_recoveryPasswordButton"
-
-
 loginCodeInputId : HtmlId
 loginCodeInputId =
     Dom.id "loginForm_loginCodeInput"
@@ -871,9 +793,6 @@ rateLimited loginForm =
         EnterUserData _ ->
             loginForm
 
-        EnterRecoveryPassword _ ->
-            loginForm
-
 
 signupsDisabled : LoginForm -> LoginForm
 signupsDisabled loginForm =
@@ -896,9 +815,6 @@ signupsDisabled loginForm =
         EnterUserData _ ->
             loginForm
 
-        EnterRecoveryPassword _ ->
-            loginForm
-
 
 invalidCode : Int -> LoginForm -> LoginForm
 invalidCode loginCode loginForm =
@@ -918,20 +834,6 @@ invalidCode loginCode loginForm =
                 |> EnterTwoFactorCode
 
         EnterUserData _ ->
-            loginForm
-
-        EnterRecoveryPassword _ ->
-            loginForm
-
-
-invalidRecoveryPassword : LoginForm -> LoginForm
-invalidRecoveryPassword loginForm =
-    case loginForm of
-        EnterRecoveryPassword enterRecoveryPassword ->
-            EnterRecoveryPassword
-                { enterRecoveryPassword | pressedSubmit = NotSubmitted False, incorrectPassword = True }
-
-        _ ->
             loginForm
 
 
@@ -982,65 +884,6 @@ enterEmailView model =
         ]
 
 
-enterRecoveryPasswordView : EnterRecoveryPassword2 -> Element Msg
-enterRecoveryPasswordView model =
-    let
-        label : { element : Element msg, id : Ui.Input.Label }
-        label =
-            Ui.Input.label
-                (Dom.idToString recoveryPasswordInputId)
-                [ Ui.Font.weight 600 ]
-                (Ui.text "Enter the recovery password")
-    in
-    Ui.column
-        [ Ui.spacing 16 ]
-        [ Ui.Prose.paragraph
-            [ Ui.Font.size 30, Ui.Font.weight 600 ]
-            [ Ui.text "Recovery login" ]
-        , Ui.Prose.paragraph
-            [ Ui.Font.color MyUi.font3, Ui.Font.size 16 ]
-            [ Ui.text "Logging in by email isn't possible because this server has no Postmark API key configured. Enter the recovery password to log in as the admin user." ]
-        , MyUi.column
-            []
-            [ label.element
-            , Ui.Input.currentPassword
-                [ Ui.Events.onKey Ui.Events.enter PressedSubmitRecoveryPassword
-                , Ui.background MyUi.inputBackground
-                , Ui.Font.color MyUi.font1
-                , if model.incorrectPassword then
-                    Ui.borderColor MyUi.errorColor
-
-                  else
-                    Ui.borderColor MyUi.inputBorder
-                ]
-                { onChange = TypedRecoveryPassword
-                , text = model.password
-                , placeholder = Nothing
-                , label = label.id
-                , show = False
-                }
-            ]
-        , Ui.row
-            [ Ui.spacing 16 ]
-            [ MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel"
-            , MyUi.simpleButton submitRecoveryPasswordButtonId PressedSubmitRecoveryPassword (Ui.text "Login")
-            ]
-        , if model.incorrectPassword then
-            errorView "Incorrect password"
-
-          else
-            case model.pressedSubmit of
-                NotSubmitted True ->
-                    errorView "Enter the recovery password first"
-
-                NotSubmitted False ->
-                    Ui.none
-
-                Submitting ->
-                    Ui.Prose.paragraph [] [ Ui.text "Submitting..." ]
-        ]
-
-
 validateEmail : String -> Result String EmailAddress
 validateEmail text =
     EmailAddress.fromString text
@@ -1053,20 +896,11 @@ validateEmail text =
             )
 
 
-init : LoginType -> LoginForm
-init loginType =
-    case loginType of
-        LoginWithEmail ->
-            EnterEmail
-                { email = ""
-                , pressedSubmitEmail = False
-                , rateLimited = False
-                , showSignupsDisabled = False
-                }
-
-        LoginWithRecoveryPassword ->
-            EnterRecoveryPassword
-                { password = ""
-                , pressedSubmit = NotSubmitted False
-                , incorrectPassword = False
-                }
+init : LoginForm
+init =
+    EnterEmail
+        { email = ""
+        , pressedSubmitEmail = False
+        , rateLimited = False
+        , showSignupsDisabled = False
+        }
