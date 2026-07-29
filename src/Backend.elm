@@ -657,20 +657,10 @@ update msg model =
                                     (\session -> { session | pushSubscription = SubscriptionError subscribeData error })
                                     model.sessions
                         }
-                        (if Env.isProduction && userId /= Broadcast.adminUserId then
-                            Broadcast.toSession
-                                sessionId
-                                (Server_PushNotificationFailed
-                                    subscribeData
-                                    (Http.BadBody "Something went wrong when sending notifications")
-                                )
-                                model
-
-                         else
-                            Broadcast.toSession
-                                sessionId
-                                (Server_PushNotificationFailed subscribeData error)
-                                model
+                        (Broadcast.toSession
+                            sessionId
+                            (Server_PushNotificationFailed subscribeData error)
+                            model
                         )
 
         GotVapidKeys result ->

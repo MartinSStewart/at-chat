@@ -27,11 +27,6 @@ secretKey =
     "123"
 
 
-postmarkServerToken_ : String
-postmarkServerToken_ =
-    ""
-
-
 slackClientId : String
 slackClientId =
     "9460466681300.9470334175105"
