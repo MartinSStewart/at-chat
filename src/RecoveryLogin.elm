@@ -1,6 +1,7 @@
 module RecoveryLogin exposing
-    ( Model
+    ( Model(..)
     , Msg(..)
+    , SubmitStatus(..)
     , incorrectPassword
     , init
     , isPressMsg
@@ -52,6 +53,8 @@ type Model
     = Model { password : String, submitStatus : SubmitStatus }
 
 
+{-| Opaque
+-}
 type SubmitStatus
     = NotSubmitted Bool
     | Submitting
