@@ -103,7 +103,6 @@ channelRouteFuzzer =
     Fuzz.oneOf
         [ Fuzz.map3 ChannelRoute idFuzzer threadRouteFuzzer (Fuzz.maybe tabFuzzer)
         , Fuzz.constant NewChannelRoute
-        , Fuzz.map EditChannelRoute idFuzzer
         , Fuzz.constant GuildSettingsRoute
         , Fuzz.map JoinRoute secretIdFuzzer
         ]

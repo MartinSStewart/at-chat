@@ -464,7 +464,6 @@ view textSelection loginForm windowSize pwaStatus =
                         , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
                         , Ui.Font.color MyUi.font1
-                        , MyUi.focusEffect
                         ]
                         (Ui.text "Submit")
                     ]
@@ -692,7 +691,7 @@ enterLoginCodeView windowSize textSelection model =
             ]
         , Ui.el
             [ Ui.centerX, Ui.width Ui.shrink ]
-            (MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel")
+            (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
         ]
 
 
@@ -743,7 +742,7 @@ enterTwoFactorCodeView windowSize textSelection model =
             ]
         , Ui.el
             [ Ui.centerX, Ui.width Ui.shrink ]
-            (MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel")
+            (MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel")
         ]
 
 
@@ -870,7 +869,7 @@ enterEmailView model =
             )
         , Ui.row
             [ Ui.spacing 16 ]
-            [ MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel"
+            [ MyUi.secondaryButtonTall cancelButtonId PressedCancelLogin "Cancel"
             , MyUi.simpleButton submitEmailButtonId PressedSubmitEmail (Ui.text "Login")
             ]
         , if model.rateLimited then

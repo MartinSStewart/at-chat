@@ -560,9 +560,6 @@ canDropFiles currentUserId route =
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute _ ->
-                    Nothing
-
                 GuildSettingsRoute ->
                     Nothing
 
@@ -590,9 +587,6 @@ canDropFiles currentUserId route =
                         |> Just
 
                 DiscordChannel_NewChannelRoute ->
-                    Nothing
-
-                DiscordChannel_EditChannelRoute _ ->
                     Nothing
 
                 DiscordChannel_GuildSettingsRoute ->
@@ -1096,7 +1090,6 @@ externalLinkWarning domainWhitelist isMobile url =
                     , Ui.rounded 4
                     , Ui.width Ui.shrink
                     , Ui.paddingXY 16 8
-                    , MyUi.focusEffect
                     , Ui.Font.weight 500
                     , Ui.Font.color MyUi.white
                     , MyUi.htmlStyle "text-decoration" "none"
@@ -1530,9 +1523,6 @@ routeRequest previousRoute newRoute model =
                 NewChannelRoute ->
                     enterSidebarRoute sameGuild previousRoute Command.none model3
 
-                EditChannelRoute _ ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
-
                 GuildSettingsRoute ->
                     enterSidebarRoute sameGuild previousRoute Command.none model3
 
@@ -1620,9 +1610,6 @@ routeRequest previousRoute newRoute model =
                         model3
 
                 DiscordChannel_NewChannelRoute ->
-                    enterSidebarRoute sameGuild previousRoute Command.none model3
-
-                DiscordChannel_EditChannelRoute _ ->
                     enterSidebarRoute sameGuild previousRoute Command.none model3
 
                 DiscordChannel_GuildSettingsRoute ->
@@ -1996,12 +1983,6 @@ isPressMsg msg =
         PressedSubmitNewChannel _ _ ->
             False
 
-        MouseEnteredChannelName _ _ _ ->
-            False
-
-        MouseExitedChannelName _ _ _ ->
-            False
-
         EditChannelFormChanged _ _ _ ->
             False
 
@@ -2259,12 +2240,6 @@ isPressMsg msg =
 
         PressedUnlinkDiscordUser _ ->
             True
-
-        MouseEnteredDiscordChannelName _ _ _ ->
-            False
-
-        MouseExitedDiscordChannelName _ _ _ ->
-            False
 
         PressedDiscordGuildMemberLabel _ ->
             True

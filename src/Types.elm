@@ -17,7 +17,6 @@ module Types exposing
     , FrontendModel_(..)
     , FrontendMsg
     , FrontendMsg_(..)
-    , GuildChannelNameHover(..)
     , InitialLoadRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -227,12 +226,6 @@ type LoginStatus
         }
 
 
-type GuildChannelNameHover
-    = NoChannelNameHover
-    | GuildChannelNameHover (Id GuildId) (Id ChannelId) ThreadRoute
-    | DiscordGuildChannelNameHover (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
-
-
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Pages.Admin.Model
@@ -241,7 +234,6 @@ type alias LoggedIn2 =
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     , editGuildForm : SeqDict (Id GuildId) EditGuildForm
     , newGuildForm : Maybe NewGuildForm
-    , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
     , textInputFocus : Maybe TextInputFocus
     , -- Lasts until mouseUp
@@ -477,10 +469,6 @@ type FrontendMsg_
     | SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
-    | MouseEnteredChannelName (Id GuildId) (Id ChannelId) ThreadRoute
-    | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
-    | MouseEnteredDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
-    | MouseExitedDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm

@@ -2523,9 +2523,6 @@ routeToViewing route local =
                     NewChannelRoute ->
                         StopViewingChannel
 
-                    EditChannelRoute _ ->
-                        StopViewingChannel
-
                     GuildSettingsRoute ->
                         StopViewingChannel
 
@@ -2547,9 +2544,6 @@ routeToViewing route local =
                                 ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
 
                     DiscordChannel_NewChannelRoute ->
-                        StopViewingChannel
-
-                    DiscordChannel_EditChannelRoute _ ->
                         StopViewingChannel
 
                     DiscordChannel_GuildSettingsRoute ->

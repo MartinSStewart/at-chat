@@ -487,7 +487,7 @@ view windowSize hasImage model =
 
                   else
                     Ui.none
-                , MyUi.secondaryButton
+                , MyUi.secondaryButtonTall
                     (Dom.id "imageEditor_selectImage")
                     PressedProfileImage
                     (if hasImage then

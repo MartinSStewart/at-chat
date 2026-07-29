@@ -2110,22 +2110,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin user ->
-                let
-                    guildId : Id GuildId
-                    guildId =
-                        Id.fromInt 1
-
-                    newChannelId : Id ChannelId
-                    newChannelId =
-                        Id.fromInt 1
-                in
                 [ admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "to-delete"
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
-                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
-                , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
+                , admin.click 100 (Dom.id "guild_showMembers")
                 , admin.click 100 (Dom.id "guild_deleteChannel")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
@@ -2275,21 +2265,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin user ->
-                let
-                    guildId : Id GuildId
-                    guildId =
-                        Id.fromInt 1
-
-                    newChannelId : Id ChannelId
-                    newChannelId =
-                        Id.fromInt 1
-                in
                 [ admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "with-message"
                 , admin.click 100 (Dom.id "guild_createChannel")
                 , E2EHelper.writeMessage admin 100 "I have content"
-                , admin.update 100 (Audio.userMsg (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread))
-                , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
+                , admin.click 100 (Dom.id "guild_showMembers")
 
                 -- First click reveals the confirmation input but does not delete
                 , admin.click 100 (Dom.id "guild_deleteChannel")
