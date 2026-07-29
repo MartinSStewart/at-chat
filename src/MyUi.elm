@@ -1005,19 +1005,15 @@ textarea::-moz-selection {
     color: rgba(0,0,0,0);
 }
 /* The message input's textarea is drawn on top of the rich text so that the caret stays visible.
-   That means the selection highlight is drawn on top of the rich text too, so it needs to be
-   translucent to avoid hiding it. */
+   Only the caret should be visible though, so its text and selection highlight are transparent and
+   RichText.textWithSelection draws the highlight on the rich text instead. */
 .rich-text-input::selection {
-    background-color: """
-                ++ colorToStyle (colorWithAlpha 0.5 selectedTextBackground)
-                ++ """;
-    color: rgba(0,0,0,0);
+    background-color: transparent;
+    color: transparent;
 }
 .rich-text-input::-moz-selection {
-    background-color: """
-                ++ colorToStyle (colorWithAlpha 0.5 selectedTextBackground)
-                ++ """;
-    color: rgba(0,0,0,0);
+    background-color: transparent;
+    color: transparent;
 }
 
 //https://stackoverflow.com/a/54410301

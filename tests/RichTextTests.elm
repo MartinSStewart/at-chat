@@ -2,13 +2,17 @@ module RichTextTests exposing (simpleTest, test)
 
 import Expect
 import Fuzz exposing (Fuzzer)
+import Html
 import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
+import MyUi
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
+import Test.Html.Query
+import Test.Html.Selector
 import Unsafe
 import Url exposing (Protocol(..), Url)
 
@@ -550,7 +554,84 @@ test =
                 (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []))
                 [ NormalText '\n' "- \n- b" ]
             )
+        , Test.describe "Selection highlight in the message input"
+            [ selectionHighlightTest "abc||spoiler||def"
+            , selectionHighlightTest "a*bold*c"
+            , selectionHighlightTest "a__under__c"
+            , selectionHighlightTest "a~~strike~~c"
+            , selectionHighlightTest "a`code`c"
+            , selectionHighlightTest "a\\*b"
+            , selectionHighlightTest "> quoted"
+            , selectionHighlightTest "> line1\n> line2\n> line3"
+            , selectionHighlightTest "# Heading"
+            , selectionHighlightTest "@a bc"
+            , selectionHighlightTest "[!1]abc"
+            , selectionHighlightTest "https://abc.com/x"
+            , selectionHighlightTest "* bullet1\n* bullet2"
+            , selectionHighlightTest "a||*b*||c"
+            ]
         ]
+
+
+{-| The message input draws the selection highlight itself (the textarea on top of the rich text has
+a transparent one) so the highlight has to line up with the text the user typed. Selects each
+character in turn and checks that it's the character that ends up highlighted.
+-}
+selectionHighlightTest : String -> Test
+selectionHighlightTest source =
+    Test.test
+        ("Selection highlight lines up with " ++ Debug.toString source)
+        (\_ ->
+            case String.Nonempty.fromString source of
+                Just nonempty ->
+                    Expect.all
+                        (List.filterMap
+                            (\index ->
+                                let
+                                    char : String
+                                    char =
+                                        String.slice index (index + 1) source
+                                in
+                                if String.trim char == "" then
+                                    -- Test.Html.Selector.exactText can't match whitespace
+                                    Nothing
+
+                                else
+                                    Just (\() -> expectHighlighted nonempty index char)
+                            )
+                            (List.range 0 (String.length source - 1))
+                        )
+                        ()
+
+                Nothing ->
+                    Expect.fail "Empty source text"
+        )
+
+
+expectHighlighted : NonemptyString -> Int -> String -> Expect.Expectation
+expectHighlighted source index char =
+    RichText.textInputView
+        users
+        SeqDict.empty
+        SeqDict.empty
+        SeqDict.empty
+        (Just { start = index, end = index + 1 })
+        (RichText.fromNonemptyString users source)
+        |> Html.div []
+        |> Test.Html.Query.fromHtml
+        |> Test.Html.Query.findAll
+            [ Test.Html.Selector.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground)
+            , Test.Html.Selector.exactText char
+            ]
+        |> Test.Html.Query.count
+            (Expect.equal 1
+                >> Expect.onFail
+                    ("Selecting index "
+                        ++ String.fromInt index
+                        ++ " should highlight "
+                        ++ Debug.toString char
+                    )
+            )
 
 
 simpleTest : String -> b -> c -> (b -> c) -> Test

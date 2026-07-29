@@ -247,6 +247,21 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                                 Json.Decode.fail ""
                         )
                 )
+
+        selection : Maybe Range
+        selection =
+            case loggedIn.textInputFocus of
+                Just textInputFocus ->
+                    -- Only this input's selection gets drawn. Otherwise text in every message input
+                    -- on screen is highlighted when one of them is focused.
+                    if textInputFocus.htmlId == channelTextInputId then
+                        Just textInputFocus.selection
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
     in
     Html.div
         [ Html.Attributes.style "display" "flex"
@@ -377,7 +392,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                         attachedFiles
                         localUser.customEmojis
                         localUser.stickers
-                        (Maybe.map .selection loggedIn.textInputFocus)
+                        selection
                         richText2
                         ++ [ Html.text "\n" ]
 
