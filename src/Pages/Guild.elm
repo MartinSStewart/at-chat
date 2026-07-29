@@ -8724,19 +8724,10 @@ newGuildFormView form =
         , guildNameInput form |> Ui.map NewGuildFormChanged
         , Ui.row
             [ Ui.spacing 16, Ui.paddingXY 16 0 ]
-            [ MyUi.elButton
+            [ MyUi.secondaryButton
                 (Dom.id "guild_cancelNewGuild")
                 (PressedLink HomePageRoute)
-                [ Ui.paddingXY 16 8
-                , Ui.background MyUi.cancelButtonBackground
-                , Ui.width Ui.shrink
-                , Ui.rounded 8
-                , Ui.Font.color MyUi.buttonFontColor
-                , Ui.Font.bold
-                , Ui.borderColor MyUi.buttonBorder
-                , Ui.border 1
-                ]
-                (Ui.text "Cancel")
+                "Cancel"
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]
         ]
