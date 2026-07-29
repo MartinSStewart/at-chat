@@ -15,6 +15,7 @@ import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
+import Env
 import FileName
 import FileStatus exposing (FileData, FileId)
 import GuildIcon
@@ -371,6 +372,7 @@ notificationEmail =
         (Broadcast.notificationEmailContent
             (\id -> "User " ++ Id.toString id)
             "Stevie Steve"
+            Env.domain
             message
         )
 
