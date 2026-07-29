@@ -31,6 +31,7 @@ import Pages.Guild
 import PersonName
 import Route exposing (ShowMembersTab(..))
 import SeqDict
+import SeqSet
 import Sticker
 import Test.Html.Query
 import Test.Html.Selector
@@ -138,6 +139,54 @@ checkGuildVisibleMessageCount admin isExpected data =
 
                 Nothing ->
                     Err "The Discord guild channel is missing from the frontend"
+        )
+
+
+guildEmojisUpdateGuildId : Discord.Id Discord.GuildId
+guildEmojisUpdateGuildId =
+    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+{-| Reads the names of the custom emojis the admin can use in the bot test guild
+(guild 705745250815311942) and checks them against the expected names.
+-}
+checkGuildCustomEmojis :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List String
+    -> T.Data FrontendModel BackendModel
+    -> Result String ()
+checkGuildCustomEmojis admin expected data =
+    withAdminLocalState admin
+        data
+        (\local ->
+            case SeqDict.get guildEmojisUpdateGuildId local.discordGuilds of
+                Just guild ->
+                    let
+                        names : List String
+                        names =
+                            LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild
+                                |> Tuple.first
+                                |> SeqSet.toList
+                                |> List.filterMap
+                                    (\customEmojiId ->
+                                        SeqDict.get customEmojiId local.localUser.customEmojis
+                                            |> Maybe.map (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name)
+                                    )
+                                |> List.sort
+                    in
+                    if names == List.sort expected then
+                        Ok ()
+
+                    else
+                        Err
+                            ("Expected the bot test guild to have the custom emojis "
+                                ++ String.join ", " (List.sort expected)
+                                ++ " but it has "
+                                ++ String.join ", " names
+                            )
+
+                Nothing ->
+                    Err "The Discord guild is missing from the frontend"
         )
 
 
@@ -1970,6 +2019,34 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , viewer.checkModel 200 (checkDiscordUserLoaded "Discord guild member AT" True guildOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "DM channel user kess" True dmChannelOnlyDiscordUserId)
                 , viewer.checkModel 100 (checkDiscordUserLoaded "Unrelated Discord user TesterBot" False unrelatedDiscordUserId)
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Guild emojis update"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- The Bot Test guild starts out with a single custom emoji from the ready payload.
+                          T.checkState 100 (checkGuildCustomEmojis admin [ "elm" ])
+                        , -- Adding an emoji on Discord: the new emoji gets downloaded and becomes usable.
+                          T.websocketSendString 100 connection """{"t":"GUILD_EMOJIS_UPDATE","s":10,"op":0,"d":{"guild_id":"705745250815311942","emojis":[{"roles":[],"require_colons":true,"name":"elm","managed":false,"id":"888159336168300574","available":true,"animated":false},{"roles":[],"require_colons":true,"name":"lamdera","managed":false,"id":"1499999999999999999","available":true,"animated":false}]}}"""
+                        , T.checkState 1000 (checkGuildCustomEmojis admin [ "elm", "lamdera" ])
+                        , -- Deleting an emoji on Discord: it drops out of the guild even though the
+                          -- custom emoji itself is kept around for messages that already use it.
+                          T.websocketSendString 100 connection """{"t":"GUILD_EMOJIS_UPDATE","s":11,"op":0,"d":{"guild_id":"705745250815311942","emojis":[{"roles":[],"require_colons":true,"name":"lamdera","managed":false,"id":"1499999999999999999","available":true,"animated":false}]}}"""
+                        , T.checkState 1000 (checkGuildCustomEmojis admin [ "lamdera" ])
+                        ]
+                    )
                 ]
             )
         ]

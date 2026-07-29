@@ -1949,6 +1949,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
+                        Discord.UserOutMsg_GuildEmojisUpdate emojisUpdate ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleGuildEmojisUpdate userData.linkedTo emojisUpdate model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
                         Discord.UserOutMsg_ChannelPinsUpdate _ ->
                             ( model2, cmds )
 
@@ -2109,6 +2116,78 @@ handleGuildRoleUpdate roleUpdate model =
                 roleUpdate.guildId
                 (Server_DiscordUpdateRole roleUpdate.guildId role.id discordRole |> ServerChange)
                 model
+            )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+{-| A GUILD\_EMOJIS\_UPDATE event carries the guild's complete emoji list as it
+looks after the change, not just the emojis that were added or removed. Emojis we
+haven't seen before get downloaded and stored, and the guild's emoji set is
+replaced so that deleted emojis stop appearing in the emoji picker.
+
+Renaming an emoji on Discord also shows up here. Custom emojis are keyed by id
+_and_ name, so a rename is stored as a new custom emoji and the old name drops
+out of the guild's set.
+
+-}
+handleGuildEmojisUpdate :
+    Id UserId
+    -> Discord.GuildEmojisUpdate
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleGuildEmojisUpdate userId emojisUpdate model =
+    case SeqDict.get emojisUpdate.guildId model.discordGuilds of
+        Just guild ->
+            let
+                emojis : List DiscordCustomEmojiIdAndName
+                emojis =
+                    emojiDataToEmojiIdAndName emojisUpdate.emojis
+
+                customEmojiData :
+                    { tasks : List (Task BackendOnly Never ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+                    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+                    , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+                    }
+                customEmojiData =
+                    handleCustomEmojis
+                        model.serverSecret
+                        emojis
+                        { tasks = []
+                        , customEmojis = model.customEmojis
+                        , discordCustomEmojis = model.discordCustomEmojis
+                        }
+
+                guildCustomEmojis : SeqSet (Id CustomEmojiId)
+                guildCustomEmojis =
+                    List.filterMap
+                        (\emoji -> OneToOne.second emoji customEmojiData.discordCustomEmojis)
+                        emojis
+                        |> SeqSet.fromList
+
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                emojisUpdate.guildId
+                                { guild | customEmojis = guildCustomEmojis }
+                                model.discordGuilds
+                        , customEmojis = customEmojiData.customEmojis
+                        , discordCustomEmojis = customEmojiData.discordCustomEmojis
+                    }
+            in
+            ( model2
+            , Command.batch
+                [ Broadcast.toDiscordGuild
+                    emojisUpdate.guildId
+                    (Server_DiscordUpdateGuildCustomEmojis emojisUpdate.guildId guildCustomEmojis |> ServerChange)
+                    model2
+                , Task.sequence customEmojiData.tasks
+                    |> Task.andThen (\customEmojis -> Task.map (GotDiscordReadyDataCustomEmojis userId customEmojis) Time.now)
+                    |> Task.perform identity
+                ]
             )
 
         Nothing ->

@@ -1606,7 +1606,7 @@ channelView channelRoute guildId guild loggedIn local model =
                 |> newChannelFormView (MyUi.isMobile model) guildId
 
         GuildSettingsRoute ->
-            guildSettingsForm model loggedIn local guildId guild
+            guildSettingsView model loggedIn local guildId guild
 
         JoinRoute _ ->
             Ui.none
@@ -1678,11 +1678,17 @@ discordChannelView routeData guild loggedIn local model =
             pageMissing "Adding Discord channels not supported yet"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId local
+            discordGuildSettingsView (MyUi.isMobile model) routeData.currentDiscordUserId routeData.guildId guild local
 
 
-discordGuildSettingsView : Discord.Id Discord.UserId -> Discord.Id Discord.GuildId -> LocalState -> Element FrontendMsg_
-discordGuildSettingsView userId guildId local =
+discordGuildSettingsView :
+    Bool
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> LocalState
+    -> Element FrontendMsg_
+discordGuildSettingsView isMobile currentUserId guildId guild local =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1692,11 +1698,16 @@ discordGuildSettingsView userId guildId local =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
+            , Ui.column
+                [ Ui.paddingXY 8 0 ]
+                [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
+                , discordMemberLabel isMobile local.localUser currentUserId (MembersAndOwner.owner guild.membersAndOwner)
+                ]
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (MyUi.radioColumn
                     (Dom.id "guild_discordNotificationLevel")
-                    (PressedDiscordGuildNotificationLevel userId guildId)
+                    (PressedDiscordGuildNotificationLevel currentUserId guildId)
                     (if SeqSet.member guildId local.localUser.user.discordNotifyOnAllMessages then
                         Just NotifyOnEveryMessage
 
@@ -1712,8 +1723,8 @@ discordGuildSettingsView userId guildId local =
         )
 
 
-guildSettingsForm : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
-guildSettingsForm model loggedIn local guildId guild =
+guildSettingsView : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg_
+guildSettingsView model loggedIn local guildId guild =
     let
         isMobile =
             MyUi.isMobile model

@@ -4466,6 +4466,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
+                Server_DiscordUpdateGuildCustomEmojis guildId customEmojis ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | customEmojis = customEmojis })
+                                local.discordGuilds
+                    }
+
                 Server_UpdateDiscordMembers guildId members ->
                     { local
                         | discordGuilds =
