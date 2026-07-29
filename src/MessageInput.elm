@@ -368,7 +368,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    [ if placeholderText == "" || Maybe.map .htmlId loggedIn.textInputFocus == Just channelTextInputId then
+                    [ if placeholderText == "" then
                         -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
                         Html.text "\u{00A0}"
 

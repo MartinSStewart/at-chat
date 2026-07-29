@@ -12,8 +12,6 @@ module MyUi exposing
     , bounceScroll
     , buttonBackground
     , buttonBorder
-    , buttonFontColor
-    , cancelButtonBackground
     , channelAndGuildColumnWidth
     , channelHeaderHeight
     , colorToHex
@@ -1378,11 +1376,6 @@ disabledButtonBorder =
     Ui.rgb 158 162 165
 
 
-cancelButtonBackground : Ui.Color
-cancelButtonBackground =
-    Ui.rgb 196 200 204
-
-
 deleteButtonBackground : Ui.Color
 deleteButtonBackground =
     Ui.rgb 180 50 40
@@ -1401,11 +1394,6 @@ deleteButtonFont =
 buttonBorder : Ui.Color
 buttonBorder =
     Ui.rgb 101 141 181
-
-
-buttonFontColor : Ui.Color
-buttonFontColor =
-    Ui.rgb 0 0 0
 
 
 font1 : Ui.Color

@@ -179,7 +179,11 @@ guildColumn isMobile route localUser dmChannels discordDmChannels guilds discord
                 ++ List.map
                     (\( guildId, guild ) -> Ui.Lazy.lazy4 discordGuildIcon localUser route guildId guild)
                     (SeqDict.toList discordGuilds)
-                ++ [ GuildIcon.addGuildButton (Dom.id "guild_createGuild") False PressedCreateGuild ]
+                ++ [ GuildIcon.addGuildButton
+                        (Dom.id "guild_createGuild")
+                        (route == NewGuildRoute)
+                        (PressedLink NewGuildRoute)
+                   ]
             )
         )
 

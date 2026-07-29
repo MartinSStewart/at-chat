@@ -14,6 +14,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
+    , newGuildFormView
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -130,14 +131,11 @@ homePageLoggedInView :
     -> LocalState
     -> Element FrontendMsg_
 homePageLoggedInView maybeOtherUserId model loggedIn local =
-    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
-        ( Just fileData, _ ) ->
+    case loggedIn.showFileToUploadInfo of
+        Just fileData ->
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
-        ( Nothing, Just form ) ->
-            newGuildFormView form
-
-        ( Nothing, Nothing ) ->
+        Nothing ->
             if MyUi.isMobile model then
                 let
                     canScroll2 : Bool
@@ -512,14 +510,11 @@ conversationWidth model =
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg_
 guildView model guildId channelRoute loggedIn local =
-    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
-        ( Just fileData, _ ) ->
+    case loggedIn.showFileToUploadInfo of
+        Just fileData ->
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
-        ( Nothing, Just form ) ->
-            newGuildFormView form
-
-        ( Nothing, Nothing ) ->
+        Nothing ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     if MyUi.isMobile model then
@@ -686,14 +681,11 @@ discordGuildView :
     -> LocalState
     -> Element FrontendMsg_
 discordGuildView model routeData loggedIn local =
-    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
-        ( Just fileData, _ ) ->
+    case loggedIn.showFileToUploadInfo of
+        Just fileData ->
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
-        ( Nothing, Just form ) ->
-            newGuildFormView form
-
-        ( Nothing, Nothing ) ->
+        Nothing ->
             case
                 ( SeqDict.get routeData.guildId local.discordGuilds
                 , LinkedAndOtherDiscordUsers.getLinkedUser routeData.currentDiscordUserId local.localUser.discordUsers
@@ -8732,19 +8724,10 @@ newGuildFormView form =
         , guildNameInput form |> Ui.map NewGuildFormChanged
         , Ui.row
             [ Ui.spacing 16, Ui.paddingXY 16 0 ]
-            [ MyUi.elButton
+            [ MyUi.secondaryButton
                 (Dom.id "guild_cancelNewGuild")
-                PressedCancelNewGuild
-                [ Ui.paddingXY 16 8
-                , Ui.background MyUi.cancelButtonBackground
-                , Ui.width Ui.shrink
-                , Ui.rounded 8
-                , Ui.Font.color MyUi.buttonFontColor
-                , Ui.Font.bold
-                , Ui.borderColor MyUi.buttonBorder
-                , Ui.border 1
-                ]
-                (Ui.text "Cancel")
+                (PressedLink HomePageRoute)
+                "Cancel"
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]
         ]

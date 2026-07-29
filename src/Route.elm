@@ -39,6 +39,7 @@ import UserSession exposing (ChannelHeaderTab(..))
 type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe (Id Pagination.ItemId) }
+    | NewGuildRoute
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute DmRouteData
@@ -130,6 +131,9 @@ decode url =
                         _ ->
                             Nothing
                 }
+
+        [ "new-guild" ] ->
+            NewGuildRoute
 
         [ "ai-chat" ] ->
             AiChatRoute
@@ -386,6 +390,9 @@ toChannelHeaderTab route =
         AdminRoute _ ->
             Nothing
 
+        NewGuildRoute ->
+            Nothing
+
         GuildRoute _ channelRoute ->
             case channelRoute of
                 ChannelRoute _ _ maybeTab ->
@@ -443,6 +450,9 @@ toShowMembersTab route =
             ( HideMembersTab, False )
 
         AdminRoute _ ->
+            ( HideMembersTab, False )
+
+        NewGuildRoute ->
             ( HideMembersTab, False )
 
         GuildRoute _ channelRoute ->
@@ -584,6 +594,9 @@ encode route =
                         Nothing ->
                             []
                     )
+
+                NewGuildRoute ->
+                    ( [ "new-guild" ], [] )
 
                 AiChatRoute ->
                     ( [ "ai-chat" ], [] )
@@ -759,6 +772,9 @@ requiresLogin route =
             False
 
         AdminRoute _ ->
+            True
+
+        NewGuildRoute ->
             True
 
         AiChatRoute ->

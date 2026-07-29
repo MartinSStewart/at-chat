@@ -2509,6 +2509,9 @@ routeToViewing route local =
         AdminRoute _ ->
             StopViewingChannel
 
+        NewGuildRoute ->
+            StopViewingChannel
+
         GuildRoute guildId channelRoute ->
             if SeqDict.member guildId local.guilds then
                 case channelRoute of
