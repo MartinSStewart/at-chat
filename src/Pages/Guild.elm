@@ -6009,15 +6009,12 @@ profileImageButtonId messageId =
     Dom.id ("guild_profileImage_" ++ Id.toString messageId)
 
 
-{-| Makes a message's profile image open the DM channel with whoever wrote the message.
-Only used when the user isn't picking a drawing anchor, since then the profile image is an
-anchor to attach drawings to instead.
--}
 openDmButton : Id messageId -> MessageViewMsg -> List (Ui.Attribute MessageViewMsg)
 openDmButton messageId onPress =
     [ Ui.pointer
     , profileImageButtonId messageId |> Dom.idToString |> Ui.id
-    , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
+    , Ui.Events.onClick onPress
+    , MyUi.hoverText "Go to direct messages"
     ]
 
 
@@ -6048,14 +6045,14 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
                     Drawing.userColor
-                    MessageView_PressedUserIcon
+                    MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             []
 
                         else
-                            openDmButton messageId (MessageView_PressedProfileImage message2.createdBy)
+                            openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
                        )
                 )
             |> Ui.el
@@ -6181,14 +6178,14 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
                     Drawing.discordUserColor
-                    MessageView_PressedUserIcon
+                    MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
                     ++ (if isHovered == IsHoveredWhileSelectingAnchor then
                             []
 
                         else
-                            openDmButton messageId (MessageView_PressedDiscordProfileImage message2.createdBy)
+                            openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
                        )
                 )
             |> Ui.el

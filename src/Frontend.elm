@@ -2724,7 +2724,7 @@ updateLoaded msg model =
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIcon elementPosition anchorHalfSize ->
+                MessageView.MessageView_PressedUserIconAnchor elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
                         Just ChannelHeaderTab_Draw ->
                             selectDrawingAnchor
@@ -2780,7 +2780,7 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedProfileImage otherUserId ->
+                MessageView.MessageView_PressedUserIconButton otherUserId ->
                     case model.loginStatus of
                         LoggedIn loggedIn ->
                             FrontendExtra.routePush
@@ -2798,7 +2798,7 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedDiscordProfileImage otherUserId ->
+                MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
                     case model.loginStatus of
                         LoggedIn loggedIn ->
                             case LocalState.discordDmChannelWithUser otherUserId (Local.model loggedIn.localState) of

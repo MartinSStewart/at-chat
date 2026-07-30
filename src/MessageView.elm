@@ -47,12 +47,12 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGameStartedCard
-    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedUserIconAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedCardAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
-    | MessageView_PressedProfileImage (Id UserId)
-    | MessageView_PressedDiscordProfileImage (Discord.Id Discord.UserId)
+    | MessageView_PressedUserIconButton (Id UserId)
+    | MessageView_PressedDiscordUserIconButton (Discord.Id Discord.UserId)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -115,7 +115,7 @@ isPressMsg msg =
         MessageViewMsg_PressedGameStartedCard ->
             True
 
-        MessageView_PressedUserIcon _ _ ->
+        MessageView_PressedUserIconAnchor _ _ ->
             True
 
         MessageView_PressedTimestamp _ _ ->
@@ -127,10 +127,10 @@ isPressMsg msg =
         MessageView_PressedCardAnchor _ _ ->
             True
 
-        MessageView_PressedProfileImage _ ->
+        MessageView_PressedUserIconButton _ ->
             True
 
-        MessageView_PressedDiscordProfileImage _ ->
+        MessageView_PressedDiscordUserIconButton _ ->
             True
 
 
