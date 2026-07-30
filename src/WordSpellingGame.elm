@@ -4304,7 +4304,7 @@ gameSummaryView localUser shared log =
     in
     Ui.column
         [ Ui.spacing 12
-        , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
+        , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = 8 }
         , Ui.Font.color MyUi.font3
         ]
         ([ Ui.column
@@ -4324,10 +4324,10 @@ gameSummaryView localUser shared log =
                             [ Ui.spacing 4 ]
                             [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
                             , Ui.Prose.paragraph
-                                []
+                                [ Ui.paddingXY 4 4 ]
                                 [ Ui.text
                                     (bestWord.word
-                                        ++ " ("
+                                        ++ " (+"
                                         ++ String.fromInt bestWord.points
                                         ++ ") by "
                                     )
@@ -4349,7 +4349,7 @@ digits the counts run to.
 countsView : List { name : String, count : Int } -> Element GameMsg
 countsView entries =
     Ui.row
-        [ Ui.spacing 8 ]
+        [ Ui.spacing 8, Ui.paddingXY 4 0 ]
         [ Ui.column
             [ Ui.width Ui.shrink, Ui.spacing 4, Ui.Font.variants [ Ui.Font.tabularNumbers ] ]
             (List.map (\entry -> Ui.text (String.fromInt entry.count)) entries)
@@ -4387,7 +4387,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                     [ gameSummaryView localUser shared log
                     , Ui.Prose.paragraph
                         [ Ui.alignTop
-                        , Ui.paddingWith { left = 0, right = 0, top = 14, bottom = 6 }
+                        , Ui.paddingWith { left = 0, right = 0, top = 30, bottom = 6 }
                         , Ui.Font.color MyUi.font3
                         ]
                         (case gameEndReason of
@@ -4507,6 +4507,8 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
             , Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
             , Ui.scrollable
+            , Ui.heightMin 0
+            , Ui.height Ui.fill
             ]
         |> Ui.el
             [ (tabBodyHeight windowSize setup.traySize
@@ -4517,6 +4519,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
               )
                 |> Ui.px
                 |> Ui.height
+            , Ui.heightMin 0
             , Ui.inFront
                 (Ui.el
                     [ Ui.Font.color MyUi.font3
