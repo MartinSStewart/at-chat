@@ -54,7 +54,7 @@ view onPress isMuted =
         onPress
         (Just isMuted)
         "Notifications"
-        [ ( IsMuted, "Muted (hide red/white dot and don't sent notifications)" )
+        [ ( IsMuted, "Muted (hide red/white dot)" )
         , ( IsNotMuted, "Not muted" )
         ]
 

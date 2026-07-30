@@ -1279,10 +1279,11 @@ memberColumnContainerNotMobile isThread contents =
         , Ui.borderColor MyUi.border2
         ]
         [ Ui.row
-            [ Ui.height (Ui.px MyUi.channelHeaderHeight)
+            [ -- For some reason the bottom border isn't lining up with the ChannelHeader so we need to add a 1px offset
+              Ui.height (Ui.px (MyUi.channelHeaderHeight + 1))
             , MyUi.noShrinking
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor MyUi.border2
+            , Ui.borderColor MyUi.border1
             ]
             [ Ui.el
                 [ Ui.Font.color MyUi.font3, Ui.paddingXY 8 0 ]
@@ -1372,6 +1373,9 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm =
                         in
                         [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
                         , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+                        , MuteSettings.view
+                            (PressedMuteChannel guildId channelId)
+                            (MuteSettings.isChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
                         , if hasChanges then
                             Ui.row
                                 [ Ui.spacing 8 ]

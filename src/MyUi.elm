@@ -1229,7 +1229,7 @@ guildIconFullWidth =
 
 memberColumnWidth : number
 memberColumnWidth =
-    250
+    300
 
 
 insetTop : String
