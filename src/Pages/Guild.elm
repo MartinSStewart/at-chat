@@ -8609,39 +8609,51 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
         matchesSearch name =
             String.contains searchFilter (String.toLower (PersonName.toString name))
 
+        columnItems : List ( Time.Posix, Element FrontendMsg_ )
         columnItems =
             List.filterMap
                 (\( otherUserId, dmChannel ) ->
                     case User.getUser otherUserId localUser of
                         Just otherUser ->
                             if matchesSearch otherUser.name then
-                                ( case MessageArray.last dmChannel.messages of
-                                    Just message2 ->
-                                        Message.createdAt message2
+                                Ui.column
+                                    []
+                                    [ ( case MessageArray.last dmChannel.messages of
+                                            Just message2 ->
+                                                Message.createdAt message2
 
-                                    _ ->
-                                        Time.millisToPosix 0
-                                , Ui.Lazy.lazy6
-                                    (if isMobile then
-                                        friendLabelMobile
+                                            _ ->
+                                                Time.millisToPosix 0
+                                      , Ui.Lazy.lazy6
+                                            (if isMobile then
+                                                friendLabelMobile
 
-                                     else
-                                        friendLabelNotMobile
-                                    )
-                                    currentTime
-                                    (case openedOtherUserId of
-                                        SelectedDmChannel dmRoute ->
-                                            DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+                                             else
+                                                friendLabelNotMobile
+                                            )
+                                            currentTime
+                                            (case openedOtherUserId of
+                                                SelectedDmChannel dmRoute ->
+                                                    DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
 
-                                        _ ->
-                                            False
-                                    )
-                                    localUser
-                                    otherUserId
-                                    otherUser
-                                    dmChannel
-                                )
-                                    |> Just
+                                                _ ->
+                                                    False
+                                            )
+                                            localUser
+                                            otherUserId
+                                            otherUser
+                                            dmChannel
+                                      )
+                                        |> Just
+                                    , Ui.column
+                                        []
+                                        (SeqDict.toList dmChannel.threads
+                                            |> List.map
+                                                (\( threadId, thread ) ->
+                                                    thread
+                                                )
+                                        )
+                                    ]
 
                             else
                                 Nothing
