@@ -931,6 +931,8 @@ type ServerChange
     | Server_VoiceChatChange Call.ServerChange
     | Server_Game (Id UserId) GuildOrDmId Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
+    | Server_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | Server_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
 
 
 type LocalChange

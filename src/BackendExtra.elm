@@ -2071,10 +2071,10 @@ toBackendLog toBackend =
                 Local_Drawing _ _ _ ->
                     ToBackendLog_Local_Drawing
 
-                Local_SetMuteChannel id _ isMuted ->
+                Local_SetMuteChannel _ _ _ ->
                     ToBackendLog_Local_SetMuteChannel
 
-                Local_SetMuteThread id _ _ isMuted ->
+                Local_SetMuteThread _ _ _ _ ->
                     ToBackendLog_Local_SetMuteThread
 
         TwoFactorToBackend _ ->

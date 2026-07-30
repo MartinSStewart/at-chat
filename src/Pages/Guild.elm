@@ -1220,14 +1220,23 @@ guildErrorPage error local model =
             ]
 
 
-{-| The member column is also shown on routes where no channel is selected. In
-that case there's nothing to export.
+{-| The channel the route has selected, and which of its threads (if any) is open.
+The member column is also shown on routes where no channel is selected, hence the
+`Maybe`.
 -}
-channelRouteToChannelId : ChannelRoute -> Maybe (Id ChannelId)
-channelRouteToChannelId channelRoute =
+channelRouteToChannelIdAndThread : ChannelRoute -> Maybe ( Id ChannelId, ThreadRoute )
+channelRouteToChannelIdAndThread channelRoute =
     case channelRoute of
-        ChannelRoute channelId _ _ ->
-            Just channelId
+        ChannelRoute channelId threadRoute _ ->
+            ( channelId
+            , case threadRoute of
+                ViewThreadWithFriends threadId _ _ ->
+                    ViewThread threadId
+
+                NoThreadWithFriends _ _ ->
+                    NoThread
+            )
+                |> Just
 
         NewChannelRoute ->
             Nothing
@@ -1306,8 +1315,8 @@ memberColumnContainerNotMobile isThread contents =
         ]
 
 
-{-| Only actual channels can be edited. Threads and the other channel routes
-don't have an edit form so nothing is shown for them.
+{-| Only actual channels can be edited. Threads only get the mute setting, and the
+other channel routes show nothing at all.
 -}
 channelSettingsForm :
     LocalUser
@@ -1315,11 +1324,10 @@ channelSettingsForm :
     -> ChannelRoute
     -> FrontendGuild
     -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
-    -> ThreadRoute
     -> Element FrontendMsg_
-channelSettingsForm localUser guildId channelRoute guild editChannelForm threadRoute =
-    case ( channelRouteToChannelId channelRoute, threadRoute ) of
-        ( Just channelId, NoThread ) ->
+channelSettingsForm localUser guildId channelRoute guild editChannelForm =
+    case channelRouteToChannelIdAndThread channelRoute of
+        Just ( channelId, NoThread ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     (if localUser.session.userId == MembersAndOwner.owner guild.membersAndOwner then
@@ -1417,8 +1425,7 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm threadR
                      else
                         [ MuteSettings.view
                             (PressedMuteChannel guildId channelId)
-                            (MuteSettings.isChannelSpecificallyMuted guildId channelId)
-                            localUser.user.muteSettings
+                            (MuteSettings.isChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
                         , exportChannelButton (ExportChannel_Guild guildId channelId)
                         ]
                     )
@@ -1427,15 +1434,14 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm threadR
                 Nothing ->
                     Ui.none
 
-        ( Just channelId, ViewThread threadId ) ->
+        Just ( channelId, ViewThread threadId ) ->
             [ MuteSettings.view
                 (PressedMuteThread guildId channelId threadId)
-                (MuteSettings.isThreadSpecificallyMuted guildId channelId threadId)
-                localUser.user.muteSettings
+                (MuteSettings.isThreadSpecificallyMuted localUser.user.muteSettings guildId channelId threadId)
             ]
                 |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
-        ( Nothing, _ ) ->
+        Nothing ->
             Ui.none
 
 
@@ -1495,13 +1501,7 @@ memberColumnNotMobile :
 memberColumnNotMobile localUser guildId channelRoute guild editChannelForm isThread =
     memberColumnContainerNotMobile
         isThread
-        [ channelSettingsForm
-            localUser
-            guildId
-            channelRoute
-            guild
-            editChannelForm
-            isThread
+        [ channelSettingsForm localUser guildId channelRoute guild editChannelForm
         , Ui.Lazy.lazy3 memberListView False localUser guild.membersAndOwner
         ]
 
@@ -1599,7 +1599,7 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread
+            [ channelSettingsForm localUser guildId channelRoute guild editChannelForm
             , Ui.Lazy.lazy3 memberListView True localUser guild.membersAndOwner
             ]
         ]

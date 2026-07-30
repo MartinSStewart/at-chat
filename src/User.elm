@@ -56,7 +56,7 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, GuildOrDmId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import MuteSettings

@@ -1,4 +1,4 @@
-module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isThreadSpecificallyMuted, view)
+module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isThreadSpecificallyMuted, setMuteChannel, setMuteThread, view)
 
 import Discord
 import Effect.Browser.Dom as Dom
@@ -57,6 +57,59 @@ view onPress isMuted =
         [ ( IsMuted, "Muted (hide red/white dot and don't sent notifications)" )
         , ( IsNotMuted, "Not muted" )
         ]
+
+
+setMuteChannel : Id GuildId -> Id ChannelId -> IsMuted -> Model -> Model
+setMuteChannel guildId channelId isMuted model =
+    updateMutedChannel guildId channelId (\channel -> { channel | mutedChannel = isMuted }) model
+
+
+setMuteThread : Id GuildId -> Id ChannelId -> Id ChannelMessageId -> IsMuted -> Model -> Model
+setMuteThread guildId channelId threadId isMuted model =
+    updateMutedChannel
+        guildId
+        channelId
+        (\channel ->
+            { channel
+                | mutedThreads =
+                    case isMuted of
+                        IsMuted ->
+                            SeqSet.insert threadId channel.mutedThreads
+
+                        IsNotMuted ->
+                            SeqSet.remove threadId channel.mutedThreads
+            }
+        )
+        model
+
+
+updateMutedChannel : Id GuildId -> Id ChannelId -> (MutedChannel -> MutedChannel) -> Model -> Model
+updateMutedChannel guildId channelId updateFunc model =
+    { model
+        | mutedGuilds =
+            SeqDict.update
+                guildId
+                (\maybeGuild ->
+                    let
+                        guild : MutedGuild
+                        guild =
+                            Maybe.withDefault { mutedGuild = IsNotMuted, channels = SeqDict.empty } maybeGuild
+                    in
+                    { guild
+                        | channels =
+                            SeqDict.update
+                                channelId
+                                (\maybeChannel ->
+                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqSet.empty } maybeChannel
+                                        |> updateFunc
+                                        |> Just
+                                )
+                                guild.channels
+                    }
+                        |> Just
+                )
+                model.mutedGuilds
+    }
 
 
 isChannelSpecificallyMuted : Model -> Id GuildId -> Id ChannelId -> IsMuted

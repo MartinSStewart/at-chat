@@ -136,6 +136,7 @@ import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import LoginForm
 import Message
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -2635,6 +2636,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Drawing _ _ _ ->
                     True
 
+                Local_SetMuteChannel _ _ _ ->
+                    True
+
+                Local_SetMuteThread _ _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2840,6 +2847,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Drawing _ _ _ _ ->
                             True
 
+                        Types.Server_SetMuteChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteThread _ _ _ _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -3030,6 +3043,8 @@ allAttackerLocalChanges =
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
+    , Local_SetMuteChannel legitGuildId channelId MuteSettings.IsMuted
+    , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
