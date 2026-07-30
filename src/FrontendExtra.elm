@@ -2390,14 +2390,14 @@ isPressMsg msg =
 
         MessageMenu_PressedOpenDm _ ->
             True
+
         PressedMuteChannel _ _ _ ->
             True
 
         MessageMenu_PressedOpenDiscordDm _ _ ->
             True
 
-
-        PressedMuteThread _ _ _ isMuted ->
+        PressedMuteThread _ _ _ _ ->
             True
 
         PressedMuteDiscordChannel _ _ _ _ ->
