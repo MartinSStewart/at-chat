@@ -4279,22 +4279,9 @@ gameSummary log =
         log
 
 
-pluralize : Int -> String -> String
-pluralize count noun =
-    String.fromInt count
-        ++ " "
-        ++ noun
-        ++ (if count == 1 then
-                ""
-
-            else
-                "s"
-           )
-
-
-{-| The breakdown shown under the "the game has ended" line in the Moves log: what each player put
-on the board and the best word anyone played. Players are listed highest score first, matching the
-leaderboard in the status view.
+{-| The breakdown shown under the "the game has ended" line in the Moves log: a section for the
+tiles each player put on the board, one for the invalid words they tried, and the best word anyone
+played. Each section lists every player, highest count first.
 -}
 gameSummaryView : LocalUser -> Shared -> List Description -> Element GameMsg
 gameSummaryView localUser shared log =
@@ -4302,38 +4289,50 @@ gameSummaryView localUser shared log =
         summary : GameSummary
         summary =
             gameSummary log
+
+        counts : SeqDict (Id UserId) Int -> List { name : String, count : Int }
+        counts tally =
+            List.Nonempty.toList shared.players
+                |> List.map
+                    (\player ->
+                        { name = userName localUser player.userId
+                        , count = SeqDict.get player.userId tally |> Maybe.withDefault 0
+                        }
+                    )
+                -- Elm's sort is stable, so players who tie stay in turn order.
+                |> List.sortBy (\entry -> negate entry.count)
     in
     Ui.column
-        [ Ui.spacing 4
+        [ Ui.spacing 12
         , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
         , Ui.Font.color MyUi.font3
         ]
-        (List.map
-            (\player ->
-                Ui.Prose.paragraph
-                    []
-                    [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser player.userId))
-                    , Ui.text
-                        (": "
-                            ++ pluralize
-                                (SeqDict.get player.userId summary.tilesPlaced |> Maybe.withDefault 0)
-                                "tile"
-                            ++ " placed, "
-                            ++ pluralize
-                                (SeqDict.get player.userId summary.invalidWords |> Maybe.withDefault 0)
-                                "invalid word"
-                        )
-                    ]
-            )
-            (List.Nonempty.toList shared.players |> List.sortBy (\player -> negate player.score))
+        ([ Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.el [ Ui.Font.bold ] (Ui.text "Tiles placed:")
+            , countsView (counts summary.tilesPlaced)
+            ]
+         , Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.el [ Ui.Font.bold ] (Ui.text "Invalid words:")
+            , countsView (counts summary.invalidWords)
+            ]
+         ]
             ++ (case summary.bestWord of
                     Just bestWord ->
-                        [ Ui.Prose.paragraph
-                            []
-                            [ Ui.text "Best word: "
-                            , Ui.el [ Ui.Font.bold ] (Ui.text bestWord.word)
-                            , Ui.text (" for " ++ pluralize bestWord.points "point" ++ ", played by ")
-                            , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                        [ Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
+                            , Ui.Prose.paragraph
+                                []
+                                [ Ui.text
+                                    (bestWord.word
+                                        ++ " ("
+                                        ++ String.fromInt bestWord.points
+                                        ++ ") by "
+                                    )
+                                , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                                ]
                             ]
                         ]
 
@@ -4341,6 +4340,25 @@ gameSummaryView localUser shared log =
                         []
                )
         )
+
+
+{-| One section of the end of game summary: how much each player did of something, most first. The
+counts and the names are two columns rather than a row each so the names line up no matter how many
+digits the counts run to.
+-}
+countsView : List { name : String, count : Int } -> Element GameMsg
+countsView entries =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.column
+            [ Ui.width Ui.shrink, Ui.spacing 4, Ui.Font.variants [ Ui.Font.tabularNumbers ] ]
+            (List.map (\entry -> Ui.text (String.fromInt entry.count)) entries)
+        , Ui.column
+            [ Ui.spacing 4 ]
+            -- A name that wrapped would push every row below it out of line with its count, so the
+            -- names are kept on one line and the Moves log scrolls sideways for a very long one.
+            (List.map (\entry -> Ui.el [ Ui.Font.noWrap ] (Ui.text entry.name)) entries)
+        ]
 
 
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg

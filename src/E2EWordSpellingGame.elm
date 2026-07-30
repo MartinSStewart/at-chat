@@ -339,17 +339,20 @@ tests normalConfig =
                         100
                         -- The leaderboard renders each player's name and score suffix as separate
                         -- elements (see WordSpellingGame.playerRow), so they're matched separately.
-                        -- The end of game summary under the Moves log is split the same way.
+                        -- The end of game summary under the Moves log lists each count next to the
+                        -- player it belongs to in a separate element too.
                         (Test.Html.Query.has
                             [ Test.Html.Selector.exactText "Game over"
                             , Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 0"
-                            , Test.Html.Selector.exactText ": 2 tiles placed, 0 invalid words"
-                            , Test.Html.Selector.exactText ": 0 tiles placed, 0 invalid words"
-                            , Test.Html.Selector.exactText "Best word: "
-                            , Test.Html.Selector.exactText " for 4 points, played by "
+                            , Test.Html.Selector.exactText "Tiles placed:"
+                            , Test.Html.Selector.exactText "2"
+                            , Test.Html.Selector.exactText "Invalid words:"
+                            , Test.Html.Selector.exactText "0"
+                            , Test.Html.Selector.exactText "Top scoring word:"
+                            , Test.Html.Selector.exactText "AA (4) by "
                             ]
                         )
                     , user.checkView
