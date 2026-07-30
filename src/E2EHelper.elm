@@ -2642,6 +2642,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteThread _ _ _ _ ->
                     True
 
+                Local_SetMuteDiscordChannel _ _ _ _ ->
+                    True
+
+                Local_SetMuteDiscordThread _ _ _ _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2853,6 +2859,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteThread _ _ _ _ ->
                             True
 
+                        Types.Server_SetMuteDiscordChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteDiscordThread _ _ _ _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -3044,6 +3056,8 @@ allAttackerLocalChanges =
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
     , Local_SetMuteChannel legitGuildId channelId MuteSettings.IsMuted
+    , Local_SetMuteDiscordChannel discordUserId discordGuildId discordChannelId MuteSettings.IsMuted
+    , Local_SetMuteDiscordThread discordUserId discordGuildId discordChannelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications

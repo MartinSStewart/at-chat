@@ -2077,6 +2077,12 @@ toBackendLog toBackend =
                 Local_SetMuteThread _ _ _ _ ->
                     ToBackendLog_Local_SetMuteThread
 
+                Local_SetMuteDiscordChannel _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordChannel
+
+                Local_SetMuteDiscordThread _ _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordThread
+
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 

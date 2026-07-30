@@ -1058,9 +1058,9 @@ discordGuildView model routeData loggedIn local =
                             , Ui.heightMin 0
                             , Ui.clip
                             , (case showMembers of
-                                ( ShowMembersTab, isThread ) ->
+                                ( ShowMembersTab, _ ) ->
                                     case routeData.channelRoute of
-                                        DiscordChannel_ChannelRoute channelId _ _ ->
+                                        DiscordChannel_ChannelRoute channelId threadRoute _ ->
                                             Ui.Lazy.lazy6
                                                 discordMemberColumnMobile
                                                 canScroll2
@@ -1068,7 +1068,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData
                                                 guild
                                                 channelId
-                                                isThread
+                                                (threadRouteWithFriends threadRoute)
                                                 |> Ui.el
                                                     [ Ui.height Ui.fill
                                                     , Ui.background MyUi.background3
@@ -1145,9 +1145,9 @@ discordGuildView model routeData loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
                             , case Route.toShowMembersTab model.route of
-                                ( ShowMembersTab, isThread ) ->
+                                ( ShowMembersTab, _ ) ->
                                     case routeData.channelRoute of
-                                        DiscordChannel_ChannelRoute channelId _ _ ->
+                                        DiscordChannel_ChannelRoute channelId threadRoute _ ->
                                             Ui.Lazy.lazy6
                                                 discordMemberColumnNotMobile
                                                 local.localUser
@@ -1155,7 +1155,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData.currentDiscordUserId
                                                 guild
                                                 channelId
-                                                isThread
+                                                (threadRouteWithFriends threadRoute)
                                                 |> Ui.el
                                                     [ Ui.width Ui.shrink
                                                     , Ui.height Ui.fill
@@ -1228,15 +1228,7 @@ channelRouteToChannelIdAndThread : ChannelRoute -> Maybe ( Id ChannelId, ThreadR
 channelRouteToChannelIdAndThread channelRoute =
     case channelRoute of
         ChannelRoute channelId threadRoute _ ->
-            ( channelId
-            , case threadRoute of
-                ViewThreadWithFriends threadId _ _ ->
-                    ViewThread threadId
-
-                NoThreadWithFriends _ _ ->
-                    NoThread
-            )
-                |> Just
+            Just ( channelId, threadRouteWithFriends threadRoute )
 
         NewChannelRoute ->
             Nothing
@@ -1246,6 +1238,19 @@ channelRouteToChannelIdAndThread channelRoute =
 
         JoinRoute _ ->
             Nothing
+
+
+{-| The thread a route has open, without the extra bits the route carries around for
+scrolling to a message and showing the member tab.
+-}
+threadRouteWithFriends : ThreadRouteWithFriends -> ThreadRoute
+threadRouteWithFriends threadRoute =
+    case threadRoute of
+        ViewThreadWithFriends threadId _ _ ->
+            ViewThread threadId
+
+        NoThreadWithFriends _ _ ->
+            NoThread
 
 
 exportChannelButton : ExportChannelId -> Element FrontendMsg_
@@ -1537,20 +1542,42 @@ discordMemberColumnNotMobile :
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> Bool
+    -> ThreadRoute
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
+discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId threadRoute =
     memberColumnContainerNotMobile
-        isThread
-        [ if isThread then
-            Ui.none
-
-          else
-            Ui.el
-                [ Ui.paddingXY 8 4 ]
-                (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+        (threadRoute /= NoThread)
+        [ discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute
         , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
         ]
+
+
+{-| Discord channels are managed on Discord, so the only thing to change here is whether
+the channel (or the thread inside it) is muted.
+-}
+discordChannelSettingsForm :
+    LocalUser
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> ThreadRoute
+    -> Element FrontendMsg_
+discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute =
+    (case threadRoute of
+        NoThread ->
+            [ MuteSettings.view
+                (PressedMuteDiscordChannel currentDiscordUserId guildId channelId)
+                (MuteSettings.isDiscordChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
+            , exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId)
+            ]
+
+        ViewThread threadId ->
+            [ MuteSettings.view
+                (PressedMuteDiscordThread currentDiscordUserId guildId channelId threadId)
+                (MuteSettings.isDiscordThreadSpecificallyMuted localUser.user.muteSettings guildId channelId threadId)
+            ]
+    )
+        |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
 
 discordMemberColumnContainer : List (Element msg) -> Element msg
@@ -1615,9 +1642,9 @@ discordMemberColumnMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> Bool
+    -> ThreadRoute
     -> Element FrontendMsg_
-discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThread =
+discordMemberColumnMobile canScroll2 localUser routeData guild channelId threadRoute =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.row
@@ -1629,7 +1656,7 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThrea
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , if isThread then
+            , if threadRoute /= NoThread then
                 Ui.text "Thread members"
 
               else
@@ -1643,13 +1670,12 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThrea
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ if isThread then
-                Ui.none
-
-              else
-                Ui.el
-                    [ Ui.paddingXY 8 4 ]
-                    (exportChannelButton (ExportChannel_Discord routeData.currentDiscordUserId routeData.guildId channelId))
+            [ discordChannelSettingsForm
+                localUser
+                routeData.currentDiscordUserId
+                routeData.guildId
+                channelId
+                threadRoute
             , discordMemberListView True routeData.currentDiscordUserId localUser routeData.guildId guild channelId
             ]
         ]

@@ -298,6 +298,12 @@ pendingChangesText localChange =
         Local_SetMuteThread _ _ _ _ ->
             "Changed thread notifications"
 
+        Local_SetMuteDiscordChannel _ _ _ _ ->
+            "Changed channel notifications"
+
+        Local_SetMuteDiscordThread _ _ _ _ _ ->
+            "Changed thread notifications"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
 layout model attributes child =
@@ -2394,6 +2400,12 @@ isPressMsg msg =
         PressedMuteThread _ _ _ isMuted ->
             True
 
+        PressedMuteDiscordChannel _ _ _ _ ->
+            True
+
+        PressedMuteDiscordThread _ _ _ _ _ ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
@@ -3524,6 +3536,12 @@ changeUpdate localMsg local =
 
                 Local_SetMuteThread guildId channelId threadId isMuted ->
                     setMuteThread guildId channelId threadId isMuted local
+
+                Local_SetMuteDiscordChannel _ guildId channelId isMuted ->
+                    setMuteDiscordChannel guildId channelId isMuted local
+
+                Local_SetMuteDiscordThread _ guildId channelId threadId isMuted ->
+                    setMuteDiscordThread guildId channelId threadId isMuted local
 
         ServerChange serverChange ->
             case serverChange of
@@ -4751,6 +4769,12 @@ changeUpdate localMsg local =
                 Server_SetMuteThread guildId channelId threadId isMuted ->
                     setMuteThread guildId channelId threadId isMuted local
 
+                Server_SetMuteDiscordChannel guildId channelId isMuted ->
+                    setMuteDiscordChannel guildId channelId isMuted local
+
+                Server_SetMuteDiscordThread guildId channelId threadId isMuted ->
+                    setMuteDiscordThread guildId channelId threadId isMuted local
+
 
 setMuteChannel : Id GuildId -> Id ChannelId -> IsMuted -> LocalState -> LocalState
 setMuteChannel guildId channelId isMuted local =
@@ -4792,6 +4816,57 @@ setMuteThread guildId channelId threadId isMuted local =
                     { user
                         | muteSettings =
                             MuteSettings.setMuteThread guildId channelId threadId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteDiscordChannel : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> IsMuted -> LocalState -> LocalState
+setMuteDiscordChannel guildId channelId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings = MuteSettings.setMuteDiscordChannel guildId channelId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteDiscordThread :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+    -> LocalState
+    -> LocalState
+setMuteDiscordThread guildId channelId threadId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings =
+                            MuteSettings.setMuteDiscordThread guildId channelId threadId isMuted user.muteSettings
                     }
             }
     }

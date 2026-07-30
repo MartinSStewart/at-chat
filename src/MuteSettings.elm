@@ -1,4 +1,4 @@
-module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isThreadSpecificallyMuted, setMuteChannel, setMuteThread, view)
+module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isDiscordChannelMuted, isDiscordChannelSpecificallyMuted, isDiscordThreadSpecificallyMuted, isThreadSpecificallyMuted, setMuteChannel, setMuteDiscordChannel, setMuteDiscordThread, setMuteThread, view)
 
 import Discord
 import Effect.Browser.Dom as Dom
@@ -83,6 +83,36 @@ setMuteThread guildId channelId threadId isMuted model =
         model
 
 
+setMuteDiscordChannel : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> IsMuted -> Model -> Model
+setMuteDiscordChannel guildId channelId isMuted model =
+    updateMutedDiscordChannel guildId channelId (\channel -> { channel | mutedChannel = isMuted }) model
+
+
+setMuteDiscordThread :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+    -> Model
+    -> Model
+setMuteDiscordThread guildId channelId threadId isMuted model =
+    updateMutedDiscordChannel
+        guildId
+        channelId
+        (\channel ->
+            { channel
+                | mutedThreads =
+                    case isMuted of
+                        IsMuted ->
+                            SeqSet.insert threadId channel.mutedThreads
+
+                        IsNotMuted ->
+                            SeqSet.remove threadId channel.mutedThreads
+            }
+        )
+        model
+
+
 updateMutedChannel : Id GuildId -> Id ChannelId -> (MutedChannel -> MutedChannel) -> Model -> Model
 updateMutedChannel guildId channelId updateFunc model =
     { model
@@ -109,6 +139,40 @@ updateMutedChannel guildId channelId updateFunc model =
                         |> Just
                 )
                 model.mutedGuilds
+    }
+
+
+updateMutedDiscordChannel :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> (MutedChannel -> MutedChannel)
+    -> Model
+    -> Model
+updateMutedDiscordChannel guildId channelId updateFunc model =
+    { model
+        | mutedDiscordGuilds =
+            SeqDict.update
+                guildId
+                (\maybeGuild ->
+                    let
+                        guild : MutedDiscordGuild
+                        guild =
+                            Maybe.withDefault { mutedGuild = IsNotMuted, channels = SeqDict.empty } maybeGuild
+                    in
+                    { guild
+                        | channels =
+                            SeqDict.update
+                                channelId
+                                (\maybeChannel ->
+                                    Maybe.withDefault { mutedChannel = IsNotMuted, mutedThreads = SeqSet.empty } maybeChannel
+                                        |> updateFunc
+                                        |> Just
+                                )
+                                guild.channels
+                    }
+                        |> Just
+                )
+                model.mutedDiscordGuilds
     }
 
 
@@ -149,6 +213,79 @@ isThreadSpecificallyMuted model guildId channelId threadId =
 isChannelMuted : Model -> Id GuildId -> Id ChannelId -> ThreadRoute -> IsMuted
 isChannelMuted model guildId channelId threadRoute =
     case SeqDict.get guildId model.mutedGuilds of
+        Just guild ->
+            case guild.mutedGuild of
+                IsMuted ->
+                    IsMuted
+
+                IsNotMuted ->
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            case threadRoute of
+                                NoThread ->
+                                    channel.mutedChannel
+
+                                ViewThread threadId ->
+                                    case channel.mutedChannel of
+                                        IsMuted ->
+                                            IsMuted
+
+                                        IsNotMuted ->
+                                            if SeqSet.member threadId channel.mutedThreads then
+                                                IsMuted
+
+                                            else
+                                                IsNotMuted
+
+                        Nothing ->
+                            IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isDiscordChannelSpecificallyMuted : Model -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> IsMuted
+isDiscordChannelSpecificallyMuted model guildId channelId =
+    case SeqDict.get guildId model.mutedDiscordGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    channel.mutedChannel
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isDiscordThreadSpecificallyMuted :
+    Model
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+isDiscordThreadSpecificallyMuted model guildId channelId threadId =
+    case SeqDict.get guildId model.mutedDiscordGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    if SeqSet.member threadId channel.mutedThreads then
+                        IsMuted
+
+                    else
+                        IsNotMuted
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isDiscordChannelMuted : Model -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> ThreadRoute -> IsMuted
+isDiscordChannelMuted model guildId channelId threadRoute =
+    case SeqDict.get guildId model.mutedDiscordGuilds of
         Just guild ->
             case guild.mutedGuild of
                 IsMuted ->

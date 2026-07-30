@@ -72,6 +72,8 @@ type ToBackendLog
     | ToBackendLog_Local_Drawing
     | ToBackendLog_Local_SetMuteChannel
     | ToBackendLog_Local_SetMuteThread
+    | ToBackendLog_Local_SetMuteDiscordChannel
+    | ToBackendLog_Local_SetMuteDiscordThread
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -265,3 +267,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetMuteThread ->
             "Local_SetMuteThread"
+
+        ToBackendLog_Local_SetMuteDiscordChannel ->
+            "Local_SetMuteDiscordChannel"
+
+        ToBackendLog_Local_SetMuteDiscordThread ->
+            "Local_SetMuteDiscordThread"

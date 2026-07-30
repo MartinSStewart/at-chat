@@ -597,6 +597,8 @@ type FrontendMsg_
     | PressedClearChannelSearch
     | PressedMuteChannel (Id GuildId) (Id ChannelId) IsMuted
     | PressedMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | PressedMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | PressedMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
 
 
 type alias NewChannelForm =
@@ -933,6 +935,8 @@ type ServerChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
     | Server_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
     | Server_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | Server_SetMuteDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
 
 
 type LocalChange
@@ -981,3 +985,5 @@ type LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
     | Local_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
     | Local_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | Local_SetMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted

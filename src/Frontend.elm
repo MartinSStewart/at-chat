@@ -4577,6 +4577,28 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMuteDiscordChannel discordUserId guildId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordChannel discordUserId guildId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteDiscordThread discordUserId guildId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordThread discordUserId guildId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
 they only select a drawing anchor while the drawing tab is open.
