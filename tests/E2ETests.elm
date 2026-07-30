@@ -1461,6 +1461,98 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Muted channels are left out of the unread overview"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The user watches the overview while the admin writes in two channels.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "Unread in general"
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Noisy-channel"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , E2EHelper.writeMessage admin 100 "Unread in the noisy channel"
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the noisy channel" ])
+
+                -- Muting the noisy channel drops it from the overview, and the other
+                -- channel stays.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the noisy channel" ])
+
+                -- Muting the whole guild drops the rest of it too.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in general" ])
+
+                -- Unmuting the guild brings back everything but the muted channel.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsNotMuted))
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the noisy channel" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Muting a guild is remembered even when none of its channels were muted first"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ -- Nothing in this guild has been muted before, so there's no mute settings
+                  -- entry for it to change yet.
+                  user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case NonemptyDict.get (Id.fromInt 2) backend.users of
+                            Just user2 ->
+                                if MuteSettings.isGuildSpecificallyMute user2.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                    Ok ()
+
+                                else
+                                    Err "Guild should be muted on the backend"
+
+                            Nothing ->
+                                Err "User not found"
+                    )
+                , user.checkModel
+                    100
+                    (\model ->
+                        case Audio.userModel model of
+                            Types.Loaded loaded ->
+                                case loaded.loginStatus of
+                                    Types.LoggedIn loggedIn ->
+                                        if MuteSettings.isGuildSpecificallyMute (Local.model loggedIn.localState).localUser.user.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                            Ok ()
+
+                                        else
+                                            Err "Guild should be muted on the frontend"
+
+                                    Types.NotLoggedIn _ ->
+                                        Err "Not logged in"
+
+                            Types.Loading _ ->
+                                Err "Still loading"
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Guild icon notification is shown"
         E2EHelper.startTime
         normalConfig

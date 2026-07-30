@@ -95,14 +95,45 @@ view onPress isMuted =
 
 setMuteGuild : Id GuildId -> IsMuted -> Model -> Model
 setMuteGuild guildId isMuted model =
-    { model | mutedGuilds = SeqDict.updateIfExists guildId (\guild -> { guild | mutedGuild = isMuted }) model.mutedGuilds }
+    { model
+        | mutedGuilds =
+            SeqDict.update
+                guildId
+                (\maybeGuild ->
+                    { mutedGuild = isMuted
+                    , channels =
+                        case maybeGuild of
+                            Just guild ->
+                                guild.channels
+
+                            Nothing ->
+                                SeqDict.empty
+                    }
+                        |> Just
+                )
+                model.mutedGuilds
+    }
 
 
 setMuteDiscordGuild : Discord.Id Discord.GuildId -> IsMuted -> Model -> Model
 setMuteDiscordGuild guildId isMuted model =
     { model
         | mutedDiscordGuilds =
-            SeqDict.updateIfExists guildId (\guild -> { guild | mutedGuild = isMuted }) model.mutedDiscordGuilds
+            SeqDict.update
+                guildId
+                (\maybeGuild ->
+                    { mutedGuild = isMuted
+                    , channels =
+                        case maybeGuild of
+                            Just guild ->
+                                guild.channels
+
+                            Nothing ->
+                                SeqDict.empty
+                    }
+                        |> Just
+                )
+                model.mutedDiscordGuilds
     }
 
 
