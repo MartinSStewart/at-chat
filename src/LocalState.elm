@@ -2533,7 +2533,8 @@ routeToViewing : Route -> LocalState -> SetViewing
 routeToViewing route local =
     case route of
         HomePageRoute ->
-            StopViewingChannel
+            -- The home page shows the unread overview when no DM is selected
+            ViewOverview EmptyPlaceholder
 
         AdminRoute _ ->
             StopViewingChannel

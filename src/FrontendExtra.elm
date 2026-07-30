@@ -80,6 +80,7 @@ import MessageArray exposing (MessageArray)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
+import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict
 import NonemptySet
@@ -290,6 +291,24 @@ pendingChangesText localChange =
 
         Local_Drawing _ _ _ ->
             "Drew on a message"
+
+        Local_SetMuteChannel _ _ _ ->
+            "Changed channel notifications"
+
+        Local_SetMuteThread _ _ _ _ ->
+            "Changed thread notifications"
+
+        Local_SetMuteDiscordChannel _ _ _ _ ->
+            "Changed channel notifications"
+
+        Local_SetMuteDiscordThread _ _ _ _ _ ->
+            "Changed thread notifications"
+
+        Local_SetMuteGuild _ _ ->
+            "Set mute guild"
+
+        Local_SetMuteDiscordGuild _ _ _ ->
+            "Set mute Discord guild"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg_) -> Element FrontendMsg_ -> Html FrontendMsg_
@@ -2378,7 +2397,28 @@ isPressMsg msg =
         MessageMenu_PressedOpenDm _ ->
             True
 
+        PressedMuteChannel _ _ _ ->
+            True
+
         MessageMenu_PressedOpenDiscordDm _ _ ->
+            True
+
+        PressedMuteThread _ _ _ _ ->
+            True
+
+        PressedMuteDiscordChannel _ _ _ _ ->
+            True
+
+        PressedMuteDiscordThread _ _ _ _ _ ->
+            True
+
+        PressedMarkChannelAsRead _ _ ->
+            True
+
+        PressedMuteGuild _ _ ->
+            True
+
+        PressedMuteDiscordGuild _ _ _ ->
             True
 
 
@@ -3051,6 +3091,68 @@ changeUpdate localMsg local =
                                             local.discordGuilds
                             }
 
+                        ViewOverview overviewData ->
+                            let
+                                localUser2 : LocalUser
+                                localUser2 =
+                                    { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
+                            in
+                            case overviewData of
+                                FilledInByBackend overviewData2 ->
+                                    { local
+                                        | localUser =
+                                            { localUser2
+                                                | discordUsers =
+                                                    SeqDict.foldl
+                                                        LinkedAndOtherDiscordUsers.addOtherUser
+                                                        localUser2.discordUsers
+                                                        overviewData2.discordUsers
+                                            }
+                                        , guilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages guilds ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        guilds
+                                                )
+                                                local.guilds
+                                                overviewData2.guildChannels
+                                        , dmChannels =
+                                            SeqDict.foldl
+                                                (\otherUserId messages dmChannels ->
+                                                    SeqDict.updateIfExists
+                                                        otherUserId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        dmChannels
+                                                )
+                                                local.dmChannels
+                                                overviewData2.dmChannels
+                                        , discordGuilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages discordGuilds ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        discordGuilds
+                                                )
+                                                local.discordGuilds
+                                                overviewData2.discordGuildChannels
+                                        , discordDmChannels =
+                                            SeqDict.foldl
+                                                (\channelId messages discordDmChannels ->
+                                                    SeqDict.updateIfExists
+                                                        channelId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        discordDmChannels
+                                                )
+                                                local.discordDmChannels
+                                                overviewData2.discordDmChannels
+                                    }
+
+                                EmptyPlaceholder ->
+                                    { local | localUser = localUser2 }
+
                 Local_SetName name ->
                     let
                         localUser =
@@ -3443,6 +3545,24 @@ changeUpdate localMsg local =
 
                 Local_Drawing guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changedBy drawingChange local
+
+                Local_SetMuteChannel guildId channelId isMuted ->
+                    setMuteChannel guildId channelId isMuted local
+
+                Local_SetMuteThread guildId channelId threadId isMuted ->
+                    setMuteThread guildId channelId threadId isMuted local
+
+                Local_SetMuteDiscordChannel _ guildId channelId isMuted ->
+                    setMuteDiscordChannel guildId channelId isMuted local
+
+                Local_SetMuteDiscordThread _ guildId channelId threadId isMuted ->
+                    setMuteDiscordThread guildId channelId threadId isMuted local
+
+                Local_SetMuteGuild guildId isMuted ->
+                    setMuteGuild guildId isMuted local
+
+                Local_SetMuteDiscordGuild _ guildId isMuted ->
+                    setMuteDiscordGuild guildId isMuted local
 
         ServerChange serverChange ->
             case serverChange of
@@ -4663,6 +4783,158 @@ changeUpdate localMsg local =
 
                 Server_Drawing changeBy guildOrDmId threadRoute drawingChange ->
                     LocalState.drawingHandleChangeFrontend guildOrDmId threadRoute changeBy drawingChange local
+
+                Server_SetMuteChannel guildId channelId isMuted ->
+                    setMuteChannel guildId channelId isMuted local
+
+                Server_SetMuteThread guildId channelId threadId isMuted ->
+                    setMuteThread guildId channelId threadId isMuted local
+
+                Server_SetMuteDiscordChannel guildId channelId isMuted ->
+                    setMuteDiscordChannel guildId channelId isMuted local
+
+                Server_SetMuteDiscordThread guildId channelId threadId isMuted ->
+                    setMuteDiscordThread guildId channelId threadId isMuted local
+
+                Server_SetMuteGuild guildId isMuted ->
+                    setMuteGuild guildId isMuted local
+
+                Server_SetMuteDiscordGuild guildId isMuted ->
+                    setMuteDiscordGuild guildId isMuted local
+
+
+setMuteGuild : Id GuildId -> IsMuted -> LocalState -> LocalState
+setMuteGuild guildId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user = { user | muteSettings = MuteSettings.setMuteGuild guildId isMuted user.muteSettings }
+            }
+    }
+
+
+setMuteChannel : Id GuildId -> Id ChannelId -> IsMuted -> LocalState -> LocalState
+setMuteChannel guildId channelId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings = MuteSettings.setMuteChannel guildId channelId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteThread : Id GuildId -> Id ChannelId -> Id ChannelMessageId -> IsMuted -> LocalState -> LocalState
+setMuteThread guildId channelId threadId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings =
+                            MuteSettings.setMuteThread guildId channelId threadId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteDiscordGuild : Discord.Id Discord.GuildId -> IsMuted -> LocalState -> LocalState
+setMuteDiscordGuild guildId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user = { user | muteSettings = MuteSettings.setMuteDiscordGuild guildId isMuted user.muteSettings }
+            }
+    }
+
+
+setMuteDiscordChannel : Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> IsMuted -> LocalState -> LocalState
+setMuteDiscordChannel guildId channelId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings = MuteSettings.setMuteDiscordChannel guildId channelId isMuted user.muteSettings
+                    }
+            }
+    }
+
+
+setMuteDiscordThread :
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Id ChannelMessageId
+    -> IsMuted
+    -> LocalState
+    -> LocalState
+setMuteDiscordThread guildId channelId threadId isMuted local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        user : FrontendCurrentUser
+        user =
+            localUser.user
+    in
+    { local
+        | localUser =
+            { localUser
+                | user =
+                    { user
+                        | muteSettings =
+                            MuteSettings.setMuteDiscordThread guildId channelId threadId isMuted user.muteSettings
+                    }
+            }
+    }
 
 
 gameChangeUpdate : Id UserId -> GuildOrDmId -> Game.LocalChange -> LocalState -> LocalState

@@ -95,6 +95,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -594,6 +595,13 @@ type FrontendMsg_
     | PressedClearFriendsSearch
     | TypedChannelSearch String
     | PressedClearChannelSearch
+    | PressedMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | PressedMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | PressedMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | PressedMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | PressedMarkChannelAsRead AnyGuildOrDmId (Id ChannelMessageId)
+    | PressedMuteGuild (Id GuildId) IsMuted
+    | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
 
 
 type alias NewChannelForm =
@@ -928,6 +936,12 @@ type ServerChange
     | Server_VoiceChatChange Call.ServerChange
     | Server_Game (Id UserId) GuildOrDmId Game.LocalChange
     | Server_Drawing (Id UserId) AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
+    | Server_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | Server_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | Server_SetMuteDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | Server_SetMuteGuild (Id GuildId) IsMuted
+    | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
 
 
 type LocalChange
@@ -974,3 +988,9 @@ type LocalChange
     | Local_VoiceChatChange Call.LocalChange
     | Local_Game GuildOrDmId Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
+    | Local_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | Local_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
+    | Local_SetMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
+    | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | Local_SetMuteGuild (Id GuildId) IsMuted
+    | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted

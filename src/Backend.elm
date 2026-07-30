@@ -55,6 +55,7 @@ import Log
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), GameType(..), Message(..))
+import MuteSettings
 import MyUi
 import NonemptyDict
 import NonemptySet
@@ -4728,6 +4729,34 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                        ViewOverview _ ->
+                            BackendExtra.asUser
+                                model
+                                sessionId
+                                (\session user ->
+                                    ( { model
+                                        | connections =
+                                            SeqDict.updateIfExists
+                                                sessionId
+                                                (NonemptyDict.updateIfExists
+                                                    clientId
+                                                    (\connection -> { connection | currentlyViewing = currentlyViewing })
+                                                )
+                                                model.connections
+                                      }
+                                    , Command.batch
+                                        [ ViewOverview
+                                            (BackendExtra.unreadOverviewData session.userId user model
+                                                |> FilledInByBackend
+                                            )
+                                            |> Local_CurrentlyViewing
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
+                                    )
+                                )
+
                 Local_SetName name ->
                     BackendExtra.asUser
                         model
@@ -5473,6 +5502,179 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_Drawing guildOrDmId anchor drawingChange ->
                     BackendExtra.handleDrawingChange sessionId clientId changeId guildOrDmId anchor drawingChange model
+
+                Local_SetMuteChannel guildId channelId isMuted ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\session user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteChannel guildId channelId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteChannel guildId channelId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteThread guildId channelId threadId isMuted ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\session user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteThread guildId channelId threadId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteThread guildId channelId threadId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteDiscordChannel discordUserId guildId channelId isMuted ->
+                    BackendExtra.asDiscordGuildChannelMember
+                        model
+                        sessionId
+                        guildId
+                        channelId
+                        discordUserId
+                        (\session _ user _ _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteDiscordChannel guildId channelId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordChannel guildId channelId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteDiscordThread discordUserId guildId channelId threadId isMuted ->
+                    BackendExtra.asDiscordGuildChannelMember
+                        model
+                        sessionId
+                        guildId
+                        channelId
+                        discordUserId
+                        (\session _ user _ _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteDiscordThread guildId channelId threadId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordThread guildId channelId threadId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteGuild guildId isMuted ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\session user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteGuild guildId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteGuild guildId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteDiscordGuild discordUserId guildId isMuted ->
+                    BackendExtra.asDiscordGuildMember
+                        model
+                        sessionId
+                        guildId
+                        discordUserId
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteDiscordGuild guildId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordGuild guildId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
 
         TwoFactorToBackend toBackend2 ->
             BackendExtra.asUser

@@ -30,6 +30,7 @@ module BackendExtra exposing
     , sendLoginEmail
     , shouldRateLimit
     , toBackendLog
+    , unreadOverviewData
     , validateAttachedFiles
     )
 
@@ -57,14 +58,14 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import IdArray
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -303,6 +304,247 @@ requestedForToGuildOrDmId userId requestMessagesFor =
 
                 Nothing ->
                     UserSession.Viewing_None
+
+
+{-| What the unread overview needs: the newest unread messages of every channel the user
+hasn't read to the end, plus the Discord users those messages show the names of.
+
+Only channels the user is allowed to see are included, and only the channel messages, not
+the messages in the threads a channel contains.
+
+-}
+unreadOverviewData : Id UserId -> BackendUser -> BackendModel -> UserSession.UnreadOverviewData
+unreadOverviewData userId user model =
+    let
+        linkedDiscordUserIds : List (Discord.Id Discord.UserId)
+        linkedDiscordUserIds =
+            SeqDict.foldr
+                (\discordUserId userData list ->
+                    case userData of
+                        FullData data ->
+                            if data.linkedTo == userId then
+                                discordUserId :: list
+
+                            else
+                                list
+
+                        NeedsAuthAgain data ->
+                            if data.linkedTo == userId then
+                                discordUserId :: list
+
+                            else
+                                list
+
+                        BasicData _ ->
+                            list
+                )
+                []
+                model.discordUsers
+
+        discordGuildChannels :
+            SeqDict
+                ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+        discordGuildChannels =
+            SeqDict.foldl
+                (\guildId guild dict ->
+                    -- The frontend shows a Discord guild as whichever of our linked Discord
+                    -- users is a member of it, and that's the user the unread state is
+                    -- tracked for, so pick the same one here.
+                    case
+                        List.Extra.find
+                            (\discordUserId -> MembersAndOwner.isMember discordUserId guild.membersAndOwner /= IsNotMember)
+                            linkedDiscordUserIds
+                    of
+                        Just discordUserId ->
+                            SeqDict.foldl
+                                (\channelId channel dict2 ->
+                                    if LocalState.canViewDiscordChannel guildId channel guild discordUserId then
+                                        case
+                                            ( channel.status
+                                            , unreadMessages
+                                                (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId))
+                                                user
+                                                channel
+                                            )
+                                        of
+                                            ( ChannelActive, Just messages ) ->
+                                                SeqDict.insert ( guildId, channelId ) messages dict2
+
+                                            _ ->
+                                                dict2
+
+                                    else
+                                        dict2
+                                )
+                                dict
+                                guild.channels
+
+                        Nothing ->
+                            dict
+                )
+                SeqDict.empty
+                model.discordGuilds
+
+        discordDmChannels :
+            SeqDict
+                (Discord.Id Discord.PrivateChannelId)
+                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+        discordDmChannels =
+            SeqDict.foldl
+                (\channelId dmChannel dict ->
+                    case
+                        List.Extra.find
+                            (\discordUserId -> NonemptyDict.member discordUserId dmChannel.members)
+                            linkedDiscordUserIds
+                    of
+                        Just currentUserId ->
+                            case
+                                unreadMessages
+                                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                                    user
+                                    dmChannel
+                            of
+                                Just messages ->
+                                    SeqDict.insert channelId messages dict
+
+                                Nothing ->
+                                    dict
+
+                        Nothing ->
+                            dict
+                )
+                SeqDict.empty
+                model.discordDmChannels
+    in
+    { guildChannels =
+        SeqDict.foldl
+            (\guildId guild dict ->
+                case MembersAndOwner.isMember userId guild.membersAndOwner of
+                    IsNotMember ->
+                        dict
+
+                    _ ->
+                        SeqDict.foldl
+                            (\channelId channel dict2 ->
+                                case
+                                    ( channel.status
+                                    , unreadMessages (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) user channel
+                                    )
+                                of
+                                    ( ChannelActive, Just messages ) ->
+                                        SeqDict.insert ( guildId, channelId ) messages dict2
+
+                                    _ ->
+                                        dict2
+                            )
+                            dict
+                            guild.channels
+            )
+            SeqDict.empty
+            model.guilds
+    , dmChannels =
+        SeqDict.foldl
+            (\dmChannelId dmChannel dict ->
+                case DmChannelId.otherUserId userId dmChannelId of
+                    Just otherUserId ->
+                        case unreadMessages (GuildOrDmId (GuildOrDmId_Dm otherUserId)) user dmChannel of
+                            Just messages ->
+                                SeqDict.insert otherUserId messages dict
+
+                            Nothing ->
+                                dict
+
+                    Nothing ->
+                        dict
+            )
+            SeqDict.empty
+            model.dmChannels
+    , discordGuildChannels = discordGuildChannels
+    , discordDmChannels = discordDmChannels
+    , discordUsers =
+        List.foldl
+            (\messages dict ->
+                SeqDict.foldl
+                    (\_ message dict2 ->
+                        List.foldl
+                            (\discordUserId dict3 ->
+                                case SeqDict.get discordUserId model.discordUsers of
+                                    Just discordUser ->
+                                        SeqDict.insert discordUserId (User.discordUserDataToFrontendUser discordUser) dict3
+
+                                    Nothing ->
+                                        dict3
+                            )
+                            dict2
+                            (messageUserIds message)
+                    )
+                    dict
+                    messages
+            )
+            SeqDict.empty
+            (SeqDict.values discordGuildChannels ++ SeqDict.values discordDmChannels)
+    }
+
+
+{-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
+-}
+messageUserIds : Message messageId userId -> List userId
+messageUserIds message =
+    case message of
+        UserTextMessage data ->
+            data.createdBy :: SeqSet.toList (RichText.mentionsUser data.content)
+
+        UserJoinedMessage _ userId _ _ ->
+            [ userId ]
+
+        DeletedMessage _ ->
+            []
+
+        CallStarted data ->
+            [ data.startedBy ]
+
+        GameStarted data ->
+            [ data.startedBy ]
+
+
+{-| The newest unread messages in a channel, at most `unreadOverviewMessageLimit` of them,
+keyed by the index they sit at in the channel. `Nothing` when the user has read the channel
+to the end.
+-}
+unreadMessages :
+    AnyGuildOrDmId
+    -> BackendUser
+    -> { a | messages : IdArray ChannelMessageId (Message ChannelMessageId userId) }
+    -> Maybe (SeqDict (Id ChannelMessageId) (Message ChannelMessageId userId))
+unreadMessages guildOrDmId user channel =
+    let
+        messageCount : Int
+        messageCount =
+            IdArray.length channel.messages
+
+        oldestUnread : Int
+        oldestUnread =
+            case SeqDict.get guildOrDmId user.lastViewed of
+                Just lastViewed ->
+                    Id.toInt lastViewed + 1
+
+                Nothing ->
+                    0
+
+        oldestIncluded : Int
+        oldestIncluded =
+            max oldestUnread (messageCount - UserSession.unreadOverviewMessageLimit)
+    in
+    if oldestUnread < messageCount then
+        IdArray.slice (Id.fromInt oldestIncluded) (Id.fromInt messageCount) channel.messages
+            |> IdArray.toList
+            |> List.indexedMap (\index message -> ( oldestIncluded + index |> Id.fromInt, message ))
+            |> SeqDict.fromList
+            |> Just
+
+    else
+        Nothing
 
 
 loginWithToken :
@@ -914,6 +1156,12 @@ getLinkedDiscordUsersAndOtherUsers userId currentlyViewing model =
                 visibleDmUsers
 
             UserSession.Viewing_None ->
+                visibleDmUsers
+
+            UserSession.Viewing_Overview ->
+                -- The Discord users the overview needs are sent along with the overview
+                -- itself (see `unreadOverviewData`), since which guilds they come from
+                -- depends on which channels have unread messages.
                 visibleDmUsers
         )
         linkedUsers
@@ -1812,6 +2060,24 @@ toBackendLog toBackend =
 
                 Local_Drawing _ _ _ ->
                     ToBackendLog_Local_Drawing
+
+                Local_SetMuteChannel _ _ _ ->
+                    ToBackendLog_Local_SetMuteChannel
+
+                Local_SetMuteThread _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteThread
+
+                Local_SetMuteDiscordChannel _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordChannel
+
+                Local_SetMuteDiscordThread _ _ _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordThread
+
+                Local_SetMuteGuild _ _ ->
+                    ToBackendLog_Local_SetMuteGuild
+
+                Local_SetMuteDiscordGuild _ _ _ ->
+                    ToBackendLog_Local_SetMuteDiscordGuild
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend

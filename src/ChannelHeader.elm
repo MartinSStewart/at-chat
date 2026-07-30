@@ -262,7 +262,7 @@ channelHeader isMobile showMembers content tabContent =
                 Ui.inFront
                     (Ui.el
                         [ Ui.move { x = 0, y = MyUi.channelHeaderHeight + 1, z = 0 }
-                        , MyUi.htmlStyle "z-index" "20"
+                        , tabBodyZIndex
                         ]
                         tabContent2
                     )
@@ -292,6 +292,11 @@ channelHeader isMobile showMembers content tabContent =
                 ]
             )
         ]
+
+
+tabBodyZIndex : Ui.Attribute msg
+tabBodyZIndex =
+    MyUi.htmlStyle "z-index" "20"
 
 
 channelSettings : Bool -> Maybe ( ShowMembersTab, Bool ) -> Element FrontendMsg_

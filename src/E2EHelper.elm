@@ -136,6 +136,7 @@ import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
 import LoginForm
 import Message
+import MuteSettings
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -2566,6 +2567,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         StopViewingChannel ->
                             False
 
+                        -- The overview response only contains the Discord users behind
+                        -- the unread messages of whoever requested it, so there's nothing
+                        -- here the attacker shouldn't get.
+                        ViewOverview _ ->
+                            False
+
                 Local_SetName _ ->
                     False
 
@@ -2627,6 +2634,24 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     True
 
                 Local_Drawing _ _ _ ->
+                    True
+
+                Local_SetMuteChannel _ _ _ ->
+                    True
+
+                Local_SetMuteThread _ _ _ _ ->
+                    True
+
+                Local_SetMuteDiscordChannel _ _ _ _ ->
+                    True
+
+                Local_SetMuteDiscordThread _ _ _ _ _ ->
+                    True
+
+                Local_SetMuteGuild _ _ ->
+                    True
+
+                Local_SetMuteDiscordGuild _ _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -2834,6 +2859,24 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Drawing _ _ _ _ ->
                             True
 
+                        Types.Server_SetMuteChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteThread _ _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteDiscordChannel _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteDiscordThread _ _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteGuild _ _ ->
+                            True
+
+                        Types.Server_SetMuteDiscordGuild _ _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -3024,6 +3067,10 @@ allAttackerLocalChanges =
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
     , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
+    , Local_SetMuteChannel legitGuildId channelId MuteSettings.IsMuted
+    , Local_SetMuteDiscordChannel discordUserId discordGuildId discordChannelId MuteSettings.IsMuted
+    , Local_SetMuteDiscordThread discordUserId discordGuildId discordChannelId (Id.fromInt 0) MuteSettings.IsMuted
+    , Local_SetMuteThread legitGuildId channelId (Id.fromInt 0) MuteSettings.IsMuted
     , Local_SetName (Unsafe.personName "hacked")
     , Local_SetNotificationMode NoNotifications
     , Local_SetEmailNotifications User.NotifyMeWhenMentioned
@@ -3074,6 +3121,8 @@ allAttackerLocalChanges =
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( 0, 0 ))
+    , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
+    , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     ]
 
 

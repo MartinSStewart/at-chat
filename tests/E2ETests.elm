@@ -36,6 +36,7 @@ import Json.Encode
 import Local exposing (ChangeId(..))
 import LoginForm
 import MembersAndOwner
+import MuteSettings
 import NonemptyDict
 import Pages.Home
 import PersonName
@@ -1404,6 +1405,169 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Muting a channel or thread hides its notification dot"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- The channel gets one unread message and the thread inside it two, so
+                    -- the two notification dots can be told apart by their count.
+                    channelDot : Test.Html.Selector.Selector
+                    channelDot =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "1")
+
+                    threadDot : Test.Html.Selector.Selector
+                    threadDot =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2")
+                in
+                [ -- The admin writes in a channel and a thread the user isn't looking at.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Noisy-channel"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , E2EHelper.writeMessage admin 100 "Message in the channel"
+                , E2EHelper.createThread admin (Id.fromInt 0)
+                , E2EHelper.writeMessage admin 100 "First message in the thread"
+                , E2EHelper.writeMessage admin 100 "Second message in the thread"
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.has [ threadDot ])
+
+                -- Muting the thread only takes the thread's dot away.
+                , user.update
+                    100
+                    (Audio.userMsg
+                        (Types.PressedMuteThread (Id.fromInt 1) (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsMuted)
+                    )
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
+
+                -- Muting the channel takes the channel's dot away too.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
+
+                -- Unmuting the channel brings its dot back, but the thread stays muted.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsNotMuted))
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
+
+                -- The guild icon counts the same messages, so out on the home page it shows
+                -- the channel's one unread message and not the muted thread's two.
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ]
+                    )
+
+                -- Muting the channel as well leaves the guild icon with nothing to show.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Muted channels are left out of the unread overview"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- The user watches the overview while the admin writes in two channels.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "Unread in general"
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Noisy-channel"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , E2EHelper.writeMessage admin 100 "Unread in the noisy channel"
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the noisy channel" ])
+
+                -- Muting the noisy channel drops it from the overview, and the other
+                -- channel stays.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the noisy channel" ])
+
+                -- Muting the whole guild drops the rest of it too.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in general" ])
+
+                -- Unmuting the guild brings back everything but the muted channel.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsNotMuted))
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Unread in general" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the noisy channel" ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Muting a guild is remembered even when none of its channels were muted first"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\_ user ->
+                [ -- Nothing in this guild has been muted before, so there's no mute settings
+                  -- entry for it to change yet.
+                  user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteGuild (Id.fromInt 1) MuteSettings.IsMuted))
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case NonemptyDict.get (Id.fromInt 2) backend.users of
+                            Just user2 ->
+                                if MuteSettings.isGuildSpecificallyMute user2.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                    Ok ()
+
+                                else
+                                    Err "Guild should be muted on the backend"
+
+                            Nothing ->
+                                Err "User not found"
+                    )
+                , user.checkModel
+                    100
+                    (\model ->
+                        case Audio.userModel model of
+                            Types.Loaded loaded ->
+                                case loaded.loginStatus of
+                                    Types.LoggedIn loggedIn ->
+                                        if MuteSettings.isGuildSpecificallyMute (Local.model loggedIn.localState).localUser.user.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
+                                            Ok ()
+
+                                        else
+                                            Err "Guild should be muted on the frontend"
+
+                                    Types.NotLoggedIn _ ->
+                                        Err "Not logged in"
+
+                            Types.Loading _ ->
+                                Err "Still loading"
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Guild icon notification is shown"
         E2EHelper.startTime
         normalConfig
@@ -1423,6 +1587,113 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     )
                 , E2EHelper.writeMessage admin 100 "@Stevie Steve now you should see a red icon"
                 , E2EHelper.tallSnapshot user 100 { name = "Guild icon new mention notification" }
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Unread overview shows the unread messages of each unread channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- The overview shows all but the two oldest of these, so message 3 is
+                    -- the oldest one shown and this is the newest.
+                    newestUnreadMessage : String
+                    newestUnreadMessage =
+                        "Unread message " ++ String.fromInt (UserSession.unreadOverviewMessageLimit + 2)
+                in
+                [ -- Leave the channel so that the messages the admin writes stay unread.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+
+                -- Two more messages than the overview shows per channel. They are spaced
+                -- out because the backend only allows 10 messages per 10 seconds.
+                , List.range 1 (UserSession.unreadOverviewMessageLimit + 2)
+                    |> List.map
+                        (\index -> E2EHelper.writeMessage admin 1500 ("Unread message " ++ String.fromInt index))
+                    |> T.group
+
+                -- A client that connects after the messages were sent hasn't scrolled
+                -- through the channel, so it only has the messages the backend sends along
+                -- with the overview.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text newestUnreadMessage ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread message 3" ])
+
+                        -- The two oldest unread messages are past the limit, so they are
+                        -- only counted, not shown.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread message 2" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "2 older unread messages" ])
+
+                        -- The container says which guild and channel the messages are from.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
+
+                        -- Marking the channel as read empties the overview.
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewMarkAsRead_guild_1_0")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text newestUnreadMessage ])
+
+                        -- A new message puts the channel back in the overview, and its
+                        -- header is a link to the channel it came from.
+                        , E2EHelper.writeMessage admin 1500 "Unread again"
+                        , admin.click 100 (Dom.id "guild_newChannel")
+                        , admin.input 100 (Dom.id "newChannelName") "NewChannel"
+                        , admin.click 100 (Dom.id "guild_createChannel")
+                        , E2EHelper.writeMessage admin 100 "Unread in a different channel"
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
+
+                        -- Messages that arrive while the overview is open are loaded as they
+                        -- come in, so the newest channel gets the same limit as the ones the
+                        -- backend sends, without disturbing the other channel.
+                        , List.range 1 UserSession.unreadOverviewMessageLimit
+                            |> List.map
+                                (\index -> E2EHelper.writeMessage admin 100 ("Live message " ++ String.fromInt index))
+                            |> T.group
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text
+                                    ("Live message " ++ String.fromInt UserSession.unreadOverviewMessageLimit)
+                                ]
+                            )
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in a different channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "1 older unread message" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewOpenChannel_guild_1_0")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "channel_textinput" ])
+                        ]
+                    )
                 ]
             )
         ]

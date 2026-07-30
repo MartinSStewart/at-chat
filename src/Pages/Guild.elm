@@ -39,7 +39,7 @@ import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
-import GuildName
+import GuildName exposing (GuildName)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -58,6 +58,7 @@ import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
+import MuteSettings exposing (IsMuted(..))
 import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -328,7 +329,18 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
 
                         NoDmChannelSelected ->
-                            Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
+                            unreadOverviewNotMobile local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
                     , case ( Route.toShowMembersTab model.route, maybeOtherUserId ) of
                         ( ( ShowMembersTab, isThread ), SelectedDmChannel dmRoute ) ->
                             case DmChannelId.otherUserId local.localUser.session.userId dmRoute.channelId of
@@ -367,6 +379,430 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ( ( HideMembersTab, _ ), _ ) ->
                             Ui.none
                     ]
+
+
+{-| The unread messages of one channel, along with where they came from and how many older
+unread messages of that channel aren't shown.
+-}
+type alias UnreadOverviewChannel =
+    { source : String
+    , route : Route
+    , guildOrDmId : AnyGuildOrDmId
+    , additionalUnread : Int
+    , newestMessageId : Id ChannelMessageId
+    , newestAt : Time.Posix
+    , messages : UnreadOverviewMessages
+    }
+
+
+{-| Discord messages are kept apart from the rest because they are written by Discord users
+rather than our own users.
+-}
+type UnreadOverviewMessages
+    = UnreadOverviewMessages (List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ))
+    | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ))
+
+
+unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
+unreadOverviewNotMobile local model =
+    let
+        currentUser : FrontendCurrentUser
+        currentUser =
+            local.localUser.user
+
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local.localUser
+
+        allDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+        allDiscordUsers =
+            LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
+
+        unreads : List UnreadOverviewChannel
+        unreads =
+            List.concatMap
+                (\( guildId, guild ) ->
+                    List.filterMap
+                        (\( channelId, channel ) ->
+                            let
+                                guildOrDmId : AnyGuildOrDmId
+                                guildOrDmId =
+                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                            in
+                            case MuteSettings.isChannelMuted currentUser.muteSettings guildId channelId NoThread of
+                                IsNotMuted ->
+                                    unreadMessages guildOrDmId currentUser channel
+                                        |> Maybe.map
+                                            (\unread ->
+                                                { source = channelSource guild.name channel.name
+                                                , route =
+                                                    GuildRoute
+                                                        guildId
+                                                        (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+                                                , guildOrDmId = guildOrDmId
+                                                , additionalUnread = unread.additionalUnread
+                                                , newestMessageId = unread.newestMessageId
+                                                , newestAt = unread.newestAt
+                                                , messages = UnreadOverviewMessages unread.messages
+                                                }
+                                            )
+
+                                IsMuted ->
+                                    Nothing
+                        )
+                        (SeqDict.toList guild.channels)
+                )
+                (SeqDict.toList local.guilds)
+                ++ List.filterMap
+                    (\( otherUserId, dmChannel ) ->
+                        let
+                            guildOrDmId : AnyGuildOrDmId
+                            guildOrDmId =
+                                GuildOrDmId (GuildOrDmId_Dm otherUserId)
+                        in
+                        case MuteSettings.isDmMuted currentUser.muteSettings otherUserId NoThread of
+                            IsNotMuted ->
+                                unreadMessages guildOrDmId currentUser dmChannel
+                                    |> Maybe.map
+                                        (\unread ->
+                                            { source = User.toString otherUserId allUsers
+                                            , route =
+                                                DmRoute
+                                                    { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                                    , tab = Nothing
+                                                    }
+                                            , guildOrDmId = guildOrDmId
+                                            , additionalUnread = unread.additionalUnread
+                                            , newestMessageId = unread.newestMessageId
+                                            , newestAt = unread.newestAt
+                                            , messages = UnreadOverviewMessages unread.messages
+                                            }
+                                        )
+
+                            IsMuted ->
+                                Nothing
+                    )
+                    (SeqDict.toList local.dmChannels)
+                ++ List.concatMap
+                    (\( guildId, guild ) ->
+                        case GuildColumn.discordGuildCurrentUserId local.localUser guild of
+                            Just currentDiscordUserId ->
+                                List.filterMap
+                                    (\( channelId, channel ) ->
+                                        case MuteSettings.isDiscordChannelMuted currentUser.muteSettings guildId channelId NoThread of
+                                            IsNotMuted ->
+                                                let
+                                                    guildOrDmId : AnyGuildOrDmId
+                                                    guildOrDmId =
+                                                        DiscordGuildOrDmId
+                                                            (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
+                                                in
+                                                unreadMessages guildOrDmId currentUser channel
+                                                    |> Maybe.map
+                                                        (\unread ->
+                                                            { source = channelSource guild.name channel.name
+                                                            , route =
+                                                                DiscordGuildRoute
+                                                                    { currentDiscordUserId = currentDiscordUserId
+                                                                    , guildId = guildId
+                                                                    , channelRoute =
+                                                                        DiscordChannel_ChannelRoute
+                                                                            channelId
+                                                                            (NoThreadWithFriends Nothing HideMembersTab)
+                                                                            Nothing
+                                                                    }
+                                                            , guildOrDmId = guildOrDmId
+                                                            , additionalUnread = unread.additionalUnread
+                                                            , newestMessageId = unread.newestMessageId
+                                                            , newestAt = unread.newestAt
+                                                            , messages =
+                                                                UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
+                                                            }
+                                                        )
+
+                                            IsMuted ->
+                                                Nothing
+                                    )
+                                    (SeqDict.toList guild.channels)
+
+                            Nothing ->
+                                []
+                    )
+                    (SeqDict.toList local.discordGuilds)
+                ++ List.filterMap
+                    (\( channelId, dmChannel ) ->
+                        case
+                            ( GuildColumn.discordDmCurrentUserId local.localUser dmChannel
+                            , MuteSettings.isDiscordDmMuted currentUser.muteSettings channelId
+                            )
+                        of
+                            ( Just currentDiscordUserId, IsNotMuted ) ->
+                                let
+                                    guildOrDmId : AnyGuildOrDmId
+                                    guildOrDmId =
+                                        DiscordGuildOrDmId
+                                            (DiscordGuildOrDmId_Dm
+                                                { currentUserId = currentDiscordUserId, channelId = channelId }
+                                            )
+                                in
+                                unreadMessages guildOrDmId currentUser dmChannel
+                                    |> Maybe.map
+                                        (\unread ->
+                                            { source = discordDmSource currentDiscordUserId allDiscordUsers dmChannel
+                                            , route =
+                                                DiscordDmRoute
+                                                    { currentDiscordUserId = currentDiscordUserId
+                                                    , channelId = channelId
+                                                    , viewingMessage = Nothing
+                                                    , showMembersTab = HideMembersTab
+                                                    , tab = Nothing
+                                                    }
+                                            , guildOrDmId = guildOrDmId
+                                            , additionalUnread = unread.additionalUnread
+                                            , newestMessageId = unread.newestMessageId
+                                            , newestAt = unread.newestAt
+                                            , messages =
+                                                UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
+                                            }
+                                        )
+
+                            _ ->
+                                Nothing
+                    )
+                    (SeqDict.toList local.discordDmChannels)
+                |> List.sortBy (\unread -> Time.posixToMillis unread.newestAt)
+
+        containerWidth =
+            conversationWidth model
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.heightMin 0, Ui.Font.color MyUi.font1 ]
+        [ Ui.el
+            [ Ui.Font.bold
+            , Ui.paddingXY 8 0
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , Ui.contentCenterY
+            , MyUi.noShrinking
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            ]
+            (Ui.text "Overview")
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.heightMin 0
+            , MyUi.scrollable True
+            , Ui.paddingWith { left = 0, right = 0, top = 8, bottom = 0 }
+            ]
+            (List.map
+                (\unread ->
+                    unreadOverviewContainer
+                        unread
+                        (case unread.messages of
+                            UnreadOverviewMessages messages ->
+                                List.map
+                                    (\( messageId, message ) ->
+                                        messageView
+                                            False
+                                            containerWidth
+                                            False
+                                            SeqDict.empty
+                                            NoHighlight
+                                            IsNotHovered
+                                            False
+                                            local.localUser.session.userId
+                                            allUsers
+                                            local.localUser
+                                            Nothing
+                                            Nothing
+                                            messageId
+                                            message
+                                            |> Ui.map (\_ -> FrontendNoOp)
+                                    )
+                                    messages
+
+                            UnreadOverviewDiscordMessages currentDiscordUserId messages ->
+                                List.map
+                                    (\( messageId, message ) ->
+                                        discordMessageView
+                                            False
+                                            containerWidth
+                                            False
+                                            SeqDict.empty
+                                            NoHighlight
+                                            IsNotHovered
+                                            currentDiscordUserId
+                                            allDiscordUsers
+                                            local.localUser
+                                            Nothing
+                                            Nothing
+                                            messageId
+                                            message
+                                            |> Ui.map (\_ -> FrontendNoOp)
+                                    )
+                                    messages
+                        )
+                )
+                unreads
+            )
+        ]
+
+
+{-| The guild and channel an unread message came from, shown at the top of its container
+in the overview.
+-}
+channelSource : GuildName -> ChannelName -> String
+channelSource guildName channelName =
+    GuildName.toString guildName ++ " #" ++ ChannelName.toString channelName
+
+
+{-| The people in a Discord DM channel, not counting the linked Discord account the user
+is in the channel as. A DM channel with only us in it is named after us.
+-}
+discordDmSource :
+    Discord.Id Discord.UserId
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> DiscordFrontendDmChannel
+    -> String
+discordDmSource currentDiscordUserId allDiscordUsers dmChannel =
+    case NonemptyDict.remove currentDiscordUserId dmChannel.members |> SeqDict.keys of
+        [] ->
+            User.toString currentDiscordUserId allDiscordUsers
+
+        others ->
+            List.map (\userId -> User.toString userId allDiscordUsers) others |> String.join ", "
+
+
+{-| One channel's worth of unread messages in the overview. The messages are shown the same
+way the conversation view shows them, so a line and a header saying which channel they are
+from is what separates one channel from the next.
+-}
+unreadOverviewContainer : UnreadOverviewChannel -> List (Element FrontendMsg_) -> Element FrontendMsg_
+unreadOverviewContainer unread messageViews =
+    Ui.column
+        [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
+        , MyUi.noShrinking
+        ]
+        (Ui.row
+            [ Ui.spacing 8, Ui.paddingXY 8 4, Ui.contentCenterY ]
+            [ GuildColumn.elLinkButton
+                (unreadOverviewHtmlId "guild_unreadOverviewOpenChannel_" unread.guildOrDmId)
+                unread.route
+                [ Ui.Font.bold
+                , Ui.Font.color MyUi.font3
+                , Ui.clipWithEllipsis
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText unread.source
+                ]
+                (Ui.text unread.source)
+            , MyUi.elButton
+                (unreadOverviewHtmlId "guild_unreadOverviewMarkAsRead_" unread.guildOrDmId)
+                (PressedMarkChannelAsRead unread.guildOrDmId unread.newestMessageId)
+                [ Ui.width Ui.shrink
+                , Ui.alignRight
+                , Ui.paddingXY 8 2
+                , Ui.rounded 4
+                , Ui.border 1
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.background MyUi.buttonBackground
+                , Ui.Font.color MyUi.font1
+                , MyUi.noShrinking
+                ]
+                (Ui.text "Mark as read")
+            ]
+            :: (if unread.additionalUnread > 0 then
+                    Ui.el
+                        [ Ui.Font.color MyUi.font3
+                        , Ui.Font.italic
+                        , Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 4 }
+                        ]
+                        (Ui.text
+                            (if unread.additionalUnread == 1 then
+                                "1 older unread message"
+
+                             else
+                                String.fromInt unread.additionalUnread ++ " older unread messages"
+                            )
+                        )
+
+                else
+                    Ui.none
+               )
+            :: messageViews
+            ++ [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none) ]
+        )
+
+
+{-| Buttons in the overview are named after the channel they belong to, since the overview
+shows many channels at once.
+-}
+unreadOverviewHtmlId : String -> AnyGuildOrDmId -> HtmlId
+unreadOverviewHtmlId prefix guildOrDmId =
+    (case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            "guild_" ++ Id.toString guildId ++ "_" ++ Id.toString channelId
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            "dm_" ++ Id.toString otherUserId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+            "discord_" ++ Discord.idToString guildId ++ "_" ++ Discord.idToString channelId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            "discordDm_" ++ Discord.idToString data.channelId
+    )
+        |> (\suffix -> Dom.id (prefix ++ suffix))
+
+
+{-| The newest unread messages of a channel, oldest first, plus how many older unread
+messages aren't shown. The backend only sends `UserSession.unreadOverviewMessageLimit` of
+them per channel, but messages that arrive while the overview is open are loaded too, so
+the same limit is applied here.
+-}
+unreadMessages :
+    AnyGuildOrDmId
+    -> FrontendCurrentUser
+    -> { a | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId) }
+    ->
+        Maybe
+            { messages : List ( Id ChannelMessageId, Message ChannelMessageId userId )
+            , additionalUnread : Int
+            , newestMessageId : Id ChannelMessageId
+            , newestAt : Time.Posix
+            }
+unreadMessages guildOrDmId currentUser channel =
+    let
+        messageCount : Int
+        messageCount =
+            MessageArray.length channel.messages
+
+        unreadCount : Int
+        unreadCount =
+            GuildColumn.newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel
+
+        loaded : List ( Id ChannelMessageId, Message ChannelMessageId userId )
+        loaded =
+            MessageArray.slice
+                (messageCount - unreadCount |> Id.fromInt)
+                (Id.fromInt messageCount)
+                channel.messages
+                |> MessageArray.toList
+
+        shown : List ( Id ChannelMessageId, Message ChannelMessageId userId )
+        shown =
+            List.drop (List.length loaded - UserSession.unreadOverviewMessageLimit) loaded
+    in
+    case List.Extra.last shown of
+        Just ( newestMessageId, newest ) ->
+            Just
+                { messages = shown
+                , additionalUnread = unreadCount - List.length shown
+                , newestMessageId = newestMessageId
+                , newestAt = Message.createdAt newest
+                }
+
+        Nothing ->
+            Nothing
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -717,9 +1153,9 @@ discordGuildView model routeData loggedIn local =
                             , Ui.heightMin 0
                             , Ui.clip
                             , (case showMembers of
-                                ( ShowMembersTab, isThread ) ->
+                                ( ShowMembersTab, _ ) ->
                                     case routeData.channelRoute of
-                                        DiscordChannel_ChannelRoute channelId _ _ ->
+                                        DiscordChannel_ChannelRoute channelId threadRoute _ ->
                                             Ui.Lazy.lazy6
                                                 discordMemberColumnMobile
                                                 canScroll2
@@ -727,7 +1163,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData
                                                 guild
                                                 channelId
-                                                isThread
+                                                threadRoute
                                                 |> Ui.el
                                                     [ Ui.height Ui.fill
                                                     , Ui.background MyUi.background3
@@ -804,9 +1240,9 @@ discordGuildView model routeData loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
                             , case Route.toShowMembersTab model.route of
-                                ( ShowMembersTab, isThread ) ->
+                                ( ShowMembersTab, _ ) ->
                                     case routeData.channelRoute of
-                                        DiscordChannel_ChannelRoute channelId _ _ ->
+                                        DiscordChannel_ChannelRoute channelId threadRoute _ ->
                                             Ui.Lazy.lazy6
                                                 discordMemberColumnNotMobile
                                                 local.localUser
@@ -814,7 +1250,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData.currentDiscordUserId
                                                 guild
                                                 channelId
-                                                isThread
+                                                threadRoute
                                                 |> Ui.el
                                                     [ Ui.width Ui.shrink
                                                     , Ui.height Ui.fill
@@ -879,14 +1315,15 @@ guildErrorPage error local model =
             ]
 
 
-{-| The member column is also shown on routes where no channel is selected. In
-that case there's nothing to export.
+{-| The channel the route has selected, and which of its threads (if any) is open.
+The member column is also shown on routes where no channel is selected, hence the
+`Maybe`.
 -}
-channelRouteToChannelId : ChannelRoute -> Maybe (Id ChannelId)
-channelRouteToChannelId channelRoute =
+channelRouteToChannelIdAndThread : ChannelRoute -> Maybe ( Id ChannelId, ThreadRoute )
+channelRouteToChannelIdAndThread channelRoute =
     case channelRoute of
-        ChannelRoute channelId _ _ ->
-            Just channelId
+        ChannelRoute channelId threadRoute _ ->
+            Just ( channelId, threadRouteWithFriends threadRoute )
 
         NewChannelRoute ->
             Nothing
@@ -896,6 +1333,19 @@ channelRouteToChannelId channelRoute =
 
         JoinRoute _ ->
             Nothing
+
+
+{-| The thread a route has open, without the extra bits the route carries around for
+scrolling to a message and showing the member tab.
+-}
+threadRouteWithFriends : ThreadRouteWithFriends -> ThreadRoute
+threadRouteWithFriends threadRoute =
+    case threadRoute of
+        ViewThreadWithFriends threadId _ _ ->
+            ViewThread threadId
+
+        NoThreadWithFriends _ _ ->
+            NoThread
 
 
 exportChannelButton : ExportChannelId -> Element FrontendMsg_
@@ -929,8 +1379,11 @@ memberColumnContainerNotMobile isThread contents =
         , Ui.borderColor MyUi.border2
         ]
         [ Ui.row
-            [ Ui.height (Ui.px MyUi.channelHeaderHeight)
+            [ -- For some reason the bottom border isn't lining up with the ChannelHeader so we need to add a 1px offset
+              Ui.height (Ui.px (MyUi.channelHeaderHeight + 1))
             , MyUi.noShrinking
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border1
             ]
             [ Ui.el
                 [ Ui.Font.color MyUi.font3, Ui.paddingXY 8 0 ]
@@ -963,8 +1416,8 @@ memberColumnContainerNotMobile isThread contents =
         ]
 
 
-{-| Only actual channels can be edited. Threads and the other channel routes
-don't have an edit form so nothing is shown for them.
+{-| Only actual channels can be edited. Threads only get the mute setting, and the
+other channel routes show nothing at all.
 -}
 channelSettingsForm :
     LocalUser
@@ -972,11 +1425,10 @@ channelSettingsForm :
     -> ChannelRoute
     -> FrontendGuild
     -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
-    -> Bool
     -> Element FrontendMsg_
-channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread =
-    case ( channelRouteToChannelId channelRoute, isThread ) of
-        ( Just channelId, False ) ->
+channelSettingsForm localUser guildId channelRoute guild editChannelForm =
+    case channelRouteToChannelIdAndThread channelRoute of
+        Just ( channelId, NoThread ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     (if localUser.session.userId == MembersAndOwner.owner guild.membersAndOwner then
@@ -1021,6 +1473,9 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThrea
                         in
                         [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
                         , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+                        , MuteSettings.view
+                            (PressedMuteChannel guildId channelId)
+                            (MuteSettings.isChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
                         , if hasChanges then
                             Ui.row
                                 [ Ui.spacing 8 ]
@@ -1072,14 +1527,25 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThrea
                         ]
 
                      else
-                        [ exportChannelButton (ExportChannel_Guild guildId channelId) ]
+                        [ MuteSettings.view
+                            (PressedMuteChannel guildId channelId)
+                            (MuteSettings.isChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
+                        , exportChannelButton (ExportChannel_Guild guildId channelId)
+                        ]
                     )
                         |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
                 Nothing ->
                     Ui.none
 
-        _ ->
+        Just ( channelId, ViewThread threadId ) ->
+            [ MuteSettings.view
+                (PressedMuteThread guildId channelId threadId)
+                (MuteSettings.isThreadSpecificallyMuted localUser.user.muteSettings guildId channelId threadId)
+            ]
+                |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
+
+        Nothing ->
             Ui.none
 
 
@@ -1139,13 +1605,7 @@ memberColumnNotMobile :
 memberColumnNotMobile localUser guildId channelRoute guild editChannelForm isThread =
     memberColumnContainerNotMobile
         isThread
-        [ channelSettingsForm
-            localUser
-            guildId
-            channelRoute
-            guild
-            editChannelForm
-            isThread
+        [ channelSettingsForm localUser guildId channelRoute guild editChannelForm
         , Ui.Lazy.lazy3 memberListView False localUser guild.membersAndOwner
         ]
 
@@ -1177,20 +1637,48 @@ discordMemberColumnNotMobile :
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> Bool
+    -> ThreadRouteWithFriends
     -> Element FrontendMsg_
-discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId isThread =
+discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId threadRoute =
     memberColumnContainerNotMobile
-        isThread
-        [ if isThread then
-            Ui.none
+        (case threadRoute of
+            NoThreadWithFriends _ _ ->
+                False
 
-          else
-            Ui.el
-                [ Ui.paddingXY 8 4 ]
-                (exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId))
+            ViewThreadWithFriends _ _ _ ->
+                True
+        )
+        [ discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute
         , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
         ]
+
+
+{-| Discord channels are managed on Discord, so the only thing to change here is whether
+the channel (or the thread inside it) is muted.
+-}
+discordChannelSettingsForm :
+    LocalUser
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> ThreadRouteWithFriends
+    -> Element FrontendMsg_
+discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute =
+    (case threadRoute of
+        NoThreadWithFriends _ _ ->
+            [ MuteSettings.view
+                (PressedMuteDiscordChannel currentDiscordUserId guildId channelId)
+                (MuteSettings.isDiscordChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
+            , exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId)
+            ]
+
+        ViewThreadWithFriends threadId _ _ ->
+            [ MuteSettings.view
+                (PressedMuteDiscordThread currentDiscordUserId guildId channelId threadId)
+                (MuteSettings.isDiscordThreadSpecificallyMuted localUser.user.muteSettings guildId channelId threadId)
+            ]
+    )
+        |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
 
 discordMemberColumnContainer : List (Element msg) -> Element msg
@@ -1243,7 +1731,7 @@ memberColumnMobile canScroll2 localUser guildId channelRoute guild editChannelFo
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread
+            [ channelSettingsForm localUser guildId channelRoute guild editChannelForm
             , Ui.Lazy.lazy3 memberListView True localUser guild.membersAndOwner
             ]
         ]
@@ -1255,9 +1743,9 @@ discordMemberColumnMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> Bool
+    -> ThreadRouteWithFriends
     -> Element FrontendMsg_
-discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThread =
+discordMemberColumnMobile canScroll2 localUser routeData guild channelId threadRoute =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.row
@@ -1269,11 +1757,12 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThrea
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , if isThread then
-                Ui.text "Thread members"
+            , case threadRoute of
+                ViewThreadWithFriends _ _ _ ->
+                    Ui.text "Thread members"
 
-              else
-                Ui.text "Channel members"
+                NoThreadWithFriends _ _ ->
+                    Ui.text "Channel members"
             ]
         , Ui.column
             [ Ui.height Ui.fill
@@ -1283,13 +1772,12 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId isThrea
             , MyUi.scrollable canScroll2
             , Ui.heightMin 0
             ]
-            [ if isThread then
-                Ui.none
-
-              else
-                Ui.el
-                    [ Ui.paddingXY 8 4 ]
-                    (exportChannelButton (ExportChannel_Discord routeData.currentDiscordUserId routeData.guildId channelId))
+            [ discordChannelSettingsForm
+                localUser
+                routeData.currentDiscordUserId
+                routeData.guildId
+                channelId
+                threadRoute
             , discordMemberListView True routeData.currentDiscordUserId localUser routeData.guildId guild channelId
             ]
         ]
@@ -1715,10 +2203,16 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
                      else
                         Just NotifyOnMention
                     )
-                    "Guild notifications"
+                    (Ui.text "Guild notifications")
                     [ ( NotifyOnMention, "Only when mentioned" )
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
+                )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteDiscordGuild currentUserId guildId)
+                    (MuteSettings.isDiscordGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             ]
         )
@@ -1873,10 +2367,16 @@ guildSettingsView model loggedIn local guildId guild =
                      else
                         Just NotifyOnMention
                     )
-                    "Guild notifications"
+                    (Ui.text "Guild notifications")
                     [ ( NotifyOnMention, "Only when mentioned" )
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
+                )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteGuild guildId)
+                    (MuteSettings.isGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             , if isOwner then
                 deleteGuildSection guildId guild editGuildForm
@@ -3416,6 +3916,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
                           else
                             Ui.width Ui.shrink
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
@@ -3441,6 +3942,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
                           else
                             Ui.width Ui.shrink
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
@@ -3474,9 +3976,15 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                                     y
                             , z = 0
                             }
+                        , emojiSelectorZIndex
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
+
+
+emojiSelectorZIndex : Ui.Attribute msg
+emojiSelectorZIndex =
+    MyUi.htmlStyle "z-index" "30"
 
 
 replyToHeader :
@@ -7294,9 +7802,13 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                 |> List.map
                     (\( channelId, channel ) ->
                         let
+                            channelMuted =
+                                MuteSettings.isChannelMuted localUser.user.muteSettings guildId channelId NoThread
+
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
+                                    channelMuted
                                     directMentions
                                     (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                     channelId
@@ -7309,6 +7821,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                             []
                             [ channelColumnRow
                                 isMobile
+                                channelMuted
                                 hasNotifications
                                 channelRoute
                                 guildId
@@ -7529,9 +8042,18 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                 |> List.map
                     (\( channelId, channel ) ->
                         let
+                            channelMuted : IsMuted
+                            channelMuted =
+                                MuteSettings.isDiscordChannelMuted
+                                    localUser.user.muteSettings
+                                    routeData.guildId
+                                    channelId
+                                    NoThread
+
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
+                                    channelMuted
                                     directMentions
                                     (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                     channelId
@@ -7544,6 +8066,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                             []
                             [ discordChannelColumnRow
                                 isMobile
+                                channelMuted
                                 hasNotifications
                                 routeData
                                 channelId
@@ -7590,7 +8113,7 @@ channelColumnThreads :
     -> Element FrontendMsg_
 channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
@@ -7604,9 +8127,17 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                                 _ ->
                                     False
 
+                        isMuted =
+                            MuteSettings.isChannelMuted
+                                localUser.user.muteSettings
+                                guildId
+                                channelId
+                                (ViewThread threadMessageIndex)
+
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
+                                isMuted
                                 directMentions
                                 (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                 channelId
@@ -7620,13 +8151,13 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                             else
                                 Nothing
 
                         _ ->
-                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -7634,10 +8165,11 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
+                isMuted
                 hasNotifications
                 index
                 count
@@ -7652,6 +8184,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
 channelColumnThreadsHelper :
     Bool
     -> Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> Int
     -> Int
@@ -7659,8 +8192,8 @@ channelColumnThreadsHelper :
     -> Route
     -> String
     -> Element FrontendMsg_
-channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThreadCount htmlId route name =
-    GuildColumn.elLinkButton
+channelColumnThreadsHelper isMobile isSelected isMuted hasNotifications index visibleThreadCount htmlId route name =
+    GuildColumn.rowLinkButton
         htmlId
         route
         [ Ui.paddingWith { left = 28, right = 8, top = 0, bottom = 0 }
@@ -7704,7 +8237,9 @@ channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThr
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text name)
+        [ Ui.text name
+        , channelIsMuted isMuted
+        ]
 
 
 discordChannelColumnThreads :
@@ -7719,7 +8254,7 @@ discordChannelColumnThreads :
     -> Element FrontendMsg_
 discordChannelColumnThreads isMobile now routeData directMentions localUser channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
@@ -7733,9 +8268,17 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                                 _ ->
                                     False
 
+                        isMuted =
+                            MuteSettings.isDiscordChannelMuted
+                                localUser.user.muteSettings
+                                routeData.guildId
+                                channelId
+                                (ViewThread threadMessageIndex)
+
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
+                                isMuted
                                 directMentions
                                 (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                 channelId
@@ -7751,13 +8294,13 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                             else
                                 Nothing
 
                         _ ->
-                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -7766,10 +8309,11 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
+                isMuted
                 hasNotifications
                 index
                 count
@@ -7792,13 +8336,14 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
 
 channelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> ChannelRoute
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg_
-channelColumnRow isMobile hasNotification channelRoute guildId channelId channel =
+channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -7809,7 +8354,7 @@ channelColumnRow isMobile hasNotification channelRoute guildId channelId channel
                 _ ->
                     False
     in
-    GuildColumn.elLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
         (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
         [ Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
@@ -7840,17 +8385,35 @@ channelColumnRow isMobile hasNotification channelRoute guildId channelId channel
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text (ChannelName.toString channel.name))
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
+
+
+channelIsMuted : IsMuted -> Element msg
+channelIsMuted isMuted =
+    case isMuted of
+        IsMuted ->
+            Ui.el
+                [ MyUi.noShrinking
+                , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 0 }
+                , Ui.alignRight
+                ]
+                (Ui.html Icons.bellSlash)
+
+        IsNotMuted ->
+            Ui.none
 
 
 discordChannelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> DiscordGuildRouteData
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg_
-discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
+discordChannelColumnRow isMobile isMuted hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -7861,7 +8424,7 @@ discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
                 _ ->
                     False
     in
-    GuildColumn.elLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_openChannel_" ++ Discord.idToString channelId))
         (DiscordGuildRoute
             { currentDiscordUserId = routeData.currentDiscordUserId
@@ -7906,7 +8469,9 @@ discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text (ChannelName.toString channel.name))
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
 
 
 friendsColumnLazy :

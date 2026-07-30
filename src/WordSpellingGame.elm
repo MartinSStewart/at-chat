@@ -4434,9 +4434,9 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                             case player.premove of
                                 Just ( _, result, _ ) ->
                                     [ Ui.text
-                                        ("You'll automatically try placing \""
+                                        ("You'll automatically try placing "
                                             ++ headlineWord result.words
-                                            ++ "\" when it's your turn."
+                                            ++ " when it's your turn."
                                         )
                                         |> Ui.el
                                             [ Ui.background premoveColor
@@ -4789,7 +4789,7 @@ wordDefinitionBody word data =
         WordDefinition_NotFound ->
             Ui.column
                 [ Ui.Font.color MyUi.font3, Ui.height Ui.fill ]
-                [ Ui.text ("No definition found for \"" ++ word ++ "\".")
+                [ Ui.text ("No definition found for " ++ word ++ ".")
                 , definitionCredits
                 ]
 
@@ -6110,7 +6110,7 @@ setupView windowSize isReadonly setup =
                     (Dom.id "ws_language")
                     PressedLanguage
                     (Just setup.language)
-                    "Dictionary"
+                    (Ui.text "Dictionary")
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
             , Go.setupSection
                 (Ui.text "Attempts per turn")

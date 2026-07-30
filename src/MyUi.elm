@@ -532,11 +532,11 @@ emailAddress emailAddress2 =
     Ui.el [ Ui.Font.bold ] (Ui.text (EmailAddress.toString emailAddress2))
 
 
-radioColumn : HtmlId -> (option -> msg) -> Maybe option -> String -> List ( option, String ) -> Element msg
+radioColumn : HtmlId -> (option -> msg) -> Maybe option -> Element msg -> List ( option, String ) -> Element msg
 radioColumn htmlId onPress maybeValue title options =
     let
         label2 =
-            Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] (Ui.text title)
+            Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] title
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -1229,7 +1229,7 @@ guildIconFullWidth =
 
 memberColumnWidth : number
 memberColumnWidth =
-    250
+    300
 
 
 insetTop : String

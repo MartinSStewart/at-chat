@@ -70,6 +70,12 @@ type ToBackendLog
     | ToBackendLog_Local_VoiceChatChange
     | ToBackendLog_Local_Game
     | ToBackendLog_Local_Drawing
+    | ToBackendLog_Local_SetMuteChannel
+    | ToBackendLog_Local_SetMuteThread
+    | ToBackendLog_Local_SetMuteDiscordChannel
+    | ToBackendLog_Local_SetMuteDiscordThread
+    | ToBackendLog_Local_SetMuteGuild
+    | ToBackendLog_Local_SetMuteDiscordGuild
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -257,3 +263,21 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Drawing ->
             "Local_Drawing"
+
+        ToBackendLog_Local_SetMuteChannel ->
+            "Local_SetMuteChannel"
+
+        ToBackendLog_Local_SetMuteThread ->
+            "Local_SetMuteThread"
+
+        ToBackendLog_Local_SetMuteDiscordChannel ->
+            "Local_SetMuteDiscordChannel"
+
+        ToBackendLog_Local_SetMuteDiscordThread ->
+            "Local_SetMuteDiscordThread"
+
+        ToBackendLog_Local_SetMuteGuild ->
+            "Local_SetMuteGuild"
+
+        ToBackendLog_Local_SetMuteDiscordGuild ->
+            "Local_SetMuteDiscordGuild"

@@ -4555,6 +4555,83 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
                 model
 
+        PressedMuteChannel guildId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteChannel guildId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteThread guildId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteThread guildId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteDiscordChannel discordUserId guildId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordChannel discordUserId guildId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteDiscordThread discordUserId guildId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordThread discordUserId guildId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteGuild guildId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteGuild guildId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteDiscordGuild discordUserId guildId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordGuild discordUserId guildId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMarkChannelAsRead guildOrDmId messageId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetLastViewed guildOrDmId (NoThreadWithMessage messageId) |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
 they only select a drawing anchor while the drawing tab is open.
@@ -6514,6 +6591,9 @@ updateLoadedFromBackend msg model =
 
                                         _ ->
                                             Command.none
+
+                                ViewOverview _ ->
+                                    Command.none
 
                         Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
                             if SeqDict.isEmpty messagesLoaded then
