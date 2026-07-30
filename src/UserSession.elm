@@ -111,7 +111,9 @@ The frontend holds the newest message of every channel already, but nothing olde
 that for channels the user hasn't opened, and it never has the Discord users of a guild
 it isn't looking at, so those come along too.
 
-Threads aren't included, only the channels themselves.
+The threads of a channel are unread separately from the channel itself, so they come
+along as well, keyed by the message they were started from. Discord DM channels can't
+contain threads, so there's nothing to send for those.
 
 -}
 type alias UnreadOverviewData =
@@ -119,11 +121,23 @@ type alias UnreadOverviewData =
         SeqDict
             ( Id GuildId, Id ChannelId )
             (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+    , guildThreads :
+        SeqDict
+            ( Id GuildId, Id ChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
     , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+    , dmThreads :
+        SeqDict
+            ( Id UserId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
     , discordGuildChannels :
         SeqDict
             ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
             (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+    , discordGuildThreads :
+        SeqDict
+            ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
+            (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)

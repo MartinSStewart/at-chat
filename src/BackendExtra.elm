@@ -58,7 +58,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
@@ -306,11 +306,10 @@ requestedForToGuildOrDmId userId requestMessagesFor =
                     UserSession.Viewing_None
 
 
-{-| What the unread overview needs: the newest unread messages of every channel the user
-hasn't read to the end, plus the Discord users those messages show the names of.
+{-| What the unread overview needs: the newest unread messages of every channel and thread
+the user hasn't read to the end, plus the Discord users those messages show the names of.
 
-Only channels the user is allowed to see are included, and only the channel messages, not
-the messages in the threads a channel contains.
+Only channels the user is allowed to see are included.
 
 -}
 unreadOverviewData : Id UserId -> BackendUser -> BackendModel -> UserSession.UnreadOverviewData
@@ -341,11 +340,17 @@ unreadOverviewData userId user model =
                 []
                 model.discordUsers
 
-        discordGuildChannels :
-            SeqDict
-                ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
-                (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
-        discordGuildChannels =
+        discordGuilds :
+            { channels :
+                SeqDict
+                    ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+            , threads :
+                SeqDict
+                    ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId, Id ChannelMessageId )
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId)))
+            }
+        discordGuilds =
             SeqDict.foldl
                 (\guildId guild dict ->
                     -- The frontend shows a Discord guild as whichever of our linked Discord
@@ -359,17 +364,45 @@ unreadOverviewData userId user model =
                         Just discordUserId ->
                             SeqDict.foldl
                                 (\channelId channel dict2 ->
+                                    let
+                                        guildOrDmId : AnyGuildOrDmId
+                                        guildOrDmId =
+                                            DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId)
+                                    in
                                     if LocalState.canViewDiscordChannel guildId channel guild discordUserId then
-                                        case
-                                            ( channel.status
-                                            , unreadMessages
-                                                (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild discordUserId guildId channelId))
-                                                user
-                                                channel
-                                            )
-                                        of
-                                            ( ChannelActive, Just messages ) ->
-                                                SeqDict.insert ( guildId, channelId ) messages dict2
+                                        case channel.status of
+                                            ChannelActive ->
+                                                { channels =
+                                                    case
+                                                        unreadMessages
+                                                            (SeqDict.get guildOrDmId user.lastViewed)
+                                                            channel
+                                                    of
+                                                        Just messages ->
+                                                            SeqDict.insert ( guildId, channelId ) messages dict2.channels
+
+                                                        Nothing ->
+                                                            dict2.channels
+                                                , threads =
+                                                    SeqDict.foldl
+                                                        (\threadId thread dict3 ->
+                                                            case
+                                                                unreadMessages
+                                                                    (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                                    thread
+                                                            of
+                                                                Just messages ->
+                                                                    SeqDict.insert
+                                                                        ( guildId, channelId, threadId )
+                                                                        messages
+                                                                        dict3
+
+                                                                Nothing ->
+                                                                    dict3
+                                                        )
+                                                        dict2.threads
+                                                        channel.threads
+                                                }
 
                                             _ ->
                                                 dict2
@@ -383,7 +416,7 @@ unreadOverviewData userId user model =
                         Nothing ->
                             dict
                 )
-                SeqDict.empty
+                { channels = SeqDict.empty, threads = SeqDict.empty }
                 model.discordGuilds
 
         discordDmChannels :
@@ -401,8 +434,10 @@ unreadOverviewData userId user model =
                         Just currentUserId ->
                             case
                                 unreadMessages
-                                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
-                                    user
+                                    (SeqDict.get
+                                        (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId }))
+                                        user.lastViewed
+                                    )
                                     dmChannel
                             of
                                 Just messages ->
@@ -416,75 +451,163 @@ unreadOverviewData userId user model =
                 )
                 SeqDict.empty
                 model.discordDmChannels
-    in
-    { guildChannels =
-        SeqDict.foldl
-            (\guildId guild dict ->
-                case MembersAndOwner.isMember userId guild.membersAndOwner of
-                    IsNotMember ->
-                        dict
 
-                    _ ->
-                        SeqDict.foldl
-                            (\channelId channel dict2 ->
-                                case
-                                    ( channel.status
-                                    , unreadMessages (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) user channel
-                                    )
-                                of
-                                    ( ChannelActive, Just messages ) ->
-                                        SeqDict.insert ( guildId, channelId ) messages dict2
-
-                                    _ ->
-                                        dict2
-                            )
+        guilds :
+            { channels :
+                SeqDict
+                    ( Id GuildId, Id ChannelId )
+                    (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            , threads :
+                SeqDict
+                    ( Id GuildId, Id ChannelId, Id ChannelMessageId )
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+            }
+        guilds =
+            SeqDict.foldl
+                (\guildId guild dict ->
+                    case MembersAndOwner.isMember userId guild.membersAndOwner of
+                        IsNotMember ->
                             dict
-                            guild.channels
-            )
-            SeqDict.empty
-            model.guilds
-    , dmChannels =
-        SeqDict.foldl
-            (\dmChannelId dmChannel dict ->
-                case DmChannelId.otherUserId userId dmChannelId of
-                    Just otherUserId ->
-                        case unreadMessages (GuildOrDmId (GuildOrDmId_Dm otherUserId)) user dmChannel of
-                            Just messages ->
-                                SeqDict.insert otherUserId messages dict
 
-                            Nothing ->
+                        _ ->
+                            SeqDict.foldl
+                                (\channelId channel dict2 ->
+                                    let
+                                        guildOrDmId : AnyGuildOrDmId
+                                        guildOrDmId =
+                                            GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                                    in
+                                    case channel.status of
+                                        ChannelActive ->
+                                            { channels =
+                                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewed) channel of
+                                                    Just messages ->
+                                                        SeqDict.insert ( guildId, channelId ) messages dict2.channels
+
+                                                    Nothing ->
+                                                        dict2.channels
+                                            , threads =
+                                                SeqDict.foldl
+                                                    (\threadId thread dict3 ->
+                                                        case
+                                                            unreadMessages
+                                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                                thread
+                                                        of
+                                                            Just messages ->
+                                                                SeqDict.insert ( guildId, channelId, threadId ) messages dict3
+
+                                                            Nothing ->
+                                                                dict3
+                                                    )
+                                                    dict2.threads
+                                                    channel.threads
+                                            }
+
+                                        _ ->
+                                            dict2
+                                )
                                 dict
+                                guild.channels
+                )
+                { channels = SeqDict.empty, threads = SeqDict.empty }
+                model.guilds
 
-                    Nothing ->
-                        dict
-            )
-            SeqDict.empty
-            model.dmChannels
-    , discordGuildChannels = discordGuildChannels
-    , discordDmChannels = discordDmChannels
-    , discordUsers =
-        List.foldl
-            (\messages dict ->
-                SeqDict.foldl
-                    (\_ message dict2 ->
-                        List.foldl
-                            (\discordUserId dict3 ->
-                                case SeqDict.get discordUserId model.discordUsers of
-                                    Just discordUser ->
-                                        SeqDict.insert discordUserId (User.discordUserDataToFrontendUser discordUser) dict3
+        dms :
+            { channels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+            , threads :
+                SeqDict
+                    ( Id UserId, Id ChannelMessageId )
+                    (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId)))
+            }
+        dms =
+            SeqDict.foldl
+                (\dmChannelId dmChannel dict ->
+                    case DmChannelId.otherUserId userId dmChannelId of
+                        Just otherUserId ->
+                            let
+                                guildOrDmId : AnyGuildOrDmId
+                                guildOrDmId =
+                                    GuildOrDmId (GuildOrDmId_Dm otherUserId)
+                            in
+                            { channels =
+                                case unreadMessages (SeqDict.get guildOrDmId user.lastViewed) dmChannel of
+                                    Just messages ->
+                                        SeqDict.insert otherUserId messages dict.channels
 
                                     Nothing ->
-                                        dict3
-                            )
-                            dict2
-                            (messageUserIds message)
-                    )
-                    dict
-                    messages
-            )
-            SeqDict.empty
-            (SeqDict.values discordGuildChannels ++ SeqDict.values discordDmChannels)
+                                        dict.channels
+                            , threads =
+                                SeqDict.foldl
+                                    (\threadId thread dict2 ->
+                                        case
+                                            unreadMessages
+                                                (SeqDict.get ( guildOrDmId, threadId ) user.lastViewedThreads)
+                                                thread
+                                        of
+                                            Just messages ->
+                                                SeqDict.insert ( otherUserId, threadId ) messages dict2
+
+                                            Nothing ->
+                                                dict2
+                                    )
+                                    dict.threads
+                                    dmChannel.threads
+                            }
+
+                        Nothing ->
+                            dict
+                )
+                { channels = SeqDict.empty, threads = SeqDict.empty }
+                model.dmChannels
+    in
+    { guildChannels = guilds.channels
+    , guildThreads = guilds.threads
+    , dmChannels = dms.channels
+    , dmThreads = dms.threads
+    , discordGuildChannels = discordGuilds.channels
+    , discordGuildThreads = discordGuilds.threads
+    , discordDmChannels = discordDmChannels
+    , discordUsers =
+        SeqDict.empty
+            |> discordUsersInMessages
+                model.discordUsers
+                (SeqDict.values discordGuilds.channels ++ SeqDict.values discordDmChannels)
+            |> discordUsersInMessages model.discordUsers (SeqDict.values discordGuilds.threads)
     }
+
+
+{-| The Discord users the given messages show the names of, added to the users found so
+far. Channel messages and thread messages are numbered differently, so they can't be put
+in one list and are added in two passes instead.
+-}
+discordUsersInMessages :
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> List (SeqDict (Id messageId) (Message messageId (Discord.Id Discord.UserId)))
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+discordUsersInMessages allDiscordUsers messageDicts foundSoFar =
+    List.foldl
+        (\messages dict ->
+            SeqDict.foldl
+                (\_ message dict2 ->
+                    List.foldl
+                        (\discordUserId dict3 ->
+                            case SeqDict.get discordUserId allDiscordUsers of
+                                Just discordUser ->
+                                    SeqDict.insert discordUserId (User.discordUserDataToFrontendUser discordUser) dict3
+
+                                Nothing ->
+                                    dict3
+                        )
+                        dict2
+                        (messageUserIds message)
+                )
+                dict
+                messages
+        )
+        foundSoFar
+        messageDicts
 
 
 {-| The users a message shows the name of: whoever wrote it, plus anyone it mentions.
@@ -508,16 +631,14 @@ messageUserIds message =
             [ data.startedBy ]
 
 
-{-| The newest unread messages in a channel, at most `unreadOverviewMessageLimit` of them,
-keyed by the index they sit at in the channel. `Nothing` when the user has read the channel
-to the end.
+{-| The newest unread messages in a channel or thread, at most `unreadOverviewMessageLimit`
+of them, keyed by the index they sit at. `Nothing` when the user has read it to the end.
 -}
 unreadMessages :
-    AnyGuildOrDmId
-    -> BackendUser
-    -> { a | messages : IdArray ChannelMessageId (Message ChannelMessageId userId) }
-    -> Maybe (SeqDict (Id ChannelMessageId) (Message ChannelMessageId userId))
-unreadMessages guildOrDmId user channel =
+    Maybe (Id messageId)
+    -> { a | messages : IdArray messageId (Message messageId userId) }
+    -> Maybe (SeqDict (Id messageId) (Message messageId userId))
+unreadMessages maybeLastViewed channel =
     let
         messageCount : Int
         messageCount =
@@ -525,7 +646,7 @@ unreadMessages guildOrDmId user channel =
 
         oldestUnread : Int
         oldestUnread =
-            case SeqDict.get guildOrDmId user.lastViewed of
+            case maybeLastViewed of
                 Just lastViewed ->
                     Id.toInt lastViewed + 1
 

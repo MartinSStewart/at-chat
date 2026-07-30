@@ -1698,6 +1698,77 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Unread overview includes threads and can mark everything as read at once"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- Leave the channel so that the messages the admin writes stay unread.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "Unread in the channel"
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "Unread in the thread"
+
+                -- A client that connects after the messages were sent only has what the
+                -- backend sends along with the overview, so this checks that thread
+                -- messages are sent too.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the thread" ])
+
+                        -- The thread is listed separately from the channel it's in.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general (thread)" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with a thread" }
+
+                        -- Marking everything as read empties the overview.
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewMarkAllAsRead")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the thread" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with nothing unread" }
+
+                        -- The thread stays read once the page is loaded from scratch again.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            (Route.encode Route.HomePageRoute)
+                            E2EHelper.desktopWindow
+                            (\userReload2 ->
+                                [ T.andThen
+                                    10
+                                    (\data -> [ userReload2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , userReload2.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "No messages missing even in long chat history"
         E2EHelper.startTime
         normalConfig
