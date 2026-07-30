@@ -754,10 +754,10 @@ unreadOverviewHtmlId prefix guildOrDmId =
         |> (\suffix -> Dom.id (prefix ++ suffix))
 
 
-{-| The unread messages of a channel that the frontend has loaded, oldest first, plus how
-many older unread messages it doesn't have. The backend sends the newest unread messages of
-every channel when the overview is opened (see `BackendExtra.unreadOverviewData`), which is
-what caps how many of them show up here.
+{-| The newest unread messages of a channel, oldest first, plus how many older unread
+messages aren't shown. The backend only sends `UserSession.unreadOverviewMessageLimit` of
+them per channel, but messages that arrive while the overview is open are loaded too, so
+the same limit is applied here.
 -}
 unreadMessages :
     AnyGuildOrDmId
@@ -787,12 +787,16 @@ unreadMessages guildOrDmId currentUser channel =
                 (Id.fromInt messageCount)
                 channel.messages
                 |> MessageArray.toList
+
+        shown : List ( Id ChannelMessageId, Message ChannelMessageId userId )
+        shown =
+            List.drop (List.length loaded - UserSession.unreadOverviewMessageLimit) loaded
     in
-    case List.Extra.last loaded of
+    case List.Extra.last shown of
         Just ( newestMessageId, newest ) ->
             Just
-                { messages = loaded
-                , additionalUnread = unreadCount - List.length loaded
+                { messages = shown
+                , additionalUnread = unreadCount - List.length shown
                 , newestMessageId = newestMessageId
                 , newestAt = Message.createdAt newest
                 }
@@ -8038,15 +8042,18 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                 |> List.map
                     (\( channelId, channel ) ->
                         let
+                            channelMuted : IsMuted
+                            channelMuted =
+                                MuteSettings.isDiscordChannelMuted
+                                    localUser.user.muteSettings
+                                    routeData.guildId
+                                    channelId
+                                    NoThread
+
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
-                                    (MuteSettings.isDiscordChannelMuted
-                                        localUser.user.muteSettings
-                                        routeData.guildId
-                                        channelId
-                                        NoThread
-                                    )
+                                    channelMuted
                                     directMentions
                                     (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                     channelId
@@ -8059,6 +8066,7 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                             []
                             [ discordChannelColumnRow
                                 isMobile
+                                channelMuted
                                 hasNotifications
                                 routeData
                                 channelId
@@ -8399,12 +8407,13 @@ channelIsMuted isMuted =
 
 discordChannelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> DiscordGuildRouteData
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg_
-discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
+discordChannelColumnRow isMobile isMuted hasNotifications routeData channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -8415,7 +8424,7 @@ discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
                 _ ->
                     False
     in
-    GuildColumn.elLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_openChannel_" ++ Discord.idToString channelId))
         (DiscordGuildRoute
             { currentDiscordUserId = routeData.currentDiscordUserId
@@ -8460,7 +8469,9 @@ discordChannelColumnRow isMobile hasNotifications routeData channelId channel =
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text (ChannelName.toString channel.name))
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
 
 
 friendsColumnLazy :

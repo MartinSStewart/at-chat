@@ -15,6 +15,7 @@ module UserSession exposing
     , isViewingGame
     , setViewingToCurrentlyViewing
     , toFrontend
+    , unreadOverviewMessageLimit
     )
 
 import Discord
@@ -90,6 +91,15 @@ type Viewing
     | Viewing_DiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId)
     | Viewing_None
     | Viewing_Overview
+
+
+{-| How many of a channel's unread messages the unread overview shows. A channel that has
+gone unread for a long time can hold thousands of messages, and the overview is a summary,
+so only this many of the newest ones are sent and shown.
+-}
+unreadOverviewMessageLimit : number
+unreadOverviewMessageLimit =
+    3
 
 
 {-| What the unread overview needs from the backend: the unread messages of every channel

@@ -31,7 +31,6 @@ module BackendExtra exposing
     , shouldRateLimit
     , toBackendLog
     , unreadOverviewData
-    , unreadOverviewMessageLimit
     , validateAttachedFiles
     )
 
@@ -307,15 +306,6 @@ requestedForToGuildOrDmId userId requestMessagesFor =
                     UserSession.Viewing_None
 
 
-{-| How many of a channel's unread messages the unread overview shows. A channel that
-has gone unread for a long time can hold thousands of messages, and the overview is a
-summary, so only this many of the newest ones are sent.
--}
-unreadOverviewMessageLimit : number
-unreadOverviewMessageLimit =
-    3
-
-
 {-| What the unread overview needs: the newest unread messages of every channel the user
 hasn't read to the end, plus the Discord users those messages show the names of.
 
@@ -544,7 +534,7 @@ unreadMessages guildOrDmId user channel =
 
         oldestIncluded : Int
         oldestIncluded =
-            max oldestUnread (messageCount - unreadOverviewMessageLimit)
+            max oldestUnread (messageCount - UserSession.unreadOverviewMessageLimit)
     in
     if oldestUnread < messageCount then
         IdArray.slice (Id.fromInt oldestIncluded) (Id.fromInt messageCount) channel.messages

@@ -3,7 +3,6 @@ module E2ETests exposing (main, setup)
 import Array exposing (Array)
 import Audio
 import Backend
-import BackendExtra
 import Bytes exposing (Bytes)
 import Codec
 import Coord
@@ -1457,6 +1456,22 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsNotMuted))
                 , user.checkView 100 (Test.Html.Query.has [ channelDot ])
                 , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
+
+                -- The guild icon counts the same messages, so out on the home page it shows
+                -- the channel's one unread message and not the muted thread's two.
+                , user.click 100 (Dom.id "guildIcon_showFriends")
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ]
+                    )
+
+                -- Muting the channel as well leaves the guild icon with nothing to show.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
                 ]
             )
         ]
@@ -1587,14 +1602,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     -- the oldest one shown and this is the newest.
                     newestUnreadMessage : String
                     newestUnreadMessage =
-                        "Unread message " ++ String.fromInt (BackendExtra.unreadOverviewMessageLimit + 2)
+                        "Unread message " ++ String.fromInt (UserSession.unreadOverviewMessageLimit + 2)
                 in
                 [ -- Leave the channel so that the messages the admin writes stay unread.
                   user.click 100 (Dom.id "guildIcon_showFriends")
 
                 -- Two more messages than the overview shows per channel. They are spaced
                 -- out because the backend only allows 10 messages per 10 seconds.
-                , List.range 1 (BackendExtra.unreadOverviewMessageLimit + 2)
+                , List.range 1 (UserSession.unreadOverviewMessageLimit + 2)
                     |> List.map
                         (\index -> E2EHelper.writeMessage admin 1500 ("Unread message " ++ String.fromInt index))
                     |> T.group
@@ -1646,6 +1661,30 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , admin.input 100 (Dom.id "newChannelName") "NewChannel"
                         , admin.click 100 (Dom.id "guild_createChannel")
                         , E2EHelper.writeMessage admin 100 "Unread in a different channel"
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
+
+                        -- Messages that arrive while the overview is open are loaded as they
+                        -- come in, so the newest channel gets the same limit as the ones the
+                        -- backend sends, without disturbing the other channel.
+                        , List.range 1 UserSession.unreadOverviewMessageLimit
+                            |> List.map
+                                (\index -> E2EHelper.writeMessage admin 100 ("Live message " ++ String.fromInt index))
+                            |> T.group
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text
+                                    ("Live message " ++ String.fromInt UserSession.unreadOverviewMessageLimit)
+                                ]
+                            )
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in a different channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "1 older unread message" ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
