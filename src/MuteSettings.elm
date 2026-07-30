@@ -1,4 +1,22 @@
-module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isDiscordChannelMuted, isDiscordChannelSpecificallyMuted, isDiscordThreadSpecificallyMuted, isThreadSpecificallyMuted, setMuteChannel, setMuteDiscordChannel, setMuteDiscordThread, setMuteThread, view)
+module MuteSettings exposing
+    ( IsMuted(..)
+    , Model
+    , MutedChannel
+    , MutedDiscordGuild
+    , MutedGuild
+    , init
+    , isChannelMuted
+    , isChannelSpecificallyMuted
+    , isDiscordChannelMuted
+    , isDiscordChannelSpecificallyMuted
+    , isDiscordThreadSpecificallyMuted
+    , isThreadSpecificallyMuted
+    , setMuteChannel
+    , setMuteDiscordChannel
+    , setMuteDiscordThread
+    , setMuteThread
+    , view
+    )
 
 import Discord
 import Effect.Browser.Dom as Dom
