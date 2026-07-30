@@ -1140,7 +1140,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData
                                                 guild
                                                 channelId
-                                                (threadRouteWithFriends threadRoute)
+                                                threadRoute
                                                 |> Ui.el
                                                     [ Ui.height Ui.fill
                                                     , Ui.background MyUi.background3
@@ -1227,7 +1227,7 @@ discordGuildView model routeData loggedIn local =
                                                 routeData.currentDiscordUserId
                                                 guild
                                                 channelId
-                                                (threadRouteWithFriends threadRoute)
+                                                threadRoute
                                                 |> Ui.el
                                                     [ Ui.width Ui.shrink
                                                     , Ui.height Ui.fill
@@ -1614,11 +1614,17 @@ discordMemberColumnNotMobile :
     -> Discord.Id Discord.UserId
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> ThreadRoute
+    -> ThreadRouteWithFriends
     -> Element FrontendMsg_
 discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channelId threadRoute =
     memberColumnContainerNotMobile
-        (threadRoute /= NoThread)
+        (case threadRoute of
+            NoThreadWithFriends _ _ ->
+                False
+
+            ViewThreadWithFriends id maybeId showMembersTab ->
+                True
+        )
         [ discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute
         , Ui.Lazy.lazy6 discordMemberListView False currentDiscordUserId localUser guildId guild channelId
         ]
@@ -1632,18 +1638,18 @@ discordChannelSettingsForm :
     -> Discord.Id Discord.UserId
     -> Discord.Id Discord.GuildId
     -> Discord.Id Discord.ChannelId
-    -> ThreadRoute
+    -> ThreadRouteWithFriends
     -> Element FrontendMsg_
 discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute =
     (case threadRoute of
-        NoThread ->
+        NoThreadWithFriends _ _ ->
             [ MuteSettings.view
                 (PressedMuteDiscordChannel currentDiscordUserId guildId channelId)
                 (MuteSettings.isDiscordChannelSpecificallyMuted localUser.user.muteSettings guildId channelId)
             , exportChannelButton (ExportChannel_Discord currentDiscordUserId guildId channelId)
             ]
 
-        ViewThread threadId ->
+        ViewThreadWithFriends threadId _ _ ->
             [ MuteSettings.view
                 (PressedMuteDiscordThread currentDiscordUserId guildId channelId threadId)
                 (MuteSettings.isDiscordThreadSpecificallyMuted localUser.user.muteSettings guildId channelId threadId)
@@ -1714,7 +1720,7 @@ discordMemberColumnMobile :
     -> DiscordGuildRouteData
     -> DiscordFrontendGuild
     -> Discord.Id Discord.ChannelId
-    -> ThreadRoute
+    -> ThreadRouteWithFriends
     -> Element FrontendMsg_
 discordMemberColumnMobile canScroll2 localUser routeData guild channelId threadRoute =
     Ui.column
@@ -1728,11 +1734,12 @@ discordMemberColumnMobile canScroll2 localUser routeData guild channelId threadR
             , MyUi.noShrinking
             ]
             [ ChannelHeader.headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
-            , if threadRoute /= NoThread then
-                Ui.text "Thread members"
+            , case threadRoute of
+                ViewThreadWithFriends _ _ _ ->
+                    Ui.text "Thread members"
 
-              else
-                Ui.text "Channel members"
+                NoThreadWithFriends _ _ ->
+                    Ui.text "Channel members"
             ]
         , Ui.column
             [ Ui.height Ui.fill
