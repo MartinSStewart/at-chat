@@ -58,7 +58,7 @@ import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
-import MuteSettings
+import MuteSettings exposing (IsMuted(..))
 import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -2180,7 +2180,7 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
                      else
                         Just NotifyOnMention
                     )
-                    "Guild notifications"
+                    (Ui.text "Guild notifications")
                     [ ( NotifyOnMention, "Only when mentioned" )
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
@@ -2344,7 +2344,7 @@ guildSettingsView model loggedIn local guildId guild =
                      else
                         Just NotifyOnMention
                     )
-                    "Guild notifications"
+                    (Ui.text "Guild notifications")
                     [ ( NotifyOnMention, "Only when mentioned" )
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
@@ -7779,10 +7779,13 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                 |> List.map
                     (\( channelId, channel ) ->
                         let
+                            channelMuted =
+                                MuteSettings.isChannelMuted localUser.user.muteSettings guildId channelId NoThread
+
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
-                                    (MuteSettings.isChannelMuted localUser.user.muteSettings guildId channelId NoThread)
+                                    channelMuted
                                     directMentions
                                     (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                     channelId
@@ -7795,6 +7798,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                             []
                             [ channelColumnRow
                                 isMobile
+                                channelMuted
                                 hasNotifications
                                 channelRoute
                                 guildId
@@ -8082,7 +8086,7 @@ channelColumnThreads :
     -> Element FrontendMsg_
 channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
@@ -8096,15 +8100,17 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                                 _ ->
                                     False
 
+                        isMuted =
+                            MuteSettings.isChannelMuted
+                                localUser.user.muteSettings
+                                guildId
+                                channelId
+                                (ViewThread threadMessageIndex)
+
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
-                                (MuteSettings.isChannelMuted
-                                    localUser.user.muteSettings
-                                    guildId
-                                    channelId
-                                    (ViewThread threadMessageIndex)
-                                )
+                                isMuted
                                 directMentions
                                 (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                 channelId
@@ -8118,13 +8124,13 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                             else
                                 Nothing
 
                         _ ->
-                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -8132,10 +8138,11 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
+                isMuted
                 hasNotifications
                 index
                 count
@@ -8150,6 +8157,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
 channelColumnThreadsHelper :
     Bool
     -> Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> Int
     -> Int
@@ -8157,8 +8165,8 @@ channelColumnThreadsHelper :
     -> Route
     -> String
     -> Element FrontendMsg_
-channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThreadCount htmlId route name =
-    GuildColumn.elLinkButton
+channelColumnThreadsHelper isMobile isSelected isMuted hasNotifications index visibleThreadCount htmlId route name =
+    GuildColumn.rowLinkButton
         htmlId
         route
         [ Ui.paddingWith { left = 28, right = 8, top = 0, bottom = 0 }
@@ -8202,7 +8210,9 @@ channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThr
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text name)
+        [ Ui.text name
+        , channelIsMuted isMuted
+        ]
 
 
 discordChannelColumnThreads :
@@ -8217,7 +8227,7 @@ discordChannelColumnThreads :
     -> Element FrontendMsg_
 discordChannelColumnThreads isMobile now routeData directMentions localUser channelId channel threads =
     let
-        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
             List.filterMap
                 (\( threadMessageIndex, thread ) ->
@@ -8231,15 +8241,17 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                                 _ ->
                                     False
 
+                        isMuted =
+                            MuteSettings.isDiscordChannelMuted
+                                localUser.user.muteSettings
+                                routeData.guildId
+                                channelId
+                                (ViewThread threadMessageIndex)
+
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
-                                (MuteSettings.isDiscordChannelMuted
-                                    localUser.user.muteSettings
-                                    routeData.guildId
-                                    channelId
-                                    (ViewThread threadMessageIndex)
-                                )
+                                isMuted
                                 directMentions
                                 (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                 channelId
@@ -8255,13 +8267,13 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
                             if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                                Just ( threadMessageIndex, hasNotifications, isSelected )
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
 
                             else
                                 Nothing
 
                         _ ->
-                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
                 )
                 (SeqDict.toList threads)
 
@@ -8270,10 +8282,11 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
             List.length threads2
     in
     List.indexedMap
-        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
             channelColumnThreadsHelper
                 isMobile
                 isSelected
+                isMuted
                 hasNotifications
                 index
                 count
@@ -8296,13 +8309,14 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
 
 channelColumnRow :
     Bool
+    -> IsMuted
     -> ChannelNotificationType
     -> ChannelRoute
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg_
-channelColumnRow isMobile hasNotification channelRoute guildId channelId channel =
+channelColumnRow isMobile isMuted hasNotification channelRoute guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -8313,7 +8327,7 @@ channelColumnRow isMobile hasNotification channelRoute guildId channelId channel
                 _ ->
                     False
     in
-    GuildColumn.elLinkButton
+    GuildColumn.rowLinkButton
         (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
         (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
         [ Ui.paddingWith { left = 26, right = 8, top = 0, bottom = 0 }
@@ -8344,7 +8358,24 @@ channelColumnRow isMobile hasNotification channelRoute guildId channelId channel
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        (Ui.text (ChannelName.toString channel.name))
+        [ Ui.text (ChannelName.toString channel.name)
+        , channelIsMuted isMuted
+        ]
+
+
+channelIsMuted : IsMuted -> Element msg
+channelIsMuted isMuted =
+    case isMuted of
+        IsMuted ->
+            Ui.el
+                [ MyUi.noShrinking
+                , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 0 }
+                , Ui.alignRight
+                ]
+                (Ui.html Icons.bellSlash)
+
+        IsNotMuted ->
+            Ui.none
 
 
 discordChannelColumnRow :

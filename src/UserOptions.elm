@@ -281,10 +281,10 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             SelectedNotificationMode
                             (Just local.localUser.session.notificationMode)
                             (if isMobile then
-                                "Notifications"
+                                Ui.text "Notifications"
 
                              else
-                                "Desktop notifications"
+                                Ui.text "Desktop notifications"
                             )
                             (if isMobile then
                                 [ ( NoNotifications, "No notifications" )
@@ -323,7 +323,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         (Dom.id "userOptions_emailNotifications")
                         SelectedEmailNotifications
                         (Just local.localUser.user.emailNotifications)
-                        "Email notifications"
+                        (Ui.text "Email notifications")
                         [ ( User.NeverNotifyMe, "No email notifications" )
                         , ( User.NotifyMeWhenMentioned, "Send me email notifications" )
                         ]

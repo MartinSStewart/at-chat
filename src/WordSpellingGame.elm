@@ -6110,7 +6110,7 @@ setupView windowSize isReadonly setup =
                     (Dom.id "ws_language")
                     PressedLanguage
                     (Just setup.language)
-                    "Dictionary"
+                    (Ui.text "Dictionary")
                     (List.map (\language -> ( language, languageToString language )) allLanguages)
             , Go.setupSection
                 (Ui.text "Attempts per turn")

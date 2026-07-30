@@ -1168,6 +1168,7 @@ bell =
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "20"
         ]
         [ Svg.path
             [ Svg.Attributes.strokeLinecap "round"
@@ -1185,6 +1186,7 @@ bellSlash =
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "20"
         ]
         [ Svg.path
             [ Svg.Attributes.strokeLinecap "round"

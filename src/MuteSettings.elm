@@ -24,6 +24,7 @@ module MuteSettings exposing
 
 import Discord
 import Effect.Browser.Dom as Dom
+import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..))
 import MyUi
 import SeqDict exposing (SeqDict)
@@ -75,7 +76,16 @@ view onPress isMuted =
         (Dom.id "guild_muteChannel")
         onPress
         (Just isMuted)
-        "Mute notifications"
+        (Ui.row [ Ui.spacing 8 ]
+            [ Ui.text "Mute notifications"
+            , case isMuted of
+                IsNotMuted ->
+                    Ui.html Icons.bell
+
+                IsMuted ->
+                    Ui.html Icons.bellSlash
+            ]
+        )
         [ ( IsNotMuted, "Not muted" )
         , ( IsMuted, "Muted (hide red/white dot)" )
         ]
