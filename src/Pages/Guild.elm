@@ -382,23 +382,25 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
 
 
 {-| The unread messages of one channel, along with where they came from and how many older
-unread messages of that channel aren't shown. Discord messages are kept apart from the rest
-because they are written by Discord users rather than our own users.
+unread messages of that channel aren't shown.
 -}
-type UnreadOverviewChannel
-    = UnreadOverviewChannel
-        { source : String
-        , additionalUnread : Int
-        , messages : List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
-        , newestAt : Time.Posix
-        }
-    | UnreadOverviewDiscordChannel
-        { source : String
-        , additionalUnread : Int
-        , currentDiscordUserId : Discord.Id Discord.UserId
-        , messages : List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
-        , newestAt : Time.Posix
-        }
+type alias UnreadOverviewChannel =
+    { source : String
+    , route : Route
+    , guildOrDmId : AnyGuildOrDmId
+    , additionalUnread : Int
+    , newestMessageId : Id ChannelMessageId
+    , newestAt : Time.Posix
+    , messages : UnreadOverviewMessages
+    }
+
+
+{-| Discord messages are kept apart from the rest because they are written by Discord users
+rather than our own users.
+-}
+type UnreadOverviewMessages
+    = UnreadOverviewMessages (List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ))
+    | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ))
 
 
 unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -422,15 +424,25 @@ unreadOverviewNotMobile local model =
                 (\( guildId, guild ) ->
                     List.filterMap
                         (\( channelId, channel ) ->
-                            unreadMessages (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) currentUser channel
+                            let
+                                guildOrDmId : AnyGuildOrDmId
+                                guildOrDmId =
+                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId)
+                            in
+                            unreadMessages guildOrDmId currentUser channel
                                 |> Maybe.map
                                     (\unread ->
-                                        UnreadOverviewChannel
-                                            { source = channelSource guild.name channel.name
-                                            , additionalUnread = unread.additionalUnread
-                                            , messages = unread.messages
-                                            , newestAt = unread.newestAt
-                                            }
+                                        { source = channelSource guild.name channel.name
+                                        , route =
+                                            GuildRoute
+                                                guildId
+                                                (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
+                                        , guildOrDmId = guildOrDmId
+                                        , additionalUnread = unread.additionalUnread
+                                        , newestMessageId = unread.newestMessageId
+                                        , newestAt = unread.newestAt
+                                        , messages = UnreadOverviewMessages unread.messages
+                                        }
                                     )
                         )
                         (SeqDict.toList guild.channels)
@@ -438,15 +450,27 @@ unreadOverviewNotMobile local model =
                 (SeqDict.toList local.guilds)
                 ++ List.filterMap
                     (\( otherUserId, dmChannel ) ->
-                        unreadMessages (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel
+                        let
+                            guildOrDmId : AnyGuildOrDmId
+                            guildOrDmId =
+                                GuildOrDmId (GuildOrDmId_Dm otherUserId)
+                        in
+                        unreadMessages guildOrDmId currentUser dmChannel
                             |> Maybe.map
                                 (\unread ->
-                                    UnreadOverviewChannel
-                                        { source = User.toString otherUserId allUsers
-                                        , additionalUnread = unread.additionalUnread
-                                        , messages = unread.messages
-                                        , newestAt = unread.newestAt
-                                        }
+                                    { source = User.toString otherUserId allUsers
+                                    , route =
+                                        DmRoute
+                                            { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
+                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                            , tab = Nothing
+                                            }
+                                    , guildOrDmId = guildOrDmId
+                                    , additionalUnread = unread.additionalUnread
+                                    , newestMessageId = unread.newestMessageId
+                                    , newestAt = unread.newestAt
+                                    , messages = UnreadOverviewMessages unread.messages
+                                    }
                                 )
                     )
                     (SeqDict.toList local.dmChannels)
@@ -456,19 +480,33 @@ unreadOverviewNotMobile local model =
                             Just currentDiscordUserId ->
                                 List.filterMap
                                     (\( channelId, channel ) ->
-                                        unreadMessages
-                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId))
-                                            currentUser
-                                            channel
+                                        let
+                                            guildOrDmId : AnyGuildOrDmId
+                                            guildOrDmId =
+                                                DiscordGuildOrDmId
+                                                    (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId)
+                                        in
+                                        unreadMessages guildOrDmId currentUser channel
                                             |> Maybe.map
                                                 (\unread ->
-                                                    UnreadOverviewDiscordChannel
-                                                        { source = channelSource guild.name channel.name
-                                                        , additionalUnread = unread.additionalUnread
-                                                        , currentDiscordUserId = currentDiscordUserId
-                                                        , messages = unread.messages
-                                                        , newestAt = unread.newestAt
-                                                        }
+                                                    { source = channelSource guild.name channel.name
+                                                    , route =
+                                                        DiscordGuildRoute
+                                                            { currentDiscordUserId = currentDiscordUserId
+                                                            , guildId = guildId
+                                                            , channelRoute =
+                                                                DiscordChannel_ChannelRoute
+                                                                    channelId
+                                                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                                                    Nothing
+                                                            }
+                                                    , guildOrDmId = guildOrDmId
+                                                    , additionalUnread = unread.additionalUnread
+                                                    , newestMessageId = unread.newestMessageId
+                                                    , newestAt = unread.newestAt
+                                                    , messages =
+                                                        UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
+                                                    }
                                                 )
                                     )
                                     (SeqDict.toList guild.channels)
@@ -481,39 +519,40 @@ unreadOverviewNotMobile local model =
                     (\( channelId, dmChannel ) ->
                         case GuildColumn.discordDmCurrentUserId local.localUser dmChannel of
                             Just currentDiscordUserId ->
-                                unreadMessages
-                                    (DiscordGuildOrDmId
-                                        (DiscordGuildOrDmId_Dm
-                                            { currentUserId = currentDiscordUserId, channelId = channelId }
-                                        )
-                                    )
-                                    currentUser
-                                    dmChannel
+                                let
+                                    guildOrDmId : AnyGuildOrDmId
+                                    guildOrDmId =
+                                        DiscordGuildOrDmId
+                                            (DiscordGuildOrDmId_Dm
+                                                { currentUserId = currentDiscordUserId, channelId = channelId }
+                                            )
+                                in
+                                unreadMessages guildOrDmId currentUser dmChannel
                                     |> Maybe.map
                                         (\unread ->
-                                            UnreadOverviewDiscordChannel
-                                                { source =
-                                                    discordDmSource currentDiscordUserId allDiscordUsers dmChannel
-                                                , additionalUnread = unread.additionalUnread
-                                                , currentDiscordUserId = currentDiscordUserId
-                                                , messages = unread.messages
-                                                , newestAt = unread.newestAt
-                                                }
+                                            { source = discordDmSource currentDiscordUserId allDiscordUsers dmChannel
+                                            , route =
+                                                DiscordDmRoute
+                                                    { currentDiscordUserId = currentDiscordUserId
+                                                    , channelId = channelId
+                                                    , viewingMessage = Nothing
+                                                    , showMembersTab = HideMembersTab
+                                                    , tab = Nothing
+                                                    }
+                                            , guildOrDmId = guildOrDmId
+                                            , additionalUnread = unread.additionalUnread
+                                            , newestMessageId = unread.newestMessageId
+                                            , newestAt = unread.newestAt
+                                            , messages =
+                                                UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
+                                            }
                                         )
 
                             Nothing ->
                                 Nothing
                     )
                     (SeqDict.toList local.discordDmChannels)
-                |> List.sortBy
-                    (\unread ->
-                        case unread of
-                            UnreadOverviewChannel { newestAt } ->
-                                Time.posixToMillis newestAt
-
-                            UnreadOverviewDiscordChannel { newestAt } ->
-                                Time.posixToMillis newestAt
-                    )
+                |> List.sortBy (\unread -> Time.posixToMillis unread.newestAt)
 
         containerWidth =
             conversationWidth model
@@ -531,20 +570,17 @@ unreadOverviewNotMobile local model =
             ]
             (Ui.text "Overview")
         , Ui.column
-            [ Ui.spacing 8
-            , Ui.padding 8
-            , Ui.height Ui.fill
+            [ Ui.height Ui.fill
             , Ui.heightMin 0
             , MyUi.scrollable True
             ]
             (List.map
                 (\unread ->
-                    case unread of
-                        UnreadOverviewChannel { source, additionalUnread, messages } ->
-                            unreadOverviewContainer
-                                source
-                                additionalUnread
-                                (List.map
+                    unreadOverviewContainer
+                        unread
+                        (case unread.messages of
+                            UnreadOverviewMessages messages ->
+                                List.map
                                     (\( messageId, message ) ->
                                         messageView
                                             False
@@ -564,13 +600,9 @@ unreadOverviewNotMobile local model =
                                             |> Ui.map (\_ -> FrontendNoOp)
                                     )
                                     messages
-                                )
 
-                        UnreadOverviewDiscordChannel { source, additionalUnread, currentDiscordUserId, messages } ->
-                            unreadOverviewContainer
-                                source
-                                additionalUnread
-                                (List.map
+                            UnreadOverviewDiscordMessages currentDiscordUserId messages ->
+                                List.map
                                     (\( messageId, message ) ->
                                         discordMessageView
                                             False
@@ -589,7 +621,7 @@ unreadOverviewNotMobile local model =
                                             |> Ui.map (\_ -> FrontendNoOp)
                                     )
                                     messages
-                                )
+                        )
                 )
                 unreads
             )
@@ -621,40 +653,58 @@ discordDmSource currentDiscordUserId allDiscordUsers dmChannel =
             List.map (\userId -> User.toString userId allDiscordUsers) others |> String.join ", "
 
 
-{-| One channel's worth of unread messages in the overview: which channel they are from,
-how many older unread messages of it aren't shown, and then the messages themselves.
+{-| One channel's worth of unread messages in the overview. The messages are shown the same
+way the conversation view shows them, so a line and a header saying which channel they are
+from is what separates one channel from the next.
 -}
-unreadOverviewContainer : String -> Int -> List (Element msg) -> Element msg
-unreadOverviewContainer source additionalUnread messageViews =
+unreadOverviewContainer : UnreadOverviewChannel -> List (Element FrontendMsg_) -> Element FrontendMsg_
+unreadOverviewContainer unread messageViews =
     Ui.column
-        [ Ui.background MyUi.background2
-        , Ui.border 1
-        , Ui.borderColor MyUi.border2
-        , Ui.rounded 4
-        , Ui.clip
+        [ Ui.background MyUi.background3
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border1
+        , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
         , MyUi.noShrinking
         ]
-        (Ui.el
-            [ Ui.Font.bold
-            , Ui.Font.color MyUi.font3
-            , Ui.paddingXY 8 4
-            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor MyUi.border2
-            , Ui.clipWithEllipsis
+        (Ui.row
+            [ Ui.spacing 8, Ui.paddingXY 8 4, Ui.contentCenterY ]
+            [ GuildColumn.elLinkButton
+                (unreadOverviewHtmlId "guild_unreadOverviewOpenChannel_" unread.guildOrDmId)
+                unread.route
+                [ Ui.Font.bold
+                , Ui.Font.color MyUi.font3
+                , Ui.clipWithEllipsis
+                , MyUi.hover False [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hoverText unread.source
+                ]
+                (Ui.text unread.source)
+            , MyUi.elButton
+                (unreadOverviewHtmlId "guild_unreadOverviewMarkAsRead_" unread.guildOrDmId)
+                (PressedMarkChannelAsRead unread.guildOrDmId unread.newestMessageId)
+                [ Ui.width Ui.shrink
+                , Ui.alignRight
+                , Ui.paddingXY 8 2
+                , Ui.rounded 4
+                , Ui.border 1
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.background MyUi.buttonBackground
+                , Ui.Font.color MyUi.font1
+                , MyUi.noShrinking
+                ]
+                (Ui.text "Mark as read")
             ]
-            (Ui.text source)
-            :: (if additionalUnread > 0 then
+            :: (if unread.additionalUnread > 0 then
                     Ui.el
                         [ Ui.Font.color MyUi.font3
                         , Ui.Font.italic
-                        , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 0 }
+                        , Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 4 }
                         ]
                         (Ui.text
-                            (if additionalUnread == 1 then
+                            (if unread.additionalUnread == 1 then
                                 "1 older unread message"
 
                              else
-                                String.fromInt additionalUnread ++ " older unread messages"
+                                String.fromInt unread.additionalUnread ++ " older unread messages"
                             )
                         )
 
@@ -663,6 +713,27 @@ unreadOverviewContainer source additionalUnread messageViews =
                )
             :: messageViews
         )
+
+
+{-| Buttons in the overview are named after the channel they belong to, since the overview
+shows many channels at once.
+-}
+unreadOverviewHtmlId : String -> AnyGuildOrDmId -> HtmlId
+unreadOverviewHtmlId prefix guildOrDmId =
+    (case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            "guild_" ++ Id.toString guildId ++ "_" ++ Id.toString channelId
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            "dm_" ++ Id.toString otherUserId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+            "discord_" ++ Discord.idToString guildId ++ "_" ++ Discord.idToString channelId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            "discordDm_" ++ Discord.idToString data.channelId
+    )
+        |> (\suffix -> Dom.id (prefix ++ suffix))
 
 
 {-| The unread messages of a channel that the frontend has loaded, oldest first, plus how
@@ -678,6 +749,7 @@ unreadMessages :
         Maybe
             { messages : List ( Id ChannelMessageId, Message ChannelMessageId userId )
             , additionalUnread : Int
+            , newestMessageId : Id ChannelMessageId
             , newestAt : Time.Posix
             }
 unreadMessages guildOrDmId currentUser channel =
@@ -699,10 +771,11 @@ unreadMessages guildOrDmId currentUser channel =
                 |> MessageArray.toList
     in
     case List.Extra.last loaded of
-        Just ( _, newest ) ->
+        Just ( newestMessageId, newest ) ->
             Just
                 { messages = loaded
                 , additionalUnread = unreadCount - List.length loaded
+                , newestMessageId = newestMessageId
                 , newestAt = Message.createdAt newest
                 }
 

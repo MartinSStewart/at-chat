@@ -4599,6 +4599,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMarkChannelAsRead guildOrDmId messageId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetLastViewed guildOrDmId (NoThreadWithMessage messageId) |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
 they only select a drawing anchor while the drawing tab is open.

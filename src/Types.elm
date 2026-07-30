@@ -599,6 +599,7 @@ type FrontendMsg_
     | PressedMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
     | PressedMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
     | PressedMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | PressedMarkChannelAsRead AnyGuildOrDmId (Id ChannelMessageId)
 
 
 type alias NewChannelForm =

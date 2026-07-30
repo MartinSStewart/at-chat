@@ -1477,6 +1477,23 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general" ])
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
+
+                        -- Marking the channel as read empties the overview.
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewMarkAsRead_guild_1_0")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread message 12" ])
+
+                        -- A new message puts the channel back in the overview, and its
+                        -- header is a link to the channel it came from.
+                        , E2EHelper.writeMessage admin 1500 "Unread again"
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewOpenChannel_guild_1_0")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "channel_textinput" ])
                         ]
                     )
                 ]

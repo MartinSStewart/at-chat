@@ -2406,6 +2406,9 @@ isPressMsg msg =
         PressedMuteDiscordThread _ _ _ _ _ ->
             True
 
+        PressedMarkChannelAsRead _ _ ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =
