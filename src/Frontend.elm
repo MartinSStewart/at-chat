@@ -1841,7 +1841,7 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenDiscordDm currentUserId channelId ->
             case model.loginStatus of
-                LoggedIn loggedIn ->
+                LoggedIn _ ->
                     FrontendExtra.routePush
                         model
                         (Route.DiscordDmRoute

@@ -2375,10 +2375,10 @@ isPressMsg msg =
         PressedExpandContainer _ ->
             True
 
-        MessageMenu_PressedOpenDm id ->
+        MessageMenu_PressedOpenDm _ ->
             True
 
-        MessageMenu_PressedOpenDiscordDm id _ ->
+        MessageMenu_PressedOpenDiscordDm _ _ ->
             True
 
 

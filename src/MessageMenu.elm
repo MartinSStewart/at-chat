@@ -19,7 +19,6 @@ import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
 import LinkedAndOtherDiscordUsers
-import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
@@ -454,10 +453,10 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 UserTextMessage data ->
                                     MessageMenu_PressedOpenDm data.createdBy |> Just
 
-                                UserJoinedMessage posix createdBy seqDict drawing ->
+                                UserJoinedMessage _ createdBy _ _ ->
                                     MessageMenu_PressedOpenDm createdBy |> Just
 
-                                DeletedMessage posix ->
+                                DeletedMessage _ ->
                                     Nothing
 
                                 CallStarted data ->
@@ -482,10 +481,10 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 UserTextMessage data ->
                                     Just data.createdBy
 
-                                UserJoinedMessage posix createdBy seqDict drawing ->
+                                UserJoinedMessage _ createdBy _ _ ->
                                     Just createdBy
 
-                                DeletedMessage posix ->
+                                DeletedMessage _ ->
                                     Nothing
 
                                 CallStarted data ->
