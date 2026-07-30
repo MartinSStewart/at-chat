@@ -7,6 +7,7 @@ module WordSpellingGame exposing
     , Drag(..)
     , GameData
     , GameMsg(..)
+    , GameSummary
     , IsValid(..)
     , Language(..)
     , Letter(..)
@@ -41,6 +42,7 @@ module WordSpellingGame exposing
     , dragEnd
     , dragStart
     , fullTrayBonusScore
+    , gameSummary
     , gameView
     , initGame
     , initSetup
@@ -3845,6 +3847,16 @@ playerRowSpacing =
     8
 
 
+userName : LocalUser -> Id UserId -> String
+userName localUser userId =
+    case User.getUser userId localUser of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<missing>"
+
+
 playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
 playerRow localUser userId highlight isSelected suffix =
     let
@@ -3883,17 +3895,7 @@ playerRow localUser userId highlight isSelected suffix =
             User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
             [ MyUi.prewrap ]
-            [ Ui.el
-                [ Ui.Font.bold ]
-                (Ui.text
-                    (case maybeUser of
-                        Just user ->
-                            PersonName.toString user.name
-
-                        Nothing ->
-                            "<missing>"
-                    )
-                )
+            [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
             , Ui.text suffix
             ]
         ]
@@ -4215,6 +4217,177 @@ descriptionUserId description =
             userId
 
 
+{-| What the whole game amounted to, tallied from the Moves log for the end of game summary. Only
+words that made it onto the board count towards `tilesPlaced` and `bestWord`; a rejected word
+counts as an invalid word instead. Players who never placed anything are missing from the dicts.
+-}
+type alias GameSummary =
+    { tilesPlaced : SeqDict (Id UserId) Int
+    , invalidWords : SeqDict (Id UserId) Int
+    , bestWord :
+        Maybe
+            { userId : Id UserId
+            , word : String
+            , points : Int
+            , placedCells : List ( ( Int, Int ), LetterOrWildcard )
+            , wildcardMatches : Set String
+            }
+    }
+
+
+gameSummary : List Description -> GameSummary
+gameSummary log =
+    List.foldl
+        (\description summary ->
+            case description of
+                Description_PlacedWord userId placedWord ->
+                    { summary
+                        | tilesPlaced =
+                            SeqDictHelper.updateOrInsert
+                                userId
+                                (\count -> Maybe.withDefault 0 count + List.length placedWord.placedCells)
+                                summary.tilesPlaced
+                        , bestWord =
+                            case summary.bestWord of
+                                Just bestWord ->
+                                    -- `log` runs newest first, so ties are decided in favour of the
+                                    -- word that was played first.
+                                    if placedWord.points >= bestWord.points then
+                                        Just
+                                            { userId = userId
+                                            , word = placedWord.word
+                                            , points = placedWord.points
+                                            , placedCells = placedWord.placedCells
+                                            , wildcardMatches = placedWord.wildcardMatches
+                                            }
+
+                                    else
+                                        summary.bestWord
+
+                                Nothing ->
+                                    Just
+                                        { userId = userId
+                                        , word = placedWord.word
+                                        , points = placedWord.points
+                                        , placedCells = placedWord.placedCells
+                                        , wildcardMatches = placedWord.wildcardMatches
+                                        }
+                    }
+
+                Description_InvalidMove userId _ ->
+                    { summary
+                        | invalidWords =
+                            SeqDictHelper.updateOrInsert
+                                userId
+                                (\count -> Maybe.withDefault 0 count + 1)
+                                summary.invalidWords
+                    }
+
+                _ ->
+                    summary
+        )
+        { tilesPlaced = SeqDict.empty, invalidWords = SeqDict.empty, bestWord = Nothing }
+        log
+
+
+{-| The breakdown shown under the "the game has ended" line in the Moves log: a section for the
+tiles each player put on the board, one for the invalid words they tried, and the best word anyone
+played. Each section lists every player, highest count first.
+-}
+gameSummaryView : Coord CssPixels -> LocalUser -> Shared -> List Description -> Element GameMsg
+gameSummaryView windowSize localUser shared log =
+    let
+        summary : GameSummary
+        summary =
+            gameSummary log
+
+        counts : SeqDict (Id UserId) Int -> List { name : String, count : Int }
+        counts tally =
+            List.Nonempty.toList shared.players
+                |> List.map
+                    (\player ->
+                        { name = userName localUser player.userId
+                        , count = SeqDict.get player.userId tally |> Maybe.withDefault 0
+                        }
+                    )
+                -- Elm's sort is stable, so players who tie stay in turn order.
+                |> List.sortBy (\entry -> negate entry.count)
+    in
+    Ui.column
+        [ Ui.spacing 12
+        , Ui.paddingWith { left = 0, right = 0, top = 16, bottom = 8 }
+        , Ui.Font.color MyUi.font3
+        ]
+        ([ Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.el [ Ui.Font.bold ] (Ui.text "Tiles placed:")
+            , countsView (counts summary.tilesPlaced)
+            ]
+         , Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.el [ Ui.Font.bold ] (Ui.text "Invalid words:")
+            , countsView (counts summary.invalidWords)
+            ]
+         ]
+            ++ (case summary.bestWord of
+                    Just bestWord ->
+                        [ Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
+
+                            -- The word behaves like the placed words in the log below: hovering it
+                            -- highlights its cells on the board and lights the text up, and
+                            -- clicking it looks up the dictionary definition.
+                            , MyUi.rowButton
+                                (Dom.id "wsg_topWord")
+                                (PressedWordDefinition (definitionWords bestWord.wildcardMatches bestWord.word))
+                                [ Ui.paddingXY 4 4
+                                , Ui.rounded 4
+                                , Ui.width Ui.shrink
+                                , MyUi.htmlStyle "cursor" "pointer"
+                                , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
+                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells)
+                                , Ui.Events.onMouseLeave MouseExitWord
+                                ]
+                                [ Ui.Prose.paragraph
+                                    [ Ui.alignTop ]
+                                    [ Ui.text
+                                        (bestWord.word
+                                            ++ " (+"
+                                            ++ String.fromInt bestWord.points
+                                            ++ ") by "
+                                        )
+                                    , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                                    ]
+                                ]
+                            ]
+                        ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+{-| One section of the end of game summary: how much each player did of something, most first. The
+counts and the names are two columns rather than a row each so the names line up no matter how many
+digits the counts run to.
+-}
+countsView : List { name : String, count : Int } -> Element GameMsg
+countsView entries =
+    Ui.row
+        [ Ui.spacing 8, Ui.paddingXY 4 0 ]
+        [ Ui.column
+            [ Ui.width Ui.shrink, Ui.spacing 4, Ui.Font.variants [ Ui.Font.tabularNumbers ] ]
+            (List.map (\entry -> Ui.text (String.fromInt entry.count)) entries)
+        , Ui.column
+            [ Ui.spacing 4 ]
+            -- A name that wrapped would push every row below it out of line with its count, so the
+            -- names are kept on one line and the Moves log scrolls sideways for a very long one.
+            (List.map (\entry -> Ui.el [ Ui.Font.noWrap ] (Ui.text entry.name)) entries)
+        ]
+
+
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
@@ -4236,9 +4409,12 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
         log2 =
             (case getWinner shared of
                 Just ( _, gameEndReason ) ->
-                    [ Ui.Prose.paragraph
+                    -- `log2` is reversed before being rendered, so the summary listed first here
+                    -- ends up below the line explaining how the game ended.
+                    [ gameSummaryView windowSize localUser shared log
+                    , Ui.Prose.paragraph
                         [ Ui.alignTop
-                        , Ui.paddingWith { left = 0, right = 0, top = 14, bottom = 6 }
+                        , Ui.paddingWith { left = 0, right = 0, top = 30, bottom = 6 }
                         , Ui.Font.color MyUi.font3
                         ]
                         (case gameEndReason of
@@ -4246,16 +4422,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.text "Everyone passed and the game has ended!" ]
 
                             OutOfLetters userId ->
-                                [ Ui.el [ Ui.Font.bold ]
-                                    (Ui.text
-                                        (case User.getUser userId localUser of
-                                            Just user ->
-                                                PersonName.toString user.name
-
-                                            Nothing ->
-                                                "<missing>"
-                                        )
-                                    )
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
                                 , Ui.text " ran out of letters and the game has ended!"
                                 ]
                         )
@@ -4290,12 +4457,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         let
                             name : String
                             name =
-                                case User.getUser (descriptionUserId description) localUser of
-                                    Just user ->
-                                        PersonName.toString user.name
-
-                                    Nothing ->
-                                        "<missing>"
+                                userName localUser (descriptionUserId description)
 
                             moveNumber : Int
                             moveNumber =
@@ -4372,6 +4534,8 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
             , Ui.Events.on "scroll" (Scroll.decodeScrollToBottom UserScrolledPastMoves scrollPosition)
             , Ui.paddingWith { left = 16, right = 16, top = 24, bottom = 16 }
             , Ui.scrollable
+            , Ui.heightMin 0
+            , Ui.height Ui.fill
             ]
         |> Ui.el
             [ (tabBodyHeight windowSize setup.traySize
@@ -4382,6 +4546,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
               )
                 |> Ui.px
                 |> Ui.height
+            , Ui.heightMin 0
             , Ui.inFront
                 (Ui.el
                     [ Ui.Font.color MyUi.font3

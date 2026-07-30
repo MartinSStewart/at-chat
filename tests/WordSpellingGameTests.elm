@@ -640,7 +640,92 @@ tests =
                         (notifShared 3 alreadyOver)
                         |> Expect.equal []
             ]
+        , Test.describe "gameSummary tallies up the finished game"
+            [ Test.test "counts tiles and invalid words per player and picks the best word" <|
+                \_ ->
+                    WordSpellingGame.gameSummary
+                        [ summaryPlacedWord 1 "TOTE" 12 3
+                        , summaryInvalidWord 0 "CAB"
+                        , summaryPlacedWord 0 "HOTEL" 24 5
+                        , WordSpellingGame.Description_Passed (Id.fromInt 1)
+                        , summaryInvalidWord 0 "ELB"
+                        , summaryPlacedWord 1 "AT" 4 2
+                        , WordSpellingGame.Description_Joined (Id.fromInt 1)
+                        , summaryPlacedWord 0 "OATS" 8 4
+                        ]
+                        |> Expect.equal
+                            { tilesPlaced = SeqDict.fromList [ ( Id.fromInt 1, 5 ), ( Id.fromInt 0, 9 ) ]
+                            , invalidWords = SeqDict.fromList [ ( Id.fromInt 0, 2 ) ]
+                            , bestWord =
+                                Just
+                                    { userId = Id.fromInt 0
+                                    , word = "HOTEL"
+                                    , points = 24
+                                    , placedCells = summaryCells 5
+                                    , wildcardMatches = Set.empty
+                                    }
+                            }
+            , Test.test "the earliest word wins when two words score the same" <|
+                \_ ->
+                    -- The log runs newest first, so the second entry was played first.
+                    WordSpellingGame.gameSummary
+                        [ summaryPlacedWord 1 "TOTE" 12 3
+                        , summaryPlacedWord 0 "HOTEL" 12 5
+                        ]
+                        |> .bestWord
+                        |> Expect.equal
+                            (Just
+                                { userId = Id.fromInt 0
+                                , word = "HOTEL"
+                                , points = 12
+                                , placedCells = summaryCells 5
+                                , wildcardMatches = Set.empty
+                                }
+                            )
+            , Test.test "a game where nobody placed anything has no best word" <|
+                \_ ->
+                    WordSpellingGame.gameSummary
+                        [ WordSpellingGame.Description_Passed (Id.fromInt 0)
+                        , WordSpellingGame.Description_Joined (Id.fromInt 0)
+                        ]
+                        |> Expect.equal
+                            { tilesPlaced = SeqDict.empty
+                            , invalidWords = SeqDict.empty
+                            , bestWord = Nothing
+                            }
+            ]
         ]
+
+
+{-| A Moves log entry for `userId` placing `spelledWord` for `points`, using `tileCount` tiles from
+their tray.
+-}
+summaryPlacedWord : Int -> String -> Int -> Int -> WordSpellingGame.Description
+summaryPlacedWord userId spelledWord points tileCount =
+    WordSpellingGame.Description_PlacedWord
+        (Id.fromInt userId)
+        { word = spelledWord
+        , points = points
+        , isBingo = False
+        , placedCells = summaryCells tileCount
+        , isPremove = False
+        , wildcardMatches = Set.empty
+        }
+
+
+{-| `count` board cells for a summary test's placed word. Which cells they are only matters to the
+board highlighting, so they're all the same letter along the top row.
+-}
+summaryCells : Int -> List ( ( Int, Int ), LetterOrWildcard )
+summaryCells count =
+    List.map (\index -> ( ( index, 0 ), Letter a )) (List.range 1 count)
+
+
+summaryInvalidWord : Int -> String -> WordSpellingGame.Description
+summaryInvalidWord userId spelledWord =
+    WordSpellingGame.Description_InvalidMove
+        (Id.fromInt userId)
+        { word = spelledWord, placedCells = [], attemptsLeft = Just OneOrGreater.one }
 
 
 {-| Three players with ids 0, 1, 2 who all still hold a tile.

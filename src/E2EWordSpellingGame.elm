@@ -339,12 +339,20 @@ tests normalConfig =
                         100
                         -- The leaderboard renders each player's name and score suffix as separate
                         -- elements (see WordSpellingGame.playerRow), so they're matched separately.
+                        -- The end of game summary under the Moves log lists each count next to the
+                        -- player it belongs to in a separate element too.
                         (Test.Html.Query.has
                             [ Test.Html.Selector.exactText "Game over"
                             , Test.Html.Selector.exactText "AT"
                             , Test.Html.Selector.exactText ": 4 (winner)"
                             , Test.Html.Selector.exactText "Stevie Steve"
                             , Test.Html.Selector.exactText ": 0"
+                            , Test.Html.Selector.exactText "Tiles placed:"
+                            , Test.Html.Selector.exactText "2"
+                            , Test.Html.Selector.exactText "Invalid words:"
+                            , Test.Html.Selector.exactText "0"
+                            , Test.Html.Selector.exactText "Top scoring word:"
+                            , Test.Html.Selector.exactText "AA (+4) by "
                             ]
                         )
                     , user.checkView
@@ -361,6 +369,17 @@ tests normalConfig =
                       -- game-over push notification.
                       E2EHelper.checkNoNotification "AT played AA (+4). The game has ended. AT won with 4 points!"
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
+
+                    -- The summary's top scoring word looks up its definition when clicked, just
+                    -- like the played words in the log below it. (This window is under the 1300px
+                    -- column threshold, so the definition overlays the board.)
+                    , admin.click 100 (Dom.id "wsg_topWord")
+                    , admin.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "A burden; a weight to be carried." ])
+                    , admin.click 100 (Dom.id "wsg_closeWordDefinition")
+                    , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
                     , T.connectFrontend
                         100
                         E2EHelper.sessionId0
