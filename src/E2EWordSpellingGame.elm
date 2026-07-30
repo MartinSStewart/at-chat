@@ -369,6 +369,17 @@ tests normalConfig =
                       -- game-over push notification.
                       E2EHelper.checkNoNotification "AT played AA (+4). The game has ended. AT won with 4 points!"
                     , admin.snapshotView 0 { name = "Game ended out of letters" }
+
+                    -- The summary's top scoring word looks up its definition when clicked, just
+                    -- like the played words in the log below it. (This window is under the 1300px
+                    -- column threshold, so the definition overlays the board.)
+                    , admin.click 100 (Dom.id "wsg_topWord")
+                    , admin.checkView 1000 (Test.Html.Query.has [ Test.Html.Selector.id "wsg_wordDefinition" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "A burden; a weight to be carried." ])
+                    , admin.click 100 (Dom.id "wsg_closeWordDefinition")
+                    , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "wsg_wordDefinition" ])
                     , T.connectFrontend
                         100
                         E2EHelper.sessionId0

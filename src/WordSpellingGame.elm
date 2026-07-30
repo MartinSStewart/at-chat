@@ -4230,6 +4230,7 @@ type alias GameSummary =
             , word : String
             , points : Int
             , placedCells : List ( ( Int, Int ), LetterOrWildcard )
+            , wildcardMatches : Set String
             }
     }
 
@@ -4257,6 +4258,7 @@ gameSummary log =
                                             , word = placedWord.word
                                             , points = placedWord.points
                                             , placedCells = placedWord.placedCells
+                                            , wildcardMatches = placedWord.wildcardMatches
                                             }
 
                                     else
@@ -4268,6 +4270,7 @@ gameSummary log =
                                         , word = placedWord.word
                                         , points = placedWord.points
                                         , placedCells = placedWord.placedCells
+                                        , wildcardMatches = placedWord.wildcardMatches
                                         }
                     }
 
@@ -4332,11 +4335,16 @@ gameSummaryView windowSize localUser shared log =
                             [ Ui.spacing 4 ]
                             [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
 
-                            -- Hovering the word highlights its cells on the board and lights the
-                            -- text up, the same as the placed words in the log below.
-                            , Ui.row
+                            -- The word behaves like the placed words in the log below: hovering it
+                            -- highlights its cells on the board and lights the text up, and
+                            -- clicking it looks up the dictionary definition.
+                            , MyUi.rowButton
+                                (Dom.id "wsg_topWord")
+                                (PressedWordDefinition (definitionWords bestWord.wildcardMatches bestWord.word))
                                 [ Ui.paddingXY 4 4
+                                , Ui.rounded 4
                                 , Ui.width Ui.shrink
+                                , MyUi.htmlStyle "cursor" "pointer"
                                 , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
                                 , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells)
                                 , Ui.Events.onMouseLeave MouseExitWord

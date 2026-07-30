@@ -662,6 +662,7 @@ tests =
                                     , word = "HOTEL"
                                     , points = 24
                                     , placedCells = summaryCells 5
+                                    , wildcardMatches = Set.empty
                                     }
                             }
             , Test.test "the earliest word wins when two words score the same" <|
@@ -678,6 +679,7 @@ tests =
                                 , word = "HOTEL"
                                 , points = 12
                                 , placedCells = summaryCells 5
+                                , wildcardMatches = Set.empty
                                 }
                             )
             , Test.test "a game where nobody placed anything has no best word" <|
