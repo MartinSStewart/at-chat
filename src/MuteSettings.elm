@@ -9,8 +9,10 @@ module MuteSettings exposing
     , isChannelSpecificallyMuted
     , isDiscordChannelMuted
     , isDiscordChannelSpecificallyMuted
+    , isDiscordDmMuted
     , isDiscordGuildSpecificallyMute
     , isDiscordThreadSpecificallyMuted
+    , isDmMuted
     , isGuildSpecificallyMute
     , isThreadSpecificallyMuted
     , setMuteChannel
@@ -25,7 +27,7 @@ module MuteSettings exposing
 import Discord
 import Effect.Browser.Dom as Dom
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..))
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..), UserId)
 import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -34,7 +36,7 @@ import Ui exposing (Element)
 
 type alias Model =
     { mutedGuilds : SeqDict (Id GuildId) MutedGuild
-    , mutedDms : SeqDict (Id GuildId) MutedGuild
+    , mutedDms : SeqDict (Id UserId) MutedChannel
     , mutedDiscordGuilds : SeqDict (Discord.Id Discord.GuildId) MutedDiscordGuild
     , mutedDiscordDms : SeqSet (Discord.Id Discord.PrivateChannelId)
     }
@@ -297,6 +299,39 @@ isChannelMuted model guildId channelId threadRoute =
 
         Nothing ->
             IsNotMuted
+
+
+isDmMuted : Model -> Id UserId -> ThreadRoute -> IsMuted
+isDmMuted model otherUserId threadRoute =
+    case SeqDict.get otherUserId model.mutedDms of
+        Just channel ->
+            case channel.mutedChannel of
+                IsMuted ->
+                    IsMuted
+
+                IsNotMuted ->
+                    case threadRoute of
+                        NoThread ->
+                            IsNotMuted
+
+                        ViewThread threadId ->
+                            if SeqSet.member threadId channel.mutedThreads then
+                                IsMuted
+
+                            else
+                                IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isDiscordDmMuted : Model -> Discord.Id Discord.PrivateChannelId -> IsMuted
+isDiscordDmMuted model channelId =
+    if SeqSet.member channelId model.mutedDiscordDms then
+        IsMuted
+
+    else
+        IsNotMuted
 
 
 isDiscordGuildSpecificallyMute : Model -> Discord.Id Discord.GuildId -> IsMuted
