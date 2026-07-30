@@ -107,15 +107,13 @@ mobileMenuMaxHeight extraOptions local model =
         Coord.origin
         local
         model
-        |> .items
-        |> List.length
         |> mobileMenuMaxHeightHelper
         |> CssPixels.cssPixels
 
 
-mobileMenuMaxHeightHelper : Int -> Float
-mobileMenuMaxHeightHelper itemCount =
-    toFloat itemCount * buttonHeight True + toFloat itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
+mobileMenuMaxHeightHelper : { items : List (Element FrontendMsg_), height : Int } -> Float
+mobileMenuMaxHeightHelper { items, height } =
+    toFloat (height + List.length items) - 1 + mobileCloseButton + topPadding + bottomPadding
 
 
 mobileMenuOpeningOffset :
@@ -217,7 +215,7 @@ viewMobile offset extraOptions loggedIn local model =
         height =
             1000
 
-        { items } =
+        menuItemsData =
             menuItems
                 True
                 extraOptions.guildOrDmId
@@ -270,7 +268,7 @@ viewMobile offset extraOptions loggedIn local model =
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
-                                    (mobileMenuMaxHeightHelper (List.length items) |> round |> (+) -32)
+                                    (mobileMenuMaxHeightHelper menuItemsData |> round |> (+) -32)
                                     True
                                     True
                                     editMessageTextInputId
@@ -341,7 +339,7 @@ viewMobile offset extraOptions loggedIn local model =
                                 ]
                                 Ui.none
                             )
-                            items
+                            menuItemsData.items
                )
         )
 
@@ -510,31 +508,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
                         case ( isPrivateDm, messageUserId ) of
-                            ( False, Just userId ) ->
-                                List.Extra.findMap
-                                    (\( channelId, channel ) ->
-                                        case
-                                            ( NonemptyDict.toList channel.members
-                                            , NonemptyDict.member userId channel.members
-                                            )
-                                        of
-                                            ( [ first, second ], True ) ->
-                                                case
-                                                    SeqDict.intersect
-                                                        (SeqDict.fromList [ first, second ])
-                                                        (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers)
-                                                        |> SeqDict.keys
-                                                of
-                                                    [ linkedUserId ] ->
-                                                        MessageMenu_PressedOpenDiscordDm linkedUserId channelId |> Just
+                            ( False, Just otherUserId ) ->
+                                case LocalState.discordDmChannelWithUser otherUserId local of
+                                    Just ( linkedUserId, channelId ) ->
+                                        MessageMenu_PressedOpenDiscordDm linkedUserId channelId |> Just
 
-                                                    _ ->
-                                                        Nothing
-
-                                            _ ->
-                                                Nothing
-                                    )
-                                    (SeqDict.toList local.discordDmChannels)
+                                    Nothing ->
+                                        Nothing
 
                             _ ->
                                 Nothing
@@ -755,7 +735,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     NoItem
             , case openDm of
                 Just openDm2 ->
-                    button isMobile (Dom.id "messageMenu_addCustomEmojis") Icons.users "DM this user" openDm2
+                    button isMobile (Dom.id "messageMenu_addCustomEmojis") Icons.person "DM this user" openDm2
                         |> ButtonItem
 
                 Nothing ->
