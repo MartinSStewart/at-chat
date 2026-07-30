@@ -313,7 +313,7 @@ summary, so only this many of the newest ones are sent.
 -}
 unreadOverviewMessageLimit : number
 unreadOverviewMessageLimit =
-    10
+    3
 
 
 {-| What the unread overview needs: the newest unread messages of every channel the user

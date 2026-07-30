@@ -573,6 +573,7 @@ unreadOverviewNotMobile local model =
             [ Ui.height Ui.fill
             , Ui.heightMin 0
             , MyUi.scrollable True
+            , Ui.paddingWith { left = 0, right = 0, top = 8, bottom = 0 }
             ]
             (List.map
                 (\unread ->
@@ -660,10 +661,7 @@ from is what separates one channel from the next.
 unreadOverviewContainer : UnreadOverviewChannel -> List (Element FrontendMsg_) -> Element FrontendMsg_
 unreadOverviewContainer unread messageViews =
     Ui.column
-        [ Ui.background MyUi.background3
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border1
-        , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
+        [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
         , MyUi.noShrinking
         ]
         (Ui.row
@@ -712,6 +710,7 @@ unreadOverviewContainer unread messageViews =
                     Ui.none
                )
             :: messageViews
+            ++ [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none) ]
         )
 
 

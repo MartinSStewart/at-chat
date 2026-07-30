@@ -1487,6 +1487,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- A new message puts the channel back in the overview, and its
                         -- header is a link to the channel it came from.
                         , E2EHelper.writeMessage admin 1500 "Unread again"
+                        , admin.click 100 (Dom.id "guild_newChannel")
+                        , admin.input 100 (Dom.id "newChannelName") "NewChannel"
+                        , admin.click 100 (Dom.id "guild_createChannel")
+                        , E2EHelper.writeMessage admin 100 "Unread in a different channel"
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread again" ])
