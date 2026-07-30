@@ -10,6 +10,7 @@ module DmChannel exposing
     , latestThreadMessageId
     , loadMessages
     , loadOlderMessages
+    , loadUnreadMessages
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -200,6 +201,18 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
         EmptyPlaceholder ->
             channel
+
+
+{-| Loads the messages the unread overview shows. Unlike `loadMessages` this leaves
+`visibleMessages` alone: these are messages of channels the user hasn't opened, so they
+aren't the page of messages the channel view would scroll through.
+-}
+loadUnreadMessages :
+    SeqDict (Id messageId) (Message messageId userId)
+    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> { a | messages : MessageArray messageId (Message messageId userId) }
+loadUnreadMessages messages channel =
+    { channel | messages = MessageArray.setMany (SeqDict.toList messages) channel.messages }
 
 
 loadMessages :

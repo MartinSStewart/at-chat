@@ -4745,7 +4745,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ ViewOverview
-                                            (BackendExtra.unreadOverviewDiscordUsers session.userId user model
+                                            (BackendExtra.unreadOverviewData session.userId user model
                                                 |> FilledInByBackend
                                             )
                                             |> Local_CurrentlyViewing

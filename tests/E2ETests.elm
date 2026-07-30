@@ -3,6 +3,7 @@ module E2ETests exposing (main, setup)
 import Array exposing (Array)
 import Audio
 import Backend
+import BackendExtra
 import Bytes exposing (Bytes)
 import Codec
 import Coord
@@ -1427,7 +1428,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
-        "Unread overview shows the latest message of each unread channel"
+        "Unread overview shows the unread messages of each unread channel"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
@@ -1435,12 +1436,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\admin user ->
                 [ -- Leave the channel so that the messages the admin writes stay unread.
                   user.click 100 (Dom.id "guildIcon_showFriends")
-                , E2EHelper.writeMessage admin 100 "Older unread message"
-                , E2EHelper.writeMessage admin 100 "Newest unread message"
+
+                -- Two more messages than the overview shows per channel. They are spaced
+                -- out because the backend only allows 10 messages per 10 seconds.
+                , List.range 1 (BackendExtra.unreadOverviewMessageLimit + 2)
+                    |> List.map
+                        (\index -> E2EHelper.writeMessage admin 1500 ("Unread message " ++ String.fromInt index))
+                    |> T.group
 
                 -- A client that connects after the messages were sent hasn't scrolled
-                -- through the channel, so the only message of it the client holds is the
-                -- newest one, which is exactly what the overview shows.
+                -- through the channel, so it only has the messages the backend sends along
+                -- with the overview.
                 , T.connectFrontend
                     100
                     E2EHelper.sessionId1
@@ -1452,10 +1458,25 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Newest unread message" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread message 12" ])
                         , userReload.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Older unread message" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread message 3" ])
+
+                        -- The two oldest unread messages are past the limit, so they are
+                        -- only counted, not shown.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread message 2" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "2 older unread messages" ])
+
+                        -- The container says which guild and channel the messages are from.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
                         ]
                     )
                 ]

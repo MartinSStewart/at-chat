@@ -3057,23 +3057,67 @@ changeUpdate localMsg local =
                                             local.discordGuilds
                             }
 
-                        ViewOverview newDiscordUsers ->
-                            { local
-                                | localUser =
-                                    { localUser
-                                        | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing
-                                        , discordUsers =
-                                            case newDiscordUsers of
-                                                FilledInByBackend newDiscordUsers2 ->
+                        ViewOverview overviewData ->
+                            let
+                                localUser2 : LocalUser
+                                localUser2 =
+                                    { localUser | currentlyViewing = UserSession.setViewingToCurrentlyViewing viewing }
+                            in
+                            case overviewData of
+                                FilledInByBackend overviewData2 ->
+                                    { local
+                                        | localUser =
+                                            { localUser2
+                                                | discordUsers =
                                                     SeqDict.foldl
                                                         LinkedAndOtherDiscordUsers.addOtherUser
-                                                        localUser.discordUsers
-                                                        newDiscordUsers2
-
-                                                EmptyPlaceholder ->
-                                                    localUser.discordUsers
+                                                        localUser2.discordUsers
+                                                        overviewData2.discordUsers
+                                            }
+                                        , guilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages guilds ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        guilds
+                                                )
+                                                local.guilds
+                                                overviewData2.guildChannels
+                                        , dmChannels =
+                                            SeqDict.foldl
+                                                (\otherUserId messages dmChannels ->
+                                                    SeqDict.updateIfExists
+                                                        otherUserId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        dmChannels
+                                                )
+                                                local.dmChannels
+                                                overviewData2.dmChannels
+                                        , discordGuilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages discordGuilds ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        discordGuilds
+                                                )
+                                                local.discordGuilds
+                                                overviewData2.discordGuildChannels
+                                        , discordDmChannels =
+                                            SeqDict.foldl
+                                                (\channelId messages discordDmChannels ->
+                                                    SeqDict.updateIfExists
+                                                        channelId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        discordDmChannels
+                                                )
+                                                local.discordDmChannels
+                                                overviewData2.discordDmChannels
                                     }
-                            }
+
+                                EmptyPlaceholder ->
+                                    { local | localUser = localUser2 }
 
                 Local_SetName name ->
                     let

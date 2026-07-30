@@ -6,6 +6,7 @@ module UserSession exposing
     , PushSubscription(..)
     , SetViewing(..)
     , ToBeFilledInByBackend(..)
+    , UnreadOverviewData
     , UserSession
     , ViewDiscordGuildData
     , Viewing(..)
@@ -76,11 +77,7 @@ type SetViewing
     | ViewDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (ToBeFilledInByBackend (ViewDiscordGuildData ChannelMessageId))
     | ViewDiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (ViewDiscordGuildData ThreadMessageId))
     | StopViewingChannel
-      -- The unread overview shows the newest message of every channel the user hasn't
-      -- read everything in, and the frontend already has those messages. What it's
-      -- missing is the Discord users that wrote them, so that's what the backend fills
-      -- in (see `BackendExtra.unreadOverviewDiscordUsers`).
-    | ViewOverview (ToBeFilledInByBackend (SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser))
+    | ViewOverview (ToBeFilledInByBackend UnreadOverviewData)
 
 
 type Viewing
@@ -93,6 +90,36 @@ type Viewing
     | Viewing_DiscordChannelThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) (Id ChannelMessageId)
     | Viewing_None
     | Viewing_Overview
+
+
+{-| What the unread overview needs from the backend: the unread messages of every channel
+the user hasn't read to the end, keyed by the index they sit at in that channel. Only the
+newest `unreadOverviewMessageLimit` messages of a channel are included, since a channel
+that has gone unread for a long time can hold thousands of them.
+
+The frontend holds the newest message of every channel already, but nothing older than
+that for channels the user hasn't opened, and it never has the Discord users of a guild
+it isn't looking at, so those come along too.
+
+Threads aren't included, only the channels themselves.
+
+-}
+type alias UnreadOverviewData =
+    { guildChannels :
+        SeqDict
+            ( Id GuildId, Id ChannelId )
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+    , dmChannels : SeqDict (Id UserId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId)))
+    , discordGuildChannels :
+        SeqDict
+            ( Discord.Id Discord.GuildId, Discord.Id Discord.ChannelId )
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+    , discordDmChannels :
+        SeqDict
+            (Discord.Id Discord.PrivateChannelId)
+            (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId)))
+    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    }
 
 
 type alias ViewDiscordGuildData messageId =
