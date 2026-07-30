@@ -7763,6 +7763,7 @@ channelColumn isMobile time localUser guildId guild channelRoute canScroll2 chan
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
+                                    (MuteSettings.isChannelMuted localUser.user.muteSettings guildId channelId NoThread)
                                     directMentions
                                     (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                     channelId
@@ -7998,6 +7999,12 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
                             hasNotifications : ChannelNotificationType
                             hasNotifications =
                                 GuildColumn.channelOrThreadHasNotifications
+                                    (MuteSettings.isDiscordChannelMuted
+                                        localUser.user.muteSettings
+                                        routeData.guildId
+                                        channelId
+                                        NoThread
+                                    )
                                     directMentions
                                     (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                     channelId
@@ -8073,6 +8080,12 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
+                                (MuteSettings.isChannelMuted
+                                    localUser.user.muteSettings
+                                    guildId
+                                    channelId
+                                    (ViewThread threadMessageIndex)
+                                )
                                 directMentions
                                 (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                 channelId
@@ -8202,6 +8215,12 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
                             GuildColumn.channelOrThreadHasNotifications
+                                (MuteSettings.isDiscordChannelMuted
+                                    localUser.user.muteSettings
+                                    routeData.guildId
+                                    channelId
+                                    (ViewThread threadMessageIndex)
+                                )
                                 directMentions
                                 (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
                                 channelId

@@ -25,6 +25,7 @@ import LocalState exposing (DiscordFrontendGuild, FrontendGuild, LocalState)
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (Message)
 import MessageArray exposing (MessageArray)
+import MuteSettings exposing (IsMuted(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
@@ -429,9 +430,34 @@ dmHasNotifications currentUser otherUserId dmChannel =
     channelNewMessageCount (GuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
 
 
-{-| In the case of a channel, it's just the channel, not the threads it contains
+{-| In the case of a channel, it's just the channel, not the threads it contains. A muted
+channel or thread never shows a notification, not even for a direct mention.
 -}
 channelOrThreadHasNotifications :
+    IsMuted
+    -> Maybe (NonemptyDict ( channelId, ThreadRoute ) OneOrGreater)
+    -> Bool
+    -> channelId
+    -> ThreadRoute
+    -> Maybe (Id messageId)
+    -> { a | messages : MessageArray messageId (Message messageId userId) }
+    -> ChannelNotificationType
+channelOrThreadHasNotifications isMuted maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
+    case isMuted of
+        IsMuted ->
+            NoNotification
+
+        IsNotMuted ->
+            channelOrThreadHasNotificationsHelper
+                maybeDirectMentions
+                notifyOnAllMessages
+                channelId
+                threadRoute
+                maybeLastViewed
+                channel
+
+
+channelOrThreadHasNotificationsHelper :
     Maybe (NonemptyDict ( channelId, ThreadRoute ) OneOrGreater)
     -> Bool
     -> channelId
@@ -439,7 +465,7 @@ channelOrThreadHasNotifications :
     -> Maybe (Id messageId)
     -> { a | messages : MessageArray messageId (Message messageId userId) }
     -> ChannelNotificationType
-channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
+channelOrThreadHasNotificationsHelper maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
         case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
             Just count ->

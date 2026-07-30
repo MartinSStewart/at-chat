@@ -37,6 +37,7 @@ import Json.Encode
 import Local exposing (ChangeId(..))
 import LoginForm
 import MembersAndOwner
+import MuteSettings
 import NonemptyDict
 import Pages.Home
 import PersonName
@@ -1405,6 +1406,61 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EHelper.startTest
+        "Muting a channel or thread hides its notification dot"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- The channel gets one unread message and the thread inside it two, so
+                    -- the two notification dots can be told apart by their count.
+                    channelDot : Test.Html.Selector.Selector
+                    channelDot =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "1")
+
+                    threadDot : Test.Html.Selector.Selector
+                    threadDot =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2")
+                in
+                [ -- The admin writes in a channel and a thread the user isn't looking at.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Noisy-channel"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , E2EHelper.writeMessage admin 100 "Message in the channel"
+                , E2EHelper.createThread admin (Id.fromInt 0)
+                , E2EHelper.writeMessage admin 100 "First message in the thread"
+                , E2EHelper.writeMessage admin 100 "Second message in the thread"
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.has [ threadDot ])
+
+                -- Muting the thread only takes the thread's dot away.
+                , user.update
+                    100
+                    (Audio.userMsg
+                        (Types.PressedMuteThread (Id.fromInt 1) (Id.fromInt 1) (Id.fromInt 0) MuteSettings.IsMuted)
+                    )
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
+
+                -- Muting the channel takes the channel's dot away too.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsMuted))
+                , user.checkView 100 (Test.Html.Query.hasNot [ channelDot ])
+
+                -- Unmuting the channel brings its dot back, but the thread stays muted.
+                , user.update
+                    100
+                    (Audio.userMsg (Types.PressedMuteChannel (Id.fromInt 1) (Id.fromInt 1) MuteSettings.IsNotMuted))
+                , user.checkView 100 (Test.Html.Query.has [ channelDot ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ threadDot ])
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Guild icon notification is shown"
         E2EHelper.startTime
         normalConfig
@@ -1434,6 +1490,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
             (\admin user ->
+                let
+                    -- The overview shows all but the two oldest of these, so message 3 is
+                    -- the oldest one shown and this is the newest.
+                    newestUnreadMessage : String
+                    newestUnreadMessage =
+                        "Unread message " ++ String.fromInt (BackendExtra.unreadOverviewMessageLimit + 2)
+                in
                 [ -- Leave the channel so that the messages the admin writes stay unread.
                   user.click 100 (Dom.id "guildIcon_showFriends")
 
@@ -1458,7 +1521,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread message 12" ])
+                            (Test.Html.Query.has [ Test.Html.Selector.text newestUnreadMessage ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread message 3" ])
@@ -1482,7 +1545,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , userReload.click 100 (Dom.id "guild_unreadOverviewMarkAsRead_guild_1_0")
                         , userReload.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread message 12" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text newestUnreadMessage ])
 
                         -- A new message puts the channel back in the overview, and its
                         -- header is a link to the channel it came from.
