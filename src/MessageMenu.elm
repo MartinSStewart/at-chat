@@ -734,7 +734,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                     NoItem
             , case openDm of
                 Just openDm2 ->
-                    button isMobile (Dom.id "messageMenu_addCustomEmojis") Icons.person "DM this user" openDm2
+                    button isMobile (Dom.id "messageMenu_openDm") Icons.person "DM this user" openDm2
                         |> ButtonItem
 
                 Nothing ->
