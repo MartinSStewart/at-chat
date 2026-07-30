@@ -7,6 +7,7 @@ module WordSpellingGame exposing
     , Drag(..)
     , GameData
     , GameMsg(..)
+    , GameSummary
     , IsValid(..)
     , Language(..)
     , Letter(..)
@@ -41,6 +42,7 @@ module WordSpellingGame exposing
     , dragEnd
     , dragStart
     , fullTrayBonusScore
+    , gameSummary
     , gameView
     , initGame
     , initSetup
@@ -3845,6 +3847,16 @@ playerRowSpacing =
     8
 
 
+userName : LocalUser -> Id UserId -> String
+userName localUser userId =
+    case User.getUser userId localUser of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<missing>"
+
+
 playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
 playerRow localUser userId highlight isSelected suffix =
     let
@@ -3883,17 +3895,7 @@ playerRow localUser userId highlight isSelected suffix =
             User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
             [ MyUi.prewrap ]
-            [ Ui.el
-                [ Ui.Font.bold ]
-                (Ui.text
-                    (case maybeUser of
-                        Just user ->
-                            PersonName.toString user.name
-
-                        Nothing ->
-                            "<missing>"
-                    )
-                )
+            [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
             , Ui.text suffix
             ]
         ]
@@ -4215,6 +4217,132 @@ descriptionUserId description =
             userId
 
 
+{-| What the whole game amounted to, tallied from the Moves log for the end of game summary. Only
+words that made it onto the board count towards `tilesPlaced` and `bestWord`; a rejected word
+counts as an invalid word instead. Players who never placed anything are missing from the dicts.
+-}
+type alias GameSummary =
+    { tilesPlaced : SeqDict (Id UserId) Int
+    , invalidWords : SeqDict (Id UserId) Int
+    , bestWord : Maybe { userId : Id UserId, word : String, points : Int }
+    }
+
+
+gameSummary : List Description -> GameSummary
+gameSummary log =
+    List.foldl
+        (\description summary ->
+            case description of
+                Description_PlacedWord userId placedWord ->
+                    { summary
+                        | tilesPlaced =
+                            SeqDictHelper.updateOrInsert
+                                userId
+                                (\count -> Maybe.withDefault 0 count + List.length placedWord.placedCells)
+                                summary.tilesPlaced
+                        , bestWord =
+                            case summary.bestWord of
+                                Just bestWord ->
+                                    -- `log` runs newest first, so ties are decided in favour of the
+                                    -- word that was played first.
+                                    if placedWord.points >= bestWord.points then
+                                        Just
+                                            { userId = userId
+                                            , word = placedWord.word
+                                            , points = placedWord.points
+                                            }
+
+                                    else
+                                        summary.bestWord
+
+                                Nothing ->
+                                    Just
+                                        { userId = userId
+                                        , word = placedWord.word
+                                        , points = placedWord.points
+                                        }
+                    }
+
+                Description_InvalidMove userId _ ->
+                    { summary
+                        | invalidWords =
+                            SeqDictHelper.updateOrInsert
+                                userId
+                                (\count -> Maybe.withDefault 0 count + 1)
+                                summary.invalidWords
+                    }
+
+                _ ->
+                    summary
+        )
+        { tilesPlaced = SeqDict.empty, invalidWords = SeqDict.empty, bestWord = Nothing }
+        log
+
+
+pluralize : Int -> String -> String
+pluralize count noun =
+    String.fromInt count
+        ++ " "
+        ++ noun
+        ++ (if count == 1 then
+                ""
+
+            else
+                "s"
+           )
+
+
+{-| The breakdown shown under the "the game has ended" line in the Moves log: what each player put
+on the board and the best word anyone played. Players are listed highest score first, matching the
+leaderboard in the status view.
+-}
+gameSummaryView : LocalUser -> Shared -> List Description -> Element GameMsg
+gameSummaryView localUser shared log =
+    let
+        summary : GameSummary
+        summary =
+            gameSummary log
+    in
+    Ui.column
+        [ Ui.spacing 4
+        , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
+        , Ui.Font.color MyUi.font3
+        ]
+        (List.map
+            (\player ->
+                Ui.Prose.paragraph
+                    []
+                    [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser player.userId))
+                    , Ui.text
+                        (": "
+                            ++ pluralize
+                                (SeqDict.get player.userId summary.tilesPlaced |> Maybe.withDefault 0)
+                                "tile"
+                            ++ " placed, "
+                            ++ pluralize
+                                (SeqDict.get player.userId summary.invalidWords |> Maybe.withDefault 0)
+                                "invalid word"
+                        )
+                    ]
+            )
+            (List.Nonempty.toList shared.players |> List.sortBy (\player -> negate player.score))
+            ++ (case summary.bestWord of
+                    Just bestWord ->
+                        [ Ui.Prose.paragraph
+                            []
+                            [ Ui.text "Best word: "
+                            , Ui.el [ Ui.Font.bold ] (Ui.text bestWord.word)
+                            , Ui.text (" for " ++ pluralize bestWord.points "point" ++ ", played by ")
+                            , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                            ]
+                        ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
 recentActionsView : ScrollPosition -> Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> Shared -> Element GameMsg
 recentActionsView scrollPosition windowSize localUser setup actions shared =
     let
@@ -4236,7 +4364,10 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
         log2 =
             (case getWinner shared of
                 Just ( _, gameEndReason ) ->
-                    [ Ui.Prose.paragraph
+                    -- `log2` is reversed before being rendered, so the summary listed first here
+                    -- ends up below the line explaining how the game ended.
+                    [ gameSummaryView localUser shared log
+                    , Ui.Prose.paragraph
                         [ Ui.alignTop
                         , Ui.paddingWith { left = 0, right = 0, top = 14, bottom = 6 }
                         , Ui.Font.color MyUi.font3
@@ -4246,16 +4377,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.text "Everyone passed and the game has ended!" ]
 
                             OutOfLetters userId ->
-                                [ Ui.el [ Ui.Font.bold ]
-                                    (Ui.text
-                                        (case User.getUser userId localUser of
-                                            Just user ->
-                                                PersonName.toString user.name
-
-                                            Nothing ->
-                                                "<missing>"
-                                        )
-                                    )
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
                                 , Ui.text " ran out of letters and the game has ended!"
                                 ]
                         )
@@ -4290,12 +4412,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         let
                             name : String
                             name =
-                                case User.getUser (descriptionUserId description) localUser of
-                                    Just user ->
-                                        PersonName.toString user.name
-
-                                    Nothing ->
-                                        "<missing>"
+                                userName localUser (descriptionUserId description)
 
                             moveNumber : Int
                             moveNumber =
