@@ -352,7 +352,7 @@ tests normalConfig =
                             , Test.Html.Selector.exactText "Invalid words:"
                             , Test.Html.Selector.exactText "0"
                             , Test.Html.Selector.exactText "Top scoring word:"
-                            , Test.Html.Selector.exactText "AA (4) by "
+                            , Test.Html.Selector.exactText "AA (+4) by "
                             ]
                         )
                     , user.checkView

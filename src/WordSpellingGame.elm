@@ -4224,7 +4224,13 @@ counts as an invalid word instead. Players who never placed anything are missing
 type alias GameSummary =
     { tilesPlaced : SeqDict (Id UserId) Int
     , invalidWords : SeqDict (Id UserId) Int
-    , bestWord : Maybe { userId : Id UserId, word : String, points : Int }
+    , bestWord :
+        Maybe
+            { userId : Id UserId
+            , word : String
+            , points : Int
+            , placedCells : List ( ( Int, Int ), LetterOrWildcard )
+            }
     }
 
 
@@ -4250,6 +4256,7 @@ gameSummary log =
                                             { userId = userId
                                             , word = placedWord.word
                                             , points = placedWord.points
+                                            , placedCells = placedWord.placedCells
                                             }
 
                                     else
@@ -4260,6 +4267,7 @@ gameSummary log =
                                         { userId = userId
                                         , word = placedWord.word
                                         , points = placedWord.points
+                                        , placedCells = placedWord.placedCells
                                         }
                     }
 
@@ -4283,8 +4291,8 @@ gameSummary log =
 tiles each player put on the board, one for the invalid words they tried, and the best word anyone
 played. Each section lists every player, highest count first.
 -}
-gameSummaryView : LocalUser -> Shared -> List Description -> Element GameMsg
-gameSummaryView localUser shared log =
+gameSummaryView : Coord CssPixels -> LocalUser -> Shared -> List Description -> Element GameMsg
+gameSummaryView windowSize localUser shared log =
     let
         summary : GameSummary
         summary =
@@ -4323,15 +4331,26 @@ gameSummaryView localUser shared log =
                         [ Ui.column
                             [ Ui.spacing 4 ]
                             [ Ui.el [ Ui.Font.bold ] (Ui.text "Top scoring word:")
-                            , Ui.Prose.paragraph
-                                [ Ui.paddingXY 4 4 ]
-                                [ Ui.text
-                                    (bestWord.word
-                                        ++ " (+"
-                                        ++ String.fromInt bestWord.points
-                                        ++ ") by "
-                                    )
-                                , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+
+                            -- Hovering the word highlights its cells on the board and lights the
+                            -- text up, the same as the placed words in the log below.
+                            , Ui.row
+                                [ Ui.paddingXY 4 4
+                                , Ui.width Ui.shrink
+                                , MyUi.hover (MyUi.isMobileAlt windowSize) [ Ui.Anim.fontColor MyUi.font1 ]
+                                , Ui.Events.onMouseEnter (MouseEnterWord bestWord.placedCells)
+                                , Ui.Events.onMouseLeave MouseExitWord
+                                ]
+                                [ Ui.Prose.paragraph
+                                    [ Ui.alignTop ]
+                                    [ Ui.text
+                                        (bestWord.word
+                                            ++ " (+"
+                                            ++ String.fromInt bestWord.points
+                                            ++ ") by "
+                                        )
+                                    , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                                    ]
                                 ]
                             ]
                         ]
@@ -4384,7 +4403,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                 Just ( _, gameEndReason ) ->
                     -- `log2` is reversed before being rendered, so the summary listed first here
                     -- ends up below the line explaining how the game ended.
-                    [ gameSummaryView localUser shared log
+                    [ gameSummaryView windowSize localUser shared log
                     , Ui.Prose.paragraph
                         [ Ui.alignTop
                         , Ui.paddingWith { left = 0, right = 0, top = 30, bottom = 6 }

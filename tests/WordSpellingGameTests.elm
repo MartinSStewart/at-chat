@@ -656,7 +656,13 @@ tests =
                         |> Expect.equal
                             { tilesPlaced = SeqDict.fromList [ ( Id.fromInt 1, 5 ), ( Id.fromInt 0, 9 ) ]
                             , invalidWords = SeqDict.fromList [ ( Id.fromInt 0, 2 ) ]
-                            , bestWord = Just { userId = Id.fromInt 0, word = "HOTEL", points = 24 }
+                            , bestWord =
+                                Just
+                                    { userId = Id.fromInt 0
+                                    , word = "HOTEL"
+                                    , points = 24
+                                    , placedCells = summaryCells 5
+                                    }
                             }
             , Test.test "the earliest word wins when two words score the same" <|
                 \_ ->
@@ -666,7 +672,14 @@ tests =
                         , summaryPlacedWord 0 "HOTEL" 12 5
                         ]
                         |> .bestWord
-                        |> Expect.equal (Just { userId = Id.fromInt 0, word = "HOTEL", points = 12 })
+                        |> Expect.equal
+                            (Just
+                                { userId = Id.fromInt 0
+                                , word = "HOTEL"
+                                , points = 12
+                                , placedCells = summaryCells 5
+                                }
+                            )
             , Test.test "a game where nobody placed anything has no best word" <|
                 \_ ->
                     WordSpellingGame.gameSummary
@@ -683,8 +696,7 @@ tests =
 
 
 {-| A Moves log entry for `userId` placing `spelledWord` for `points`, using `tileCount` tiles from
-their tray. The cells themselves only matter to the board highlighting, so they're all the same
-letter.
+their tray.
 -}
 summaryPlacedWord : Int -> String -> Int -> Int -> WordSpellingGame.Description
 summaryPlacedWord userId spelledWord points tileCount =
@@ -693,10 +705,18 @@ summaryPlacedWord userId spelledWord points tileCount =
         { word = spelledWord
         , points = points
         , isBingo = False
-        , placedCells = List.map (\index -> ( ( index, 0 ), Letter a )) (List.range 1 tileCount)
+        , placedCells = summaryCells tileCount
         , isPremove = False
         , wildcardMatches = Set.empty
         }
+
+
+{-| `count` board cells for a summary test's placed word. Which cells they are only matters to the
+board highlighting, so they're all the same letter along the top row.
+-}
+summaryCells : Int -> List ( ( Int, Int ), LetterOrWildcard )
+summaryCells count =
+    List.map (\index -> ( ( index, 0 ), Letter a )) (List.range 1 count)
 
 
 summaryInvalidWord : Int -> String -> WordSpellingGame.Description
