@@ -600,6 +600,8 @@ type FrontendMsg_
     | PressedMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
     | PressedMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
     | PressedMarkChannelAsRead AnyGuildOrDmId (Id ChannelMessageId)
+    | PressedMuteGuild (Id GuildId) IsMuted
+    | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
 
 
 type alias NewChannelForm =
@@ -938,6 +940,8 @@ type ServerChange
     | Server_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
     | Server_SetMuteDiscordChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
     | Server_SetMuteDiscordThread (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | Server_SetMuteGuild (Id GuildId) IsMuted
+    | Server_SetMuteDiscordGuild (Discord.Id Discord.GuildId) IsMuted
 
 
 type LocalChange
@@ -988,3 +992,5 @@ type LocalChange
     | Local_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
     | Local_SetMuteDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) IsMuted
     | Local_SetMuteDiscordThread (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId) IsMuted
+    | Local_SetMuteGuild (Id GuildId) IsMuted
+    | Local_SetMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted

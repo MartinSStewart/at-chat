@@ -4599,6 +4599,28 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedMuteGuild guildId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteGuild guildId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteDiscordGuild discordUserId guildId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteDiscordGuild discordUserId guildId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedMarkChannelAsRead guildOrDmId messageId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

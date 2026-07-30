@@ -2178,6 +2178,12 @@ discordGuildSettingsView isMobile currentUserId guildId guild local =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteDiscordGuild currentUserId guildId)
+                    (MuteSettings.isDiscordGuildSpecificallyMute local.localUser.user.muteSettings guildId)
+                )
             ]
         )
 
@@ -2335,6 +2341,12 @@ guildSettingsView model loggedIn local guildId guild =
                     [ ( NotifyOnMention, "Only when mentioned" )
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
+                )
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MuteSettings.view
+                    (PressedMuteGuild guildId)
+                    (MuteSettings.isGuildSpecificallyMute local.localUser.user.muteSettings guildId)
                 )
             , if isOwner then
                 deleteGuildSection guildId guild editGuildForm

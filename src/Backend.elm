@@ -5560,14 +5560,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetMuteDiscordChannel discordUserId guildId channelId isMuted ->
-                    BackendExtra.asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
+                    BackendExtra.asDiscordGuildChannelMember
                         model
                         sessionId
-                        clientId
                         guildId
                         channelId
                         discordUserId
-                        (\session _ _ user _ _ ->
+                        (\session _ user _ _ ->
                             ( { model
                                 | users =
                                     NonemptyDict.insert
@@ -5591,14 +5590,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_SetMuteDiscordThread discordUserId guildId channelId threadId isMuted ->
-                    BackendExtra.asDiscordGuildChannelMember_AllowUserThatNeedsAuthAgain
+                    BackendExtra.asDiscordGuildChannelMember
                         model
                         sessionId
-                        clientId
                         guildId
                         channelId
                         discordUserId
-                        (\session _ _ user _ _ ->
+                        (\session _ user _ _ ->
                             ( { model
                                 | users =
                                     NonemptyDict.insert
@@ -5616,6 +5614,63 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     Nothing
                                     session.userId
                                     (Server_SetMuteDiscordThread guildId channelId threadId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteGuild guildId isMuted ->
+                    BackendExtra.asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\session user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteGuild guildId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteGuild guildId isMuted |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_SetMuteDiscordGuild discordUserId guildId isMuted ->
+                    BackendExtra.asDiscordGuildMember
+                        model
+                        sessionId
+                        guildId
+                        discordUserId
+                        (\session _ user _ ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user
+                                            | muteSettings =
+                                                MuteSettings.setMuteDiscordGuild guildId isMuted user.muteSettings
+                                        }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetMuteDiscordGuild guildId isMuted |> ServerChange)
                                     model
                                 ]
                             )

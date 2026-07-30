@@ -9,11 +9,15 @@ module MuteSettings exposing
     , isChannelSpecificallyMuted
     , isDiscordChannelMuted
     , isDiscordChannelSpecificallyMuted
+    , isDiscordGuildSpecificallyMute
     , isDiscordThreadSpecificallyMuted
+    , isGuildSpecificallyMute
     , isThreadSpecificallyMuted
     , setMuteChannel
     , setMuteDiscordChannel
+    , setMuteDiscordGuild
     , setMuteDiscordThread
+    , setMuteGuild
     , setMuteThread
     , view
     )
@@ -71,10 +75,23 @@ view onPress isMuted =
         (Dom.id "guild_muteChannel")
         onPress
         (Just isMuted)
-        "Notifications"
-        [ ( IsMuted, "Muted (hide red/white dot)" )
-        , ( IsNotMuted, "Not muted" )
+        "Mute notifications"
+        [ ( IsNotMuted, "Not muted" )
+        , ( IsMuted, "Muted (hide red/white dot)" )
         ]
+
+
+setMuteGuild : Id GuildId -> IsMuted -> Model -> Model
+setMuteGuild guildId isMuted model =
+    { model | mutedGuilds = SeqDict.updateIfExists guildId (\guild -> { guild | mutedGuild = isMuted }) model.mutedGuilds }
+
+
+setMuteDiscordGuild : Discord.Id Discord.GuildId -> IsMuted -> Model -> Model
+setMuteDiscordGuild guildId isMuted model =
+    { model
+        | mutedDiscordGuilds =
+            SeqDict.updateIfExists guildId (\guild -> { guild | mutedGuild = isMuted }) model.mutedDiscordGuilds
+    }
 
 
 setMuteChannel : Id GuildId -> Id ChannelId -> IsMuted -> Model -> Model
@@ -194,6 +211,16 @@ updateMutedDiscordChannel guildId channelId updateFunc model =
     }
 
 
+isGuildSpecificallyMute : Model -> Id GuildId -> IsMuted
+isGuildSpecificallyMute model guildId =
+    case SeqDict.get guildId model.mutedGuilds of
+        Just guild ->
+            guild.mutedGuild
+
+        Nothing ->
+            IsNotMuted
+
+
 isChannelSpecificallyMuted : Model -> Id GuildId -> Id ChannelId -> IsMuted
 isChannelSpecificallyMuted model guildId channelId =
     case SeqDict.get guildId model.mutedGuilds of
@@ -257,6 +284,16 @@ isChannelMuted model guildId channelId threadRoute =
 
                         Nothing ->
                             IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isDiscordGuildSpecificallyMute : Model -> Discord.Id Discord.GuildId -> IsMuted
+isDiscordGuildSpecificallyMute model guildId =
+    case SeqDict.get guildId model.mutedDiscordGuilds of
+        Just guild ->
+            guild.mutedGuild
 
         Nothing ->
             IsNotMuted
