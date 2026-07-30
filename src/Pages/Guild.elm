@@ -1622,7 +1622,7 @@ discordMemberColumnNotMobile localUser guildId currentDiscordUserId guild channe
             NoThreadWithFriends _ _ ->
                 False
 
-            ViewThreadWithFriends id maybeId showMembersTab ->
+            ViewThreadWithFriends _ _ _ ->
                 True
         )
         [ discordChannelSettingsForm localUser currentDiscordUserId guildId channelId threadRoute

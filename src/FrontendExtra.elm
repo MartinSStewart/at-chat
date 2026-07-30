@@ -304,10 +304,10 @@ pendingChangesText localChange =
         Local_SetMuteDiscordThread _ _ _ _ _ ->
             "Changed thread notifications"
 
-        Local_SetMuteGuild id isMuted ->
+        Local_SetMuteGuild _ _ ->
             "Set mute guild"
 
-        Local_SetMuteDiscordGuild id _ isMuted ->
+        Local_SetMuteDiscordGuild _ _ _ ->
             "Set mute Discord guild"
 
 
@@ -2415,10 +2415,10 @@ isPressMsg msg =
         PressedMarkChannelAsRead _ _ ->
             True
 
-        PressedMuteGuild id isMuted ->
+        PressedMuteGuild _ _ ->
             True
 
-        PressedMuteDiscordGuild id _ isMuted ->
+        PressedMuteDiscordGuild _ _ _ ->
             True
 
 

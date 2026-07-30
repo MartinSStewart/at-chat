@@ -2083,10 +2083,10 @@ toBackendLog toBackend =
                 Local_SetMuteDiscordThread _ _ _ _ _ ->
                     ToBackendLog_Local_SetMuteDiscordThread
 
-                Local_SetMuteGuild id isMuted ->
+                Local_SetMuteGuild _ _ ->
                     ToBackendLog_Local_SetMuteGuild
 
-                Local_SetMuteDiscordGuild id _ isMuted ->
+                Local_SetMuteDiscordGuild _ _ _ ->
                     ToBackendLog_Local_SetMuteDiscordGuild
 
         TwoFactorToBackend _ ->

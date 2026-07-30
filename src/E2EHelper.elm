@@ -2648,6 +2648,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteDiscordThread _ _ _ _ _ ->
                     True
 
+                Local_SetMuteGuild id isMuted ->
+                    True
+
+                Local_SetMuteDiscordGuild id _ isMuted ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2863,6 +2869,12 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_SetMuteDiscordThread _ _ _ _ ->
+                            True
+
+                        Types.Server_SetMuteGuild id isMuted ->
+                            True
+
+                        Types.Server_SetMuteDiscordGuild id isMuted ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -3109,6 +3121,8 @@ allAttackerLocalChanges =
         guildOrDmId_guild
         (Drawing.MessageAnchor threadRouteWithMessage Drawing.UserIconAnchor)
         (Drawing.StartStroke ( 0, 0 ))
+    , Local_SetMuteDiscordGuild discordUserId discordGuildId MuteSettings.IsMuted
+    , Local_SetMuteGuild legitGuildId MuteSettings.IsMuted
     ]
 
 
