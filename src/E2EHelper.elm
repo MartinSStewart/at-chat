@@ -2648,10 +2648,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetMuteDiscordThread _ _ _ _ _ ->
                     True
 
-                Local_SetMuteGuild id isMuted ->
+                Local_SetMuteGuild _ _ ->
                     True
 
-                Local_SetMuteDiscordGuild id _ isMuted ->
+                Local_SetMuteDiscordGuild _ _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -2871,10 +2871,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetMuteDiscordThread _ _ _ _ ->
                             True
 
-                        Types.Server_SetMuteGuild id isMuted ->
+                        Types.Server_SetMuteGuild _ _ ->
                             True
 
-                        Types.Server_SetMuteDiscordGuild id isMuted ->
+                        Types.Server_SetMuteDiscordGuild _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
