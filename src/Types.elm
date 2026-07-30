@@ -513,6 +513,8 @@ type FrontendMsg_
     | PressedBody
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | MessageMenu_PressedAddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
+    | MessageMenu_PressedOpenDm (Id UserId)
+    | MessageMenu_PressedOpenDiscordDm (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer

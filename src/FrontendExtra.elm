@@ -2375,6 +2375,12 @@ isPressMsg msg =
         PressedExpandContainer _ ->
             True
 
+        MessageMenu_PressedOpenDm id ->
+            True
+
+        MessageMenu_PressedOpenDiscordDm id _ ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
 setFocus model htmlId =

@@ -1821,6 +1821,41 @@ updateLoaded msg model =
                 )
                 model
 
+        MessageMenu_PressedOpenDm otherUserId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    FrontendExtra.routePush
+                        model
+                        (Route.DmRoute
+                            { channelId =
+                                DmChannelId.fromUserIds
+                                    otherUserId
+                                    (Local.model loggedIn.localState).localUser.session.userId
+                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        MessageMenu_PressedOpenDiscordDm currentUserId channelId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    FrontendExtra.routePush
+                        model
+                        (Route.DiscordDmRoute
+                            { currentDiscordUserId = currentUserId
+                            , channelId = channelId
+                            , viewingMessage = Nothing
+                            , showMembersTab = HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
         ScrolledToMessage ->
             ( model, Command.none )
 
