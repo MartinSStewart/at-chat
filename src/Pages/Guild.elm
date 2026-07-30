@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , newGuildFormInit
     , newGuildFormView
+    , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -6003,6 +6004,20 @@ isHoveredToAnimationMode isHovered =
             Sticker.ResetAndLoopAFewTimes
 
 
+profileImageButtonId : Id messageId -> HtmlId
+profileImageButtonId messageId =
+    Dom.id ("guild_profileImage_" ++ Id.toString messageId)
+
+
+openDmButton : Id messageId -> MessageViewMsg -> List (Ui.Attribute MessageViewMsg)
+openDmButton messageId onPress =
+    [ Ui.pointer
+    , profileImageButtonId messageId |> Dom.idToString |> Ui.id
+    , Ui.Events.onClick onPress
+    , MyUi.hoverText "Go to direct messages"
+    ]
+
+
 userTextMessageContent :
     HtmlId
     -> Int
@@ -6030,9 +6045,15 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
                     Drawing.userColor
-                    MessageView_PressedUserIcon
+                    MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
+                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                            []
+
+                        else
+                            openDmButton messageId (MessageView_PressedUserIconButton message2.createdBy)
+                       )
                 )
             |> Ui.el
                 [ Ui.paddingWith
@@ -6157,9 +6178,15 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                 (Drawing.anchorHighlight
                     (Drawing.profileImageAnchorId messageId)
                     Drawing.discordUserColor
-                    MessageView_PressedUserIcon
+                    MessageView_PressedUserIconAnchor
                     (isHovered == IsHoveredWhileSelectingAnchor)
                     message2.userIconDrawings
+                    ++ (if isHovered == IsHoveredWhileSelectingAnchor then
+                            []
+
+                        else
+                            openDmButton messageId (MessageView_PressedDiscordUserIconButton message2.createdBy)
+                       )
                 )
             |> Ui.el
                 [ Ui.paddingWith

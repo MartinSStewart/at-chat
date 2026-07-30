@@ -4,13 +4,14 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
+import Discord
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (CustomEmojiId, Id)
+import Id exposing (CustomEmojiId, Id, UserId)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -46,10 +47,12 @@ type MessageViewMsg
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageViewMsg_PressedCallStartedCard
     | MessageViewMsg_PressedGameStartedCard
-    | MessageView_PressedUserIcon (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedUserIconAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedTimestamp (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedDateDivider Date (Point2d CssPixels ScreenCoordinate) ( Float, Float )
     | MessageView_PressedCardAnchor (Point2d CssPixels ScreenCoordinate) ( Float, Float )
+    | MessageView_PressedUserIconButton (Id UserId)
+    | MessageView_PressedDiscordUserIconButton (Discord.Id Discord.UserId)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -112,7 +115,7 @@ isPressMsg msg =
         MessageViewMsg_PressedGameStartedCard ->
             True
 
-        MessageView_PressedUserIcon _ _ ->
+        MessageView_PressedUserIconAnchor _ _ ->
             True
 
         MessageView_PressedTimestamp _ _ ->
@@ -122,6 +125,12 @@ isPressMsg msg =
             True
 
         MessageView_PressedCardAnchor _ _ ->
+            True
+
+        MessageView_PressedUserIconButton _ ->
+            True
+
+        MessageView_PressedDiscordUserIconButton _ ->
             True
 
 

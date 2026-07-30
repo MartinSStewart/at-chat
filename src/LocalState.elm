@@ -68,6 +68,7 @@ module LocalState exposing
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
     , discordChannelToFrontend
+    , discordDmChannelWithUser
     , discordGuildAvailableStickersAndCustomEmojis
     , discordGuildOrDmIdToLatestMessages
     , discordGuildOrDmIdToMessage
@@ -730,6 +731,34 @@ isDiscordGuildChannelReloading channelId loadingDiscordChannels =
                     Nothing
         )
         (SeqDict.toList loadingDiscordChannels)
+
+
+{-| The one-on-one Discord DM channel we share with the given user, paired with whichever
+of our linked Discord accounts that channel belongs to. Group DMs are skipped since they
+aren't a conversation with just that user.
+-}
+discordDmChannelWithUser :
+    Discord.Id Discord.UserId
+    -> LocalState
+    -> Maybe ( Discord.Id Discord.UserId, Discord.Id Discord.PrivateChannelId )
+discordDmChannelWithUser otherUserId local =
+    List.Extra.findMap
+        (\( channelId, channel ) ->
+            if NonemptyDict.size channel.members == 2 && NonemptyDict.member otherUserId channel.members then
+                List.Extra.findMap
+                    (\currentUserId ->
+                        if currentUserId /= otherUserId && NonemptyDict.member currentUserId channel.members then
+                            Just ( currentUserId, channelId )
+
+                        else
+                            Nothing
+                    )
+                    (SeqDict.keys (LinkedAndOtherDiscordUsers.linkedUsers local.localUser.discordUsers))
+
+            else
+                Nothing
+        )
+        (SeqDict.toList local.discordDmChannels)
 
 
 isDiscordDmChannelReloading :

@@ -1821,6 +1821,41 @@ updateLoaded msg model =
                 )
                 model
 
+        MessageMenu_PressedOpenDm otherUserId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    FrontendExtra.routePush
+                        model
+                        (Route.DmRoute
+                            { channelId =
+                                DmChannelId.fromUserIds
+                                    otherUserId
+                                    (Local.model loggedIn.localState).localUser.session.userId
+                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        MessageMenu_PressedOpenDiscordDm currentUserId channelId ->
+            case model.loginStatus of
+                LoggedIn _ ->
+                    FrontendExtra.routePush
+                        model
+                        (Route.DiscordDmRoute
+                            { currentDiscordUserId = currentUserId
+                            , channelId = channelId
+                            , viewingMessage = Nothing
+                            , showMembersTab = HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
         ScrolledToMessage ->
             ( model, Command.none )
 
@@ -2724,7 +2759,7 @@ updateLoaded msg model =
                         ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIcon elementPosition anchorHalfSize ->
+                MessageView.MessageView_PressedUserIconAnchor elementPosition anchorHalfSize ->
                     case Route.toChannelHeaderTab model.route of
                         Just ChannelHeaderTab_Draw ->
                             selectDrawingAnchor
@@ -2778,6 +2813,46 @@ updateLoaded msg model =
                                 model
 
                         _ ->
+                            ( model, Command.none )
+
+                MessageView.MessageView_PressedUserIconButton otherUserId ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            FrontendExtra.routePush
+                                model
+                                (DmRoute
+                                    { channelId =
+                                        DmChannelId.fromUserIds
+                                            (Local.model loggedIn.localState).localUser.session.userId
+                                            otherUserId
+                                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                    , tab = Nothing
+                                    }
+                                )
+
+                        NotLoggedIn _ ->
+                            ( model, Command.none )
+
+                MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            case LocalState.discordDmChannelWithUser otherUserId (Local.model loggedIn.localState) of
+                                Just ( currentDiscordUserId, channelId ) ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (DiscordDmRoute
+                                            { currentDiscordUserId = currentDiscordUserId
+                                            , channelId = channelId
+                                            , viewingMessage = Nothing
+                                            , showMembersTab = HideMembersTab
+                                            , tab = Nothing
+                                            }
+                                        )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        NotLoggedIn _ ->
                             ( model, Command.none )
 
         GotRegisterPushSubscription result ->

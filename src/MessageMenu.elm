@@ -26,6 +26,7 @@ import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageView
 import MyUi exposing (Copied(..))
+import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
@@ -105,15 +106,13 @@ mobileMenuMaxHeight extraOptions local model =
         Coord.origin
         local
         model
-        |> .items
-        |> List.length
         |> mobileMenuMaxHeightHelper
         |> CssPixels.cssPixels
 
 
-mobileMenuMaxHeightHelper : Int -> Float
-mobileMenuMaxHeightHelper itemCount =
-    toFloat itemCount * buttonHeight True + toFloat itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
+mobileMenuMaxHeightHelper : { items : List (Element FrontendMsg_), height : Int } -> Float
+mobileMenuMaxHeightHelper { items, height } =
+    toFloat (height + List.length items) - 1 + mobileCloseButton + topPadding + bottomPadding
 
 
 mobileMenuOpeningOffset :
@@ -215,7 +214,7 @@ viewMobile offset extraOptions loggedIn local model =
         height =
             1000
 
-        { items } =
+        menuItemsData =
             menuItems
                 True
                 extraOptions.guildOrDmId
@@ -268,7 +267,7 @@ viewMobile offset extraOptions loggedIn local model =
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
-                                    (mobileMenuMaxHeightHelper (List.length items) |> round |> (+) -32)
+                                    (mobileMenuMaxHeightHelper menuItemsData |> round |> (+) -32)
                                     True
                                     True
                                     editMessageTextInputId
@@ -339,7 +338,7 @@ viewMobile offset extraOptions loggedIn local model =
                                 ]
                                 Ui.none
                             )
-                            items
+                            menuItemsData.items
                )
         )
 
@@ -411,6 +410,14 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
+type alias MenuItemsData =
+    { canEditAndDelete : Bool
+    , text : String
+    , messageCustomEmojiIdsList : List (Id CustomEmojiId)
+    , openDm : Maybe FrontendMsg_
+    }
+
+
 menuItems :
     Bool
     -> AnyGuildOrDmId
@@ -424,45 +431,99 @@ menuItems :
     -> { items : List (Element FrontendMsg_), height : Int }
 menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
-        helper : Id messageId -> { a | messages : MessageArray messageId (Message messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
-        helper messageId thread =
+        helper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Id UserId)) } -> Maybe MenuItemsData
+        helper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
-                    ( case message of
-                        UserTextMessage data ->
-                            data.createdBy == local.localUser.session.userId
+                    { canEditAndDelete =
+                        case message of
+                            UserTextMessage data ->
+                                data.createdBy == local.localUser.session.userId
 
-                        _ ->
-                            False
-                    , LocalState.messageToString (LocalState.allUsers local.localUser) message
-                    , messageCustomEmojiIds message
-                    )
+                            _ ->
+                                False
+                    , text = LocalState.messageToString (LocalState.allUsers local.localUser) message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , openDm =
+                        if isPrivateDm then
+                            Nothing
+
+                        else
+                            case message of
+                                UserTextMessage data ->
+                                    MessageMenu_PressedOpenDm data.createdBy |> Just
+
+                                UserJoinedMessage _ createdBy _ _ ->
+                                    MessageMenu_PressedOpenDm createdBy |> Just
+
+                                DeletedMessage _ ->
+                                    Nothing
+
+                                CallStarted data ->
+                                    MessageMenu_PressedOpenDm data.startedBy |> Just
+
+                                GameStarted data ->
+                                    MessageMenu_PressedOpenDm data.startedBy |> Just
+                    }
                         |> Just
 
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : MessageArray messageId (Message messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
-        discordHelper messageId thread =
+        discordHelper : Bool -> Id messageId -> { a | messages : MessageArray messageId (Message messageId (Discord.Id Discord.UserId)) } -> Maybe MenuItemsData
+        discordHelper isPrivateDm messageId thread =
             case MessageArray.get messageId thread.messages of
                 Just message ->
-                    ( case message of
-                        UserTextMessage data ->
-                            LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers
+                    let
+                        messageUserId : Maybe (Discord.Id Discord.UserId)
+                        messageUserId =
+                            case message of
+                                UserTextMessage data ->
+                                    Just data.createdBy
 
-                        _ ->
-                            False
-                    , LocalState.messageToString
-                        (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
-                        message
-                    , messageCustomEmojiIds message
-                    )
+                                UserJoinedMessage _ createdBy _ _ ->
+                                    Just createdBy
+
+                                DeletedMessage _ ->
+                                    Nothing
+
+                                CallStarted data ->
+                                    Just data.startedBy
+
+                                GameStarted data ->
+                                    Just data.startedBy
+                    in
+                    { canEditAndDelete =
+                        case message of
+                            UserTextMessage data ->
+                                LinkedAndOtherDiscordUsers.isLinkedUser data.createdBy local.localUser.discordUsers
+
+                            _ ->
+                                False
+                    , text =
+                        LocalState.messageToString
+                            (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
+                            message
+                    , messageCustomEmojiIdsList = messageCustomEmojiIds message
+                    , openDm =
+                        case ( isPrivateDm, messageUserId ) of
+                            ( False, Just otherUserId ) ->
+                                case LocalState.discordDmChannelWithUser otherUserId local of
+                                    Just ( linkedUserId, channelId ) ->
+                                        MessageMenu_PressedOpenDiscordDm linkedUserId channelId |> Just
+
+                                    Nothing ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                    }
                         |> Just
 
                 _ ->
                     Nothing
 
-        maybeData : Maybe ( Bool, String, List (Id CustomEmojiId) )
+        maybeData : Maybe MenuItemsData
         maybeData =
             case guildOrDmId of
                 GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -472,13 +533,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex channel.threads of
                                         Just thread ->
-                                            helper messageId thread
+                                            helper False messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    helper messageId channel
+                                    helper False messageId channel
 
                         Nothing ->
                             Nothing
@@ -490,13 +551,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex dmChannel.threads of
                                         Just thread ->
-                                            helper messageId thread
+                                            helper True messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    helper messageId dmChannel
+                                    helper True messageId dmChannel
 
                         Nothing ->
                             Nothing
@@ -508,13 +569,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex channel.threads of
                                         Just thread ->
-                                            discordHelper messageId thread
+                                            discordHelper False messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    discordHelper messageId channel
+                                    discordHelper False messageId channel
 
                         Nothing ->
                             Nothing
@@ -527,13 +588,16 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                     Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    discordHelper messageId channel
+                                    discordHelper
+                                        (NonemptyDict.size channel.members < 3)
+                                        messageId
+                                        channel
 
                         Nothing ->
                             Nothing
     in
     case maybeData of
-        Just ( canEditAndDelete, text, messageCustomEmojiIdsList ) ->
+        Just { canEditAndDelete, text, messageCustomEmojiIdsList, openDm } ->
             let
                 newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
                 newCustomEmojiIds =
@@ -664,6 +728,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                         Icons.plusIcon
                         "Get stickers & emojis"
                         (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
+                        |> ButtonItem
+
+                Nothing ->
+                    NoItem
+            , case openDm of
+                Just openDm2 ->
+                    button isMobile (Dom.id "messageMenu_openDm") Icons.person "DM this user" openDm2
                         |> ButtonItem
 
                 Nothing ->

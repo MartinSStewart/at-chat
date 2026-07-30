@@ -20,6 +20,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
 import IdArray
 import Iso8601
+import Json.Encode
 import LinkedAndOtherDiscordUsers
 import Local exposing (ChangeId(..))
 import LocalState
@@ -1615,6 +1616,97 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Clicking a Discord profile image opens the one-on-one DM with that user"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A group DM containing the linked account, at0232 and kess is created and
+                          -- at0232 writes a message in it.
+                          T.websocketSendString 100 connection discordGroupDmChannelCreate
+                        , discordGroupDmMessage connection "Hello everyone in the group!"
+                        , admin.click 100 (Dom.id "guildsColumn_openDiscordDm_1500000000000000099")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Hello everyone in the group!" ])
+
+                        -- Clicking at0232's profile image leaves the group DM and opens the
+                        -- one-on-one Discord DM channel shared with them instead.
+                        , admin.click 100 (Pages.Guild.profileImageButtonId (Id.fromInt 0))
+                        , admin.checkModel 100 (checkDiscordDmRoute at0232DiscordDmChannelId)
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Long pressing a Discord guild message offers to DM whoever wrote it"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\_ -> [])
+        , -- A phone sized client on the same session, opened straight onto the Bot Test
+          -- guild's channel A, so that long pressing a message opens the mobile menu.
+          T.connectFrontend
+            100
+            E2EHelper.sessionId0
+            (Route.encode
+                (Route.DiscordGuildRoute
+                    { currentDiscordUserId = E2EHelper.currentDiscordUserId
+                    , guildId = E2EHelper.botTestGuild
+                    , channelRoute =
+                        Route.DiscordChannel_ChannelRoute
+                            E2EHelper.botTestGuild_ChannelA
+                            (Route.NoThreadWithFriends Nothing HideMembersTab)
+                            Nothing
+                    }
+                )
+            )
+            E2EHelper.iphone14Window
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data -> [ admin.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.safariIphone) ])
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- `AT` is a Bot Test member that the linked Discord account shares no
+                          -- DM channel with, and the frontend can't create one, so long pressing
+                          -- their message opens a menu without the DM option.
+                          discordGuildMessageFromGuildOnlyUser connection "There is no DM channel with me"
+                        , longPressLastDiscordGuildMessage admin
+                        , admin.checkView 600 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_close" ])
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_openDm" ])
+                        , admin.click 100 (Dom.id "messageMenu_close")
+                        , releaseLongPress admin
+
+                        -- `at0232` does share a one-on-one DM channel with the linked account, so
+                        -- their message gets the DM option, which opens that channel.
+                        , discordGuildMessage connection "You can DM me"
+                        , longPressLastDiscordGuildMessage admin
+                        , admin.checkView 600 (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_openDm" ])
+                        , E2EHelper.tallSnapshot admin 100 { name = "Discord message menu with DM this user option" }
+                        , admin.click 100 (Dom.id "messageMenu_openDm")
+                        , admin.checkModel 100 (checkDiscordDmRoute at0232DiscordDmChannelId)
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Private Discord channel is hidden from a user without access"
         E2EHelper.startTime
         normalConfig
@@ -2169,6 +2261,29 @@ discordGuildMessage connection content =
         )
 
 
+{-| Send a Discord guild `MESSAGE_CREATE` gateway event for the Bot Test guild's
+channel A, sent by `AT` (`guildOnlyDiscordUserId`), a guild member the linked admin
+account shares no DM channel with. The message timestamp is the current test time and
+the sequence number/message id are derived from it.
+-}
+discordGuildMessageFromGuildOnlyUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildMessageFromGuildOnlyUser connection content =
+    T.andThen
+        100
+        (\data ->
+            let
+                unique : String
+                unique =
+                    uniqueFromTime data.time
+            in
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at\",\"public_flags\":0,\"id\":\"1401255355928936478\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":null},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}")
+            ]
+        )
+
+
 {-| Send a Discord DM `MESSAGE_CREATE` gateway event (no `guild_id`) for the private
 channel the linked admin shares with user `137748026084163584`, sent by that other
 user. The message timestamp is the current test time and the sequence number/message
@@ -2322,6 +2437,121 @@ checkDiscordUserLoaded label shouldBeLoaded discordUserId model =
 
         Types.Loading _ ->
             Err (label ++ ": expected the frontend to have finished loading")
+
+
+{-| The one-on-one Discord DM channel the linked account shares with `at0232`. It's listed
+in the READY payload's private channels, separately from the group DM that `at0232` is also
+a member of.
+-}
+at0232DiscordDmChannelId : Discord.Id Discord.PrivateChannelId
+at0232DiscordDmChannelId =
+    Unsafe.uint64 "185574444641550336" |> Discord.idFromUInt64
+
+
+{-| The index of the most recent message in the Bot Test guild's channel A.
+-}
+lastDiscordGuildMessageId : BackendModel -> Maybe (Id.Id Id.ChannelMessageId)
+lastDiscordGuildMessageId backend =
+    case
+        SeqDict.get E2EHelper.botTestGuild backend.discordGuilds
+            |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
+    of
+        Just channel ->
+            if IdArray.isEmpty channel.messages then
+                Nothing
+
+            else
+                Id.fromInt (IdArray.length channel.messages - 1) |> Just
+
+        Nothing ->
+            Nothing
+
+
+{-| Touch and hold the most recent message in the Bot Test guild's channel A. The message
+menu opens half a second later, once the long press timer fires.
+-}
+longPressLastDiscordGuildMessage :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+longPressLastDiscordGuildMessage actions =
+    T.andThen
+        100
+        (\data ->
+            case lastDiscordGuildMessageId data.backend of
+                Just messageId ->
+                    [ actions.custom
+                        100
+                        (Pages.Guild.channelMessageHtmlId messageId)
+                        "touchstart"
+                        (Json.Encode.object
+                            [ ( "timeStamp", Json.Encode.float 1000 )
+                            , ( "touches"
+                              , Json.Encode.object
+                                    [ ( "length", Json.Encode.int 1 )
+                                    , ( "0"
+                                      , Json.Encode.object
+                                            [ ( "identifier", Json.Encode.int 0 )
+                                            , ( "clientX", Json.Encode.float 50 )
+                                            , ( "clientY", Json.Encode.float 150 )
+                                            , ( "target"
+                                              , Json.Encode.object
+                                                    [ ( "id"
+                                                      , Pages.Guild.channelMessageHtmlId messageId
+                                                            |> Dom.idToString
+                                                            |> Json.Encode.string
+                                                      )
+                                                    ]
+                                              )
+                                            ]
+                                      )
+                                    ]
+                              )
+                            , ( "target", Json.Encode.object [ ( "dataset", Json.Encode.object [] ) ] )
+                            ]
+                        )
+                    ]
+
+                Nothing ->
+                    [ actions.checkModel
+                        100
+                        (\_ -> Err "Expected the Discord guild channel to contain a message")
+                    ]
+        )
+
+
+{-| Release the long press so the next one is registered instead of being treated as a
+continuation of the previous drag.
+-}
+releaseLongPress :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+releaseLongPress actions =
+    actions.custom
+        100
+        (Dom.id "elm-ui-root-id")
+        "touchend"
+        (Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ])
+
+
+{-| Check that the frontend is viewing the given Discord DM channel.
+-}
+checkDiscordDmRoute : Discord.Id Discord.PrivateChannelId -> FrontendModel -> Result String ()
+checkDiscordDmRoute channelId model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.DiscordDmRoute discordDmRoute ->
+                    if discordDmRoute.channelId == channelId then
+                        Ok ()
+
+                    else
+                        Err "Opened the wrong Discord DM channel"
+
+                _ ->
+                    Err "Expected to be viewing a Discord DM channel"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
 
 
 {-| The Discord DM channel `discordDmMessage` sends messages to.
