@@ -58,6 +58,7 @@ import MessageArray exposing (MessageArray)
 import MessageInput
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
+import MuteSettings
 import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -1136,11 +1137,11 @@ channelSettingsForm :
     -> ChannelRoute
     -> FrontendGuild
     -> SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
-    -> Bool
+    -> ThreadRoute
     -> Element FrontendMsg_
-channelSettingsForm localUser guildId channelRoute guild editChannelForm isThread =
-    case ( channelRouteToChannelId channelRoute, isThread ) of
-        ( Just channelId, False ) ->
+channelSettingsForm localUser guildId channelRoute guild editChannelForm threadRoute =
+    case ( channelRouteToChannelId channelRoute, threadRoute ) of
+        ( Just channelId, NoThread ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     (if localUser.session.userId == MembersAndOwner.owner guild.membersAndOwner then
@@ -1236,14 +1237,27 @@ channelSettingsForm localUser guildId channelRoute guild editChannelForm isThrea
                         ]
 
                      else
-                        [ exportChannelButton (ExportChannel_Guild guildId channelId) ]
+                        [ MuteSettings.view
+                            (PressedMuteChannel guildId channelId)
+                            (MuteSettings.isChannelSpecificallyMuted guildId channelId)
+                            localUser.user.muteSettings
+                        , exportChannelButton (ExportChannel_Guild guildId channelId)
+                        ]
                     )
                         |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
 
                 Nothing ->
                     Ui.none
 
-        _ ->
+        ( Just channelId, ViewThread threadId ) ->
+            [ MuteSettings.view
+                (PressedMuteThread guildId channelId threadId)
+                (MuteSettings.isThreadSpecificallyMuted guildId channelId threadId)
+                localUser.user.muteSettings
+            ]
+                |> Ui.column [ Ui.Font.color MyUi.font1, Ui.padding 8, Ui.spacing 16 ]
+
+        ( Nothing, _ ) ->
             Ui.none
 
 

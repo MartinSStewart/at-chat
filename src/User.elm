@@ -56,9 +56,10 @@ import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, GuildOrDmId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
+import MuteSettings
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
@@ -105,6 +106,7 @@ type alias BackendUser =
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
     , availableCustomEmojis : SeqSet (Id CustomEmojiId)
+    , muteSettings : MuteSettings.Model
     }
 
 
@@ -253,6 +255,7 @@ init createdAt name email userIsAdmin =
     , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
     , availableCustomEmojis = SeqSet.empty
+    , muteSettings = MuteSettings.init
     }
 
 
@@ -640,6 +643,7 @@ backendToFrontendCurrent user =
     , emojiConfig = user.emojiConfig
     , availableStickers = user.availableStickers
     , availableCustomEmojis = user.availableCustomEmojis
+    , muteSettings = user.muteSettings
     }
 
 

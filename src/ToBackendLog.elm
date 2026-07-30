@@ -70,6 +70,8 @@ type ToBackendLog
     | ToBackendLog_Local_VoiceChatChange
     | ToBackendLog_Local_Game
     | ToBackendLog_Local_Drawing
+    | ToBackendLog_Local_SetMuteChannel
+    | ToBackendLog_Local_SetMuteThread
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -257,3 +259,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Drawing ->
             "Local_Drawing"
+
+        ToBackendLog_Local_SetMuteChannel ->
+            "Local_SetMuteChannel"
+
+        ToBackendLog_Local_SetMuteThread ->
+            "Local_SetMuteThread"

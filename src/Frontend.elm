@@ -4555,6 +4555,28 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | channelSearch = "" }, Command.none ))
                 model
 
+        PressedMuteChannel guildId channelId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteChannel guildId channelId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedMuteThread guildId channelId threadId isMuted ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetMuteThread guildId channelId threadId isMuted |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 {-| Anchor elements (profile images and timestamps) can always be clicked but
 they only select a drawing anchor while the drawing tab is open.

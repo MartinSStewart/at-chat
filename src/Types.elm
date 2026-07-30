@@ -95,6 +95,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
@@ -594,6 +595,8 @@ type FrontendMsg_
     | PressedClearFriendsSearch
     | TypedChannelSearch String
     | PressedClearChannelSearch
+    | PressedMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | PressedMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted
 
 
 type alias NewChannelForm =
@@ -974,3 +977,5 @@ type LocalChange
     | Local_VoiceChatChange Call.LocalChange
     | Local_Game GuildOrDmId Game.LocalChange
     | Local_Drawing AnyGuildOrDmId Drawing.AnchorType Drawing.LocalChange
+    | Local_SetMuteChannel (Id GuildId) (Id ChannelId) IsMuted
+    | Local_SetMuteThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) IsMuted

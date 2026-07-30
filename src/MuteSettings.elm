@@ -1,0 +1,127 @@
+module MuteSettings exposing (IsMuted(..), Model, MutedChannel, MutedDiscordGuild, MutedGuild, init, isChannelMuted, isChannelSpecificallyMuted, isThreadSpecificallyMuted, view)
+
+import Discord
+import Effect.Browser.Dom as Dom
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, ThreadRoute(..))
+import MyUi
+import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
+import Ui exposing (Element)
+
+
+type alias Model =
+    { mutedGuilds : SeqDict (Id GuildId) MutedGuild
+    , mutedDms : SeqDict (Id GuildId) MutedGuild
+    , mutedDiscordGuilds : SeqDict (Discord.Id Discord.GuildId) MutedDiscordGuild
+    , mutedDiscordDms : SeqSet (Discord.Id Discord.PrivateChannelId)
+    }
+
+
+type IsMuted
+    = IsMuted
+    | IsNotMuted
+
+
+type alias MutedGuild =
+    { mutedGuild : IsMuted
+    , channels : SeqDict (Id ChannelId) MutedChannel
+    }
+
+
+type alias MutedChannel =
+    { mutedChannel : IsMuted, mutedThreads : SeqSet (Id ChannelMessageId) }
+
+
+type alias MutedDiscordGuild =
+    { mutedGuild : IsMuted
+    , channels : SeqDict (Discord.Id Discord.ChannelId) MutedChannel
+    }
+
+
+init : Model
+init =
+    { mutedGuilds = SeqDict.empty
+    , mutedDms = SeqDict.empty
+    , mutedDiscordGuilds = SeqDict.empty
+    , mutedDiscordDms = SeqSet.empty
+    }
+
+
+view : (IsMuted -> msg) -> IsMuted -> Element msg
+view onPress isMuted =
+    MyUi.radioColumn
+        (Dom.id "guild_muteChannel")
+        onPress
+        (Just isMuted)
+        "Notifications"
+        [ ( IsMuted, "Muted (hide red/white dot and don't sent notifications)" )
+        , ( IsNotMuted, "Not muted" )
+        ]
+
+
+isChannelSpecificallyMuted : Model -> Id GuildId -> Id ChannelId -> IsMuted
+isChannelSpecificallyMuted model guildId channelId =
+    case SeqDict.get guildId model.mutedGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    channel.mutedChannel
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isThreadSpecificallyMuted : Model -> Id GuildId -> Id ChannelId -> Id ChannelMessageId -> IsMuted
+isThreadSpecificallyMuted model guildId channelId threadId =
+    case SeqDict.get guildId model.mutedGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    if SeqSet.member threadId channel.mutedThreads then
+                        IsMuted
+
+                    else
+                        IsNotMuted
+
+                Nothing ->
+                    IsNotMuted
+
+        Nothing ->
+            IsNotMuted
+
+
+isChannelMuted : Model -> Id GuildId -> Id ChannelId -> ThreadRoute -> IsMuted
+isChannelMuted model guildId channelId threadRoute =
+    case SeqDict.get guildId model.mutedGuilds of
+        Just guild ->
+            case guild.mutedGuild of
+                IsMuted ->
+                    IsMuted
+
+                IsNotMuted ->
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            case threadRoute of
+                                NoThread ->
+                                    channel.mutedChannel
+
+                                ViewThread threadId ->
+                                    case channel.mutedChannel of
+                                        IsMuted ->
+                                            IsMuted
+
+                                        IsNotMuted ->
+                                            if SeqSet.member threadId channel.mutedThreads then
+                                                IsMuted
+
+                                            else
+                                                IsNotMuted
+
+                        Nothing ->
+                            IsNotMuted
+
+        Nothing ->
+            IsNotMuted
