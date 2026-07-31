@@ -1645,7 +1645,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- The container says which guild and channel the messages are from.
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general" ])
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "My new guild!"
+                                , Test.Html.Selector.exactText "general"
+                                ]
+                            )
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
 
                         -- Marking the channel as read empties the overview.
@@ -1692,6 +1696,97 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.id "channel_textinput" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Unread overview includes threads and can mark everything as read at once"
+        -- Just before midnight, so that the last message lands on the next day and the
+        -- overview has a day for its date dividers to pass into.
+        (Duration.addTo E2EHelper.startTime (Duration.hours 23.96))
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- Leave the channel so that the messages the admin writes stay unread.
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.writeMessage admin 100 "Unread in the channel"
+                , E2EHelper.createThread admin (Id.fromInt 1)
+                , E2EHelper.writeMessage admin 100 "Unread in the thread"
+                , E2EHelper.writeMessage
+                    admin
+                    (Duration.hours 0.05 |> Duration.inMilliseconds)
+                    "Unread in the thread, a day later"
+
+                -- A client that connects after the messages were sent only has what the
+                -- backend sends along with the overview, so this checks that thread
+                -- messages are sent too.
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data -> [ userReload.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the thread" ])
+
+                        -- The thread is listed separately from the channel it's in.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "My new guild!"
+                                , Test.Html.Selector.exactText "general"
+                                , Test.Html.Selector.exactText "thread"
+                                ]
+                            )
+
+                        -- The day the oldest shown message was written on is above it, and
+                        -- the thread passes into the next day so it has both dividers.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "January 1, 1970" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "January 2, 1970" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with a thread" }
+
+                        -- Marking everything as read empties the overview.
+                        , userReload.click 100 (Dom.id "guild_unreadOverviewMarkAllAsRead")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the channel" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unread in the thread" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                        , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with nothing unread" }
+
+                        -- The thread stays read once the page is loaded from scratch again.
+                        , T.connectFrontend
+                            100
+                            E2EHelper.sessionId1
+                            (Route.encode Route.HomePageRoute)
+                            E2EHelper.desktopWindow
+                            (\userReload2 ->
+                                [ T.andThen
+                                    10
+                                    (\data -> [ userReload2.portEvent 10 "load_startup_data_from_js" (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop) ])
+                                , userReload2.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.exactText "You have no unread messages!" ])
+                                ]
+                            )
                         ]
                     )
                 ]

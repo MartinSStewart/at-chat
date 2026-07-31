@@ -2415,6 +2415,9 @@ isPressMsg msg =
         PressedMarkChannelAsRead _ _ ->
             True
 
+        PressedMarkAllChannelsAsRead _ ->
+            True
+
         PressedMuteGuild _ _ ->
             True
 
@@ -3099,6 +3102,43 @@ changeUpdate localMsg local =
                             in
                             case overviewData of
                                 FilledInByBackend overviewData2 ->
+                                    let
+                                        guilds : SeqDict (Id GuildId) FrontendGuild
+                                        guilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages guilds2 ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        guilds2
+                                                )
+                                                local.guilds
+                                                overviewData2.guildChannels
+
+                                        dmChannels : SeqDict (Id UserId) FrontendDmChannel
+                                        dmChannels =
+                                            SeqDict.foldl
+                                                (\otherUserId messages dmChannels2 ->
+                                                    SeqDict.updateIfExists
+                                                        otherUserId
+                                                        (DmChannel.loadUnreadMessages messages)
+                                                        dmChannels2
+                                                )
+                                                local.dmChannels
+                                                overviewData2.dmChannels
+
+                                        discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+                                        discordGuilds =
+                                            SeqDict.foldl
+                                                (\( guildId, channelId ) messages discordGuilds2 ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
+                                                        discordGuilds2
+                                                )
+                                                local.discordGuilds
+                                                overviewData2.discordGuildChannels
+                                    in
                                     { local
                                         | localUser =
                                             { localUser2
@@ -3110,34 +3150,64 @@ changeUpdate localMsg local =
                                             }
                                         , guilds =
                                             SeqDict.foldl
-                                                (\( guildId, channelId ) messages guilds ->
+                                                (\( guildId, channelId, threadId ) messages guilds2 ->
                                                     SeqDict.updateIfExists
                                                         guildId
-                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
-                                                        guilds
+                                                        (LocalState.updateChannel
+                                                            (\channel ->
+                                                                { channel
+                                                                    | threads =
+                                                                        SeqDict.updateIfExists
+                                                                            threadId
+                                                                            (DmChannel.loadUnreadMessages messages)
+                                                                            channel.threads
+                                                                }
+                                                            )
+                                                            channelId
+                                                        )
+                                                        guilds2
                                                 )
-                                                local.guilds
-                                                overviewData2.guildChannels
+                                                guilds
+                                                overviewData2.guildThreads
                                         , dmChannels =
                                             SeqDict.foldl
-                                                (\otherUserId messages dmChannels ->
+                                                (\( otherUserId, threadId ) messages dmChannels2 ->
                                                     SeqDict.updateIfExists
                                                         otherUserId
-                                                        (DmChannel.loadUnreadMessages messages)
-                                                        dmChannels
+                                                        (\dmChannel ->
+                                                            { dmChannel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (DmChannel.loadUnreadMessages messages)
+                                                                        dmChannel.threads
+                                                            }
+                                                        )
+                                                        dmChannels2
                                                 )
-                                                local.dmChannels
-                                                overviewData2.dmChannels
+                                                dmChannels
+                                                overviewData2.dmThreads
                                         , discordGuilds =
                                             SeqDict.foldl
-                                                (\( guildId, channelId ) messages discordGuilds ->
+                                                (\( guildId, channelId, threadId ) messages discordGuilds2 ->
                                                     SeqDict.updateIfExists
                                                         guildId
-                                                        (LocalState.updateChannel (DmChannel.loadUnreadMessages messages) channelId)
-                                                        discordGuilds
+                                                        (LocalState.updateChannel
+                                                            (\channel ->
+                                                                { channel
+                                                                    | threads =
+                                                                        SeqDict.updateIfExists
+                                                                            threadId
+                                                                            (DmChannel.loadUnreadMessages messages)
+                                                                            channel.threads
+                                                                }
+                                                            )
+                                                            channelId
+                                                        )
+                                                        discordGuilds2
                                                 )
-                                                local.discordGuilds
-                                                overviewData2.discordGuildChannels
+                                                discordGuilds
+                                                overviewData2.discordGuildThreads
                                         , discordDmChannels =
                                             SeqDict.foldl
                                                 (\channelId messages discordDmChannels ->

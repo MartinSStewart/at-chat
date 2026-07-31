@@ -3847,16 +3847,6 @@ playerRowSpacing =
     8
 
 
-userName : LocalUser -> Id UserId -> String
-userName localUser userId =
-    case User.getUser userId localUser of
-        Just user ->
-            PersonName.toString user.name
-
-        Nothing ->
-            "<missing>"
-
-
 playerRow : LocalUser -> Id UserId -> Bool -> Bool -> String -> Element GameMsg
 playerRow localUser userId highlight isSelected suffix =
     let
@@ -3895,7 +3885,7 @@ playerRow localUser userId highlight isSelected suffix =
             User.profileImage userId (Maybe.andThen .icon maybeUser)
         , Ui.row
             [ MyUi.prewrap ]
-            [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
+            [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
             , Ui.text suffix
             ]
         ]
@@ -4306,7 +4296,7 @@ gameSummaryView windowSize localUser shared log =
             List.Nonempty.toList shared.players
                 |> List.map
                     (\player ->
-                        { name = userName localUser player.userId
+                        { name = User.toStringAlt player.userId localUser
                         , count = SeqDict.get player.userId tally |> Maybe.withDefault 0
                         }
                     )
@@ -4357,7 +4347,7 @@ gameSummaryView windowSize localUser shared log =
                                             ++ String.fromInt bestWord.points
                                             ++ ") by "
                                         )
-                                    , Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser bestWord.userId))
+                                    , Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt bestWord.userId localUser))
                                     ]
                                 ]
                             ]
@@ -4422,7 +4412,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                                 [ Ui.text "Everyone passed and the game has ended!" ]
 
                             OutOfLetters userId ->
-                                [ Ui.el [ Ui.Font.bold ] (Ui.text (userName localUser userId))
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text (User.toStringAlt userId localUser))
                                 , Ui.text " ran out of letters and the game has ended!"
                                 ]
                         )
@@ -4457,7 +4447,7 @@ recentActionsView scrollPosition windowSize localUser setup actions shared =
                         let
                             name : String
                             name =
-                                userName localUser (descriptionUserId description)
+                                User.toStringAlt (descriptionUserId description) localUser
 
                             moveNumber : Int
                             moveNumber =

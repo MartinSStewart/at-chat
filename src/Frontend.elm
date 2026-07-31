@@ -4621,14 +4621,30 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedMarkChannelAsRead guildOrDmId messageId ->
+        PressedMarkChannelAsRead guildOrDmId threadRoute ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_SetLastViewed guildOrDmId (NoThreadWithMessage messageId) |> Just)
+                        (Local_SetLastViewed guildOrDmId threadRoute |> Just)
                         loggedIn
                         Command.none
+                )
+                model
+
+        PressedMarkAllChannelsAsRead unreads ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    List.foldl
+                        (\( guildOrDmId, threadRoute ) ( loggedIn2, cmds ) ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetLastViewed guildOrDmId threadRoute |> Just)
+                                loggedIn2
+                                cmds
+                        )
+                        ( loggedIn, Command.none )
+                        unreads
                 )
                 model
 

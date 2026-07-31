@@ -41,6 +41,7 @@ module User exposing
     , setLastDmViewed
     , setName
     , toString
+    , toStringAlt
     )
 
 import Array
@@ -679,6 +680,20 @@ toString userId allUsers =
 
         Nothing ->
             "<missing>"
+
+
+toStringAlt : Id UserId -> LocalUser -> String
+toStringAlt userId local =
+    if local.session.userId == userId then
+        PersonName.toString local.user.name
+
+    else
+        case SeqDict.get userId local.otherUsers of
+            Just user ->
+                PersonName.toString user.name
+
+            Nothing ->
+                "<missing>"
 
 
 profileImageSize : number

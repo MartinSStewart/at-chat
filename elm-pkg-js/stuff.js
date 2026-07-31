@@ -517,7 +517,10 @@ exports.init = async function init(app)
             scrollbarWidth: scrollbarWidth,
             isPwa: isPwa,
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
-            safeAreaInsetTop: safeAreaInsetTop
+            safeAreaInsetTop: safeAreaInsetTop,
+            // How many device pixels one CSS pixel is drawn with. It changes when the page is
+            // zoomed or moved to a different screen, which the re-sends below pick up.
+            devicePixelRatio: window.devicePixelRatio || 1
         });
     }
 

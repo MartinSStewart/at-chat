@@ -258,6 +258,9 @@ type alias StartupData =
     , -- The safe-area inset at the top of the screen (e.g. a phone notch), in pixels. Touch events
       -- report positions from the viewport top (behind the inset) while the UI is laid out below it.
       safeAreaInsetTop : Int
+    , -- How many device pixels one CSS pixel is drawn with (2 or 3 on high DPI screens, and any
+      -- fractional value when the page is zoomed).
+      devicePixelRatio : Float
     }
 
 
@@ -281,6 +284,7 @@ startupDataSub msg =
                     , pwaStatus = BrowserView
                     , notificationPermission = NotAsked
                     , safeAreaInsetTop = 0
+                    , devicePixelRatio = 1
                     }
                 |> msg
         )
@@ -288,7 +292,7 @@ startupDataSub msg =
 
 decodeStartupData : Json.Decode.Decoder StartupData
 decodeStartupData =
-    Json.Decode.map7 StartupData
+    Json.Decode.map8 StartupData
         (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
         (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
         (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
@@ -298,6 +302,11 @@ decodeStartupData =
         (Json.Decode.oneOf
             [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
             , Json.Decode.succeed 0
+            ]
+        )
+        (Json.Decode.oneOf
+            [ Json.Decode.field "devicePixelRatio" Json.Decode.float
+            , Json.Decode.succeed 1
             ]
         )
 

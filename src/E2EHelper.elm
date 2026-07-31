@@ -193,6 +193,7 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "isPwa", Json.Encode.bool isPwa )
         , ( "notificationPermission", Json.Encode.string "denied" )
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
+        , ( "devicePixelRatio", Json.Encode.float 2 )
         ]
 
 
