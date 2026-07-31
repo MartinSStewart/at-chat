@@ -924,6 +924,7 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/webp")
                 .header("Content-Disposition", "inline")
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .body(Body::from(data))
                 .unwrap(),
             Result::Err(_) => Response::builder()
@@ -949,6 +950,7 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
         match reqwest::get(format!("https://discord.com/stickers/{}", sticker_path2)).await {
             Ok(bytes) => Response::builder()
                 .status(StatusCode::OK)
+                .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                 .body(Body::from(bytes.bytes().await.unwrap()))
                 .unwrap(),
             Err(_) => Response::builder()
@@ -963,6 +965,13 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
             .unwrap()
     }
 }
+
+/// Files are addressed by a hash of their contents, so the bytes behind a given
+/// URL can never change and the browser is free to keep them indefinitely
+/// without revalidating. Without this the browser has no expiry and no
+/// validator to work with, so every avatar and guild icon is redownloaded on
+/// each page load.
+const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 
 async fn get_file_endpoint(
     Path((content_type_index, hash)): Path<(String, String)>,
@@ -984,10 +993,12 @@ async fn get_file_endpoint(
                         .status(StatusCode::OK)
                         .header("Content-Type", *content_type2)
                         .header("Content-Disposition", "inline")
+                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                         .body(Body::from(data))
                         .unwrap(),
                     None => Response::builder()
                         .status(StatusCode::OK)
+                        .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
                         .body(Body::from(data))
                         .unwrap(),
                 }
