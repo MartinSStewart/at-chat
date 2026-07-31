@@ -464,24 +464,46 @@ unreadOverviewNotMobile local model =
                 let
                     art : AsciiArt
                     art =
-                        List.Nonempty.get (Time.toDay model.timezone model.time) AsciiArt.art
+                        List.Nonempty.get
+                            (Time.toDay model.timezone model.time - Time.toDay model.timezone local.localUser.user.createdAt)
+                            AsciiArt.art
 
                     dpi =
                         model.startupData.devicePixelRatio
 
                     scaleFactor : Int
                     scaleFactor =
-                        round (dpi * toFloat containerWidth) // Coord.xRaw art.size
+                        round (dpi * toFloat containerWidth) // Coord.xRaw art.size |> clamp 1 3
                 in
                 Ui.column
-                    [ Ui.paddingXY 8 16, Ui.Font.center, Ui.Font.color MyUi.font3, Ui.Font.bold, Ui.spacing 32 ]
-                    [ Ui.text "You have no unread messages!"
-                    , Ui.image
+                    [ Ui.height Ui.fill
+                    , Ui.inFront
+                        (Ui.el
+                            [ Ui.Font.center
+                            , Ui.padding 16
+                            , Ui.Font.color MyUi.font3
+                            , Ui.Font.bold
+                            , Ui.Font.size 20
+                            ]
+                            (Ui.text "You have no unread messages!")
+                        )
+                    ]
+                    [ Ui.image
                         [ MyUi.htmlStyle "image-rendering" "pixelated"
+                        , Ui.centerX
+                        , Ui.centerY
+                        , Ui.paddingXY 0 16
                         , MyUi.htmlStyle
                             "width"
                             (String.fromFloat (toFloat (Coord.xRaw art.size * scaleFactor) / dpi) ++ "px")
                         , Ui.opacity 0.3
+                        , MyUi.hover False [ Ui.Anim.opacity 0.6 ]
+                        , Ui.linkNewTab
+                            ("https://ascii-collab.app/?x="
+                                ++ String.fromInt (Coord.xRaw art.coordinates)
+                                ++ "&y="
+                                ++ String.fromInt (Coord.yRaw art.coordinates)
+                            )
                         ]
                         { source = "/art/" ++ art.url ++ ".png"
                         , description = "Pleasing ascii art drawing"

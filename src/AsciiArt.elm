@@ -20,9 +20,9 @@ type alias AsciiArt =
 art : Nonempty AsciiArt
 art =
     Nonempty
-        { url = "ascii-bari-gisher"
-        , coordinates = Coord.xy 1173 -47
-        , size = Coord.xy 276 103
+        { url = "ascii-party-popper"
+        , coordinates = Coord.xy -68 122
+        , size = Coord.xy 145 157
         }
         [ { url = "ascii-sw-home"
           , coordinates = Coord.xy -434 -141
@@ -96,8 +96,8 @@ art =
           , coordinates = Coord.xy -730 -169
           , size = Coord.xy 103 282
           }
-        , { url = "ascii-party-popper"
-          , coordinates = Coord.xy -68 122
-          , size = Coord.xy 145 157
+        , { url = "ascii-bari-gisher"
+          , coordinates = Coord.xy 1173 -47
+          , size = Coord.xy 276 103
           }
         ]
