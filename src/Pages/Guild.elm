@@ -737,7 +737,8 @@ unreadOverviewNotMobile local model =
                                     UnreadOverviewMessages messages ->
                                         List.map
                                             (\( messageId, message ) ->
-                                                messageView
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , messageView
                                                     False
                                                     containerWidth
                                                     False
@@ -753,13 +754,15 @@ unreadOverviewNotMobile local model =
                                                     messageId
                                                     message
                                                     |> Ui.map (\_ -> FrontendNoOp)
+                                                )
                                             )
                                             messages
 
                                     UnreadOverviewThreadMessages messages ->
                                         List.map
                                             (\( messageId, message ) ->
-                                                threadMessageView
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , threadMessageView
                                                     False
                                                     containerWidth
                                                     SeqDict.empty
@@ -773,13 +776,15 @@ unreadOverviewNotMobile local model =
                                                     messageId
                                                     message
                                                     |> Ui.map (\_ -> FrontendNoOp)
+                                                )
                                             )
                                             messages
 
                                     UnreadOverviewDiscordMessages currentDiscordUserId messages ->
                                         List.map
                                             (\( messageId, message ) ->
-                                                discordMessageView
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , discordMessageView
                                                     False
                                                     containerWidth
                                                     False
@@ -794,13 +799,15 @@ unreadOverviewNotMobile local model =
                                                     messageId
                                                     message
                                                     |> Ui.map (\_ -> FrontendNoOp)
+                                                )
                                             )
                                             messages
 
                                     UnreadOverviewDiscordThreadMessages currentDiscordUserId messages ->
                                         List.map
                                             (\( messageId, message ) ->
-                                                discordThreadMessageView
+                                                ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
+                                                , discordThreadMessageView
                                                     False
                                                     containerWidth
                                                     SeqDict.empty
@@ -813,6 +820,7 @@ unreadOverviewNotMobile local model =
                                                     messageId
                                                     message
                                                     |> Ui.map (\_ -> FrontendNoOp)
+                                                )
                                             )
                                             messages
                                 )
@@ -859,7 +867,7 @@ discordDmSource currentDiscordUserId allDiscordUsers dmChannel =
 way the conversation view shows them, so a line and a header saying which channel they are
 from is what separates one channel from the next.
 -}
-unreadOverviewContainer : UnreadOverviewChannel -> List (Element FrontendMsg_) -> Element FrontendMsg_
+unreadOverviewContainer : UnreadOverviewChannel -> List ( Date, Element FrontendMsg_ ) -> Element FrontendMsg_
 unreadOverviewContainer unread messageViews =
     Ui.column
         [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 8 }
@@ -910,8 +918,60 @@ unreadOverviewContainer unread messageViews =
                 else
                     Ui.none
                )
-            :: messageViews
+            :: unreadOverviewMessages messageViews
             ++ [ Ui.el [ Ui.paddingXY 8 0 ] (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none) ]
+        )
+
+
+{-| The messages of one channel in the overview, oldest first, with a date divider above the
+oldest one and another wherever the messages pass into a new day. The oldest one gets a
+divider too because the messages above it aren't shown, so there's nothing else saying which
+day they were written on.
+-}
+unreadOverviewMessages : List ( Date, Element FrontendMsg_ ) -> List (Element FrontendMsg_)
+unreadOverviewMessages messageViews =
+    List.foldl
+        (\( date, messageView2 ) ( maybeLastDate, list ) ->
+            ( Just date
+            , if maybeLastDate == Just date then
+                messageView2 :: list
+
+              else
+                messageView2 :: unreadOverviewDateDivider date :: list
+            )
+        )
+        ( Nothing, [] )
+        messageViews
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| The day the messages below it were written on. The conversation view shows the day that
+ended and the day that started on either side of its divider, but the overview leaves gaps
+between the messages it shows, so only the day that starts is meaningful here.
+-}
+unreadOverviewDateDivider : Date -> Element msg
+unreadOverviewDateDivider date =
+    Ui.el
+        [ Ui.paddingXY 8 0, Ui.height (Ui.px 28), Ui.contentCenterY, MyUi.noShrinking ]
+        (Ui.el
+            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+            , Ui.borderColor MyUi.border2
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.centerX
+                    , Ui.width Ui.shrink
+                    , Ui.move { x = 0, y = -9, z = 0 }
+                    , Ui.background MyUi.background3
+                    , Ui.paddingXY 6 0
+                    , Ui.Font.color MyUi.font3
+                    , Ui.Font.size 14
+                    , Ui.Font.bold
+                    ]
+                    (Ui.text (MyUi.datestampDate date))
+                )
+            ]
+            Ui.none
         )
 
 

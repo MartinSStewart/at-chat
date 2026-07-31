@@ -1699,7 +1699,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EHelper.startTest
         "Unread overview includes threads and can mark everything as read at once"
-        E2EHelper.startTime
+        -- Just before midnight, so that the last message lands on the next day and the
+        -- overview has a day for its date dividers to pass into.
+        (Duration.addTo E2EHelper.startTime (Duration.hours 23.96))
         normalConfig
         [ E2EHelper.connectTwoUsersAndJoinNewGuild
             E2EHelper.desktopWindow
@@ -1709,6 +1711,10 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , E2EHelper.writeMessage admin 100 "Unread in the channel"
                 , E2EHelper.createThread admin (Id.fromInt 1)
                 , E2EHelper.writeMessage admin 100 "Unread in the thread"
+                , E2EHelper.writeMessage
+                    admin
+                    (Duration.hours 0.05 |> Duration.inMilliseconds)
+                    "Unread in the thread, a day later"
 
                 -- A client that connects after the messages were sent only has what the
                 -- backend sends along with the overview, so this checks that thread
@@ -1733,6 +1739,15 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general (thread)" ])
+
+                        -- The day the oldest shown message was written on is above it, and
+                        -- the thread passes into the next day so it has both dividers.
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "January 1, 1970" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "January 2, 1970" ])
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview with a thread" }
 
                         -- Marking everything as read empties the overview.
