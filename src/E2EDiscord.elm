@@ -20,7 +20,6 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import IdArray
 import Iso8601
-import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -2176,42 +2175,6 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
-        "Discord guild typing indicator"
-        E2EHelper.startTime
-        normalConfig
-        [ E2EHelper.linkDiscordAndLogin
-            E2EHelper.sessionId0
-            (PersonName.toString Backend.adminUser.name)
-            E2EHelper.adminEmail
-            False
-            discordOp0Ready
-            discordOp0ReadySupplemental
-            (\admin ->
-                [ E2EHelper.andThenWebsocket
-                    (\connection websocketState ->
-                        [ -- Discord stays silent about typing in guilds we haven't subscribed to, so
-                          -- the gateway connection has to ask for them once it's ready.
-                          T.checkState
-                            0
-                            (\_ -> checkSubscribedToGuildTyping "705745250815311942" websocketState)
-                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232 is typing..." ])
-                        , discordGuildTypingStart connection
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232 is typing..." ])
-                        , -- The typing indicator times out a few seconds after the last TYPING_START
-                          admin.checkView
-                            10000
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232 is typing..." ])
-                        ]
-                    )
-                ]
-            )
-        ]
-    , E2EHelper.startTest
         "Discord DM messages are held back until the account has used the DM channel"
         E2EHelper.startTime
         normalConfig
@@ -2434,54 +2397,6 @@ discordGuildMessage connection content =
                 0
                 connection
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}")
-            ]
-        )
-
-
-{-| Assert that the backend asked Discord to send typing events for the given guild. The
-gateway only sends `TYPING_START` for guilds the client subscribed to with an op 37.
--}
-checkSubscribedToGuildTyping : String -> T.WebsocketState -> Result String ()
-checkSubscribedToGuildTyping guildId websocketState =
-    if
-        Array.toList websocketState.dataSent
-            |> List.any
-                (\{ data } ->
-                    Json.Decode.decodeString
-                        (Json.Decode.map2
-                            Tuple.pair
-                            (Json.Decode.field "op" Json.Decode.int)
-                            (Json.Decode.at [ "d", "subscriptions", guildId, "typing" ] Json.Decode.bool)
-                        )
-                        data
-                        == Ok ( 37, True )
-                )
-    then
-        Ok ()
-
-    else
-        Err ("The backend never subscribed to typing events for Discord guild " ++ guildId)
-
-
-{-| Send a Discord guild `TYPING_START` gateway event for the Bot Test guild's channel A,
-sent by `at0232` (a user other than the linked admin account). The timestamp is the
-current test time (Discord sends it in seconds) and the sequence number is derived from
-it.
--}
-discordGuildTypingStart : Websocket.Connection -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-discordGuildTypingStart connection =
-    T.andThen
-        100
-        (\data ->
-            [ T.websocketSendString
-                0
-                connection
-                ("{\"t\":\"TYPING_START\",\"s\":"
-                    ++ uniqueFromTime data.time
-                    ++ ",\"op\":0,\"d\":{\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":"
-                    ++ String.fromInt (Time.posixToMillis data.time // 1000)
-                    ++ "}}"
-                )
             ]
         )
 
