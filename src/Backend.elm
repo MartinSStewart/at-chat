@@ -2944,8 +2944,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
                                             in
-                                            case RichText.toDiscord model.discordCustomEmojis richText of
-                                                Ok discordText ->
+                                            case
+                                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                                  -- Sending messages in a DM channel the linked account has barely
+                                                  -- used is likely to trigger Discord's spam bot heuristics
+                                                , LocalState.sentEnoughDiscordDmMessages data.currentUserId dmChannel
+                                                )
+                                            of
+                                                ( Ok discordText, True ) ->
                                                     ( { model
                                                         | pendingDiscordCreateDmMessages =
                                                             SeqDict.insert
@@ -2980,7 +2986,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
                                                     )
 
-                                                Err _ ->
+                                                _ ->
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         _ ->

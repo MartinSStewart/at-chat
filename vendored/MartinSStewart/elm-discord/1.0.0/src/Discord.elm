@@ -5614,6 +5614,7 @@ type GatewayUserCommand
     | GatewayUser_OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
     | GatewayUser_OpUpdateVoiceState
     | GatewayUser_OpUpdatePresence
+    | GatewayUser_OpBulkGuildSubscribe (List (Id GuildId))
 
 
 type GatewayEvent event
@@ -6356,6 +6357,30 @@ encodeUserGatewayCommand gatewayCommand =
         GatewayUser_OpUpdatePresence ->
             JE.object []
 
+        GatewayUser_OpBulkGuildSubscribe guildIds ->
+            JE.object
+                [ ( "op", JE.int 37 )
+                , ( "d"
+                  , JE.object
+                        [ ( "subscriptions"
+                          , List.map
+                                (\guildId ->
+                                    ( idToString guildId
+                                    , JE.object
+                                        [ ( "typing", JE.bool True )
+                                        , ( "threads", JE.bool True )
+                                        , ( "activities", JE.bool True )
+                                        , ( "member_updates", JE.bool True )
+                                        ]
+                                    )
+                                )
+                                guildIds
+                                |> JE.object
+                          )
+                        ]
+                  )
+                ]
+
 
 
 --- Gateway code
@@ -6630,6 +6655,18 @@ handleGateway authToken intents response model =
             ( model, [] )
 
 
+{-| Tell Discord which guilds we want to receive typing events, thread events, presence
+updates and member updates for. Without this, the gateway stays silent about them no
+matter which guilds the account is in.
+-}
+bulkGuildSubscribe : connection -> List (Id GuildId) -> UserOutMsg connection
+bulkGuildSubscribe connection guildIds =
+    GatewayUser_OpBulkGuildSubscribe guildIds
+        |> encodeUserGatewayCommand
+        |> JE.encode 0
+        |> UserOutMsg_SendWebsocketData connection
+
+
 handleUserGateway : UserAuth -> Intents -> String -> Model connection -> ( Model connection, List (UserOutMsg connection) )
 handleUserGateway authToken intents response model =
     case ( model.websocketHandle, JD.decodeString (decodeGatewayEvent decodeDispatchUserEvent) response ) of
@@ -6676,7 +6713,13 @@ handleUserGateway authToken intents response model =
                     case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
                             ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }
-                            , [ UserOutMsg_ReadyData readyEvent ]
+                            , [ UserOutMsg_ReadyData readyEvent
+                              , -- Discord only sends typing events (and presence updates) for guilds
+                                -- that the client has explicitly subscribed to
+                                bulkGuildSubscribe
+                                    connection
+                                    (List.map (\guild -> guild.properties.id) readyEvent.guilds)
+                              ]
                             )
 
                         DispatchUser_ReadySupplementalEvent readySupplementalEvent ->
@@ -6819,7 +6862,11 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_GuildCreate gatewayGuild ->
-                            ( model, [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild ] )
+                            ( model
+                            , [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild
+                              , bulkGuildSubscribe connection [ gatewayGuild.properties.id ]
+                              ]
+                            )
 
                         DispatchUser_ChannelUpdate channel ->
                             ( model, [ UserOutMsg_ChannelUpdated channel ] )

@@ -116,6 +116,7 @@ module LocalState exposing
     , removeReactionEmojiFrontendHelper
     , removeReactionEmojiHelper
     , routeToViewing
+    , sentEnoughDiscordDmMessages
     , updateChannel
     , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
@@ -2507,26 +2508,34 @@ canSendDiscordMessage local guildOrDmId =
                     else
                         case SeqDict.get data.channelId local.discordDmChannels of
                             Just channel ->
-                                let
-                                    messagesSent =
-                                        case NonemptyDict.get data.currentUserId channel.members of
-                                            Just member ->
-                                                member.messagesSent
-
-                                            Nothing ->
-                                                0
-                                in
-                                if messagesSent >= 4 then
+                                if sentEnoughDiscordDmMessages data.currentUserId channel then
                                     Ok ()
 
                                 else
                                     Err "Send at least 4 messages using Discord first"
 
                             Nothing ->
-                                Err "This Discord user isn't linked to your account"
+                                Err "Channel not found"
 
                 Nothing ->
-                    Err "Channel not found"
+                    Err "This Discord user isn't linked to your account"
+
+
+{-| Discord's spam bot heuristics are likely to trigger if we send messages on behalf of a
+linked account in a DM channel it has barely used, so we require a few messages to have
+been sent with Discord itself first.
+-}
+sentEnoughDiscordDmMessages :
+    Discord.Id Discord.UserId
+    -> { a | members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int } }
+    -> Bool
+sentEnoughDiscordDmMessages currentUserId channel =
+    case NonemptyDict.get currentUserId channel.members of
+        Just member ->
+            member.messagesSent >= 4
+
+        Nothing ->
+            False
 
 
 routeToViewing : Route -> LocalState -> SetViewing

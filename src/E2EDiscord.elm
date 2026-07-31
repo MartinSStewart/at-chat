@@ -17,23 +17,27 @@ import Emoji exposing (EmojiOrCustomEmoji(..))
 import Expect
 import GuildIcon
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import IdArray
 import Iso8601
+import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
+import List.Extra
 import Local exposing (ChangeId(..))
 import LocalState
 import MembersAndOwner
 import Message
 import MessageArray
 import MessageInput
+import NonemptyDict
 import Pages.Guild
 import PersonName
 import Route exposing (ShowMembersTab(..))
 import SeqDict
 import SeqSet
 import Sticker
+import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
@@ -2171,6 +2175,150 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Discord guild typing indicator"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection websocketState ->
+                        [ -- Discord stays silent about typing in guilds we haven't subscribed to, so
+                          -- the gateway connection has to ask for them once it's ready.
+                          T.checkState
+                            0
+                            (\_ -> checkSubscribedToGuildTyping "705745250815311942" websocketState)
+                        , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232 is typing..." ])
+                        , discordGuildTypingStart connection
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "at0232 is typing..." ])
+                        , -- The typing indicator times out a few seconds after the last TYPING_START
+                          admin.checkView
+                            10000
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "at0232 is typing..." ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Discord DM messages are held back until the account has used the DM channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.text "Send at least 4 messages using Discord first" ]
+                            )
+                        , -- A tampered with frontend can skip the disabled message input, so the backend
+                          -- has to check the restriction as well.
+                          admin.sendToBackend
+                            100
+                            (LocalModelChangeRequest
+                                (ChangeId 0)
+                                (Local_Discord_SendMessage
+                                    E2EHelper.startTime
+                                    (DiscordGuildOrDmId_Dm
+                                        { currentUserId = E2EHelper.currentDiscordUserId
+                                        , channelId = discordDmChannelId
+                                        }
+                                    )
+                                    (NonemptyString 'H' "acked")
+                                    (NoThreadWithMaybeMessage Nothing)
+                                    SeqDict.empty
+                                )
+                            )
+                        , T.checkState
+                            100
+                            (\data ->
+                                if discordDmMessagesPosted data == 0 then
+                                    Ok ()
+
+                                else
+                                    Err "The backend sent a Discord DM even though the restriction wasn't met"
+                            )
+                        , -- The account writes 4 messages in the DM channel using Discord itself, which
+                          -- is what the restriction is waiting for.
+                          discordDmMessageFromLinkedUser connection "One"
+                        , discordDmMessageFromLinkedUser connection "Two"
+                        , discordDmMessageFromLinkedUser connection "Three"
+                        , discordDmMessageFromLinkedUser connection "Four"
+                        , T.checkState
+                            100
+                            (\data ->
+                                case
+                                    SeqDict.get discordDmChannelId data.backend.discordDmChannels
+                                        |> Maybe.andThen
+                                            (\channel -> NonemptyDict.get E2EHelper.currentDiscordUserId channel.members)
+                                of
+                                    Just member ->
+                                        if member.messagesSent >= 4 then
+                                            Ok ()
+
+                                        else
+                                            Err
+                                                ("The backend only counted "
+                                                    ++ String.fromInt member.messagesSent
+                                                    ++ " messages sent with Discord"
+                                                )
+
+                                    Nothing ->
+                                        Err "The linked account is missing from the Discord DM channel's members"
+                            )
+                        , -- The message now gets through. It's sent the same way as the earlier attempt
+                          -- because the message input only picks up the new count when the channel is
+                          -- loaded again.
+                          admin.sendToBackend
+                            100
+                            (LocalModelChangeRequest
+                                (ChangeId 1)
+                                (Local_Discord_SendMessage
+                                    E2EHelper.startTime
+                                    (DiscordGuildOrDmId_Dm
+                                        { currentUserId = E2EHelper.currentDiscordUserId
+                                        , channelId = discordDmChannelId
+                                        }
+                                    )
+                                    (NonemptyString 'H' "ello from at-chat")
+                                    (NoThreadWithMaybeMessage Nothing)
+                                    SeqDict.empty
+                                )
+                            )
+                        , T.checkState
+                            100
+                            (\data ->
+                                if discordDmMessagesPosted data == 1 then
+                                    Ok ()
+
+                                else
+                                    Err "The backend didn't send the Discord DM"
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
@@ -2290,6 +2438,54 @@ discordGuildMessage connection content =
         )
 
 
+{-| Assert that the backend asked Discord to send typing events for the given guild. The
+gateway only sends `TYPING_START` for guilds the client subscribed to with an op 37.
+-}
+checkSubscribedToGuildTyping : String -> T.WebsocketState -> Result String ()
+checkSubscribedToGuildTyping guildId websocketState =
+    if
+        Array.toList websocketState.dataSent
+            |> List.any
+                (\{ data } ->
+                    Json.Decode.decodeString
+                        (Json.Decode.map2
+                            Tuple.pair
+                            (Json.Decode.field "op" Json.Decode.int)
+                            (Json.Decode.at [ "d", "subscriptions", guildId, "typing" ] Json.Decode.bool)
+                        )
+                        data
+                        == Ok ( 37, True )
+                )
+    then
+        Ok ()
+
+    else
+        Err ("The backend never subscribed to typing events for Discord guild " ++ guildId)
+
+
+{-| Send a Discord guild `TYPING_START` gateway event for the Bot Test guild's channel A,
+sent by `at0232` (a user other than the linked admin account). The timestamp is the
+current test time (Discord sends it in seconds) and the sequence number is derived from
+it.
+-}
+discordGuildTypingStart : Websocket.Connection -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildTypingStart connection =
+    T.andThen
+        100
+        (\data ->
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"TYPING_START\",\"s\":"
+                    ++ uniqueFromTime data.time
+                    ++ ",\"op\":0,\"d\":{\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":"
+                    ++ String.fromInt (Time.posixToMillis data.time // 1000)
+                    ++ "}}"
+                )
+            ]
+        )
+
+
 {-| Send a Discord guild `MESSAGE_CREATE` gateway event for the Bot Test guild's
 channel A, sent by `AT` (`guildOnlyDiscordUserId`), a guild member the linked admin
 account shares no DM channel with. The message timestamp is the current test time and
@@ -2334,6 +2530,47 @@ discordDmMessage connection content =
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"capysuit\",\"public_flags\":0,\"id\":\"137748026084163584\",\"global_name\":\"gio\",\"discriminator\":\"0\",\"avatar\":\"7d2709668c67727f98ba40ff62611e78\"},\"attachments\":[]}}")
             ]
         )
+
+
+{-| Send a Discord DM `MESSAGE_CREATE` gateway event for the private channel the linked
+admin shares with user `137748026084163584`, sent by the linked admin account itself (as
+if they wrote it in the Discord app). The message timestamp is the current test time and
+the sequence number/message id are derived from it.
+-}
+discordDmMessageFromLinkedUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordDmMessageFromLinkedUser connection content =
+    T.andThen
+        100
+        (\data ->
+            let
+                unique : String
+                unique =
+                    uniqueFromTime data.time
+            in
+            [ T.websocketSendString
+                0
+                connection
+                ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[]}}")
+            ]
+        )
+
+
+{-| The number of messages the backend has posted to the Discord DM channel that
+`discordDmMessage` uses.
+-}
+discordDmMessagesPosted : T.Data FrontendModel BackendModel -> Int
+discordDmMessagesPosted data =
+    List.Extra.count
+        (\request ->
+            case ( request.url, E2EHelper.decodeCustomRequest request ) of
+                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
+                    (customRequest.url == "https://discord.com/api/v9/channels/1472236476401057854/messages")
+                        && (customRequest.method == "POST")
+
+                _ ->
+                    False
+        )
+        data.httpRequests
 
 
 {-| A `CHANNEL_CREATE` gateway event for a Discord group DM (channel id
