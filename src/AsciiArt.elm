@@ -5,6 +5,11 @@ import CssPixels exposing (CssPixels)
 import List.Nonempty exposing (Nonempty(..))
 
 
+{-| One drawing from <https://ascii-collab.app>. `url` names the image in public/art (without
+the .png), `coordinates` is where the drawing sits on the ascii-collab canvas
+(<https://ascii-collab.app/?x=&y=>), and `size` is how many pixels the image is, which is what
+the scale factor it's drawn at is worked out from.
+-}
 type alias AsciiArt =
     { url : String
     , coordinates : Coord CssPixels
@@ -23,26 +28,76 @@ art =
           , coordinates = Coord.xy -434 -141
           , size = Coord.xy 365 371
           }
+        , { url = "ascii-box-house"
+          , coordinates = Coord.xy -169 -176
+          , size = Coord.xy 303 198
+          }
+        , { url = "ascii-sandwich"
+          , coordinates = Coord.xy -723 -150
+          , size = Coord.xy 385 309
+          }
+        , { url = "ascii-princess"
+          , coordinates = Coord.xy -892 -187
+          , size = Coord.xy 399 747
+          }
+        , { url = "ascii-crab"
+          , coordinates = Coord.xy -662 -344
+          , size = Coord.xy 163 76
+          }
+        , { url = "ascii-squirrel"
+          , coordinates = Coord.xy -630 -344
+          , size = Coord.xy 137 127
+          }
+        , { url = "ascii-cat-and-soup"
+          , coordinates = Coord.xy -860 -353
+          , size = Coord.xy 286 136
+          }
+        , { url = "ascii-bat"
+          , coordinates = Coord.xy -812 -226
+          , size = Coord.xy 297 101
+          }
+        , { url = "ascii-paintings"
+          , coordinates = Coord.xy -189 169
+          , size = Coord.xy 483 147
+          }
+        , { url = "ascii-key"
+          , coordinates = Coord.xy 24 146
+          , size = Coord.xy 205 203
+          }
+        , { url = "ascii-fishermoon"
+          , coordinates = Coord.xy 23 -58
+          , size = Coord.xy 284 229
+          }
+        , { url = "ascii-lamb"
+          , coordinates = Coord.xy 125 -91
+          , size = Coord.xy 122 134
+          }
+        , { url = "ascii-cat-and-fish"
+          , coordinates = Coord.xy 189 -202
+          , size = Coord.xy 266 298
+          }
+        , { url = "ascii-snail"
+          , coordinates = Coord.xy 621 -20
+          , size = Coord.xy 255 215
+          }
+        , { url = "ascii-sister"
+          , coordinates = Coord.xy 916 201
+          , size = Coord.xy 214 216
+          }
+        , { url = "ascii-brother"
+          , coordinates = Coord.xy 707 192
+          , size = Coord.xy 245 274
+          }
+        , { url = "ascii-cheese"
+          , coordinates = Coord.xy 326 95
+          , size = Coord.xy 255 222
+          }
+        , { url = "ascii-ice-cream"
+          , coordinates = Coord.xy -730 -169
+          , size = Coord.xy 103 282
+          }
+        , { url = "ascii-party-popper"
+          , coordinates = Coord.xy -68 122
+          , size = Coord.xy 145 157
+          }
         ]
-
-
-
---https://ascii-collab.app/?x=-169&y=-176 Box house
---https://ascii-collab.app/?x=-723&y=-150 Sandwich
---https://ascii-collab.app/?x=-892&y=-187 PrincS
---https://ascii-collab.app/?x=-662&y=-344 Crab
---https://ascii-collab.app/?x=-630&y=-344 Squirrel
---https://ascii-collab.app/?x=-860&y=-353 Large cat
---https://ascii-collab.app/?x=-812&y=-226 Bat
---https://ascii-collab.app/?x=-189&y=169 Paintings
---https://ascii-collab.app/?x=24&y=146 Key
---https://ascii-collab.app/?x=23&y=-58 Fishermoon
---https://ascii-collab.app/?x=125&y=-91 Lamb
---https://ascii-collab.app/?x=189&y=-202 Cat and fish
---https://ascii-collab.app/?x=621&y=-20 Snail
---https://ascii-collab.app/?x=1173&y=-47 Bari gisher
---https://ascii-collab.app/?x=916&y=201 Sister
---https://ascii-collab.app/?x=707&y=192 Brother
---https://ascii-collab.app/?x=326&y=95 Cheese
---https://ascii-collab.app/?x=-730&y=-169 Ice cream
---https://ascii-collab.app/?x=-68&y=122 Party popper
