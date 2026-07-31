@@ -5831,7 +5831,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         GuildOrFullDmId_Dm channelId ->
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
-                                    handleGoMatchRequest time messageId dmChannel model
+                                    handleGoMatchRequest messageId dmChannel model
 
                                 Nothing ->
                                     Err ()
@@ -5841,7 +5841,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
-                                            handleGoMatchRequest time messageId channel model
+                                            handleGoMatchRequest messageId channel model
 
                                         Nothing ->
                                             Err ()
@@ -5929,12 +5929,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
 
 handleGoMatchRequest :
-    Time.Posix
-    -> Id ChannelMessageId
+    Id ChannelMessageId
     -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
     -> BackendModel
     -> Result () Go.PublicGoMatchResponse
-handleGoMatchRequest time messageId channel model =
+handleGoMatchRequest messageId channel model =
     case SeqDict.get messageId channel.games of
         Just (Game.GameData_Go setup actions) ->
             let
@@ -5947,7 +5946,6 @@ handleGoMatchRequest time messageId channel model =
                         Nothing ->
                             { name = PersonName.fromStringLossy "<missing>"
                             , isAdmin = False
-                            , createdAt = time
                             , icon = Nothing
                             }
             in
