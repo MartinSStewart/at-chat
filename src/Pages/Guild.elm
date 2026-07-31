@@ -20,6 +20,7 @@ module Pages.Guild exposing
     , typingDebouncerDelay
     )
 
+import AsciiArt exposing (AsciiArt)
 import Bitwise
 import Call
 import ChannelDescription
@@ -413,9 +414,11 @@ unreadOverviewNotMobile local model =
         allDiscordUsers =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
 
+        allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             LocalState.allUsers local.localUser
 
+        containerWidth : Int
         containerWidth =
             conversationWidth model
 
@@ -458,9 +461,33 @@ unreadOverviewNotMobile local model =
             ]
         , case unreads of
             [] ->
-                Ui.el
-                    [ Ui.paddingXY 8 16, Ui.Font.center, Ui.Font.color MyUi.font3 ]
-                    (Ui.text "You have no unread messages!")
+                let
+                    art : AsciiArt
+                    art =
+                        List.Nonempty.get (Time.toDay model.timezone model.time) AsciiArt.art
+
+                    dpi =
+                        model.startupData.devicePixelRatio
+
+                    scaleFactor : Int
+                    scaleFactor =
+                        round (dpi * toFloat containerWidth) // Coord.xRaw art.size
+                in
+                Ui.column
+                    [ Ui.paddingXY 8 16, Ui.Font.center, Ui.Font.color MyUi.font3, Ui.Font.bold, Ui.spacing 32 ]
+                    [ Ui.text "You have no unread messages!"
+                    , Ui.image
+                        [ MyUi.htmlStyle "image-rendering" "pixelated"
+                        , MyUi.htmlStyle
+                            "width"
+                            (String.fromFloat (toFloat (Coord.xRaw art.size * scaleFactor) / dpi) ++ "px")
+                        , Ui.opacity 0.3
+                        ]
+                        { source = "/art/" ++ art.url ++ ".png"
+                        , description = "Pleasing ascii art drawing"
+                        , onLoad = Nothing
+                        }
+                    ]
 
             _ ->
                 Ui.column
