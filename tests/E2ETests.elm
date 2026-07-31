@@ -1645,7 +1645,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- The container says which guild and channel the messages are from.
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general" ])
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "My new guild!"
+                                , Test.Html.Selector.exactText "general"
+                                ]
+                            )
                         , E2EHelper.tallSnapshot userReload 100 { name = "Unread overview" }
 
                         -- Marking the channel as read empties the overview.
@@ -1738,7 +1742,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         -- The thread is listed separately from the channel it's in.
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild! #general (thread)" ])
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "My new guild!"
+                                , Test.Html.Selector.exactText "general"
+                                , Test.Html.Selector.exactText "thread"
+                                ]
+                            )
 
                         -- The day the oldest shown message was written on is above it, and
                         -- the thread passes into the next day so it has both dividers.
