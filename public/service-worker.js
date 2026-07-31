@@ -110,13 +110,88 @@ const cacheName = 'resource_cache_v1';
 
 const frontendCacheName = 'frontend_cache_v1';
 
+// Uploaded files never change: the last path segment is a hash of the file's
+// contents, so a cached response can't go stale. The cache still needs an upper
+// bound though. Cache Storage counts against the origin's storage quota, and
+// when an origin goes over quota the browser evicts *all* of its storage, which
+// would throw away the frontend bundle along with every avatar and put us back
+// to fetching each one over the network.
+const maxCachedResources = 500;
+
+// cache.keys() walks every entry, so trimming after each stored file would make
+// writes O(number of cached files). Amortize it across a batch of writes
+// instead. Sitting a little over the cap between trims costs nothing.
+const putsBetweenTrims = 20;
+
+let putsSinceTrim = 0;
+
+// Trims run one at a time. Files are stored concurrently, so two overlapping
+// trims would both read the entry list before either one's deletes landed, both
+// compute an overflow against that same stale length, and between them delete
+// far more than the cache is actually over by.
+let trimming = Promise.resolve();
+
+function trimCache(cache) {
+    putsSinceTrim = putsSinceTrim + 1;
+    if (putsSinceTrim < putsBetweenTrims) {
+        return trimming;
+    }
+    putsSinceTrim = 0;
+
+    trimming = trimming.then(async () => {
+        const keys = await cache.keys();
+        const overflow = keys.length - maxCachedResources;
+
+        // Guard the slice: slice(0, negative) counts back from the end of the
+        // list and would delete entries while the cache is still under the cap.
+        if (overflow <= 0) {
+            return;
+        }
+
+        // keys() returns entries in insertion order, so the front of the list is
+        // the least recently stored.
+        await Promise.all(keys.slice(0, overflow).map((key) => cache.delete(key)));
+    });
+
+    return trimming;
+}
+
+// Everything the file server hands out under these paths is immutable and safe
+// to keep forever: /file/<content type index>/<content hash> for uploads (the
+// content type is an index into the server's content type table, so it's always
+// a number), /file/t/<content hash> for generated thumbnails, and
+// /file/discord-sticker/<sticker id> for stickers proxied from Discord.
+//
+// Deliberately not matched are /file/upload, /file/upload-url and
+// /file/internal/*, which are POSTs whose responses depend on the request body.
+function isCacheableFile(url, domain) {
+    const prefix = domain + 'file/';
+    if (!url.startsWith(prefix)) {
+        return false;
+    }
+
+    const path = url.slice(prefix.length);
+    return path.startsWith('t/')
+        || path.startsWith('discord-sticker/')
+        || (path.length > 0 && path[0] >= '0' && path[0] <= '9');
+}
+
 self.addEventListener('fetch', (event) => {
     try
     {
     // Check if this is a request for an image
     const url = event.request.url;
 
-    const domain = 'https://at-chat.app/';
+    // Derived from the service worker's own location rather than hardcoded, so
+    // the caching still applies when the app is served from somewhere other
+    // than https://at-chat.app (a staging domain, a local build, ngrok).
+    const domain = self.location.origin + '/';
+
+    // cache.put() rejects for anything other than GET, and uploads have request
+    // bodies that would make a cached response meaningless anyway.
+    if (event.request.method !== 'GET') {
+        return;
+    }
 
     // The hashed frontend bundle, e.g. https://at-chat.app/frontend.a1b2c3.js
     if (url.startsWith(domain + 'frontend.') && url.endsWith('.js')) {
@@ -160,19 +235,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (url.startsWith(domain + 'file/t/')
-        || url.startsWith(domain + 'file/0')
-        || url.startsWith(domain + 'file/1')
-        || url.startsWith(domain + 'file/2')
-        || url.startsWith(domain + 'file/3')
-        || url.startsWith(domain + 'file/4')
-        || url.startsWith(domain + 'file/5')
-        || url.startsWith(domain + 'file/6')
-        || url.startsWith(domain + 'file/7')
-        || url.startsWith(domain + 'file/8')
-        || url.startsWith(domain + 'file/9')
-        ) {
-
+    if (isCacheableFile(url, domain)) {
         event.respondWith(caches.open(cacheName).then((cache) => {
             // Go to the cache first
             return cache.match(url).then((cachedResponse) => {
@@ -184,11 +247,27 @@ self.addEventListener('fetch', (event) => {
                 // Otherwise, hit the network
                 return fetch(event.request).then((fetchedResponse) => {
 
+                    // A response sent with chunked encoding has no
+                    // content-length, which reads back as 0 here. That's treated
+                    // as small enough to keep rather than as a reason to skip
+                    // caching, otherwise nothing behind a gzipping proxy would
+                    // ever be stored.
                     const size = Number(fetchedResponse.headers.get("content-length"));
                     const isValid = size < 1000 * 1000;
 
                     if (fetchedResponse.ok && isValid) {
-                        cache.put(event.request, fetchedResponse.clone());
+                        // Hand the response to the page immediately and write to
+                        // the cache in the background, but keep the write alive
+                        // with waitUntil. Without it the browser is free to shut
+                        // the service worker down as soon as this fetch handler
+                        // settles, dropping the put half finished, and the file
+                        // gets refetched on the next page load.
+                        event.waitUntil(
+                            cache
+                                .put(event.request, fetchedResponse.clone())
+                                .then(() => trimCache(cache))
+                                .catch((error) => log("Cache put error: " + error.message))
+                        );
                     }
 
                     return fetchedResponse;
