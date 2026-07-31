@@ -2662,11 +2662,11 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ _ _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
-                        Types.Server_Discord_SendMessage _ _ _ _ _ _ ->
+                        Types.Server_Discord_SendMessage _ _ _ _ _ _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ _ ->

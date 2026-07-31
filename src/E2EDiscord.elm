@@ -2147,6 +2147,41 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Unread overview names a Discord user that arrives with a new message"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- The admin is looking at the unread overview and has never opened the Bot
+                          -- Test guild, so its members aren't loaded.
+                          admin.checkModel
+                            100
+                            (checkDiscordUserLoaded "Discord guild-only member AT" False guildOnlyDiscordUserId)
+                        , discordGuildMessageFromGuildOnlyUser connection "Written by someone we never loaded"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Written by someone we never loaded" ])
+                        , -- The message brought its writer along, so the overview can name them
+                          admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "<missing>" ])
+                        , admin.checkModel
+                            100
+                            (checkDiscordUserLoaded "Discord guild-only member AT" True guildOnlyDiscordUserId)
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Guild emojis update"
         E2EHelper.startTime
         normalConfig

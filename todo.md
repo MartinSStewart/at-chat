@@ -1,5 +1,6 @@
 * Fix ping user dropdown appearing too low on mobile
-* Typing indicator not appearing for Discord guilds
+* Typing indicator not appearing for Discord guilds (won't do, due to server overhead or added complexity of
+  managing individual Discord guild subscriptions)
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Two messages get sent if a linked Discord user starts a thread
 * Finding an emoji via text search and then trying to click it fails on mobile

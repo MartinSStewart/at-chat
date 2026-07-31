@@ -1672,6 +1672,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     guildId
                     (Server_SendMessage
                         session.userId
+                        (User.backendToFrontendForUser user)
                         time
                         guildOrDmId
                         richText
@@ -1735,6 +1736,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         time
                         clientId
                         session.userId
+                        (User.backendToFrontendForUser user)
                         otherUserId
                         text
                         message
@@ -1786,6 +1788,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         time
                         clientId
                         session.userId
+                        (User.backendToFrontendForUser user)
                         otherUserId
                         text
                         message

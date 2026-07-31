@@ -6705,7 +6705,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
                                     )
 
-                                Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _ _ ->
+                                Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
                                         helper channel =
                                             Command.batch
@@ -6751,7 +6751,7 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                     )
 
-                                Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _ _ ->
+                                Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
                                     let
                                         helper senderId channel =
                                             Command.batch

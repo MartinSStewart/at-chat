@@ -64,7 +64,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import User
-import UserSession exposing (UserSession)
+import UserSession exposing (DiscordFrontendUser, UserSession)
 
 
 addOrRemoveDiscordReaction :
@@ -338,6 +338,21 @@ discordChannelIdToChannelId channelId messageId guild =
                             Nothing
                 )
                 (SeqDict.toList guild.channels)
+
+
+{-| The Discord user that wrote a message, in the form the frontend shows names in. It's
+sent along with the message because the receiver might not have that user loaded yet. That
+happens whenever the message comes from a guild they aren't looking at, which is most of
+the time for messages that show up in the unread overview.
+-}
+messageSender : Discord.User -> BackendModel -> DiscordFrontendUser
+messageSender author model =
+    case SeqDict.get author.id model.discordUsers of
+        Just discordUser ->
+            User.discordUserDataToFrontendUser discordUser
+
+        Nothing ->
+            { name = PersonName.fromStringLossy author.username, icon = Nothing }
 
 
 discordChannelIdToChannelIdNoMessage :
@@ -975,6 +990,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     (Server_Discord_SendMessage
                                                         discordMessage.timestamp
                                                         guildOrDmId
+                                                        (messageSender discordMessage.author model2)
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments2
@@ -991,6 +1007,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     (Server_Discord_SendMessage
                                                         discordMessage.timestamp
                                                         guildOrDmId
+                                                        (messageSender discordMessage.author model2)
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments2
@@ -1373,6 +1390,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (Server_Discord_SendMessage
                                                                 discordMessage.timestamp
                                                                 guildOrDmId
+                                                                (messageSender discordMessage.author model2)
                                                                 richText
                                                                 threadRoute
                                                                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
@@ -1389,6 +1407,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         (Server_Discord_SendMessage
                                                             discordMessage.timestamp
                                                             guildOrDmId
+                                                            (messageSender discordMessage.author model2)
                                                             richText
                                                             threadRoute
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
