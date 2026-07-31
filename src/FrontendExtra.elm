@@ -3636,7 +3636,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage createdBy createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
+                Server_SendMessage createdBy createdByUser createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -3712,6 +3712,7 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , otherUsers = addMessageSender createdBy createdByUser localUser
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
@@ -3775,11 +3776,12 @@ changeUpdate localMsg local =
 
                                             else
                                                 user
+                                        , otherUsers = addMessageSender createdBy createdByUser localUser
                                         , stickers = SeqDict.union stickers localUser.stickers
                                     }
                             }
 
-                Server_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
+                Server_Discord_SendMessage createdAt guildOrDmId createdByUser text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild discordUserId guildId channelId ->
                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -3860,6 +3862,11 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , discordUsers =
+                                                    LinkedAndOtherDiscordUsers.addOtherUser
+                                                        discordUserId
+                                                        createdByUser
+                                                        localUser.discordUsers
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
@@ -3913,6 +3920,11 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , discordUsers =
+                                                    LinkedAndOtherDiscordUsers.addOtherUser
+                                                        data.currentUserId
+                                                        createdByUser
+                                                        localUser.discordUsers
                                                 , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
@@ -5362,6 +5374,19 @@ startReloadingDiscordUser time discordUserId local =
                         localUser.discordUsers
             }
     }
+
+
+{-| Add the user that wrote a message to the users we know about. We might not have heard
+of them yet, for example when an account created after we connected joins a guild we're in
+and writes a message before we're told about them joining.
+-}
+addMessageSender : Id UserId -> FrontendUser -> LocalUser -> SeqDict (Id UserId) FrontendUser
+addMessageSender userId user localUser =
+    if userId == localUser.session.userId then
+        localUser.otherUsers
+
+    else
+        SeqDict.insert userId user localUser.otherUsers
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> ThreadRoute -> LocalState -> LocalState

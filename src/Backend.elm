@@ -2944,8 +2944,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
                                             in
-                                            case RichText.toDiscord model.discordCustomEmojis richText of
-                                                Ok discordText ->
+                                            case
+                                                ( RichText.toDiscord model.discordCustomEmojis richText
+                                                  -- Sending messages in a DM channel the linked account has barely
+                                                  -- used is likely to trigger Discord's spam bot heuristics
+                                                , LocalState.sentEnoughDiscordDmMessages data.currentUserId dmChannel
+                                                )
+                                            of
+                                                ( Ok discordText, True ) ->
                                                     ( { model
                                                         | pendingDiscordCreateDmMessages =
                                                             SeqDict.insert
@@ -2980,7 +2986,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
                                                     )
 
-                                                Err _ ->
+                                                _ ->
                                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         _ ->
@@ -5825,7 +5831,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         GuildOrFullDmId_Dm channelId ->
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
-                                    handleGoMatchRequest time messageId dmChannel model
+                                    handleGoMatchRequest messageId dmChannel model
 
                                 Nothing ->
                                     Err ()
@@ -5835,7 +5841,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
-                                            handleGoMatchRequest time messageId channel model
+                                            handleGoMatchRequest messageId channel model
 
                                         Nothing ->
                                             Err ()
@@ -5923,12 +5929,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
 
 handleGoMatchRequest :
-    Time.Posix
-    -> Id ChannelMessageId
+    Id ChannelMessageId
     -> { a | games : SeqDict (Id ChannelMessageId) Game.BackendGameData }
     -> BackendModel
     -> Result () Go.PublicGoMatchResponse
-handleGoMatchRequest time messageId channel model =
+handleGoMatchRequest messageId channel model =
     case SeqDict.get messageId channel.games of
         Just (Game.GameData_Go setup actions) ->
             let
@@ -5941,7 +5946,6 @@ handleGoMatchRequest time messageId channel model =
                         Nothing ->
                             { name = PersonName.fromStringLossy "<missing>"
                             , isAdmin = False
-                            , createdAt = time
                             , icon = Nothing
                             }
             in

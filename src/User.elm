@@ -551,7 +551,6 @@ sectionToString section2 =
 type alias FrontendUser =
     { name : PersonName
     , isAdmin : Bool
-    , createdAt : Time.Posix
     , icon : Maybe FileHash
     }
 
@@ -654,7 +653,6 @@ backendToFrontend : FrontendCurrentUser -> FrontendUser
 backendToFrontend user =
     { name = user.name
     , isAdmin = user.isAdmin
-    , createdAt = user.createdAt
     , icon = user.icon
     }
 
@@ -662,12 +660,11 @@ backendToFrontend user =
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
 backendToFrontendForUser :
-    { a | name : PersonName, isAdmin : Bool, createdAt : Time.Posix, icon : Maybe FileHash }
+    { a | name : PersonName, isAdmin : Bool, icon : Maybe FileHash }
     -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
     , isAdmin = user.isAdmin
-    , createdAt = user.createdAt
     , icon = user.icon
     }
 

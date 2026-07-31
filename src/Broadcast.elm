@@ -71,7 +71,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Unsafe
 import Url
-import User exposing (BackendUser, EmailNotifications(..))
+import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
 
@@ -1270,6 +1270,7 @@ broadcastDm :
     -> Time.Posix
     -> ClientId
     -> Id UserId
+    -> FrontendUser
     -> Id UserId
     -> NonemptyString
     -> UserTextMessageData messageId (Id UserId)
@@ -1278,7 +1279,7 @@ broadcastDm :
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-broadcastDm changeId time clientId userId otherUserId text message threadRouteWithReplyTo attachedFiles stickers model =
+broadcastDm changeId time clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles stickers model =
     let
         isViewing : Bool
         isViewing =
@@ -1350,6 +1351,7 @@ broadcastDm changeId time clientId userId otherUserId text message threadRouteWi
             (\otherUserId2 ->
                 Server_SendMessage
                     userId
+                    senderFrontendUser
                     time
                     (GuildOrDmId_Dm otherUserId2)
                     message.content

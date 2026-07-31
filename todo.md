@@ -1,8 +1,8 @@
 * Fix ping user dropdown appearing too low on mobile
-* Typing indicator not appearing for Discord guilds
+* Typing indicator not appearing for Discord guilds (won't do, due to server overhead or added complexity of
+  managing individual Discord guild subscriptions)
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Two messages get sent if a linked Discord user starts a thread
-* 4 Discord messages DM restriction is not being checked
 * Finding an emoji via text search and then trying to click it fails on mobile
 * Push notification sent even when viewing DM channel
 * Login/signup button doesn't work if failed to link Discord message is visible
