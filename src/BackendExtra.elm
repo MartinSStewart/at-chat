@@ -45,7 +45,7 @@ import Bytes.Encode
 import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, FrontendDmChannel)
 import DmChannelId exposing (DmChannelId)
 import Drawing
 import Duration
@@ -65,7 +65,7 @@ import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAn
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendGuild, CallStatus(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), FrontendGuild)
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -87,7 +87,7 @@ import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser)
+import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (DiscordFrontendUser, UserSession)
 import VisibleMessages
@@ -853,6 +853,58 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
     let
         linkedAndOtherDiscordUsers =
             getLinkedDiscordUsersAndOtherUsers session.userId currentlyViewing model
+
+        guilds : SeqDict (Id GuildId) FrontendGuild
+        guilds =
+            SeqDict.filterMap
+                (\guildId guild ->
+                    LocalState.guildToFrontendForUser
+                        (case requestMessagesFor of
+                            InitialLoadRequested_Guild guildIdB channelId threadRoute _ ->
+                                if guildId == guildIdB then
+                                    Just ( channelId, threadRoute )
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                        )
+                        session.userId
+                        guild
+                )
+                model.guilds
+
+        dmChannels : SeqDict (Id UserId) FrontendDmChannel
+        dmChannels =
+            SeqDict.foldl
+                (\dmChannelId dmChannel dict ->
+                    case DmChannelId.otherUserId session.userId dmChannelId of
+                        Just otherUserId ->
+                            SeqDict.insert otherUserId
+                                (DmChannel.toFrontend
+                                    (case requestMessagesFor of
+                                        InitialLoadRequested_Dm dmChannelIdB threadRoute _ ->
+                                            if dmChannelId == dmChannelIdB then
+                                                Just threadRoute
+
+                                            else
+                                                Nothing
+
+                                        _ ->
+                                            Nothing
+                                    )
+                                    dmChannelId
+                                    model.goMatchPublicIds
+                                    dmChannel
+                                )
+                                dict
+
+                        Nothing ->
+                            dict
+                )
+                SeqDict.empty
+                model.dmChannels
     in
     { session = session
     , currentlyViewing = currentlyViewing
@@ -881,25 +933,7 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
             IsNotAdminLoginData
     , twoFactorAuthenticationEnabled =
         SeqDict.get session.userId model.twoFactorAuthentication |> Maybe.map .finishedAt
-    , guilds =
-        SeqDict.filterMap
-            (\guildId guild ->
-                LocalState.guildToFrontendForUser
-                    (case requestMessagesFor of
-                        InitialLoadRequested_Guild guildIdB channelId threadRoute _ ->
-                            if guildId == guildIdB then
-                                Just ( channelId, threadRoute )
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    session.userId
-                    guild
-            )
-            model.guilds
+    , guilds = guilds
     , discordGuilds =
         SeqDict.filterMap
             (\guildId guild ->
@@ -935,47 +969,9 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
                     (LinkedAndOtherDiscordUsers.linkedUsers linkedAndOtherDiscordUsers)
             )
             model.discordDmChannels
-    , dmChannels =
-        SeqDict.foldl
-            (\dmChannelId dmChannel dict ->
-                case DmChannelId.otherUserId session.userId dmChannelId of
-                    Just otherUserId ->
-                        SeqDict.insert otherUserId
-                            (DmChannel.toFrontend
-                                (case requestMessagesFor of
-                                    InitialLoadRequested_Dm dmChannelIdB threadRoute _ ->
-                                        if dmChannelId == dmChannelIdB then
-                                            Just threadRoute
-
-                                        else
-                                            Nothing
-
-                                    _ ->
-                                        Nothing
-                                )
-                                dmChannelId
-                                model.goMatchPublicIds
-                                dmChannel
-                            )
-                            dict
-
-                    Nothing ->
-                        dict
-            )
-            SeqDict.empty
-            model.dmChannels
+    , dmChannels = dmChannels
     , user = User.backendToFrontendCurrent user
-    , otherUsers =
-        NonemptyDict.toList model.users
-            |> List.filterMap
-                (\( otherUserId, otherUser ) ->
-                    if otherUserId == session.userId then
-                        Nothing
-
-                    else
-                        Just ( otherUserId, User.backendToFrontendForUser otherUser )
-                )
-            |> SeqDict.fromList
+    , otherUsers = visibleUsers session.userId guilds dmChannels model.users
     , discordUsers = linkedAndOtherDiscordUsers
     , otherSessions =
         SeqDict.remove sessionId model.sessions
@@ -1008,6 +1004,50 @@ getLoginData sessionId clientId currentlyViewing session user requestMessagesFor
     , customEmojis = model.customEmojis
     , voiceChatPeers = getVoiceChatData clientId session model
     }
+
+
+{-| Only send the users this user is able to see, that is, the members of the guilds they
+belong to and the people they have DMs with. Otherwise every account on the server would
+be handed out to anyone who logs in.
+
+If the frontend does encounter a user it hasn't heard of (someone who left a guild but
+whose messages are still there, for example) then it gets told about them separately. See
+`addMessageSender` in FrontendExtra.
+
+-}
+visibleUsers :
+    Id UserId
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> NonemptyDict (Id UserId) BackendUser
+    -> SeqDict (Id UserId) FrontendUser
+visibleUsers userId guilds dmChannels users =
+    let
+        addUser : Id UserId -> SeqDict (Id UserId) FrontendUser -> SeqDict (Id UserId) FrontendUser
+        addUser otherUserId dict =
+            if otherUserId == userId then
+                dict
+
+            else
+                case NonemptyDict.get otherUserId users of
+                    Just otherUser ->
+                        SeqDict.insert otherUserId (User.backendToFrontendForUser otherUser) dict
+
+                    Nothing ->
+                        dict
+    in
+    SeqDict.foldl
+        (\_ guild dict ->
+            List.foldl
+                addUser
+                dict
+                (guild.createdBy
+                    :: MembersAndOwner.membersAndOwner guild.membersAndOwner
+                    ++ List.map .createdBy (SeqDict.values guild.invites)
+                )
+        )
+        (SeqDict.foldl (\otherUserId _ dict -> addUser otherUserId dict) SeqDict.empty dmChannels)
+        guilds
 
 
 getVoiceChatDataHelper :
