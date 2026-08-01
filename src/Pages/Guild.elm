@@ -330,7 +330,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     ]
 
                         NoDmChannelSelected ->
-                            unreadOverviewNotMobile local model
+                            unreadOverviewNotMobile local loggedIn model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
@@ -407,8 +407,8 @@ type UnreadOverviewMessages
     | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ))
 
 
-unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
-unreadOverviewNotMobile local model =
+unreadOverviewNotMobile : LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
+unreadOverviewNotMobile local loggedIn model =
     let
         allDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allDiscordUsers =
@@ -524,6 +524,11 @@ unreadOverviewNotMobile local model =
                                 unread
                                 (case unread.messages of
                                     UnreadOverviewMessages messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedChannelSpoilers unread.guildOrDmId loggedIn
+                                        in
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
@@ -531,7 +536,7 @@ unreadOverviewNotMobile local model =
                                                     False
                                                     containerWidth
                                                     False
-                                                    SeqDict.empty
+                                                    revealedSpoilers
                                                     NoHighlight
                                                     IsNotHovered
                                                     False
@@ -548,13 +553,18 @@ unreadOverviewNotMobile local model =
                                             messages
 
                                     UnreadOverviewThreadMessages threadId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedThreadSpoilers unread.guildOrDmId threadId loggedIn
+                                        in
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , threadMessageView
                                                     False
                                                     containerWidth
-                                                    SeqDict.empty
+                                                    revealedSpoilers
                                                     NoHighlight
                                                     IsNotHovered
                                                     False
@@ -570,6 +580,11 @@ unreadOverviewNotMobile local model =
                                             messages
 
                                     UnreadOverviewDiscordMessages currentDiscordUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedChannelSpoilers unread.guildOrDmId loggedIn
+                                        in
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
@@ -577,7 +592,7 @@ unreadOverviewNotMobile local model =
                                                     False
                                                     containerWidth
                                                     False
-                                                    SeqDict.empty
+                                                    revealedSpoilers
                                                     NoHighlight
                                                     IsNotHovered
                                                     currentDiscordUserId
@@ -593,13 +608,18 @@ unreadOverviewNotMobile local model =
                                             messages
 
                                     UnreadOverviewDiscordThreadMessages threadId currentDiscordUserId messages ->
+                                        let
+                                            revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
+                                            revealedSpoilers =
+                                                revealedThreadSpoilers unread.guildOrDmId threadId loggedIn
+                                        in
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , discordThreadMessageView
                                                     False
                                                     containerWidth
-                                                    SeqDict.empty
+                                                    revealedSpoilers
                                                     NoHighlight
                                                     IsNotHovered
                                                     allDiscordUsers
@@ -2986,6 +3006,26 @@ messageHover guildOrDmId threadRoute loggedIn model =
             IsNotHovered
 
 
+revealedChannelSpoilers : AnyGuildOrDmId -> LoggedIn2 -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+revealedChannelSpoilers guildOrDmId loggedIn =
+    case SeqDict.get guildOrDmId loggedIn.revealedSpoilers of
+        Just revealed ->
+            revealed.messages
+
+        Nothing ->
+            SeqDict.empty
+
+
+revealedThreadSpoilers : AnyGuildOrDmId -> Id ChannelMessageId -> LoggedIn2 -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
+revealedThreadSpoilers guildOrDmId threadId loggedIn =
+    case SeqDict.get guildOrDmId loggedIn.revealedSpoilers of
+        Just revealedSpoilers2 ->
+            SeqDict.get threadId revealedSpoilers2.threadMessages |> Maybe.withDefault SeqDict.empty
+
+        Nothing ->
+            SeqDict.empty
+
+
 conversationViewHelper :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3032,12 +3072,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get (GuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
-                Just revealed ->
-                    revealed.messages
-
-                Nothing ->
-                    SeqDict.empty
+            revealedChannelSpoilers (GuildOrDmId guildOrDmIdNoThread) loggedIn
 
         containerWidth : Int
         containerWidth =
@@ -3334,12 +3369,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
-                Just revealed ->
-                    revealed.messages
-
-                Nothing ->
-                    SeqDict.empty
+            revealedChannelSpoilers (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn
 
         containerWidth : Int
         containerWidth =
@@ -3656,12 +3686,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get (GuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
-                Just revealed ->
-                    SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
-
-                Nothing ->
-                    SeqDict.empty
+            revealedThreadSpoilers (GuildOrDmId guildOrDmIdNoThread) threadId loggedIn
 
         containerWidth : Int
         containerWidth =
@@ -3870,12 +3895,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
-                Just revealed ->
-                    SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
-
-                Nothing ->
-                    SeqDict.empty
+            revealedThreadSpoilers (DiscordGuildOrDmId guildOrDmIdNoThread) threadId loggedIn
 
         containerWidth : Int
         containerWidth =
@@ -5265,12 +5285,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get (GuildOrDmId normalGuildOrDmIdNoThread) loggedIn.revealedSpoilers of
-                Just revealedSpoilers2 ->
-                    revealedSpoilers2.messages
-
-                Nothing ->
-                    SeqDict.empty
+            revealedChannelSpoilers (GuildOrDmId normalGuildOrDmIdNoThread) loggedIn
     in
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
@@ -5384,12 +5399,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case SeqDict.get guildOrDmIdNoThread loggedIn.revealedSpoilers of
-                Just revealedSpoilers2 ->
-                    revealedSpoilers2.messages
-
-                Nothing ->
-                    SeqDict.empty
+            revealedChannelSpoilers guildOrDmIdNoThread loggedIn
     in
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
