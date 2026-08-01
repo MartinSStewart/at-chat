@@ -391,7 +391,7 @@ type alias UnreadOverviewChannel =
     , guildOrDmId : AnyGuildOrDmId
     , threadRoute : ThreadRouteWithMessage
     , additionalUnread : Int
-    , newestAt : Time.Posix
+    , oldestAt : Time.Posix
     , messages : UnreadOverviewMessages
     }
 
@@ -619,6 +619,11 @@ unreadOverviewNotMobile local model =
         ]
 
 
+{-| Every channel and thread with unread messages, ordered by the oldest unread message of
+each. A channel's place in the overview is decided by when it started being unread, so
+messages arriving while the overview is open add to a channel where it already is instead of
+moving it.
+-}
 unreadOverviewChannels : LocalState -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser -> List UnreadOverviewChannel
 unreadOverviewChannels local allDiscordUsers =
     let
@@ -652,7 +657,7 @@ unreadOverviewChannels local allDiscordUsers =
                                           , guildOrDmId = guildOrDmId
                                           , threadRoute = NoThreadWithMessage unread.newestMessageId
                                           , additionalUnread = unread.additionalUnread
-                                          , newestAt = unread.newestAt
+                                          , oldestAt = unread.oldestAt
                                           , messages = UnreadOverviewMessages unread.messages
                                           }
                                         ]
@@ -688,7 +693,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                     , threadRoute =
                                                         ViewThreadWithMessage threadId unread.newestMessageId
                                                     , additionalUnread = unread.additionalUnread
-                                                    , newestAt = unread.newestAt
+                                                    , oldestAt = unread.oldestAt
                                                     , messages = UnreadOverviewThreadMessages unread.messages
                                                     }
                                                 )
@@ -723,7 +728,7 @@ unreadOverviewChannels local allDiscordUsers =
                                       , guildOrDmId = guildOrDmId
                                       , threadRoute = NoThreadWithMessage unread.newestMessageId
                                       , additionalUnread = unread.additionalUnread
-                                      , newestAt = unread.newestAt
+                                      , oldestAt = unread.oldestAt
                                       , messages = UnreadOverviewMessages unread.messages
                                       }
                                     ]
@@ -752,7 +757,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 , guildOrDmId = guildOrDmId
                                                 , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
                                                 , additionalUnread = unread.additionalUnread
-                                                , newestAt = unread.newestAt
+                                                , oldestAt = unread.oldestAt
                                                 , messages = UnreadOverviewThreadMessages unread.messages
                                                 }
                                             )
@@ -794,7 +799,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                       , guildOrDmId = guildOrDmId
                                                       , threadRoute = NoThreadWithMessage unread.newestMessageId
                                                       , additionalUnread = unread.additionalUnread
-                                                      , newestAt = unread.newestAt
+                                                      , oldestAt = unread.oldestAt
                                                       , messages =
                                                             UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
                                                       }
@@ -833,7 +838,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                 , threadRoute =
                                                                     ViewThreadWithMessage threadId unread.newestMessageId
                                                                 , additionalUnread = unread.additionalUnread
-                                                                , newestAt = unread.newestAt
+                                                                , oldestAt = unread.oldestAt
                                                                 , messages =
                                                                     UnreadOverviewDiscordThreadMessages
                                                                         currentDiscordUserId
@@ -883,7 +888,7 @@ unreadOverviewChannels local allDiscordUsers =
                                     , guildOrDmId = guildOrDmId
                                     , threadRoute = NoThreadWithMessage unread.newestMessageId
                                     , additionalUnread = unread.additionalUnread
-                                    , newestAt = unread.newestAt
+                                    , oldestAt = unread.oldestAt
                                     , messages =
                                         UnreadOverviewDiscordMessages currentDiscordUserId unread.messages
                                     }
@@ -893,7 +898,7 @@ unreadOverviewChannels local allDiscordUsers =
                         Nothing
             )
             (SeqDict.toList local.discordDmChannels)
-        |> List.sortBy (\unread -> Time.posixToMillis unread.newestAt)
+        |> List.sortBy (\unread -> Time.posixToMillis unread.oldestAt)
 
 
 channelSource : GuildName -> ChannelName -> Element msg
@@ -1094,6 +1099,11 @@ unreadOverviewMarkAllAsReadId =
 unread messages aren't shown. The backend only sends `UserSession.unreadOverviewMessageLimit`
 of them per channel, but messages that arrive while the overview is open are loaded too, so
 the same limit is applied here.
+
+`oldestAt` is when the oldest unread message we have was written, which is older than the
+messages we show if some of them were left out. It doesn't change as new messages arrive,
+which is what makes it usable for ordering the overview.
+
 -}
 unreadMessages :
     Maybe (Id messageId)
@@ -1103,7 +1113,7 @@ unreadMessages :
             { messages : List ( Id messageId, Message messageId userId )
             , additionalUnread : Int
             , newestMessageId : Id messageId
-            , newestAt : Time.Posix
+            , oldestAt : Time.Posix
             }
 unreadMessages maybeLastViewed channel =
     let
@@ -1127,16 +1137,16 @@ unreadMessages maybeLastViewed channel =
         shown =
             List.drop (List.length loaded - UserSession.unreadOverviewMessageLimit) loaded
     in
-    case List.Extra.last shown of
-        Just ( newestMessageId, newest ) ->
+    case ( List.head loaded, List.Extra.last shown ) of
+        ( Just ( _, oldest ), Just ( newestMessageId, _ ) ) ->
             Just
                 { messages = shown
                 , additionalUnread = unreadCount - List.length shown
                 , newestMessageId = newestMessageId
-                , newestAt = Message.createdAt newest
+                , oldestAt = Message.createdAt oldest
                 }
 
-        Nothing ->
+        _ ->
             Nothing
 
 
