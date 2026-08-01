@@ -1111,13 +1111,19 @@ update msg model =
                                                             model.discordStickers
                                                             attachments2
                                                 in
-                                                ( channelMessageIndex
-                                                , { existingThread
-                                                    | messages = threadMessages
-                                                    , linkedMessageIds = threadLinkedMessageIds
-                                                  }
-                                                )
-                                                    |> Just
+                                                if IdArray.isEmpty threadMessages then
+                                                    -- A thread nobody has written anything in yet is
+                                                    -- the same as the message not having a thread
+                                                    Nothing
+
+                                                else
+                                                    ( channelMessageIndex
+                                                    , { existingThread
+                                                        | messages = threadMessages
+                                                        , linkedMessageIds = threadLinkedMessageIds
+                                                      }
+                                                    )
+                                                        |> Just
 
                                             Nothing ->
                                                 -- The message the thread hangs off of is older than the
@@ -8066,14 +8072,15 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
-                        , Task.map2
-                            (\messages threads -> { messages = messages, threads = threads })
-                            (DiscordSync.getManyMessages
-                                model.serverSecret
-                                auth
-                                { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
-                            )
-                            (DiscordSync.getChannelThreadsAndMessages model.serverSecret auth guildId channelId)
+                        , DiscordSync.getManyMessages
+                            model.serverSecret
+                            auth
+                            { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
+                            |> Task.andThen
+                                (\messages ->
+                                    DiscordSync.getThreadsForMessages model.serverSecret auth messages
+                                        |> Task.map (\threads -> { messages = messages, threads = threads })
+                                )
                             |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
                         ]
                     )

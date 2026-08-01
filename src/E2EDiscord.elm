@@ -1206,36 +1206,42 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                   -- the one for the stand-alone thread is kept since that thread has no other message
                   -- to hang off of.
                   checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
-                , -- Both the active threads and the archived thread are loaded and hang off the
-                  -- message they were started from. The thread starter message in the first thread
-                  -- is left out, and so is the thread whose message is older than the messages that
-                  -- were loaded.
+                , -- Every message that has a thread gets it loaded, whether the thread is archived
+                  -- (the one on "Hello from history") or not, and the thread hangs off the message
+                  -- it was started from. The thread starter message in the first thread is left out.
                   checkDiscordChannelAThreads
                     [ ( 0, [ "Message in old message thread" ] )
                     , ( 1, [ "Message in stand-alone thread" ] )
                     , ( 2, [ "Message in archived thread" ] )
                     ]
-                , -- The guild's other channels have threads of their own. Loading their messages
-                  -- would be a wasted request since they don't belong to the channel being reloaded.
+                , -- The thread created message that was left out has a thread as well, but it's the
+                  -- same thread as the one on "Old message", so it shouldn't be loaded twice.
                   T.checkState
                     100
                     (\data ->
-                        if
-                            List.any
+                        case
+                            List.filter
                                 (\request ->
                                     case E2EHelper.decodeCustomRequest request of
                                         Just customRequest ->
-                                            String.contains "/channels/1533000000000000009/messages" customRequest.url
+                                            String.startsWith
+                                                "https://discord.com/api/v9/channels/1533000000000000001/messages"
+                                                customRequest.url
 
                                         Nothing ->
                                             False
                                 )
                                 data.httpRequests
-                        then
-                            Err "Loaded the messages of a thread belonging to another channel"
+                        of
+                            [ _ ] ->
+                                Ok ()
 
-                        else
-                            Ok ()
+                            requests ->
+                                Err
+                                    ("Expected the messages of the thread on \"Old message\" to be loaded once but they were loaded "
+                                        ++ String.fromInt (List.length requests)
+                                        ++ " times"
+                                    )
                     )
                 , E2EHelper.andThenWebsocket
                     (\connection _ ->

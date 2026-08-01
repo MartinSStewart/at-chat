@@ -2232,26 +2232,6 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 else
                     UnhandledHttpRequest
 
-            ( "GET", [ "discord.com", "api", "v9", "channels", channelId, "threads", "archived", _ ] ) ->
-                StringHttpResponse
-                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    (if channelId == botTestGuild_ChannelAString then
-                        botTestGuildChannelAArchivedThreads
-
-                     else
-                        """{"threads":[],"members":[],"has_more":false}"""
-                    )
-
-            ( "GET", [ "discord.com", "api", "v9", "guilds", guildId, "threads", "active" ] ) ->
-                StringHttpResponse
-                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    (if guildId == botTestGuildString then
-                        botTestGuildActiveThreads
-
-                     else
-                        """{"threads":[],"members":[]}"""
-                    )
-
             ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
                 StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
 
@@ -3340,53 +3320,29 @@ discordChannelHistory channelId =
     {"id":"1533096300000000000","channel_id":"1533000000000000003","content":"Message in archived thread","timestamp":"2026-03-26T12:11:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
 ]"""
 
-    else if channelId == "1520000000000000000" then
-        """[
-    {"id":"1520000000000000001","channel_id":"1520000000000000000","content":"Message in forgotten thread","timestamp":"2026-01-05T08:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
-]"""
-
     else
         "[]"
 
 
-{-| The threads the Bot Test guild has that aren't archived. Along with the two threads in
-channel A there is one in another channel, which shouldn't be loaded when channel A is
-reloaded.
--}
-botTestGuildActiveThreads : String
-botTestGuildActiveThreads =
-    """{"threads":[
-    {"id":"1533000000000000001","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Thread from old message","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-04-02T09:02:31.114000+00:00","locked":false}},
-    {"id":"1533000000000000002","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Stand-alone thread","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-03-26T12:10:30.000000+00:00","locked":false}},
-    {"id":"1533000000000000009","type":11,"guild_id":"705745250815311942","parent_id":"1072828591382999151","owner_id":"161098476632014848","name":"Thread in another channel","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-03-26T12:10:30.000000+00:00","locked":false}}
-],"members":[]}"""
-
-
-{-| The archived threads of the Bot Test guild's channel A. "Forgotten thread" hangs off a
-message that is older than the messages a reload loads, so there is nothing to attach it to.
--}
-botTestGuildChannelAArchivedThreads : String
-botTestGuildChannelAArchivedThreads =
-    """{"threads":[
-    {"id":"1533000000000000003","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Archived thread","message_count":1,"thread_metadata":{"archived":true,"auto_archive_duration":4320,"archive_timestamp":"2026-03-27T12:11:30.000000+00:00","locked":false}},
-    {"id":"1520000000000000000","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Forgotten thread","message_count":1,"thread_metadata":{"archived":true,"auto_archive_duration":4320,"archive_timestamp":"2026-01-06T08:00:00.000000+00:00","locked":false}}
-],"members":[],"has_more":false}"""
-
-
 {-| What Discord answers with when the Bot Test guild's channel A gets reloaded from the
-admin page. Newest message first, like the real API returns them. Along with two ordinary
-messages it contains the two kinds of thread created message (type 18) Discord posts in a
-channel: one for a stand-alone thread (its own id is the thread's id) and one for a thread
-started from "Old message" (its message\_reference points at the thread, which reuses that
-message's id).
+admin page. Newest message first, like the real API returns them.
+
+Along with two ordinary messages it contains the two kinds of thread created message
+(type 18) Discord posts in a channel: one for a stand-alone thread (its own id is the
+thread's id) and one for a thread started from "Old message" (its message\_reference points
+at the thread, which reuses that message's id).
+
+Every message that a thread hangs off of has the has-thread flag (32) set. "Hello from
+history" has an archived thread, which is just as visible in the flag as an active one.
+
 -}
 botTestGuildChannelAHistory : String
 botTestGuildChannelAHistory =
     """[
-    {"id":"1533096000000000000","channel_id":"1072828564317159465","content":"Thread from old message","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":0,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000001"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
-    {"id":"1533000000000000003","channel_id":"1072828564317159465","content":"Hello from history","timestamp":"2026-03-26T12:11:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
-    {"id":"1533000000000000002","channel_id":"1072828564317159465","content":"Stand-alone thread","timestamp":"2026-03-26T12:10:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":0,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000002"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
-    {"id":"1533000000000000001","channel_id":"1072828564317159465","content":"Old message","timestamp":"2026-03-26T12:10:08.752000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+    {"id":"1533096000000000000","channel_id":"1072828564317159465","content":"Thread from old message","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":32,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000001"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000003","channel_id":"1072828564317159465","content":"Hello from history","timestamp":"2026-03-26T12:11:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000002","channel_id":"1072828564317159465","content":"Stand-alone thread","timestamp":"2026-03-26T12:10:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":32,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000002"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000001","channel_id":"1072828564317159465","content":"Old message","timestamp":"2026-03-26T12:10:08.752000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
 ]"""
 
 

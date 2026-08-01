@@ -4,8 +4,8 @@ module DiscordSync exposing
     , attachmentsToFileData
     , backendSessionIdHash
     , discordUserWebsocketMsg
-    , getChannelThreadsAndMessages
     , getManyMessages
+    , getThreadsForMessages
     , handleCreateMessage
     , handleEditMessage
     , http
@@ -3151,50 +3151,50 @@ getDiscordGuildData secretKey gatewayGuild =
         )
 
 
-{-| Loads the threads that hang off the messages of a Discord channel, along with the
-messages written in them, so that reloading a channel brings its threads back as well.
-Listing threads can fail on its own (archived threads the linked account isn't allowed to
-see, for instance) without the whole reload being worth failing over, so a thread we can't
-load is left out instead.
+{-| Loads the messages of the threads hanging off the given channel messages, so that
+reloading a channel brings its threads back as well.
+
+Discord sets the has-thread flag on the message a thread was started from, and on the
+thread created message that stands in for a thread that was started without one, so the
+messages themselves say which threads exist. That works for archived threads too, unlike
+listing a guild's active threads, which is a bot-only endpoint.
+
+Loading a thread's messages can fail on its own without the whole reload being worth
+failing over, so a thread we can't load is left out instead.
+
 -}
-getChannelThreadsAndMessages :
+getThreadsForMessages :
     SecretId ServerSecret
     -> Discord.Authentication
-    -> Discord.Id Discord.GuildId
-    -> Discord.Id Discord.ChannelId
+    -> List Discord.Message
     -> Task BackendOnly x (List DiscordThreadReload)
-getChannelThreadsAndMessages secretKey authentication guildId channelId =
-    Task.map2
-        (++)
-        (Discord.listActiveThreadsPayload authentication guildId
-            |> http secretKey
-            |> Task.map .threads
-            |> Task.onError (\_ -> Task.succeed [])
+getThreadsForMessages secretKey authentication messages =
+    List.filterMap
+        (\message ->
+            case message.flags of
+                Included flags ->
+                    if flags.hasThread then
+                        -- A thread has the same id as the message it hangs off of
+                        messageLinkId message |> Discord.idToUInt64 |> Discord.idFromUInt64 |> Just
+
+                    else
+                        Nothing
+
+                Missing ->
+                    Nothing
         )
-        (Discord.getPublicArchivedThreadsPayload
-            authentication
-            { channelId = channelId, before = Nothing, limit = Just 100 }
-            |> http secretKey
-            |> Task.map .threads
-            |> Task.onError (\_ -> Task.succeed [])
-        )
-        |> Task.andThen
-            (\threads ->
-                List.filter
-                    (\thread -> thread.parentId == Included (Just channelId))
-                    threads
-                    |> List.Extra.uniqueBy (\thread -> Discord.idToString thread.id)
-                    |> List.map
-                        (\thread ->
-                            getManyMessages
-                                secretKey
-                                authentication
-                                { channelId = thread.id, limit = reloadThreadMaxMessages }
-                                |> Task.onError (\_ -> Task.succeed [])
-                                |> Task.map (\messages -> { threadId = thread.id, messages = messages })
-                        )
-                    |> Task.sequence
+        messages
+        |> List.Extra.uniqueBy Discord.idToString
+        |> List.map
+            (\threadId ->
+                getManyMessages
+                    secretKey
+                    authentication
+                    { channelId = threadId, limit = reloadThreadMaxMessages }
+                    |> Task.onError (\_ -> Task.succeed [])
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
             )
+        |> Task.sequence
 
 
 getManyMessages :
