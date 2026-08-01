@@ -94,7 +94,7 @@ import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
-import MessageView
+import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -243,7 +243,7 @@ type alias LoggedIn2 =
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
     , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId)
-    , revealedSpoilers : Maybe RevealedSpoilers
+    , revealedSpoilers : SeqDict AnyGuildOrDmId RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
@@ -337,8 +337,7 @@ messageMenuMobileOffset mobileMode =
 
 
 type alias RevealedSpoilers =
-    { guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
-    , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    { messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
     , threadMessages : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (NonemptySet Int))
     }
 
@@ -603,6 +602,8 @@ type FrontendMsg_
     | PressedMarkAllChannelsAsRead (List ( AnyGuildOrDmId, ThreadRouteWithMessage ))
     | PressedMuteGuild (Id GuildId) IsMuted
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
+    | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
 
 
 type alias NewChannelForm =

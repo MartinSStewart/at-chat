@@ -402,9 +402,9 @@ they are numbered separately.
 -}
 type UnreadOverviewMessages
     = UnreadOverviewMessages (List ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) ))
-    | UnreadOverviewThreadMessages (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ))
+    | UnreadOverviewThreadMessages (Id ChannelMessageId) (List ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) ))
     | UnreadOverviewDiscordMessages (Discord.Id Discord.UserId) (List ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) ))
-    | UnreadOverviewDiscordThreadMessages (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ))
+    | UnreadOverviewDiscordThreadMessages (Id ChannelMessageId) (Discord.Id Discord.UserId) (List ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) ))
 
 
 unreadOverviewNotMobile : LocalState -> LoadedFrontend -> Element FrontendMsg_
@@ -542,12 +542,12 @@ unreadOverviewNotMobile local model =
                                                     Nothing
                                                     messageId
                                                     message
-                                                    |> Ui.map (\_ -> FrontendNoOp)
+                                                    |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
                                                 )
                                             )
                                             messages
 
-                                    UnreadOverviewThreadMessages messages ->
+                                    UnreadOverviewThreadMessages threadId messages ->
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
@@ -564,7 +564,7 @@ unreadOverviewNotMobile local model =
                                                     Nothing
                                                     messageId
                                                     message
-                                                    |> Ui.map (\_ -> FrontendNoOp)
+                                                    |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
                                                 )
                                             )
                                             messages
@@ -587,12 +587,12 @@ unreadOverviewNotMobile local model =
                                                     Nothing
                                                     messageId
                                                     message
-                                                    |> Ui.map (\_ -> FrontendNoOp)
+                                                    |> Ui.map (UnreadOverviewChannelMsg unread.guildOrDmId messageId)
                                                 )
                                             )
                                             messages
 
-                                    UnreadOverviewDiscordThreadMessages currentDiscordUserId messages ->
+                                    UnreadOverviewDiscordThreadMessages threadId currentDiscordUserId messages ->
                                         List.map
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
@@ -608,7 +608,7 @@ unreadOverviewNotMobile local model =
                                                     Nothing
                                                     messageId
                                                     message
-                                                    |> Ui.map (\_ -> FrontendNoOp)
+                                                    |> Ui.map (UnreadOverviewThreadMsg unread.guildOrDmId threadId messageId)
                                                 )
                                             )
                                             messages
@@ -694,7 +694,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         ViewThreadWithMessage threadId unread.newestMessageId
                                                     , additionalUnread = unread.additionalUnread
                                                     , oldestAt = unread.oldestAt
-                                                    , messages = UnreadOverviewThreadMessages unread.messages
+                                                    , messages = UnreadOverviewThreadMessages threadId unread.messages
                                                     }
                                                 )
 
@@ -758,7 +758,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                 , threadRoute = ViewThreadWithMessage threadId unread.newestMessageId
                                                 , additionalUnread = unread.additionalUnread
                                                 , oldestAt = unread.oldestAt
-                                                , messages = UnreadOverviewThreadMessages unread.messages
+                                                , messages = UnreadOverviewThreadMessages threadId unread.messages
                                                 }
                                             )
 
@@ -841,6 +841,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                 , oldestAt = unread.oldestAt
                                                                 , messages =
                                                                     UnreadOverviewDiscordThreadMessages
+                                                                        threadId
                                                                         currentDiscordUserId
                                                                         unread.messages
                                                                 }
@@ -3031,13 +3032,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get (GuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
                 Just revealed ->
-                    if revealed.guildOrDmId == guildOrDmId then
-                        revealed.messages
-
-                    else
-                        SeqDict.empty
+                    revealed.messages
 
                 Nothing ->
                     SeqDict.empty
@@ -3337,13 +3334,9 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
                 Just revealed ->
-                    if revealed.guildOrDmId == guildOrDmId then
-                        revealed.messages
-
-                    else
-                        SeqDict.empty
+                    revealed.messages
 
                 Nothing ->
                     SeqDict.empty
@@ -3663,13 +3656,9 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get (GuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
                 Just revealed ->
-                    if revealed.guildOrDmId == guildOrDmId then
-                        SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
-
-                    else
-                        SeqDict.empty
+                    SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
 
                 Nothing ->
                     SeqDict.empty
@@ -3881,13 +3870,9 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
 
         revealedSpoilers : SeqDict (Id ThreadMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get (DiscordGuildOrDmId guildOrDmIdNoThread) loggedIn.revealedSpoilers of
                 Just revealed ->
-                    if revealed.guildOrDmId == guildOrDmId then
-                        SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
-
-                    else
-                        SeqDict.empty
+                    SeqDict.get threadId revealed.threadMessages |> Maybe.withDefault SeqDict.empty
 
                 Nothing ->
                     SeqDict.empty
@@ -5280,13 +5265,9 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get (GuildOrDmId normalGuildOrDmIdNoThread) loggedIn.revealedSpoilers of
                 Just revealedSpoilers2 ->
-                    if revealedSpoilers2.guildOrDmId == guildOrDmId then
-                        revealedSpoilers2.messages
-
-                    else
-                        SeqDict.empty
+                    revealedSpoilers2.messages
 
                 Nothing ->
                     SeqDict.empty
@@ -5403,13 +5384,9 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
-            case loggedIn.revealedSpoilers of
+            case SeqDict.get guildOrDmIdNoThread loggedIn.revealedSpoilers of
                 Just revealedSpoilers2 ->
-                    if revealedSpoilers2.guildOrDmId == guildOrDmId then
-                        revealedSpoilers2.messages
-
-                    else
-                        SeqDict.empty
+                    revealedSpoilers2.messages
 
                 Nothing ->
                     SeqDict.empty

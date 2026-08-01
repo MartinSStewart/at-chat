@@ -1343,7 +1343,7 @@ clearRevealedSpoilers model =
         | loginStatus =
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+                    LoggedIn { loggedIn | revealedSpoilers = SeqDict.empty }
 
                 NotLoggedIn _ ->
                     model.loginStatus
@@ -2423,6 +2423,12 @@ isPressMsg msg =
 
         PressedMuteDiscordGuild _ _ _ ->
             True
+
+        UnreadOverviewChannelMsg anyGuildOrDmId id messageViewMsg ->
+            MessageView.isPressMsg messageViewMsg
+
+        UnreadOverviewThreadMsg anyGuildOrDmId id _ messageViewMsg ->
+            MessageView.isPressMsg messageViewMsg
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg_
