@@ -514,7 +514,7 @@ async fn push_notification_endpoint(
         navigate,
         data,
         mutable,
-        isDeclarative,
+        is_declarative,
     }): Json<PushNotification>,
 ) -> Response<String> {
     // You would likely get this by deserializing a browser `pushSubscription` object.
@@ -528,7 +528,7 @@ async fn push_notification_endpoint(
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
     };
 
-    let content = match content.to_payload(isDeclarative, mutable) {
+    let content = match content.to_payload(is_declarative, mutable) {
         Ok(content2) => content2,
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2")),
     };
@@ -1155,8 +1155,8 @@ impl<D: Serialize> Notification<D> {
         }
     }
 
-    pub fn to_payload(&self, isDeclarative: bool, mutable: bool) -> serde_json::Result<Vec<u8>> {
-        serde_json::to_vec(&DeclarativePushPayload::new(self, isDeclarative, mutable))
+    pub fn to_payload(&self, is_declarative: bool, mutable: bool) -> serde_json::Result<Vec<u8>> {
+        serde_json::to_vec(&DeclarativePushPayload::new(self, is_declarative, mutable))
     }
 }
 
@@ -1168,9 +1168,9 @@ struct DeclarativePushPayload<'a, D> {
 }
 
 impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
-    pub fn new(notification: &'a Notification<D>, isDeclarative: bool, mutable: bool) -> Self {
+    pub fn new(notification: &'a Notification<D>, is_declarative: bool, mutable: bool) -> Self {
         DeclarativePushPayload {
-            web_push: if isDeclarative { 8030 } else { 0 },
+            web_push: if is_declarative { 8030 } else { 0 },
             notification,
             mutable: mutable,
         }
@@ -1189,7 +1189,7 @@ pub struct PushNotification {
     pub navigate: String,
     pub data: Option<String>,
     pub mutable : bool,
-    pub isDeclarative: bool,
+    pub is_declarative: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
