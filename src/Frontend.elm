@@ -2290,20 +2290,7 @@ updateLoaded msg model =
                     handleMouseEnteredMessage guildOrDmId threadRoute model
 
                 MessageView.MessageView_MouseExitedMessage ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | messageHover =
-                                    if MessageHover guildOrDmId threadRoute == loggedIn.messageHover then
-                                        NoMessageHover
-
-                                    else
-                                        loggedIn.messageHover
-                              }
-                            , Command.none
-                            )
-                        )
-                        model
+                    handleMouseExitedMessage guildOrDmId threadRoute model
 
                 MessageView.MessageView_TouchStart timeStamp isThreadStarter maybeImageUrl maybeLinkUrl touches ->
                     touchStart
@@ -2736,44 +2723,10 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIconButton otherUserId ->
-                    case model.loginStatus of
-                        LoggedIn loggedIn ->
-                            FrontendExtra.routePush
-                                model
-                                (DmRoute
-                                    { channelId =
-                                        DmChannelId.fromUserIds
-                                            (Local.model loggedIn.localState).localUser.session.userId
-                                            otherUserId
-                                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
-                                    , tab = Nothing
-                                    }
-                                )
-
-                        NotLoggedIn _ ->
-                            ( model, Command.none )
+                    handlePressedUserIconButton otherUserId model
 
                 MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
-                    case model.loginStatus of
-                        LoggedIn loggedIn ->
-                            case LocalState.discordDmChannelWithUser otherUserId (Local.model loggedIn.localState) of
-                                Just ( currentDiscordUserId, channelId ) ->
-                                    FrontendExtra.routePush
-                                        model
-                                        (DiscordDmRoute
-                                            { currentDiscordUserId = currentDiscordUserId
-                                            , channelId = channelId
-                                            , viewingMessage = Nothing
-                                            , showMembersTab = HideMembersTab
-                                            , tab = Nothing
-                                            }
-                                        )
-
-                                Nothing ->
-                                    ( model, Command.none )
-
-                        NotLoggedIn _ ->
-                            ( model, Command.none )
+                    handlePressedDiscordUserIconButton otherUserId model
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -4576,14 +4529,16 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedNonWhitelistLink url ->
                     handlePressedNonWhitelistLink url model
 
-                MessageView.MessageView_PressedImage pressedImageData ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedImage { fileUrl, imageSize } ->
+                    ( { model | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
+                    , Command.none
+                    )
 
                 MessageView.MessageView_MouseEnteredMessage ->
                     handleMouseEnteredMessage guildOrDmId (NoThreadWithMessage messageId) model
 
                 MessageView.MessageView_MouseExitedMessage ->
-                    Debug.todo ""
+                    handleMouseExitedMessage guildOrDmId (NoThreadWithMessage messageId) model
 
                 MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
                     Debug.todo ""
@@ -4591,11 +4546,27 @@ updateLoaded msg model =
                 MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
                     Debug.todo ""
 
-                MessageView.MessageView_PressedReactionEmoji_Remove emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_RemoveReactionEmoji guildOrDmId (NoThreadWithMessage messageId) emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
-                MessageView.MessageView_PressedReactionEmoji_Add emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_AddReactionEmoji guildOrDmId (NoThreadWithMessage messageId) emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
                 MessageView.MessageView_PressedReplyLink ->
                     Debug.todo ""
@@ -4618,8 +4589,8 @@ updateLoaded msg model =
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedReactionEmoji emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId (NoThreadWithMessage messageId) model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     Debug.todo ""
@@ -4627,23 +4598,25 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     Debug.todo ""
 
-                MessageView.MessageView_PressedUserIconAnchor point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedUserIconAnchor _ _ ->
+                    -- Anchors are only picked while drawing on a channel and the unread overview
+                    -- isn't one
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedTimestamp point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedTimestamp _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedDateDivider date point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedDateDivider _ _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedCardAnchor point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedCardAnchor _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIconButton id ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedUserIconButton otherUserId ->
+                    handlePressedUserIconButton otherUserId model
 
-                MessageView.MessageView_PressedDiscordUserIconButton id ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
+                    handlePressedDiscordUserIconButton otherUserId model
 
         UnreadOverviewThreadMsg guildOrDmId threadId messageId messageViewMsg ->
             case messageViewMsg of
@@ -4653,14 +4626,16 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedNonWhitelistLink url ->
                     handlePressedNonWhitelistLink url model
 
-                MessageView.MessageView_PressedImage pressedImageData ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedImage { fileUrl, imageSize } ->
+                    ( { model | imageViewer = Just (ImageViewer.init { url = fileUrl, imageSize = imageSize }) }
+                    , Command.none
+                    )
 
                 MessageView.MessageView_MouseEnteredMessage ->
                     handleMouseEnteredMessage guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
                 MessageView.MessageView_MouseExitedMessage ->
-                    Debug.todo ""
+                    handleMouseExitedMessage guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
                 MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
                     Debug.todo ""
@@ -4668,11 +4643,27 @@ updateLoaded msg model =
                 MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
                     Debug.todo ""
 
-                MessageView.MessageView_PressedReactionEmoji_Remove emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_RemoveReactionEmoji guildOrDmId (ViewThreadWithMessage threadId messageId) emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
-                MessageView.MessageView_PressedReactionEmoji_Add emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_AddReactionEmoji guildOrDmId (ViewThreadWithMessage threadId messageId) emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
                 MessageView.MessageView_PressedReplyLink ->
                     Debug.todo ""
@@ -4695,8 +4686,8 @@ updateLoaded msg model =
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedReactionEmoji emojiOrCustomEmoji ->
-                    Debug.todo ""
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId (ViewThreadWithMessage threadId messageId) model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
                     Debug.todo ""
@@ -4704,23 +4695,25 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
                     Debug.todo ""
 
-                MessageView.MessageView_PressedUserIconAnchor point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedUserIconAnchor _ _ ->
+                    -- Anchors are only picked while drawing on a channel and the unread overview
+                    -- isn't one
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedTimestamp point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedTimestamp _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedDateDivider date point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedDateDivider _ _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedCardAnchor point2d _ ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedCardAnchor _ _ ->
+                    ( model, Command.none )
 
-                MessageView.MessageView_PressedUserIconButton id ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedUserIconButton otherUserId ->
+                    handlePressedUserIconButton otherUserId model
 
-                MessageView.MessageView_PressedDiscordUserIconButton id ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedDiscordUserIconButton otherUserId ->
+                    handlePressedDiscordUserIconButton otherUserId model
 
 
 handleMouseEnteredMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -4741,6 +4734,68 @@ handleMouseEnteredMessage guildOrDmId threadRoute model =
                 )
             )
             model
+
+
+handleMouseExitedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handleMouseExitedMessage guildOrDmId threadRoute model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | messageHover =
+                    if MessageHover guildOrDmId threadRoute == loggedIn.messageHover then
+                        NoMessageHover
+
+                    else
+                        loggedIn.messageHover
+              }
+            , Command.none
+            )
+        )
+        model
+
+
+handlePressedUserIconButton : Id UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handlePressedUserIconButton otherUserId model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            FrontendExtra.routePush
+                model
+                (DmRoute
+                    { channelId =
+                        DmChannelId.fromUserIds
+                            (Local.model loggedIn.localState).localUser.session.userId
+                            otherUserId
+                    , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                    , tab = Nothing
+                    }
+                )
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
+
+
+handlePressedDiscordUserIconButton : Discord.Id Discord.UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
+handlePressedDiscordUserIconButton otherUserId model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            case LocalState.discordDmChannelWithUser otherUserId (Local.model loggedIn.localState) of
+                Just ( currentDiscordUserId, channelId ) ->
+                    FrontendExtra.routePush
+                        model
+                        (DiscordDmRoute
+                            { currentDiscordUserId = currentDiscordUserId
+                            , channelId = channelId
+                            , viewingMessage = Nothing
+                            , showMembersTab = HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
 
 
 handlePressedNonWhitelistLink : Url -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
