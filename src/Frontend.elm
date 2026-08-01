@@ -78,7 +78,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (ScreenCoordinate, Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), Drag(..), DragTarget(..), EmojiSelector(..), FileDrag(..), FrontendModel, FrontendModel_(..), FrontendMsg, FrontendMsg_(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), LoginType(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionSection(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -4540,10 +4540,10 @@ updateLoaded msg model =
                 MessageView.MessageView_MouseExitedMessage ->
                     handleMouseExitedMessage guildOrDmId (NoThreadWithMessage messageId) model
 
-                MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
+                MessageView.MessageView_TouchStart _ _ _ _ _ ->
                     ( model, Command.none )
 
-                MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
+                MessageView.MessageView_AltPressedMessage _ _ _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
@@ -4580,7 +4580,7 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedReply ->
                     ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedShowFullMenu bool coord ->
+                MessageView.MessageViewMsg_PressedShowFullMenu _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedViewThreadLink ->
@@ -4691,10 +4691,10 @@ updateLoaded msg model =
                 MessageView.MessageView_MouseExitedMessage ->
                     handleMouseExitedMessage guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
-                MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
+                MessageView.MessageView_TouchStart _ _ _ _ _ ->
                     ( model, Command.none )
 
-                MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
+                MessageView.MessageView_AltPressedMessage _ _ _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
@@ -4731,7 +4731,7 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedReply ->
                     ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedShowFullMenu bool coord ->
+                MessageView.MessageViewMsg_PressedShowFullMenu _ _ ->
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedViewThreadLink ->

@@ -2424,10 +2424,10 @@ isPressMsg msg =
         PressedMuteDiscordGuild _ _ _ ->
             True
 
-        UnreadOverviewChannelMsg anyGuildOrDmId id messageViewMsg ->
+        UnreadOverviewChannelMsg _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
-        UnreadOverviewThreadMsg anyGuildOrDmId id _ messageViewMsg ->
+        UnreadOverviewThreadMsg _ _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
 

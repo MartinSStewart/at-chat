@@ -541,7 +541,7 @@ type FrontendMsg_
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
-    | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
+    | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageViewMsg
     | ImageViewerMsg ImageViewer.Msg
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
