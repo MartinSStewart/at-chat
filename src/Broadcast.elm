@@ -1146,7 +1146,7 @@ pushNotificationCodec =
         |> Codec.field "navigate" .navigate Codec.string
         |> Codec.field "data" .data (Codec.nullable Codec.string)
         |> Codec.field "mutable" .mutable Codec.bool
-        |> Codec.field "isDeclarative" .isDeclarative Codec.bool
+        |> Codec.field "is_declarative" .isDeclarative Codec.bool
         |> Codec.buildObject
 
 
