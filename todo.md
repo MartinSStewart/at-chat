@@ -29,6 +29,7 @@
   switching back, since the original device has it's own state that still has the tiles place on the board
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
 * Adding images to an existing Discord message doesn't work
+* Mouse hover doesn't trigger an animated image in unreadOverview
 
 Requested features:
 
