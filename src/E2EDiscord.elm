@@ -30,6 +30,7 @@ import Message
 import MessageArray
 import MessageInput
 import NonemptyDict
+import Pages.Admin
 import Pages.Guild
 import PersonName
 import RichText
@@ -1168,6 +1169,57 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":8,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:02:35.284000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1533096100000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in old message thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000001\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordChannelAMessages [ "Old message" ]
                         , checkDiscordThreadMessages (Id.fromInt 0) [ "Message in old message thread" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Reloading a Discord channel keeps thread created messages out of the channel"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , -- Admins can reload a Discord channel to load its messages again. Discord answers
+                  -- with E2EHelper.botTestGuildChannelAHistory.
+                  admin.sendToBackend
+                    100
+                    (LocalModelChangeRequest
+                        (ChangeId 0)
+                        (Local_Admin
+                            (Pages.Admin.StartReloadingDiscordGuildChannel
+                                E2EHelper.startTime
+                                E2EHelper.currentDiscordUserId
+                                E2EHelper.botTestGuild
+                                E2EHelper.botTestGuild_ChannelA
+                            )
+                        )
+                    )
+                , -- The thread created message for the thread started from "Old message" is left out,
+                  -- the one for the stand-alone thread is kept since that thread has no other message
+                  -- to hang off of.
+                  checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- Both threads still end up in the right place when someone writes in them.
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:03:00.000000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533096100000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in old message thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000001\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:03:10.000000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533096200000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in stand-alone thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000002\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
+                        , checkDiscordThreadMessages (Id.fromInt 0) [ "Message in old message thread" ]
+                        , checkDiscordThreadMessages (Id.fromInt 1) [ "Message in stand-alone thread" ]
                         ]
                     )
                 ]

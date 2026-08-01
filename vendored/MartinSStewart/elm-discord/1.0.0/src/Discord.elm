@@ -3299,6 +3299,7 @@ type alias Message =
     -- message_reference field is excluded
     , flags : OptionalData MessageFlags
     , referencedMessage : ReferencedMessage
+    , messageReference : OptionalData MessageReference
     , stickerItems : OptionalData (List StickerItem)
     , stickers : OptionalData (List Sticker)
     , messageSnapshots : OptionalData (List MessageSnapshot)
@@ -3882,6 +3883,7 @@ decodeMessage =
                                 NoReference
                     )
             )
+        |> JD.andMap (decodeOptionalData "message_reference" decodeMessageReference)
         |> JD.andMap (decodeOptionalData "sticker_items" (JD.list decodeStickerItem))
         |> JD.andMap (decodeOptionalData "stickers" (JD.list decodeSticker))
         |> JD.andMap (decodeOptionalData "message_snapshots" (JD.list decodeMessageSnapshot))
@@ -5233,10 +5235,9 @@ decodeDispatchUserEvent eventName =
             JD.field "d" (JD.succeed DispatchUser_ResumedEvent)
 
         "MESSAGE_CREATE" ->
-            JD.map3
+            JD.map2
                 DispatchUser_MessageCreateEvent
                 (JD.at [ "d", "channel_type" ] decodeChannelType)
-                (JD.field "d" (decodeOptionalData "message_reference" decodeMessageReference))
                 (JD.field "d" decodeMessage)
 
         "MESSAGE_UPDATE" ->
@@ -5669,7 +5670,7 @@ type OpDispatchUserEvent
     = DispatchUser_ReadyEvent ReadyData
     | DispatchUser_ReadySupplementalEvent ReadySupplementalData
     | DispatchUser_ResumedEvent
-    | DispatchUser_MessageCreateEvent ChannelType (OptionalData MessageReference) Message
+    | DispatchUser_MessageCreateEvent ChannelType Message
     | DispatchUser_MessageUpdateEvent UserMessageUpdate
     | DispatchUser_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchUser_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
@@ -6407,7 +6408,7 @@ type UserOutMsg connection
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
-    | UserOutMsg_UserCreatedMessage ChannelType (OptionalData MessageReference) Message
+    | UserOutMsg_UserCreatedMessage ChannelType Message
     | UserOutMsg_UserDeletedGuildMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserOutMsg_UserDeletedDmMessage (Id PrivateChannelId) (Id MessageId)
     | UserOutMsg_UserEditedMessage UserMessageUpdate
@@ -6706,8 +6707,8 @@ handleUserGateway authToken intents response model =
                         DispatchUser_ResumedEvent ->
                             ( model, [] )
 
-                        DispatchUser_MessageCreateEvent channelType messageReference message ->
-                            ( model, [ UserOutMsg_UserCreatedMessage channelType messageReference message ] )
+                        DispatchUser_MessageCreateEvent channelType message ->
+                            ( model, [ UserOutMsg_UserCreatedMessage channelType message ] )
 
                         DispatchUser_MessageUpdateEvent messageUpdate ->
                             ( model, [ UserOutMsg_UserEditedMessage messageUpdate ] )

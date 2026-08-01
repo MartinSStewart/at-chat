@@ -2223,6 +2223,20 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 }"""
                     )
 
+            ( "GET", [ "discord.com", "api", "v9", "channels", channelId, endpoint ] ) ->
+                if String.startsWith "messages?" endpoint then
+                    StringHttpResponse
+                        { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                        (if channelId == "1072828564317159465" then
+                            botTestGuildChannelAHistory
+
+                         else
+                            "[]"
+                        )
+
+                else
+                    UnhandledHttpRequest
+
             ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
                 StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
 
@@ -3282,6 +3296,23 @@ secondDiscordUserIdString =
 secondDiscordToken : String
 secondDiscordToken =
     "legit-token-2"
+
+
+{-| What Discord answers with when the Bot Test guild's channel A gets reloaded from the
+admin page. Newest message first, like the real API returns them. Along with two ordinary
+messages it contains the two kinds of thread created message (type 18) Discord posts in a
+channel: one for a stand-alone thread (its own id is the thread's id) and one for a thread
+started from "Old message" (its message\_reference points at the thread, which reuses that
+message's id).
+-}
+botTestGuildChannelAHistory : String
+botTestGuildChannelAHistory =
+    """[
+    {"id":"1533096000000000000","channel_id":"1072828564317159465","content":"Thread from old message","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":0,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000001"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000003","channel_id":"1072828564317159465","content":"Hello from history","timestamp":"2026-03-26T12:11:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000002","channel_id":"1072828564317159465","content":"Stand-alone thread","timestamp":"2026-03-26T12:10:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":0,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000002"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000001","channel_id":"1072828564317159465","content":"Old message","timestamp":"2026-03-26T12:10:08.752000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
 
 
 botTestGuild : Discord.Id Discord.GuildId

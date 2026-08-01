@@ -747,9 +747,49 @@ messagesAndLinks :
         )
 messagesAndLinks messages customEmojis discordStickers discordAttachments =
     let
+        -- The ids of the messages a thread can hang off of. A thread created message isn't one
+        -- of them, it stands in for a thread that has no message to hang off of.
+        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
+        threadStarterIds =
+            List.filterMap
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadCreated ->
+                            Nothing
+
+                        _ ->
+                            Just message.id
+                )
+                messages
+                |> SeqSet.fromList
+
+        messages2 : List Discord.Message
+        messages2 =
+            List.filter
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadStarterMessage ->
+                            -- Discord posts this as the first message of a thread that was started
+                            -- from a message. It never has any content, it only points back at the
+                            -- message the thread was started from, which is the message the thread
+                            -- hangs off of here, so there's nothing to show.
+                            False
+
+                        Discord.ThreadCreated ->
+                            -- If the thread this announces was started from a message we are also
+                            -- loading then the thread hangs off that message and this message would
+                            -- be a second copy of it.
+                            SeqSet.member (messageLinkId message) threadStarterIds |> not
+
+                        _ ->
+                            True
+                )
+                messages
+
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
-            List.indexedMap (\index message -> ( message.id, Id.fromInt index )) messages |> OneToOne.fromList
+            List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) messages2
+                |> OneToOne.fromList
     in
     ( List.map
         (\message ->
@@ -787,10 +827,32 @@ messagesAndLinks messages customEmojis discordStickers discordAttachments =
                 )
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
         )
-        messages
+        messages2
         |> IdArray.fromList
     , linkedMessageIds
     )
+
+
+{-| The Discord message id a message gets linked to. Threads hang off a message here, so a
+thread created message (which Discord posts in the parent channel when a thread is created
+without a message or from a message that is old) stands in for the thread it announces:
+linking it to the thread instead of to itself means messages written in the thread end up
+in it, and lets us notice when the thread was started from a message we already have, since
+the thread reuses that message's id.
+-}
+messageLinkId : Discord.Message -> Discord.Id Discord.MessageId
+messageLinkId message =
+    case ( message.type_, message.messageReference ) of
+        ( Discord.ThreadCreated, Included reference ) ->
+            case reference.channelId of
+                Included threadId ->
+                    Discord.idToUInt64 threadId |> Discord.idFromUInt64
+
+                Missing ->
+                    message.id
+
+        _ ->
+            message.id
 
 
 addUploadResponsesToDiscordAttachments :
@@ -861,12 +923,11 @@ joinThread secretKey authentication guildId threadId =
 
 handleCreateMessage :
     String
-    -> OptionalData Discord.MessageReference
     -> Discord.Message
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleCreateMessage websocketJson messageReference discordMessage attachments model =
+handleCreateMessage websocketJson discordMessage attachments model =
     case discordMessage.guildId of
         Missing ->
             let
@@ -1034,7 +1095,6 @@ handleCreateMessage websocketJson messageReference discordMessage attachments mo
                 websocketJson
                 discordGuildId
                 discordMessage.content
-                messageReference
                 discordMessage
                 attachments
                 model
@@ -1085,36 +1145,19 @@ handleDiscordCreateGuildMessage :
     String
     -> Discord.Id Discord.GuildId
     -> String
-    -> OptionalData Discord.MessageReference
     -> Discord.Message
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage websocketJson discordGuildId content messageReference discordMessage attachments model =
+handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMessage attachments model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             case discordGetGuildChannel discordMessage guild of
                 Just ( channelId, channel, threadRoute ) ->
                     let
-                        -- Threads hang off a message here, so a thread created message (which Discord
-                        -- posts in the parent channel when a thread is created without a message or
-                        -- from a message that is old) stands in for the thread it announces. Linking
-                        -- it to the thread instead of to itself means messages written in the thread
-                        -- end up in it, and lets us notice when the thread was started from a message
-                        -- we already have, since the thread reuses that message's id.
                         linkedMessageId : Discord.Id Discord.MessageId
                         linkedMessageId =
-                            case ( discordMessage.type_, messageReference ) of
-                                ( Discord.ThreadCreated, Included reference ) ->
-                                    case reference.channelId of
-                                        Included threadId ->
-                                            Discord.idToUInt64 threadId |> Discord.idFromUInt64
-
-                                        Missing ->
-                                            discordMessage.id
-
-                                _ ->
-                                    discordMessage.id
+                            messageLinkId discordMessage
                     in
                     if OneToOne.memberFirst linkedMessageId channel.linkedMessageIds then
                         ( model, Command.none )
@@ -1540,7 +1583,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_UserCreatedMessage _ messageReference message ->
+                        Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
                                 attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                                 attachments =
@@ -1685,7 +1728,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                     Discord.WebsocketClosed data ->
                                                         data
                                                 )
-                                                messageReference
                                                 message
                                                 attachments
                                                 model4
