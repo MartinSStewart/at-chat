@@ -2227,15 +2227,30 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                 if String.startsWith "messages?" endpoint then
                     StringHttpResponse
                         { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                        (if channelId == "1072828564317159465" then
-                            botTestGuildChannelAHistory
-
-                         else
-                            "[]"
-                        )
+                        (discordChannelHistory channelId)
 
                 else
                     UnhandledHttpRequest
+
+            ( "GET", [ "discord.com", "api", "v9", "channels", channelId, "threads", "archived", _ ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if channelId == botTestGuild_ChannelAString then
+                        botTestGuildChannelAArchivedThreads
+
+                     else
+                        """{"threads":[],"members":[],"has_more":false}"""
+                    )
+
+            ( "GET", [ "discord.com", "api", "v9", "guilds", guildId, "threads", "active" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    (if guildId == botTestGuildString then
+                        botTestGuildActiveThreads
+
+                     else
+                        """{"threads":[],"members":[]}"""
+                    )
 
             ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
                 StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
@@ -3298,6 +3313,66 @@ secondDiscordToken =
     "legit-token-2"
 
 
+{-| What Discord answers with when the messages of a channel are loaded. Newest message
+first, like the real API returns them. Channels other than the Bot Test guild's channel A
+and the threads hanging off its messages are empty.
+-}
+discordChannelHistory : String -> String
+discordChannelHistory channelId =
+    if channelId == botTestGuild_ChannelAString then
+        botTestGuildChannelAHistory
+
+    else if channelId == "1533000000000000001" then
+        -- The thread started from "Old message". Discord posts a thread starter message
+        -- (type 21) as the first message of a thread that was started from a message.
+        """[
+    {"id":"1533096100000000000","channel_id":"1533000000000000001","content":"Message in old message thread","timestamp":"2026-04-02T09:02:35.284000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533096050000000000","channel_id":"1533000000000000001","content":"","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":21,"flags":0,"message_reference":{"type":0,"message_id":"1533000000000000001","guild_id":"705745250815311942","channel_id":"1072828564317159465"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533000000000000002" then
+        """[
+    {"id":"1533096200000000000","channel_id":"1533000000000000002","content":"Message in stand-alone thread","timestamp":"2026-03-26T12:10:40.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533000000000000003" then
+        """[
+    {"id":"1533096300000000000","channel_id":"1533000000000000003","content":"Message in archived thread","timestamp":"2026-03-26T12:11:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1520000000000000000" then
+        """[
+    {"id":"1520000000000000001","channel_id":"1520000000000000000","content":"Message in forgotten thread","timestamp":"2026-01-05T08:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else
+        "[]"
+
+
+{-| The threads the Bot Test guild has that aren't archived. Along with the two threads in
+channel A there is one in another channel, which shouldn't be loaded when channel A is
+reloaded.
+-}
+botTestGuildActiveThreads : String
+botTestGuildActiveThreads =
+    """{"threads":[
+    {"id":"1533000000000000001","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Thread from old message","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-04-02T09:02:31.114000+00:00","locked":false}},
+    {"id":"1533000000000000002","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Stand-alone thread","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-03-26T12:10:30.000000+00:00","locked":false}},
+    {"id":"1533000000000000009","type":11,"guild_id":"705745250815311942","parent_id":"1072828591382999151","owner_id":"161098476632014848","name":"Thread in another channel","message_count":1,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-03-26T12:10:30.000000+00:00","locked":false}}
+],"members":[]}"""
+
+
+{-| The archived threads of the Bot Test guild's channel A. "Forgotten thread" hangs off a
+message that is older than the messages a reload loads, so there is nothing to attach it to.
+-}
+botTestGuildChannelAArchivedThreads : String
+botTestGuildChannelAArchivedThreads =
+    """{"threads":[
+    {"id":"1533000000000000003","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Archived thread","message_count":1,"thread_metadata":{"archived":true,"auto_archive_duration":4320,"archive_timestamp":"2026-03-27T12:11:30.000000+00:00","locked":false}},
+    {"id":"1520000000000000000","type":11,"guild_id":"705745250815311942","parent_id":"1072828564317159465","owner_id":"161098476632014848","name":"Forgotten thread","message_count":1,"thread_metadata":{"archived":true,"auto_archive_duration":4320,"archive_timestamp":"2026-01-06T08:00:00.000000+00:00","locked":false}}
+],"members":[],"has_more":false}"""
+
+
 {-| What Discord answers with when the Bot Test guild's channel A gets reloaded from the
 admin page. Newest message first, like the real API returns them. Along with two ordinary
 messages it contains the two kinds of thread created message (type 18) Discord posts in a
@@ -3317,12 +3392,22 @@ botTestGuildChannelAHistory =
 
 botTestGuild : Discord.Id Discord.GuildId
 botTestGuild =
-    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+    Unsafe.uint64 botTestGuildString |> Discord.idFromUInt64
+
+
+botTestGuildString : String
+botTestGuildString =
+    "705745250815311942"
 
 
 botTestGuild_ChannelA : Discord.Id Discord.ChannelId
 botTestGuild_ChannelA =
-    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+    Unsafe.uint64 botTestGuild_ChannelAString |> Discord.idFromUInt64
+
+
+botTestGuild_ChannelAString : String
+botTestGuild_ChannelAString =
+    "1072828564317159465"
 
 
 checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel

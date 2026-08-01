@@ -4,6 +4,7 @@ module DiscordSync exposing
     , attachmentsToFileData
     , backendSessionIdHash
     , discordUserWebsocketMsg
+    , getChannelThreadsAndMessages
     , getManyMessages
     , handleCreateMessage
     , handleEditMessage
@@ -45,7 +46,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, WebsocketClosedEvent(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, DiscordThreadReload, WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -3150,66 +3151,50 @@ getDiscordGuildData secretKey gatewayGuild =
         )
 
 
-
---Task.map2
---    (\public private -> ( public, private ))
---    (Discord.getPublicArchivedThreadsPayload
---        auth
---        { channelId = channelId
---        , before = Nothing
---        , limit = Just 100
---        }
---        |> http
---        |> Task.map .threads
---        |> Task.onError (\_ -> Task.succeed [])
---    )
---    (Discord.getPrivateArchivedThreadsPayload
---        auth
---        { channelId = channelId
---        , before = Nothing
---        , limit = Just 100
---        }
---        |> http
---        |> Task.map .threads
---        |> Task.onError (\_ -> Task.succeed [])
---    )
---    |> Task.andThen
---        (\( publicArchivedThreads, privateArchivedThreads ) ->
---            let
---                allThreads : List Discord.Channel
---                allThreads =
---                    publicArchivedThreads ++ privateArchivedThreads
---            in
---            List.filterMap
---                (\thread ->
---                    case thread.parentId of
---                        Included (Just parentId) ->
---                            if parentId == channelId then
---                                getManyMessages auth { channelId = thread.id, limit = 1000 }
---                                    |> Task.onError (\_ -> Task.succeed [])
---                                    |> Task.andThen
---                                        (\messages ->
---                                            Task.map
---                                                (\uploadResponses ->
---                                                    { channelId = parentId
---                                                    , channel = thread
---                                                    , messages = List.reverse messages
---                                                    , uploadResponses = uploadResponses
---                                                    }
---                                                )
---                                                (uploadAttachmentsForMessages model messages)
---                                        )
---                                    |> Just
---
---                            else
---                                Nothing
---
---                        _ ->
---                            Nothing
---                )
---                allThreads
---                |> Task.sequence
---        )
+{-| Loads the threads that hang off the messages of a Discord channel, along with the
+messages written in them, so that reloading a channel brings its threads back as well.
+Listing threads can fail on its own (archived threads the linked account isn't allowed to
+see, for instance) without the whole reload being worth failing over, so a thread we can't
+load is left out instead.
+-}
+getChannelThreadsAndMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly x (List DiscordThreadReload)
+getChannelThreadsAndMessages secretKey authentication guildId channelId =
+    Task.map2
+        (++)
+        (Discord.listActiveThreadsPayload authentication guildId
+            |> http secretKey
+            |> Task.map .threads
+            |> Task.onError (\_ -> Task.succeed [])
+        )
+        (Discord.getPublicArchivedThreadsPayload
+            authentication
+            { channelId = channelId, before = Nothing, limit = Just 100 }
+            |> http secretKey
+            |> Task.map .threads
+            |> Task.onError (\_ -> Task.succeed [])
+        )
+        |> Task.andThen
+            (\threads ->
+                List.filter
+                    (\thread -> thread.parentId == Included (Just channelId))
+                    threads
+                    |> List.Extra.uniqueBy (\thread -> Discord.idToString thread.id)
+                    |> List.map
+                        (\thread ->
+                            getManyMessages
+                                secretKey
+                                authentication
+                                { channelId = thread.id, limit = reloadThreadMaxMessages }
+                                |> Task.onError (\_ -> Task.succeed [])
+                                |> Task.map (\messages -> { threadId = thread.id, messages = messages })
+                        )
+                    |> Task.sequence
+            )
 
 
 getManyMessages :
@@ -3691,3 +3676,12 @@ uploadAttachments files uploadAttachmentsResponses =
 reloadChannelMaxMessages : Int
 reloadChannelMaxMessages =
     10000
+
+
+{-| How many messages to load from each of a channel's threads when the channel is
+reloaded. A channel can have a lot of threads and each of them costs a request per 100
+messages, so this is much lower than reloadChannelMaxMessages.
+-}
+reloadThreadMaxMessages : Int
+reloadThreadMaxMessages =
+    1000

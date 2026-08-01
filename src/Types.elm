@@ -87,7 +87,7 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -392,7 +392,7 @@ type alias BackendModel =
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
-    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
+    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel DiscordChannelReload)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
@@ -735,7 +735,7 @@ type BackendMsg
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep
     | ScheduledExportBackendStep Time.Posix
-    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
+    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )

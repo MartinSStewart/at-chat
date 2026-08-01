@@ -1318,7 +1318,7 @@ getPublicArchivedThreads :
         }
     -> Task HttpError ArchivedThreads
 getPublicArchivedThreads authentication params =
-    getPrivateArchivedThreadsPayload authentication params |> toTask
+    getPublicArchivedThreadsPayload authentication params |> toTask
 
 
 getPublicArchivedThreadsPayload :

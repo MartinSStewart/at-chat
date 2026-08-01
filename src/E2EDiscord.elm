@@ -948,7 +948,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , -- Nothing has been written in the thread yet, so the message the thread was
                           -- started from should be the only message in the channel.
                           checkDiscordChannelAMessages [ "other user test" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) []
+                        , checkDiscordChannelAThreads []
                         , T.andThen
                             100
                             (\data ->
@@ -971,7 +971,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             connection
                                             "{\"t\":\"MESSAGE_CREATE\",\"s\":18,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:54:51.284000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":\"*_.#\",\"mute\":false,\"joined_at\":\"2016-08-11T03:26:24.940000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1533095670066712636\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"other user writes in other thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533095101817950311\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                                         , checkDiscordChannelAMessages [ "other user test" ]
-                                        , checkDiscordThreadMessages (Id.fromInt 0) [ "other user writes in other thread" ]
+                                        , checkDiscordChannelAThreads [ ( 0, [ "other user writes in other thread" ] ) ]
                                         , user.checkView
                                             100
                                             (Test.Html.Query.has
@@ -1030,7 +1030,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             connection
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":13,\"op\":0,\"d\":{\"type\":21,\"tts\":false,\"timestamp\":\"2026-08-01T12:53:03.103000+00:00\",\"position\":0,\"pinned\":false,\"message_reference\":{\"type\":0,\"message_id\":\"1533095034637910096\",\"guild_id\":\"705745250815311942\",\"channel_id\":\"1072828564317159465\"},\"mentions\":[{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2026-03-15T15:39:29.018000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"}],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":\"*_.#\",\"mute\":false,\"joined_at\":\"2016-08-11T03:26:24.940000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1533095216322576657\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533095034637910096\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordChannelAMessages [ "test" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) []
+                        , checkDiscordChannelAThreads []
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "<empty>" ])
                         , -- at0232 writes the first real message in the thread.
                           T.websocketSendString
@@ -1038,7 +1038,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             connection
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":14,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:53:10.284000+00:00\",\"position\":1,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":\"*_.#\",\"mute\":false,\"joined_at\":\"2016-08-11T03:26:24.940000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1533095300000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"First message inside thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533095034637910096\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordChannelAMessages [ "test" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) [ "First message inside thread" ]
+                        , checkDiscordChannelAThreads [ ( 0, [ "First message inside thread" ] ) ]
                         ]
                     )
                 ]
@@ -1104,7 +1104,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         , -- A stand-alone thread has no message to hang off of, so the
                                           -- thread-created message stands in for one.
                                           checkDiscordChannelAMessages [ "Thread title" ]
-                                        , checkDiscordThreadMessages (Id.fromInt 0) [ "Thread message" ]
+                                        , checkDiscordChannelAThreads [ ( 0, [ "Thread message" ] ) ]
                                         , user.checkView
                                             100
                                             (Test.Html.Query.has
@@ -1160,7 +1160,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             connection
                             "{\"t\":\"THREAD_CREATE\",\"s\":7,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-04-02T09:02:31.114000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-04-02T09:02:31.114000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1072828564317159465\",\"owner_id\":\"161098476632014848\",\"newly_created\":true,\"name\":\"Thread from old message\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\",\"184437096813953035\"],\"member_count\":2,\"last_message_id\":null,\"id\":\"1533000000000000001\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
                         , checkDiscordChannelAMessages [ "Old message" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) []
+                        , checkDiscordChannelAThreads []
                         , -- at0232 writes the first message in the thread. It belongs in the thread
                           -- hanging off the old message.
                           T.websocketSendString
@@ -1168,14 +1168,14 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             connection
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":8,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:02:35.284000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1533096100000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in old message thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000001\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordChannelAMessages [ "Old message" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) [ "Message in old message thread" ]
+                        , checkDiscordChannelAThreads [ ( 0, [ "Message in old message thread" ] ) ]
                         ]
                     )
                 ]
             )
         ]
     , E2EHelper.startTest
-        "Reloading a Discord channel keeps thread created messages out of the channel"
+        "Reloading a Discord channel loads its threads"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.linkDiscordAndLogin
@@ -1206,20 +1206,51 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                   -- the one for the stand-alone thread is kept since that thread has no other message
                   -- to hang off of.
                   checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
+                , -- Both the active threads and the archived thread are loaded and hang off the
+                  -- message they were started from. The thread starter message in the first thread
+                  -- is left out, and so is the thread whose message is older than the messages that
+                  -- were loaded.
+                  checkDiscordChannelAThreads
+                    [ ( 0, [ "Message in old message thread" ] )
+                    , ( 1, [ "Message in stand-alone thread" ] )
+                    , ( 2, [ "Message in archived thread" ] )
+                    ]
+                , -- The guild's other channels have threads of their own. Loading their messages
+                  -- would be a wasted request since they don't belong to the channel being reloaded.
+                  T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.any
+                                (\request ->
+                                    case E2EHelper.decodeCustomRequest request of
+                                        Just customRequest ->
+                                            String.contains "/channels/1533000000000000009/messages" customRequest.url
+
+                                        Nothing ->
+                                            False
+                                )
+                                data.httpRequests
+                        then
+                            Err "Loaded the messages of a thread belonging to another channel"
+
+                        else
+                            Ok ()
+                    )
                 , E2EHelper.andThenWebsocket
                     (\connection _ ->
-                        [ -- Both threads still end up in the right place when someone writes in them.
+                        [ -- A thread still ends up in the right place when someone writes in it after
+                          -- the reload.
                           T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:03:00.000000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533096100000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in old message thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000001\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
-                        , T.websocketSendString
-                            100
-                            connection
-                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:03:10.000000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533096200000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message in stand-alone thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000002\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-02T09:03:00.000000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533097100000000000\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Written after the reload\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1533000000000000001\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"discriminator\":\"0\",\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
-                        , checkDiscordThreadMessages (Id.fromInt 0) [ "Message in old message thread" ]
-                        , checkDiscordThreadMessages (Id.fromInt 1) [ "Message in stand-alone thread" ]
+                        , checkDiscordChannelAThreads
+                            [ ( 0, [ "Message in old message thread", "Written after the reload" ] )
+                            , ( 1, [ "Message in stand-alone thread" ] )
+                            , ( 2, [ "Message in archived thread" ] )
+                            ]
                         ]
                     )
                 ]
@@ -2866,6 +2897,23 @@ messagesToDebugString messages =
         List.map (\text -> "\"" ++ text ++ "\"") messages |> String.join ", "
 
 
+{-| Joins threads and their contents into something readable enough to be shown in a test
+failure.
+-}
+threadsToDebugString : List ( Int, List String ) -> String
+threadsToDebugString threads =
+    if List.isEmpty threads then
+        "no threads"
+
+    else
+        List.map
+            (\( messageIndex, messages ) ->
+                "a thread on message " ++ String.fromInt messageIndex ++ " containing " ++ messagesToDebugString messages
+            )
+            threads
+            |> String.join " and "
+
+
 {-| Check that the Bot Test guild's channel A contains exactly these messages (in order).
 -}
 checkDiscordChannelAMessages : List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -2899,11 +2947,11 @@ checkDiscordChannelAMessages expected =
         )
 
 
-{-| Check that the thread hanging off the given message in the Bot Test guild's channel A
-contains exactly these messages (in order). A thread that doesn't exist counts as empty.
+{-| Check the threads in the Bot Test guild's channel A against the index of the message
+each of them hangs off of and the messages written in them.
 -}
-checkDiscordThreadMessages : Id.Id Id.ChannelMessageId -> List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-checkDiscordThreadMessages threadId expected =
+checkDiscordChannelAThreads : List ( Int, List String ) -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkDiscordChannelAThreads expected =
     T.checkState
         100
         (\data ->
@@ -2913,26 +2961,26 @@ checkDiscordThreadMessages threadId expected =
             of
                 Just channel ->
                     let
-                        actual : List String
+                        actual : List ( Int, List String )
                         actual =
-                            case SeqDict.get threadId channel.threads of
-                                Just thread ->
-                                    IdArray.toList thread.messages |> List.map (discordMessageToString data.backend)
-
-                                Nothing ->
-                                    []
+                            List.map
+                                (\( threadId, thread ) ->
+                                    ( Id.toInt threadId
+                                    , IdArray.toList thread.messages |> List.map (discordMessageToString data.backend)
+                                    )
+                                )
+                                (SeqDict.toList channel.threads)
+                                |> List.sortBy Tuple.first
                     in
-                    if actual == expected then
+                    if actual == List.sortBy Tuple.first expected then
                         Ok ()
 
                     else
                         Err
-                            ("Expected the thread on message "
-                                ++ String.fromInt (Id.toInt threadId)
-                                ++ " to contain "
-                                ++ messagesToDebugString expected
-                                ++ " but it contains "
-                                ++ messagesToDebugString actual
+                            ("Expected channel A to have "
+                                ++ threadsToDebugString expected
+                                ++ " but it has "
+                                ++ threadsToDebugString actual
                             )
 
                 Nothing ->
