@@ -2160,7 +2160,7 @@ updateLoaded msg model =
                                 )
                                 loggedIn.drafts
                       }
-                    , Command.none
+                    , Http.cancel (FileStatus.uploadTrackerId guildOrDmId fileId)
                     )
                 )
                 model
@@ -2204,7 +2204,7 @@ updateLoaded msg model =
 
                         Nothing ->
                             loggedIn
-                    , Command.none
+                    , Http.cancel (FileStatus.uploadTrackerId guildOrDmId fileId)
                     )
                 )
                 model
