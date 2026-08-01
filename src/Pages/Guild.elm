@@ -625,6 +625,10 @@ unreadOverviewChannels local allDiscordUsers =
         currentUser : FrontendCurrentUser
         currentUser =
             local.localUser.user
+
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local.localUser
     in
     List.concatMap
         (\( guildId, guild ) ->
@@ -667,7 +671,11 @@ unreadOverviewChannels local allDiscordUsers =
                                             thread
                                             |> Maybe.map
                                                 (\unread ->
-                                                    { source = threadSource guild.name channel.name
+                                                    { source =
+                                                        threadSource
+                                                            guild.name
+                                                            channel.name
+                                                            (threadPreviewText allUsers threadId channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -806,7 +814,11 @@ unreadOverviewChannels local allDiscordUsers =
                                                         thread
                                                         |> Maybe.map
                                                             (\unread ->
-                                                                { source = threadSource guild.name channel.name
+                                                                { source =
+                                                                    threadSource
+                                                                        guild.name
+                                                                        channel.name
+                                                                        (threadPreviewText allDiscordUsers threadId channel)
                                                                 , route =
                                                                     DiscordGuildRoute
                                                                         { currentDiscordUserId = currentDiscordUserId
@@ -896,19 +908,22 @@ channelSource guildName channelName =
         ]
 
 
-threadSource : GuildName -> ChannelName -> Element msg
-threadSource guildName channelName =
+{-| A thread is named after the message it started from, which can be arbitrarily long, so
+the guild and channel it belongs to stay at their full width and the thread name is the part
+that gets cut short when there isn't enough room.
+-}
+threadSource : GuildName -> ChannelName -> String -> Element msg
+threadSource guildName channelName threadName =
     Ui.row
-        [ Ui.spacing 8
-        , Ui.width Ui.shrink
-
-        --, MyUi.hoverText (guildName2)
-        ]
-        [ Ui.text (GuildName.toString guildName)
-        , Ui.text "/"
-        , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
-        , Ui.text "/"
-        , Ui.text "thread"
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ Ui.text (GuildName.toString guildName)
+            , Ui.text "/"
+            , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
         ]
 
 
