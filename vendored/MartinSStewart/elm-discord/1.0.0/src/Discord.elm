@@ -8,7 +8,7 @@ module Discord exposing
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
     , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AttachmentFlags, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), ContentInventoryInboxStale, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), Embed, EmbedType(..), EmbeddedActivityLocation, EmbeddedActivityUpdateV2, EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildEmojisUpdate, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, GuildRoleUpdate, GuildScheduledEventUserData, HttpRequest, Id(..), ImageHash(..), ImageSize(..), IntegrationId, Intents, LoginResponse, LoginSettings, MergedMember, MessageFlags, MessageReference, MessageSnapshot, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, Participant, Presence, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, Role, RoleColors, RoleIconHash, RoleOrUserId(..), RoleTags, Roles(..), ScheduledEventId(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerItem, StickerPack, StickerPackId, StickerType(..), SubscriptionListingId, SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, decodeRole, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getStickerPacks, getStickerPacksPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, joinThread, joinThreadPayload, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, memberHasChannelPermission, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, noPermissions, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stickerUrl, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToPartialUser, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3443,6 +3443,26 @@ type ReferencedMessage
     | NoReference
 
 
+{-| Points at what a message relates to. A reply points at the message being replied to,
+a thread starter message (`ThreadStarterMessage`) points at the message its thread was
+started from, and a thread created message (`ThreadCreated`) only sets `channelId`, which
+points at the thread that was created.
+-}
+type alias MessageReference =
+    { messageId : OptionalData (Id MessageId)
+    , channelId : OptionalData (Id ChannelId)
+    , guildId : OptionalData (Id GuildId)
+    }
+
+
+decodeMessageReference : JD.Decoder MessageReference
+decodeMessageReference =
+    JD.succeed MessageReference
+        |> JD.andMap (decodeOptionalData "message_id" decodeId)
+        |> JD.andMap (decodeOptionalData "channel_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
+
+
 type MessageType
     = DefaultMessageType
     | RecipientAdd
@@ -5213,9 +5233,10 @@ decodeDispatchUserEvent eventName =
             JD.field "d" (JD.succeed DispatchUser_ResumedEvent)
 
         "MESSAGE_CREATE" ->
-            JD.map2
+            JD.map3
                 DispatchUser_MessageCreateEvent
                 (JD.at [ "d", "channel_type" ] decodeChannelType)
+                (JD.field "d" (decodeOptionalData "message_reference" decodeMessageReference))
                 (JD.field "d" decodeMessage)
 
         "MESSAGE_UPDATE" ->
@@ -5648,7 +5669,7 @@ type OpDispatchUserEvent
     = DispatchUser_ReadyEvent ReadyData
     | DispatchUser_ReadySupplementalEvent ReadySupplementalData
     | DispatchUser_ResumedEvent
-    | DispatchUser_MessageCreateEvent ChannelType Message
+    | DispatchUser_MessageCreateEvent ChannelType (OptionalData MessageReference) Message
     | DispatchUser_MessageUpdateEvent UserMessageUpdate
     | DispatchUser_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchUser_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
@@ -6386,7 +6407,7 @@ type UserOutMsg connection
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
-    | UserOutMsg_UserCreatedMessage ChannelType Message
+    | UserOutMsg_UserCreatedMessage ChannelType (OptionalData MessageReference) Message
     | UserOutMsg_UserDeletedGuildMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserOutMsg_UserDeletedDmMessage (Id PrivateChannelId) (Id MessageId)
     | UserOutMsg_UserEditedMessage UserMessageUpdate
@@ -6685,8 +6706,8 @@ handleUserGateway authToken intents response model =
                         DispatchUser_ResumedEvent ->
                             ( model, [] )
 
-                        DispatchUser_MessageCreateEvent channelType message ->
-                            ( model, [ UserOutMsg_UserCreatedMessage channelType message ] )
+                        DispatchUser_MessageCreateEvent channelType messageReference message ->
+                            ( model, [ UserOutMsg_UserCreatedMessage channelType messageReference message ] )
 
                         DispatchUser_MessageUpdateEvent messageUpdate ->
                             ( model, [ UserOutMsg_UserEditedMessage messageUpdate ] )

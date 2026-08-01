@@ -1055,7 +1055,9 @@ update msg model =
                 ( attachments, discordAttachments ) =
                     attachmentsUploadedHelper model message (List.Nonempty.toList results)
             in
-            DiscordSync.handleCreateMessage "" message attachments { model | discordAttachments = discordAttachments }
+            -- Only thread created messages need the message reference and those never have
+            -- attachments, so they never make it here
+            DiscordSync.handleCreateMessage "" Missing message attachments { model | discordAttachments = discordAttachments }
 
         DiscordMessageUpdate_AttachmentsUploaded message results ->
             let
