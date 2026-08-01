@@ -4541,10 +4541,10 @@ updateLoaded msg model =
                     handleMouseExitedMessage guildOrDmId (NoThreadWithMessage messageId) model
 
                 MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
                     FrontendExtra.updateLoggedIn
@@ -4569,22 +4569,22 @@ updateLoaded msg model =
                         model
 
                 MessageView.MessageView_PressedReplyLink ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedReply ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowFullMenu bool coord ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_PressedViewThreadLink ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
@@ -4593,14 +4593,68 @@ updateLoaded msg model =
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId (NoThreadWithMessage messageId) model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
-                    Debug.todo ""
+                    case guildOrDmId of
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                            GuildRoute
+                                guildId
+                                (ChannelRoute
+                                    channelId
+                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (Just ChannelHeaderTab_VoiceChat)
+                                )
+                                |> FrontendExtra.routePush model
+
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                            case model.loginStatus of
+                                LoggedIn loggedIn ->
+                                    DmRoute
+                                        { channelId =
+                                            DmChannelId.fromUserIds
+                                                (Local.model loggedIn.localState).localUser.session.userId
+                                                otherUserId
+                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , tab = Just ChannelHeaderTab_VoiceChat
+                                        }
+                                        |> FrontendExtra.routePush model
+
+                                NotLoggedIn _ ->
+                                    ( model, Command.none )
+
+                        DiscordGuildOrDmId _ ->
+                            ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
-                    Debug.todo ""
+                    case guildOrDmId of
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                            GuildRoute
+                                guildId
+                                (ChannelRoute
+                                    channelId
+                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                    (Just (ChannelHeaderTab_Games (Just messageId)))
+                                )
+                                |> FrontendExtra.routePush model
+
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                            case model.loginStatus of
+                                LoggedIn loggedIn ->
+                                    DmRoute
+                                        { channelId =
+                                            DmChannelId.fromUserIds
+                                                (Local.model loggedIn.localState).localUser.session.userId
+                                                otherUserId
+                                        , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                        , tab = Just (ChannelHeaderTab_Games (Just messageId))
+                                        }
+                                        |> FrontendExtra.routePush model
+
+                                NotLoggedIn _ ->
+                                    ( model, Command.none )
+
+                        DiscordGuildOrDmId _ ->
+                            ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIconAnchor _ _ ->
-                    -- Anchors are only picked while drawing on a channel and the unread overview
-                    -- isn't one
                     ( model, Command.none )
 
                 MessageView.MessageView_PressedTimestamp _ _ ->
@@ -4638,10 +4692,10 @@ updateLoaded msg model =
                     handleMouseExitedMessage guildOrDmId (ViewThreadWithMessage threadId messageId) model
 
                 MessageView.MessageView_TouchStart duration bool maybeString _ nonemptyDict ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_AltPressedMessage bool maybeString _ coord ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
                     FrontendExtra.updateLoggedIn
@@ -4666,22 +4720,22 @@ updateLoaded msg model =
                         model
 
                 MessageView.MessageView_PressedReplyLink ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedReply ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedShowFullMenu bool coord ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_PressedViewThreadLink ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
@@ -4690,10 +4744,12 @@ updateLoaded msg model =
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId (ViewThreadWithMessage threadId messageId) model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
-                    Debug.todo ""
+                    -- Calls are not supported inside threads
+                    ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGameStartedCard ->
-                    Debug.todo ""
+                    -- Games are not supported inside threads
+                    ( model, Command.none )
 
                 MessageView.MessageView_PressedUserIconAnchor _ _ ->
                     -- Anchors are only picked while drawing on a channel and the unread overview
