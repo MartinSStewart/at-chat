@@ -24,13 +24,17 @@ art =
         , coordinates = Coord.xy -68 122
         , size = Coord.xy 145 157
         }
-        [ { url = "ascii-sw-home"
-          , coordinates = Coord.xy -434 -141
-          , size = Coord.xy 365 371
+        [ { url = "ascii-bari-gisher"
+          , coordinates = Coord.xy 1173 -47
+          , size = Coord.xy 276 103
           }
-        , { url = "ascii-box-house"
-          , coordinates = Coord.xy -169 -176
-          , size = Coord.xy 303 198
+        , { url = "ascii-fishermoon"
+          , coordinates = Coord.xy 23 -58
+          , size = Coord.xy 284 229
+          }
+        , { url = "ascii-lamb"
+          , coordinates = Coord.xy 125 -91
+          , size = Coord.xy 122 134
           }
         , { url = "ascii-sandwich"
           , coordinates = Coord.xy -723 -150
@@ -64,14 +68,6 @@ art =
           , coordinates = Coord.xy 24 146
           , size = Coord.xy 205 203
           }
-        , { url = "ascii-fishermoon"
-          , coordinates = Coord.xy 23 -58
-          , size = Coord.xy 284 229
-          }
-        , { url = "ascii-lamb"
-          , coordinates = Coord.xy 125 -91
-          , size = Coord.xy 122 134
-          }
         , { url = "ascii-cat-and-fish"
           , coordinates = Coord.xy 189 -202
           , size = Coord.xy 266 298
@@ -96,8 +92,12 @@ art =
           , coordinates = Coord.xy -730 -169
           , size = Coord.xy 103 282
           }
-        , { url = "ascii-bari-gisher"
-          , coordinates = Coord.xy 1173 -47
-          , size = Coord.xy 276 103
+        , { url = "ascii-sw-home"
+          , coordinates = Coord.xy -434 -141
+          , size = Coord.xy 365 371
+          }
+        , { url = "ascii-box-house"
+          , coordinates = Coord.xy -169 -176
+          , size = Coord.xy 303 198
           }
         ]
