@@ -3432,7 +3432,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                          , Html.Attributes.style "border-radius" "4px"
                                          ]
                                             ++ (if isAsciiArt language then
-                                                    [ Html.Attributes.style "font-family" "'Courier New', monospace"
+                                                    [ Html.Attributes.style "font-family" "'ascii', monospace"
                                                     , Html.Attributes.style "line-height" "1"
                                                     ]
 

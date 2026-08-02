@@ -1098,12 +1098,13 @@ notoSansFontFaces =
         latinExtRange =
             "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF"
     in
-    List.map
-        (\weight ->
-            fontFace "Noto Sans" weight ("noto-sans-latin-" ++ String.fromInt weight ++ "-normal.woff2") latinRange
-                ++ fontFace "Noto Sans" weight ("noto-sans-latin-ext-" ++ String.fromInt weight ++ "-normal.woff2") latinExtRange
-        )
-        [ 400, 500, 600, 700 ]
+    fontFace "TrueType" "ascii" 400 "ascii.ttf" latinRange
+        :: List.map
+            (\weight ->
+                fontFace "woff2" "Noto Sans" weight ("noto-sans-latin-" ++ String.fromInt weight ++ "-normal.woff2") latinRange
+                    ++ fontFace "woff2" "Noto Sans" weight ("noto-sans-latin-ext-" ++ String.fromInt weight ++ "-normal.woff2") latinExtRange
+            )
+            [ 400, 500, 600, 700 ]
         |> String.concat
 
 
@@ -1117,8 +1118,8 @@ dejavuSansMonoFontFaces =
         ++ monoFontFace 700 "DejaVuSansMono-Bold.woff2"
 
 
-fontFace : String -> Int -> String -> String -> String
-fontFace family weight fileName unicodeRange =
+fontFace : String -> String -> Int -> String -> String -> String
+fontFace format family weight fileName unicodeRange =
     """
 @font-face {
   font-family: '""" ++ family ++ """';
@@ -1126,7 +1127,7 @@ fontFace family weight fileName unicodeRange =
   font-weight: """ ++ String.fromInt weight ++ """;
   font-stretch: normal;
   font-display: swap;
-  src: url(/fonts/""" ++ fileName ++ """) format('woff2');
+  src: url(/fonts/""" ++ fileName ++ """) format('""" ++ format ++ """');
   unicode-range: """ ++ unicodeRange ++ """;
 }"""
 
