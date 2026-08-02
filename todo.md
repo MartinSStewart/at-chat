@@ -30,6 +30,7 @@
 * Installing app to macbook desktop and then clicking on a notification causes it to open a new tab in safari
 * Adding images to an existing Discord message doesn't work
 * Mouse hover doesn't trigger an animated image in unreadOverview
+* A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
 
 Requested features:
 
