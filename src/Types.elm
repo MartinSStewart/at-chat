@@ -87,14 +87,14 @@ import ImageViewer
 import LinkedAndOtherDiscordUsers exposing (DiscordFrontendCurrentUser, LinkedAndOtherDiscordUsers)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordChannelReload, DiscordFrontendGuild, DiscordRole, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
-import MessageView
+import MessageView exposing (MessageViewMsg)
 import MuteSettings exposing (IsMuted)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -243,7 +243,7 @@ type alias LoggedIn2 =
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
     , replyTo : SeqDict ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId)
-    , revealedSpoilers : Maybe RevealedSpoilers
+    , revealedSpoilers : SeqDict AnyGuildOrDmId RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
@@ -337,8 +337,7 @@ messageMenuMobileOffset mobileMode =
 
 
 type alias RevealedSpoilers =
-    { guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
-    , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    { messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
     , threadMessages : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (NonemptySet Int))
     }
 
@@ -392,7 +391,7 @@ type alias BackendModel =
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
-    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
+    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel DiscordChannelReload)
     , signupsEnabled : Bool
     , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
@@ -542,7 +541,7 @@ type FrontendMsg_
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
-    | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
+    | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageViewMsg
     | ImageViewerMsg ImageViewer.Msg
     | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
@@ -603,6 +602,8 @@ type FrontendMsg_
     | PressedMarkAllChannelsAsRead (List ( AnyGuildOrDmId, ThreadRouteWithMessage ))
     | PressedMuteGuild (Id GuildId) IsMuted
     | PressedMuteDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) IsMuted
+    | UnreadOverviewChannelMsg AnyGuildOrDmId (Id ChannelMessageId) MessageViewMsg
+    | UnreadOverviewThreadMsg AnyGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) MessageViewMsg
 
 
 type alias NewChannelForm =
@@ -735,7 +736,7 @@ type BackendMsg
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep
     | ScheduledExportBackendStep Time.Posix
-    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
+    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError DiscordChannelReload)
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Url, Result Http.Error EmbedData )

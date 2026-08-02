@@ -5,6 +5,7 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserWebsocketMsg
     , getManyMessages
+    , getThreadsForMessages
     , handleCreateMessage
     , handleEditMessage
     , http
@@ -45,7 +46,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, WebsocketClosedEvent(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), DiscordRole, DiscordThreadReload, WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -747,9 +748,49 @@ messagesAndLinks :
         )
 messagesAndLinks messages customEmojis discordStickers discordAttachments =
     let
+        -- The ids of the messages a thread can hang off of. A thread created message isn't one
+        -- of them, it stands in for a thread that has no message to hang off of.
+        threadStarterIds : SeqSet (Discord.Id Discord.MessageId)
+        threadStarterIds =
+            List.filterMap
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadCreated ->
+                            Nothing
+
+                        _ ->
+                            Just message.id
+                )
+                messages
+                |> SeqSet.fromList
+
+        messages2 : List Discord.Message
+        messages2 =
+            List.filter
+                (\message ->
+                    case message.type_ of
+                        Discord.ThreadStarterMessage ->
+                            -- Discord posts this as the first message of a thread that was started
+                            -- from a message. It never has any content, it only points back at the
+                            -- message the thread was started from, which is the message the thread
+                            -- hangs off of here, so there's nothing to show.
+                            False
+
+                        Discord.ThreadCreated ->
+                            -- If the thread this announces was started from a message we are also
+                            -- loading then the thread hangs off that message and this message would
+                            -- be a second copy of it.
+                            SeqSet.member (messageLinkId message) threadStarterIds |> not
+
+                        _ ->
+                            True
+                )
+                messages
+
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
-            List.indexedMap (\index message -> ( message.id, Id.fromInt index )) messages |> OneToOne.fromList
+            List.indexedMap (\index message -> ( messageLinkId message, Id.fromInt index )) messages2
+                |> OneToOne.fromList
     in
     ( List.map
         (\message ->
@@ -787,10 +828,32 @@ messagesAndLinks messages customEmojis discordStickers discordAttachments =
                 )
                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
         )
-        messages
+        messages2
         |> IdArray.fromList
     , linkedMessageIds
     )
+
+
+{-| The Discord message id a message gets linked to. Threads hang off a message here, so a
+thread created message (which Discord posts in the parent channel when a thread is created
+without a message or from a message that is old) stands in for the thread it announces:
+linking it to the thread instead of to itself means messages written in the thread end up
+in it, and lets us notice when the thread was started from a message we already have, since
+the thread reuses that message's id.
+-}
+messageLinkId : Discord.Message -> Discord.Id Discord.MessageId
+messageLinkId message =
+    case ( message.type_, message.messageReference ) of
+        ( Discord.ThreadCreated, Included reference ) ->
+            case reference.channelId of
+                Included threadId ->
+                    Discord.idToUInt64 threadId |> Discord.idFromUInt64
+
+                Missing ->
+                    message.id
+
+        _ ->
+            message.id
 
 
 addUploadResponsesToDiscordAttachments :
@@ -1092,18 +1155,30 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
         Just guild ->
             case discordGetGuildChannel discordMessage guild of
                 Just ( channelId, channel, threadRoute ) ->
-                    if OneToOne.memberFirst discordMessage.id channel.linkedMessageIds then
+                    let
+                        linkedMessageId : Discord.Id Discord.MessageId
+                        linkedMessageId =
+                            messageLinkId discordMessage
+                    in
+                    if OneToOne.memberFirst linkedMessageId channel.linkedMessageIds then
                         ( model, Command.none )
 
                     else
                         case discordMessage.type_ of
+                            Discord.ThreadStarterMessage ->
+                                -- Discord posts this as the first message of a thread that was started
+                                -- from a message. It never has any content, it only points back at the
+                                -- message the thread was started from, which is the message the thread
+                                -- hangs off of here, so there's nothing to show.
+                                ( model, Command.none )
+
                             Discord.GuildMemberJoin ->
                                 let
                                     message : Message messageId (Discord.Id Discord.UserId)
                                     message =
                                         Message.userJoined discordMessage.timestamp discordMessage.author.id
                                 in
-                                case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
+                                case LocalState.createDiscordChannelMessageBackend linkedMessageId message channel of
                                     Ok ( _, channel4 ) ->
                                         let
                                             userAvatars : Command BackendOnly ToFrontend BackendMsg
@@ -1275,7 +1350,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
-                                                case LocalState.createDiscordChannelMessageBackend discordMessage.id (Message.UserTextMessage message) channel of
+                                                case LocalState.createDiscordChannelMessageBackend linkedMessageId (Message.UserTextMessage message) channel of
                                                     Ok ( messageId, channel3 ) ->
                                                         ( ( Broadcast.discordGuildMessageNotification
                                                                 usersMentioned
@@ -3076,66 +3151,50 @@ getDiscordGuildData secretKey gatewayGuild =
         )
 
 
+{-| Loads the messages of the threads hanging off the given channel messages, so that
+reloading a channel brings its threads back as well.
 
---Task.map2
---    (\public private -> ( public, private ))
---    (Discord.getPublicArchivedThreadsPayload
---        auth
---        { channelId = channelId
---        , before = Nothing
---        , limit = Just 100
---        }
---        |> http
---        |> Task.map .threads
---        |> Task.onError (\_ -> Task.succeed [])
---    )
---    (Discord.getPrivateArchivedThreadsPayload
---        auth
---        { channelId = channelId
---        , before = Nothing
---        , limit = Just 100
---        }
---        |> http
---        |> Task.map .threads
---        |> Task.onError (\_ -> Task.succeed [])
---    )
---    |> Task.andThen
---        (\( publicArchivedThreads, privateArchivedThreads ) ->
---            let
---                allThreads : List Discord.Channel
---                allThreads =
---                    publicArchivedThreads ++ privateArchivedThreads
---            in
---            List.filterMap
---                (\thread ->
---                    case thread.parentId of
---                        Included (Just parentId) ->
---                            if parentId == channelId then
---                                getManyMessages auth { channelId = thread.id, limit = 1000 }
---                                    |> Task.onError (\_ -> Task.succeed [])
---                                    |> Task.andThen
---                                        (\messages ->
---                                            Task.map
---                                                (\uploadResponses ->
---                                                    { channelId = parentId
---                                                    , channel = thread
---                                                    , messages = List.reverse messages
---                                                    , uploadResponses = uploadResponses
---                                                    }
---                                                )
---                                                (uploadAttachmentsForMessages model messages)
---                                        )
---                                    |> Just
---
---                            else
---                                Nothing
---
---                        _ ->
---                            Nothing
---                )
---                allThreads
---                |> Task.sequence
---        )
+Discord sets the has-thread flag on the message a thread was started from, and on the
+thread created message that stands in for a thread that was started without one, so the
+messages themselves say which threads exist. That works for archived threads too, unlike
+listing a guild's active threads, which is a bot-only endpoint.
+
+Loading a thread's messages can fail on its own without the whole reload being worth
+failing over, so a thread we can't load is left out instead.
+
+-}
+getThreadsForMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> List Discord.Message
+    -> Task BackendOnly x (List DiscordThreadReload)
+getThreadsForMessages secretKey authentication messages =
+    List.filterMap
+        (\message ->
+            case message.flags of
+                Included flags ->
+                    if flags.hasThread then
+                        -- A thread has the same id as the message it hangs off of
+                        messageLinkId message |> Discord.idToUInt64 |> Discord.idFromUInt64 |> Just
+
+                    else
+                        Nothing
+
+                Missing ->
+                    Nothing
+        )
+        messages
+        |> List.Extra.uniqueBy Discord.idToString
+        |> List.map
+            (\threadId ->
+                getManyMessages
+                    secretKey
+                    authentication
+                    { channelId = threadId, limit = reloadThreadMaxMessages }
+                    |> Task.onError (\_ -> Task.succeed [])
+                    |> Task.map (\threadMessages -> { threadId = threadId, messages = threadMessages })
+            )
+        |> Task.sequence
 
 
 getManyMessages :
@@ -3617,3 +3676,12 @@ uploadAttachments files uploadAttachmentsResponses =
 reloadChannelMaxMessages : Int
 reloadChannelMaxMessages =
     10000
+
+
+{-| How many messages to load from each of a channel's threads when the channel is
+reloaded. A channel can have a lot of threads and each of them costs a request per 100
+messages, so this is much lower than reloadChannelMaxMessages.
+-}
+reloadThreadMaxMessages : Int
+reloadThreadMaxMessages =
+    1000

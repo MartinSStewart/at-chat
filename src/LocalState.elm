@@ -17,10 +17,12 @@ module LocalState exposing
     , DeletedBackendGuild
     , DiscordBackendChannel
     , DiscordBackendGuild
+    , DiscordChannelReload
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
     , DiscordRole
+    , DiscordThreadReload
     , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
@@ -67,6 +69,8 @@ module LocalState exposing
     , deleteMessageFrontendHelper
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
+    , discordChannelReloadAttachmentCount
+    , discordChannelReloadMessages
     , discordChannelToFrontend
     , discordDmChannelWithUser
     , discordGuildAvailableStickersAndCustomEmojis
@@ -682,6 +686,43 @@ type LoadingDiscordChannelStep messages
     = LoadingDiscordChannelMessages
     | LoadingDiscordChannelMessagesFailed Discord.HttpError
     | LoadingDiscordChannelAttachments Time.Posix messages
+
+
+{-| Everything that was loaded from Discord when a channel gets reloaded. `messages` and
+each thread's messages are in the order Discord returns them, newest first. DM channels
+have no threads.
+-}
+type alias DiscordChannelReload =
+    { messages : List Discord.Message
+    , threads : List DiscordThreadReload
+    }
+
+
+{-| The messages of a thread that hangs off the message with the same id as `threadId`.
+-}
+type alias DiscordThreadReload =
+    { threadId : Discord.Id Discord.ChannelId
+    , messages : List Discord.Message
+    }
+
+
+{-| Every message that was loaded, so that the attachments of a channel and its threads can
+be uploaded in one go.
+-}
+discordChannelReloadMessages : DiscordChannelReload -> List Discord.Message
+discordChannelReloadMessages reload =
+    reload.messages ++ List.concatMap .messages reload.threads
+
+
+{-| How many attachments have to be uploaded for everything that was loaded when a Discord
+channel is reloaded. The admin page shows it while it waits for the uploads to finish.
+-}
+discordChannelReloadAttachmentCount : DiscordChannelReload -> Int
+discordChannelReloadAttachmentCount reload =
+    List.foldl
+        (\message count -> count + List.length message.attachments)
+        0
+        (discordChannelReloadMessages reload)
 
 
 userIsLoadingDiscordChannel : Discord.Id Discord.UserId -> SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel a) -> Bool

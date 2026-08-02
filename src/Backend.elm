@@ -50,7 +50,7 @@ import LinkedAndOtherDiscordUsers
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
+import LocalState exposing (BackendChannel, BackendGuild, CallStatus(..), ChannelStatus(..), ConnectionData, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReload, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
 import MembersAndOwner
@@ -1066,7 +1066,7 @@ update msg model =
 
         ReloadedDiscordGuildChannel userIdToLoadWith guildId channelId attachments ->
             case ( LocalState.getDiscordGuildAndChannel guildId channelId model, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
-                ( Just ( guild, channel ), Just (LoadingDiscordGuildChannel _ guildIdB channelIdB (LoadingDiscordChannelAttachments _ messages)) ) ->
+                ( Just ( guild, channel ), Just (LoadingDiscordGuildChannel _ guildIdB channelIdB (LoadingDiscordChannelAttachments _ reload)) ) ->
                     if guildId == guildIdB && channelId == channelIdB then
                         let
                             attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
@@ -1075,59 +1075,64 @@ update msg model =
 
                             ( messages2, linkedMessageIds ) =
                                 DiscordSync.messagesAndLinks
-                                    (List.reverse messages)
+                                    (List.reverse reload.messages)
                                     model.discordCustomEmojis
                                     model.discordStickers
                                     attachments2
 
-                            --( attachments3, channel2 ) =
-                            --case result of
-                            --    Ok { messages, attachments, threads } ->
-                            --        let
-                            --            attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
-                            --            attachments2 =
-                            --                List.foldl
-                            --                    (\thread dict ->
-                            --                        DiscordSync.addUploadResponsesToDiscordAttachments thread.uploadResponses dict
-                            --                    )
-                            --                    (DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments)
-                            --                    threads
-                            --
-                            --            ( messages2, linkedMessageIds ) =
-                            --                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
-                            --        in
-                            --        ( attachments2
-                            --        , { channel
-                            --            | messages = messages2
-                            --            , linkedMessageIds = linkedMessageIds
-                            --            , threads =
-                            --                List.filterMap
-                            --                    (\thread ->
-                            --                        case
-                            --                            OneToOne.second
-                            --                                (Discord.toUInt64 thread.channel.id |> Discord.fromUInt64)
-                            --                                linkedMessageIds
-                            --                        of
-                            --                            Just channelMessageIndex ->
-                            --                                let
-                            --                                    ( messages3, links ) =
-                            --                                        DiscordSync.messagesAndLinks thread.messages attachments2
-                            --                                in
-                            --                                ( channelMessageIndex
-                            --                                , { messages = messages3
-                            --                                  , lastTypedAt = SeqDict.empty
-                            --                                  , linkedMessageIds = links
-                            --                                  }
-                            --                                )
-                            --                                    |> Just
-                            --
-                            --                            Nothing ->
-                            --                                Nothing
-                            --                    )
-                            --                    threads
-                            --                    |> SeqDict.fromList
-                            --          }
-                            --        )
+                            threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+                            threads =
+                                List.filterMap
+                                    (\thread ->
+                                        let
+                                            threadMessageId : Discord.Id Discord.MessageId
+                                            threadMessageId =
+                                                Discord.idToUInt64 thread.threadId |> Discord.idFromUInt64
+                                        in
+                                        case OneToOne.second threadMessageId linkedMessageIds of
+                                            Just channelMessageIndex ->
+                                                let
+                                                    -- Keep whatever the thread already had that isn't
+                                                    -- loaded from Discord, such as drawings
+                                                    existingThread : DiscordBackendThread
+                                                    existingThread =
+                                                        case OneToOne.second threadMessageId channel.linkedMessageIds of
+                                                            Just oldMessageIndex ->
+                                                                SeqDict.get oldMessageIndex channel.threads
+                                                                    |> Maybe.withDefault Thread.discordBackendInit
+
+                                                            Nothing ->
+                                                                Thread.discordBackendInit
+
+                                                    ( threadMessages, threadLinkedMessageIds ) =
+                                                        DiscordSync.messagesAndLinks
+                                                            (List.reverse thread.messages)
+                                                            model.discordCustomEmojis
+                                                            model.discordStickers
+                                                            attachments2
+                                                in
+                                                if IdArray.isEmpty threadMessages then
+                                                    -- A thread nobody has written anything in yet is
+                                                    -- the same as the message not having a thread
+                                                    Nothing
+
+                                                else
+                                                    ( channelMessageIndex
+                                                    , { existingThread
+                                                        | messages = threadMessages
+                                                        , linkedMessageIds = threadLinkedMessageIds
+                                                      }
+                                                    )
+                                                        |> Just
+
+                                            Nothing ->
+                                                -- The message the thread hangs off of is older than the
+                                                -- messages we loaded, so there's nothing to attach it to
+                                                Nothing
+                                    )
+                                    reload.threads
+                                    |> SeqDict.fromList
+
                             model2 : BackendModel
                             model2 =
                                 { model
@@ -1138,7 +1143,11 @@ update msg model =
                                                 | channels =
                                                     SeqDict.insert
                                                         channelId
-                                                        { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                                                        { channel
+                                                            | messages = messages2
+                                                            , linkedMessageIds = linkedMessageIds
+                                                            , threads = threads
+                                                        }
                                                         guild.channels
                                             }
                                             model.discordGuilds
@@ -1160,7 +1169,7 @@ update msg model =
 
         ReloadedDiscordDmChannel userIdToLoadWith channelId attachments ->
             case ( SeqDict.get channelId model.discordDmChannels, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
-                ( Just channel, Just (LoadingDiscordDmChannel _ channelIdB (LoadingDiscordChannelAttachments _ messages)) ) ->
+                ( Just channel, Just (LoadingDiscordDmChannel _ channelIdB (LoadingDiscordChannelAttachments _ reload)) ) ->
                     if channelId == channelIdB then
                         let
                             attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
@@ -1171,7 +1180,7 @@ update msg model =
 
                             ( messages2, linkedMessageIds ) =
                                 DiscordSync.messagesAndLinks
-                                    (List.reverse messages)
+                                    (List.reverse reload.messages)
                                     model.discordCustomEmojis
                                     model.discordStickers
                                     attachments2
@@ -1235,11 +1244,11 @@ update msg model =
                 Just (LoadingDiscordGuildChannel startTime loadingGuildId loadingChannelId LoadingDiscordChannelMessages) ->
                     if guildId == loadingGuildId && channelId == loadingChannelId then
                         let
-                            loading : LoadingDiscordChannel (List Discord.Message)
+                            loading : LoadingDiscordChannel DiscordChannelReload
                             loading =
                                 (case result of
-                                    Ok messages ->
-                                        LoadingDiscordChannelAttachments time messages
+                                    Ok reload ->
+                                        LoadingDiscordChannelAttachments time reload
 
                                     Err error ->
                                         LoadingDiscordChannelMessagesFailed error
@@ -1252,14 +1261,16 @@ update msg model =
                           }
                         , Command.batch
                             [ case result of
-                                Ok messages ->
-                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                Ok reload ->
+                                    DiscordSync.uploadAttachmentsForMessages
+                                        model
+                                        (LocalState.discordChannelReloadMessages reload)
                                         |> Task.perform (ReloadedDiscordGuildChannel userIdToLoadWith guildId channelId)
 
                                 Err _ ->
                                     Command.none
                             , LocalState.loadingDiscordChannelMap
-                                (List.foldl (\message count -> count + List.length message.attachments) 0)
+                                LocalState.discordChannelReloadAttachmentCount
                                 loading
                                 |> Just
                                 |> Server_LoadingDiscordChannelChanged userIdToLoadWith
@@ -1279,11 +1290,12 @@ update msg model =
                 Just (LoadingDiscordDmChannel startTime loadingChannelId LoadingDiscordChannelMessages) ->
                     if channelId == loadingChannelId then
                         let
-                            loading : LoadingDiscordChannel (List Discord.Message)
+                            loading : LoadingDiscordChannel DiscordChannelReload
                             loading =
                                 (case result of
                                     Ok messages ->
-                                        LoadingDiscordChannelAttachments time messages
+                                        -- DM channels don't have threads
+                                        LoadingDiscordChannelAttachments time { messages = messages, threads = [] }
 
                                     Err error ->
                                         LoadingDiscordChannelMessagesFailed error
@@ -1303,7 +1315,7 @@ update msg model =
                                 Err _ ->
                                     Command.none
                             , LocalState.loadingDiscordChannelMap
-                                (List.foldl (\message count -> count + List.length message.attachments) 0)
+                                LocalState.discordChannelReloadAttachmentCount
                                 loading
                                 |> Just
                                 |> Server_LoadingDiscordChannelChanged userIdToLoadWith
@@ -8064,18 +8076,12 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             model.serverSecret
                             auth
                             { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
+                            |> Task.andThen
+                                (\messages ->
+                                    DiscordSync.getThreadsForMessages model.serverSecret auth messages
+                                        |> Task.map (\threads -> { messages = messages, threads = threads })
+                                )
                             |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
-
-                        --(DiscordSync.getChannelThreads auth guildId channelId model)
-                        --|> Task.andThen
-                        --    (\( messages, threads ) ->
-                        --        Task.map
-                        --            (\attachments ->
-                        --                { messages = messages, attachments = attachments, threads = threads }
-                        --            )
-                        --            (DiscordSync.uploadAttachmentsForMessages model messages)
-                        --    )
-                        --|> Task.attempt (ReloadedDiscordChannel time userIdToLoadWith guildId channelId)
                         ]
                     )
 

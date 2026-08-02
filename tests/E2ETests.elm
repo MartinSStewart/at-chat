@@ -1739,14 +1739,19 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.text "Unread in the thread" ])
 
-                        -- The thread is listed separately from the channel it's in.
+                        -- The thread is listed separately from the channel it's in, under the
+                        -- message it was started from.
                         , userReload.checkView
                             100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "My new guild!"
-                                , Test.Html.Selector.exactText "general"
-                                , Test.Html.Selector.exactText "thread"
-                                ]
+                            (\html ->
+                                Test.Html.Query.find
+                                    [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_guild_1_0_thread_1" ]
+                                    html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText "My new guild!"
+                                        , Test.Html.Selector.exactText "general"
+                                        , Test.Html.Selector.exactText "Unread in the channel"
+                                        ]
                             )
 
                         -- The day the oldest shown message was written on is above it, and

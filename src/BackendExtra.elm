@@ -1429,9 +1429,7 @@ adminData model lastLogPageViewed =
     , loadingDiscordChannels =
         SeqDict.map
             (\_ channel ->
-                LocalState.loadingDiscordChannelMap
-                    (List.foldl (\message count -> count + List.length message.attachments) 0)
-                    channel
+                LocalState.loadingDiscordChannelMap LocalState.discordChannelReloadAttachmentCount channel
             )
             model.loadingDiscordChannels
     , logs = Pagination.init lastLogPageViewed model.logs

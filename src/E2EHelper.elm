@@ -2223,6 +2223,15 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
 }"""
                     )
 
+            ( "GET", [ "discord.com", "api", "v9", "channels", channelId, endpoint ] ) ->
+                if String.startsWith "messages?" endpoint then
+                    StringHttpResponse
+                        { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                        (discordChannelHistory channelId)
+
+                else
+                    UnhandledHttpRequest
+
             ( "PATCH", [ "discord.com", "api", "v9", "channels", _, "messages", _ ] ) ->
                 StringHttpResponse { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty } ""
 
@@ -3284,14 +3293,77 @@ secondDiscordToken =
     "legit-token-2"
 
 
+{-| What Discord answers with when the messages of a channel are loaded. Newest message
+first, like the real API returns them. Channels other than the Bot Test guild's channel A
+and the threads hanging off its messages are empty.
+-}
+discordChannelHistory : String -> String
+discordChannelHistory channelId =
+    if channelId == botTestGuild_ChannelAString then
+        botTestGuildChannelAHistory
+
+    else if channelId == "1533000000000000001" then
+        -- The thread started from "Old message". Discord posts a thread starter message
+        -- (type 21) as the first message of a thread that was started from a message.
+        """[
+    {"id":"1533096100000000000","channel_id":"1533000000000000001","content":"Message in old message thread","timestamp":"2026-04-02T09:02:35.284000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533096050000000000","channel_id":"1533000000000000001","content":"","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":21,"flags":0,"message_reference":{"type":0,"message_id":"1533000000000000001","guild_id":"705745250815311942","channel_id":"1072828564317159465"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533000000000000002" then
+        """[
+    {"id":"1533096200000000000","channel_id":"1533000000000000002","content":"Message in stand-alone thread","timestamp":"2026-03-26T12:10:40.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else if channelId == "1533000000000000003" then
+        """[
+    {"id":"1533096300000000000","channel_id":"1533000000000000003","content":"Message in archived thread","timestamp":"2026-03-26T12:11:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":0,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+    else
+        "[]"
+
+
+{-| What Discord answers with when the Bot Test guild's channel A gets reloaded from the
+admin page. Newest message first, like the real API returns them.
+
+Along with two ordinary messages it contains the two kinds of thread created message
+(type 18) Discord posts in a channel: one for a stand-alone thread (its own id is the
+thread's id) and one for a thread started from "Old message" (its message\_reference points
+at the thread, which reuses that message's id).
+
+Every message that a thread hangs off of has the has-thread flag (32) set. "Hello from
+history" has an archived thread, which is just as visible in the flag as an active one.
+
+-}
+botTestGuildChannelAHistory : String
+botTestGuildChannelAHistory =
+    """[
+    {"id":"1533096000000000000","channel_id":"1072828564317159465","content":"Thread from old message","timestamp":"2026-04-02T09:02:31.114000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":32,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000001"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000003","channel_id":"1072828564317159465","content":"Hello from history","timestamp":"2026-03-26T12:11:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000002","channel_id":"1072828564317159465","content":"Stand-alone thread","timestamp":"2026-03-26T12:10:30.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":18,"flags":32,"message_reference":{"type":0,"guild_id":"705745250815311942","channel_id":"1533000000000000002"},"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}},
+    {"id":"1533000000000000001","channel_id":"1072828564317159465","content":"Old message","timestamp":"2026-03-26T12:10:08.752000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0,"flags":32,"author":{"username":"at0232","public_flags":0,"id":"161098476632014848","global_name":"AT","discriminator":"0","avatar":"3d7b1aa7b5149fe06971b6dedf682d82"}}
+]"""
+
+
 botTestGuild : Discord.Id Discord.GuildId
 botTestGuild =
-    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+    Unsafe.uint64 botTestGuildString |> Discord.idFromUInt64
+
+
+botTestGuildString : String
+botTestGuildString =
+    "705745250815311942"
 
 
 botTestGuild_ChannelA : Discord.Id Discord.ChannelId
 botTestGuild_ChannelA =
-    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+    Unsafe.uint64 botTestGuild_ChannelAString |> Discord.idFromUInt64
+
+
+botTestGuild_ChannelAString : String
+botTestGuild_ChannelAString =
+    "1072828564317159465"
 
 
 checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
