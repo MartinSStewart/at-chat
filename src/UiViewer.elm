@@ -128,6 +128,8 @@ main =
                         , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
                         , NormalText '\n' "Code block with spoilers revealed"
                         , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
+                        , NormalText '\n' "Ascii art code block"
+                        , CodeBlock (Language (NonemptyString 'a' "scii")) "┌───┐\n│ x │\n└───┘"
                         ]
                     )
                     |> Html.div []

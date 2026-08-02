@@ -200,6 +200,20 @@ type Language
     | NoLanguage
 
 
+{-| A code block tagged with the `ascii` language contains ASCII art rather than source code.
+The characters need to line up into a grid, so it's drawn in Courier New with no extra spacing
+between lines (the elm-ui root sets `line-height: 1.4`, which would leave gaps between rows).
+-}
+isAsciiArt : Language -> Bool
+isAsciiArt language =
+    case language of
+        Language name ->
+            String.toLower (String.Nonempty.toString name) == "ascii"
+
+        NoLanguage ->
+            False
+
+
 normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
@@ -1174,22 +1188,30 @@ emailViewHelper config dropNextLineBreak state nonempty =
                            ]
                     )
 
-                CodeBlock _ text ->
+                CodeBlock language text ->
                     ( True
                     , currentList
                         ++ [ Email.Html.div
-                                [ Email.Html.Attributes.backgroundColor
+                                ([ Email.Html.Attributes.backgroundColor
                                     (if state.spoiler then
                                         spoilerBackground
 
                                      else
                                         codeBackground
                                     )
-                                , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
-                                , Email.Html.Attributes.padding "0 4px 0 4px"
-                                , Email.Html.Attributes.borderRadius "4px"
-                                , Email.Html.Attributes.fontFamily "monospace"
-                                ]
+                                 , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
+                                 , Email.Html.Attributes.padding "0 4px 0 4px"
+                                 , Email.Html.Attributes.borderRadius "4px"
+                                 ]
+                                    ++ (if isAsciiArt language then
+                                            [ Email.Html.Attributes.fontFamily "'Courier New', monospace"
+                                            , Email.Html.Attributes.lineHeight "1"
+                                            ]
+
+                                        else
+                                            [ Email.Html.Attributes.fontFamily "monospace" ]
+                                       )
+                                )
                                 [ if state.spoiler then
                                     Email.Html.span [ Email.Html.Attributes.style "opacity" "0" ] [ Email.Html.text text ]
 
@@ -3390,14 +3412,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                            ]
                     )
 
-                CodeBlock _ text ->
+                CodeBlock language text ->
                     case showLargeContent of
                         ShowLargeContent _ ->
                             ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
-                                        [ Html.Attributes.style
+                                        ([ Html.Attributes.style
                                             "background-color"
                                             (if state.spoiler then
                                                 spoilerBackground
@@ -3405,11 +3427,19 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                              else
                                                 codeBackground
                                             )
-                                        , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
-                                        , Html.Attributes.style "padding" "0 4px 0 4px"
-                                        , Html.Attributes.style "border-radius" "4px"
-                                        , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
-                                        ]
+                                         , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
+                                         , Html.Attributes.style "padding" "0 4px 0 4px"
+                                         , Html.Attributes.style "border-radius" "4px"
+                                         ]
+                                            ++ (if isAsciiArt language then
+                                                    [ Html.Attributes.style "font-family" "'Courier New', monospace"
+                                                    , Html.Attributes.style "line-height" "1"
+                                                    ]
+
+                                                else
+                                                    [ Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace" ]
+                                               )
+                                        )
                                         [ if state.spoiler then
                                             Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
 
