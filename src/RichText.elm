@@ -97,6 +97,19 @@ codeBorder =
     "rgb(55,61,73)"
 
 
+{-| The border and left/right padding of a code block. Named because scaling ascii art has
+to subtract them from the container to know how much room the text actually gets.
+-}
+codeBorderWidth : Int
+codeBorderWidth =
+    1
+
+
+codePaddingX : Int
+codePaddingX =
+    4
+
+
 {-| Blue bar drawn along the left edge of block quotes and embeds
 -}
 accentBarColor : String
@@ -208,6 +221,37 @@ isAsciiArt language =
 
         NoLanguage ->
             False
+
+
+{-| ascii.ttf is drawn on a grid 18 pixels to the em and 10 to the character, and only comes
+out sharp when one of those pixels covers a whole number of device pixels. Use the largest
+whole number that still lets the widest line fit the room the code block has, which is the
+container less its border and padding. One drawn pixel per device pixel is the floor; art
+too wide for that overflows rather than turning blurry.
+-}
+asciiFontSize : Int -> Float -> String -> String
+asciiFontSize containerWidth devicePixelRatio text =
+    let
+        columns : Int
+        columns =
+            String.split "\n" text
+                |> List.map String.length
+                |> List.maximum
+                |> Maybe.withDefault 1
+                |> max 1
+
+        roomInDevicePixels : Int
+        roomInDevicePixels =
+            (containerWidth - 2 * (codeBorderWidth + codePaddingX))
+                |> toFloat
+                |> (*) devicePixelRatio
+                |> floor
+
+        scale : Int
+        scale =
+            roomInDevicePixels // (10 * columns) |> max 1
+    in
+    String.fromFloat (18 * toFloat scale / devicePixelRatio) ++ "px"
 
 
 normalTextFromNonempty : NonemptyString -> RichText userId
@@ -3413,7 +3457,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
 
                 CodeBlock language text ->
                     case showLargeContent of
-                        ShowLargeContent _ ->
+                        ShowLargeContent containerWidth2 ->
                             ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList
@@ -3426,8 +3470,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                              else
                                                 codeBackground
                                             )
-                                         , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
-                                         , Html.Attributes.style "padding" "0 4px 0 4px"
+                                         , Html.Attributes.style
+                                            "border"
+                                            (codeBorder ++ " solid " ++ String.fromInt codeBorderWidth ++ "px")
+                                         , Html.Attributes.style
+                                            "padding"
+                                            ("0 " ++ String.fromInt codePaddingX ++ "px")
                                          , Html.Attributes.style "border-radius" "4px"
                                          ]
                                             ++ (if isAsciiArt language then
@@ -3435,10 +3483,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                     , Html.Attributes.style "line-height" "1"
                                                     , Html.Attributes.style
                                                         "font-size"
-                                                        (String.fromFloat
-                                                            (18 * toFloat (max 1 (round config.devicePixelRatio)) / config.devicePixelRatio)
-                                                            ++ "px"
-                                                        )
+                                                        (asciiFontSize containerWidth2 config.devicePixelRatio text)
                                                     , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
                                                       Html.Attributes.style "transform" "translateZ(0)"
                                                     ]
