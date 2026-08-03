@@ -43,6 +43,7 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
+import Color.Convert
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
@@ -89,7 +90,7 @@ spoilerBackground =
 
 codeBackground : String
 codeBackground =
-    MyUi.colorToStyle MyUi.background2
+    MyUi.colorToStyle (MyUi.colorWithAlpha 0.5 MyUi.background1)
 
 
 codeBorder : String
