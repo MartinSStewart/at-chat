@@ -4248,7 +4248,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForReaction _ _ ->
             Ui.inFront
                 (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector
@@ -4274,7 +4273,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForMessage _ ->
             Ui.inFront
                 (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector
@@ -4304,7 +4302,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
             in
             Ui.inFront
                 (Emoji.selector
-                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector
