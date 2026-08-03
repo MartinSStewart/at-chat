@@ -3434,6 +3434,9 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
                                                     , Html.Attributes.style "line-height" "1"
+                                                    , Html.Attributes.style "font-size" "18px"
+                                                    , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
+                                                      Html.Attributes.style "transform" "translateZ(0)"
                                                     ]
 
                                                 else
