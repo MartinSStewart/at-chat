@@ -420,17 +420,23 @@ emojiButtonId index =
     Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
-searchInput : Bool -> Model -> Array EmojiOrSticker -> Int -> Element Msg
-searchInput searchHasFocus model items columns =
+searchInput : Model -> Array EmojiOrSticker -> Int -> Element Msg
+searchInput model items columns =
     let
         isSearching =
             model.searchText /= ""
     in
     Ui.row
-        [ Ui.attrIf
-            (not isSearching && not searchHasFocus)
-            (Ui.inFront (Ui.el [ MyUi.noPointerEvents, Ui.centerX ] (Ui.text "🔎")))
-        , Ui.height Ui.fill
+        [ Ui.Font.size 16
+        , (if isSearching then
+            Ui.none
+
+           else
+            Ui.el
+                [ Ui.centerY, Ui.paddingXY 8 0, Ui.Font.color MyUi.font3, MyUi.noPointerEvents ]
+                (Ui.text "Search by name")
+          )
+            |> Ui.inFront
         ]
         [ Ui.Input.text
             [ if isSearching then
@@ -438,11 +444,9 @@ searchInput searchHasFocus model items columns =
 
               else
                 Ui.background MyUi.background2
-            , Ui.Font.size 16
             , Ui.border 0
-            , Ui.attrIf (not isSearching && not searchHasFocus) Ui.pointer
             , Ui.height Ui.fill
-            , Ui.paddingXY 8 0
+            , Ui.paddingXY 8 8
             , Ui.width Ui.fill
             , Ui.id (Dom.idToString searchInputId)
             , Ui.htmlAttribute
@@ -600,7 +604,6 @@ type EmojiOrSticker
 
 selector :
     Bool
-    -> Bool
     -> Int
     -> Model
     -> EmojiConfig
@@ -610,7 +613,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector searchHasFocus isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -680,32 +683,26 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                 ]
                 [ Ui.row
                     [ MyUi.noShrinking ]
-                    (searchInput searchHasFocus model emojis columns
-                        :: (if isSearching then
-                                -- This is here just so the header height doesn't change
-                                [ Ui.el [ Ui.opacity 0 ] (Ui.text "🔎") ]
+                    (List.filterMap
+                        (\category ->
+                            case category of
+                                EmojiCategory Components ->
+                                    Nothing
 
-                            else
-                                List.filterMap
-                                    (\category ->
-                                        case category of
-                                            EmojiCategory Components ->
-                                                Nothing
-
-                                            _ ->
-                                                MyUi.elButton
-                                                    (categoryButtonId category)
-                                                    (PressedCategory category)
-                                                    [ Ui.Font.center
-                                                    , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-                                                    , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
-                                                    ]
-                                                    (categoryToEmojiString userData.skinTone category)
-                                                    |> Just
-                                    )
-                                    (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
-                           )
+                                _ ->
+                                    MyUi.elButton
+                                        (categoryButtonId category)
+                                        (PressedCategory category)
+                                        [ Ui.Font.center
+                                        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                        , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
+                                        ]
+                                        (categoryToEmojiString userData.skinTone category)
+                                        |> Just
+                        )
+                        (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
                     )
+                , searchInput model emojis columns
                 , Ui.row
                     [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
                     (List.indexedMap

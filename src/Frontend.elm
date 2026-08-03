@@ -5560,7 +5560,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "" }
               }
-            , Command.none
+            , Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
             )
         )
         model
