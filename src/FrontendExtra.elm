@@ -2219,6 +2219,9 @@ isPressMsg msg =
         GotStartupData _ ->
             False
 
+        GotDevicePixelRatio _ ->
+            False
+
         PressedViewAttachedFileInfo _ _ ->
             True
 

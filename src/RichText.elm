@@ -97,6 +97,19 @@ codeBorder =
     "rgb(55,61,73)"
 
 
+{-| The border and left/right padding of a code block. Named because scaling ascii art has
+to subtract them from the container to know how much room the text actually gets.
+-}
+codeBorderWidth : Int
+codeBorderWidth =
+    1
+
+
+codePaddingX : Int
+codePaddingX =
+    4
+
+
 {-| Blue bar drawn along the left edge of block quotes and embeds
 -}
 accentBarColor : String
@@ -198,6 +211,50 @@ escapedCharToString escaped =
 type Language
     = Language NonemptyString
     | NoLanguage
+
+
+isAsciiArt : Language -> Bool
+isAsciiArt language =
+    case language of
+        Language name ->
+            String.toLower (String.Nonempty.toString name) == "ascii"
+
+        NoLanguage ->
+            False
+
+
+{-| ascii.ttf is drawn on a grid 18 pixels to the em and 10 to the character, and only comes
+out sharp when one of those pixels covers a whole number of device pixels. Use the largest
+whole number that still lets the widest line fit the room the code block has, which is the
+container less its border and padding. One drawn pixel per device pixel is the floor; art
+too wide for that overflows rather than turning blurry.
+-}
+asciiFontSize : Int -> Float -> String -> String
+asciiFontSize containerWidth devicePixelRatio text =
+    let
+        columns : Int
+        columns =
+            String.split "\n" text
+                |> List.map String.length
+                |> List.maximum
+                |> Maybe.withDefault 1
+                |> max 1
+
+        rows =
+            String.indexes "\n" text |> List.length |> max 1
+
+        roomInDevicePixels : Int
+        roomInDevicePixels =
+            (containerWidth - 2 * (codeBorderWidth + codePaddingX))
+                |> toFloat
+                |> (*) devicePixelRatio
+                |> floor
+
+        scale : Int
+        scale =
+            min (400 // (18 * rows)) (roomInDevicePixels // (10 * columns)) |> clamp 1 3
+    in
+    String.fromFloat (18 * toFloat scale / devicePixelRatio) ++ "px"
 
 
 normalTextFromNonempty : NonemptyString -> RichText userId
@@ -1174,22 +1231,30 @@ emailViewHelper config dropNextLineBreak state nonempty =
                            ]
                     )
 
-                CodeBlock _ text ->
+                CodeBlock language text ->
                     ( True
                     , currentList
                         ++ [ Email.Html.div
-                                [ Email.Html.Attributes.backgroundColor
+                                ([ Email.Html.Attributes.backgroundColor
                                     (if state.spoiler then
                                         spoilerBackground
 
                                      else
                                         codeBackground
                                     )
-                                , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
-                                , Email.Html.Attributes.padding "0 4px 0 4px"
-                                , Email.Html.Attributes.borderRadius "4px"
-                                , Email.Html.Attributes.fontFamily "monospace"
-                                ]
+                                 , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
+                                 , Email.Html.Attributes.padding "0 4px 0 4px"
+                                 , Email.Html.Attributes.borderRadius "4px"
+                                 ]
+                                    ++ (if isAsciiArt language then
+                                            [ Email.Html.Attributes.fontFamily "'Courier New', monospace"
+                                            , Email.Html.Attributes.lineHeight "1"
+                                            ]
+
+                                        else
+                                            [ Email.Html.Attributes.fontFamily "monospace" ]
+                                       )
+                                )
                                 [ if state.spoiler then
                                     Email.Html.span [ Email.Html.Attributes.style "opacity" "0" ] [ Email.Html.text text ]
 
@@ -2919,6 +2984,8 @@ preview onPressLink config nonempty =
         , embedDrawings = SeqDict.empty
         , drawingUserColor = always ""
         , isSelectingAnchor = False
+        , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
+          devicePixelRatio = 1
         }
         Array.empty
         0
@@ -2939,6 +3006,7 @@ type alias Config a userId =
     , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> String
     , isSelectingAnchor : Bool
+    , devicePixelRatio : Float
     }
 
 
@@ -3390,14 +3458,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                            ]
                     )
 
-                CodeBlock _ text ->
+                CodeBlock language text ->
                     case showLargeContent of
-                        ShowLargeContent _ ->
+                        ShowLargeContent containerWidth2 ->
                             ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
-                                        [ Html.Attributes.style
+                                        ([ Html.Attributes.style
                                             "background-color"
                                             (if state.spoiler then
                                                 spoilerBackground
@@ -3405,11 +3473,28 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                              else
                                                 codeBackground
                                             )
-                                        , Html.Attributes.style "border" (codeBorder ++ " solid 1px")
-                                        , Html.Attributes.style "padding" "0 4px 0 4px"
-                                        , Html.Attributes.style "border-radius" "4px"
-                                        , Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace"
-                                        ]
+                                         , Html.Attributes.style
+                                            "border"
+                                            (codeBorder ++ " solid " ++ String.fromInt codeBorderWidth ++ "px")
+                                         , Html.Attributes.style
+                                            "padding"
+                                            ("0 " ++ String.fromInt codePaddingX ++ "px")
+                                         , Html.Attributes.style "border-radius" "4px"
+                                         ]
+                                            ++ (if isAsciiArt language then
+                                                    [ Html.Attributes.style "font-family" "'ascii', monospace"
+                                                    , Html.Attributes.style "line-height" "1"
+                                                    , Html.Attributes.style
+                                                        "font-size"
+                                                        (asciiFontSize containerWidth2 config.devicePixelRatio text)
+                                                    , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
+                                                      Html.Attributes.style "transform" "translateZ(0)"
+                                                    ]
+
+                                                else
+                                                    [ Html.Attributes.style "font-family" "'DejaVu Sans Mono', monospace" ]
+                                               )
+                                        )
                                         [ if state.spoiler then
                                             Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
 

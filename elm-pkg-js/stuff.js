@@ -609,6 +609,10 @@ exports.init = async function init(app)
             app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
         });
 
+    app.ports.request_device_pixel_ratio_to_js.subscribe((a) => {
+        app.ports.device_pixel_ratio_from_js.send(window.devicePixelRatio || 1);
+    });
+
     app.ports.request_notification_permission.subscribe((a) => {
         if ("Notification" in window) {
             Notification.requestPermission().then((permission) => {

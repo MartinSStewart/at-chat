@@ -549,6 +549,7 @@ type FrontendMsg_
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | GotStartupData Ports.StartupData
+    | GotDevicePixelRatio Float
     | PressedCloseImageInfo
     | PressedMemberListBack
     | PressedExportChannel ExportChannelId

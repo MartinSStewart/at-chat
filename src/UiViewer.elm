@@ -96,6 +96,7 @@ main =
                     , embedDrawings = SeqDict.empty
                     , drawingUserColor = \_ -> ""
                     , isSelectingAnchor = False
+                    , devicePixelRatio = 1
                     }
                     Array.empty
                     (Nonempty
@@ -128,6 +129,8 @@ main =
                         , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
                         , NormalText '\n' "Code block with spoilers revealed"
                         , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
+                        , NormalText '\n' "Ascii art code block"
+                        , CodeBlock (Language (NonemptyString 'a' "scii")) "┌───┐\n│ x │\n└───┘"
                         ]
                     )
                     |> Html.div []
@@ -197,6 +200,7 @@ stickersSection =
             , embedDrawings = SeqDict.empty
             , drawingUserColor = \_ -> ""
             , isSelectingAnchor = False
+            , devicePixelRatio = 1
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -350,6 +354,12 @@ notificationEmail =
                 , Sticker (Id.fromInt 2)
                 , normal " custom emoji "
                 , CustomEmoji (Id.fromInt 3)
+                , CodeBlock (Language (NonemptyString 'a' "scii")) """════════════════════════════
+_,  ____ ____  ,-
+¢ºº < Yo.│ No.> ··?\\
+/¥\\  ¯¯¯¯ ¯¯¯¯  /V\\
+/¯|    ___      ´╥`
+░▒▓█"""
                 ]
 
         message =
@@ -556,6 +566,7 @@ embedExamples whitelistedDomains =
                 , embedDrawings = SeqDict.empty
                 , drawingUserColor = \_ -> ""
                 , isSelectingAnchor = False
+                , devicePixelRatio = 1
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)

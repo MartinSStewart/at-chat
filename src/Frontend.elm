@@ -129,6 +129,45 @@ app_ =
         }
 
 
+{-| LocalUser keeps a copy of the device pixel ratio so that ascii art can pick a font size
+that lands on whole device pixels without messageView needing another parameter. That copy
+has to be kept in step with the real value, which changes when the page is zoomed or moved
+to a screen with a different pixel density.
+-}
+setDevicePixelRatio : Float -> LoadedFrontend -> LoadedFrontend
+setDevicePixelRatio devicePixelRatio model =
+    let
+        startupData : Ports.StartupData
+        startupData =
+            model.startupData
+    in
+    { model
+        | startupData = { startupData | devicePixelRatio = devicePixelRatio }
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser = { localUser | devicePixelRatio = devicePixelRatio }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
 checkAppVersion : Bool -> Command FrontendOnly toMsg FrontendMsg_
 checkAppVersion reloadOnNewVersion =
     Http.get
@@ -161,6 +200,7 @@ subscriptions _ model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
+        , Ports.gotDevicePixelRatio GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
@@ -346,7 +386,8 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper loading.timezone startupData.userAgent loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper loading.timezone startupData.userAgent startupData.devicePixelRatio loginData loading
+                        |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -411,14 +452,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 loadedInitHelper :
     Time.Zone
     -> UserAgent
+    -> Float
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper timezone userAgent loginData loading =
+loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState userAgent timezone loginData
+            loginDataToLocalState userAgent timezone devicePixelRatio loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -513,8 +555,8 @@ loadedInitHelper timezone userAgent loginData loading =
     )
 
 
-loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
-loginDataToLocalState userAgent timezone loginData =
+loginDataToLocalState : UserAgent -> Time.Zone -> Float -> LoginData -> LocalState
+loginDataToLocalState userAgent timezone devicePixelRatio loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -538,6 +580,7 @@ loginDataToLocalState userAgent timezone loginData =
         , discordUsers = loginData.discordUsers
         , timezone = timezone
         , userAgent = userAgent
+        , devicePixelRatio = devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         }
@@ -688,7 +731,17 @@ updateLoaded msg model =
 
         GotWindowSize width height ->
             FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }, Command.none ))
+                (\loggedIn ->
+                    ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
+                    , -- Zooming the page changes the device pixel ratio and resizes the window at
+                      -- the same time, so this is where a new ratio turns up. Ask for it so ascii
+                      -- art can pick a font size that lands on whole device pixels. Moving the
+                      -- window to a screen with a different pixel density doesn't always resize it,
+                      -- but the startup data gets re-sent whenever the window regains focus, and
+                      -- that carries the ratio too.
+                      Ports.requestDevicePixelRatio
+                    )
+                )
                 { model | windowSize = Coord.xy width height }
 
         GotTimezone _ ->
@@ -2853,7 +2906,12 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( { model | startupData = startupData }, checkAppVersion False )
+            ( setDevicePixelRatio startupData.devicePixelRatio { model | startupData = startupData }
+            , checkAppVersion False
+            )
+
+        GotDevicePixelRatio devicePixelRatio ->
+            ( setDevicePixelRatio devicePixelRatio model, Command.none )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model
@@ -6554,7 +6612,12 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.timezone model.startupData.userAgent loginData model
+                                    loadedInitHelper
+                                        model.timezone
+                                        model.startupData.userAgent
+                                        model.startupData.devicePixelRatio
+                                        loginData
+                                        model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -7233,7 +7296,12 @@ updateLoadedFromBackend msg model =
                         (\loggedIn ->
                             ( { loggedIn
                                 | localState =
-                                    loginDataToLocalState model.startupData.userAgent model.timezone loginData |> Local.init
+                                    loginDataToLocalState
+                                        model.startupData.userAgent
+                                        model.timezone
+                                        model.startupData.devicePixelRatio
+                                        loginData
+                                        |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
