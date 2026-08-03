@@ -200,10 +200,6 @@ type Language
     | NoLanguage
 
 
-{-| A code block tagged with the `ascii` language contains ASCII art rather than source code.
-The characters need to line up into a grid, so it's drawn in Courier New with no extra spacing
-between lines (the elm-ui root sets `line-height: 1.4`, which would leave gaps between rows).
--}
 isAsciiArt : Language -> Bool
 isAsciiArt language =
     case language of
@@ -212,18 +208,6 @@ isAsciiArt language =
 
         NoLanguage ->
             False
-
-
-{-| ascii.ttf draws every glyph on a grid that is 18 pixels to the em, so it only comes
-out sharp when one em covers a whole number of device pixels that is a multiple of 18.
-Round the device pixel ratio to the nearest whole number of device pixels per drawn pixel,
-then work back to the css font size that lands on it. That's 18px on a 1x, 2x or 3x
-screen, and something else once the screen or the browser zoom puts us on a fractional
-ratio: 24px at 1.5x, 14.4px at 1.25x.
--}
-asciiFontSize : Float -> String
-asciiFontSize devicePixelRatio =
-    String.fromFloat (18 * toFloat (max 1 (round devicePixelRatio)) / devicePixelRatio) ++ "px"
 
 
 normalTextFromNonempty : NonemptyString -> RichText userId
@@ -3449,7 +3433,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
                                                     , Html.Attributes.style "line-height" "1"
-                                                    , Html.Attributes.style "font-size" (asciiFontSize config.devicePixelRatio)
+                                                    , Html.Attributes.style
+                                                        "font-size"
+                                                        (String.fromFloat
+                                                            (18 * toFloat (max 1 (round config.devicePixelRatio)) / config.devicePixelRatio)
+                                                            ++ "px"
+                                                        )
                                                     , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
                                                       Html.Attributes.style "transform" "translateZ(0)"
                                                     ]
