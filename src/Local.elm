@@ -1,4 +1,4 @@
-module Local exposing (ChangeId(..), Local(..), init, model, networkError, update, updateFromBackend)
+module Local exposing (ChangeId(..), Local(..), init, mapModel, model, networkError, update, updateFromBackend)
 
 import Dict exposing (Dict)
 import Duration
@@ -56,6 +56,19 @@ update userUpdate time msg (Local localModel_) =
 model : Local msg model -> model
 model (Local localModel_) =
     localModel_.localModel
+
+
+{-| Change both the local and the server copy of the model. The two only differ by the
+local messages that haven't been confirmed yet, so this is only sound for client-only data
+that no message touches, such as the device pixel ratio.
+-}
+mapModel : (model -> model) -> Local msg model -> Local msg model
+mapModel func (Local localModel_) =
+    Local
+        { localModel_
+            | localModel = func localModel_.localModel
+            , serverModel = func localModel_.serverModel
+        }
 
 
 updateFromBackend :

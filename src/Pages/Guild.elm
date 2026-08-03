@@ -6961,6 +6961,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.userColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
+                    , devicePixelRatio = localUser.devicePixelRatio
                     }
                     message2.embeds
                     message2.content
@@ -7094,6 +7095,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.discordUserColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
+                    , devicePixelRatio = localUser.devicePixelRatio
                     }
                     message2.embeds
                     message2.content

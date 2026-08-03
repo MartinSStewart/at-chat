@@ -96,6 +96,7 @@ main =
                     , embedDrawings = SeqDict.empty
                     , drawingUserColor = \_ -> ""
                     , isSelectingAnchor = False
+                    , devicePixelRatio = 1
                     }
                     Array.empty
                     (Nonempty
@@ -199,6 +200,7 @@ stickersSection =
             , embedDrawings = SeqDict.empty
             , drawingUserColor = \_ -> ""
             , isSelectingAnchor = False
+            , devicePixelRatio = 1
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -558,6 +560,7 @@ embedExamples whitelistedDomains =
                 , embedDrawings = SeqDict.empty
                 , drawingUserColor = \_ -> ""
                 , isSelectingAnchor = False
+                , devicePixelRatio = 1
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)

@@ -214,6 +214,18 @@ isAsciiArt language =
             False
 
 
+{-| ascii.ttf draws every glyph on a grid that is 18 pixels to the em, so it only comes
+out sharp when one em covers a whole number of device pixels that is a multiple of 18.
+Round the device pixel ratio to the nearest whole number of device pixels per drawn pixel,
+then work back to the css font size that lands on it. That's 18px on a 1x, 2x or 3x
+screen, and something else once the screen or the browser zoom puts us on a fractional
+ratio: 24px at 1.5x, 14.4px at 1.25x.
+-}
+asciiFontSize : Float -> String
+asciiFontSize devicePixelRatio =
+    String.fromFloat (18 * toFloat (max 1 (round devicePixelRatio)) / devicePixelRatio) ++ "px"
+
+
 normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
@@ -2941,6 +2953,8 @@ preview onPressLink config nonempty =
         , embedDrawings = SeqDict.empty
         , drawingUserColor = always ""
         , isSelectingAnchor = False
+        , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
+          devicePixelRatio = 1
         }
         Array.empty
         0
@@ -2961,6 +2975,7 @@ type alias Config a userId =
     , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> String
     , isSelectingAnchor : Bool
+    , devicePixelRatio : Float
     }
 
 
@@ -3434,7 +3449,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                             ++ (if isAsciiArt language then
                                                     [ Html.Attributes.style "font-family" "'ascii', monospace"
                                                     , Html.Attributes.style "line-height" "1"
-                                                    , Html.Attributes.style "font-size" "18px"
+                                                    , Html.Attributes.style "font-size" (asciiFontSize config.devicePixelRatio)
                                                     , -- Disables subpixel antialiasing on Chrome. Doesn't work on Firefox. I don't know about Safari
                                                       Html.Attributes.style "transform" "translateZ(0)"
                                                     ]

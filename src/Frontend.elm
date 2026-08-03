@@ -346,7 +346,8 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper loading.timezone startupData.userAgent loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper loading.timezone startupData.userAgent startupData.devicePixelRatio loginData loading
+                        |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -411,14 +412,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 loadedInitHelper :
     Time.Zone
     -> UserAgent
+    -> Float
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper timezone userAgent loginData loading =
+loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState userAgent timezone loginData
+            loginDataToLocalState userAgent timezone devicePixelRatio loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -513,8 +515,8 @@ loadedInitHelper timezone userAgent loginData loading =
     )
 
 
-loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
-loginDataToLocalState userAgent timezone loginData =
+loginDataToLocalState : UserAgent -> Time.Zone -> Float -> LoginData -> LocalState
+loginDataToLocalState userAgent timezone devicePixelRatio loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -538,6 +540,7 @@ loginDataToLocalState userAgent timezone loginData =
         , discordUsers = loginData.discordUsers
         , timezone = timezone
         , userAgent = userAgent
+        , devicePixelRatio = devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         }
@@ -2853,7 +2856,36 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( { model | startupData = startupData }, checkAppVersion False )
+            let
+                ( model2, cmd ) =
+                    -- The device pixel ratio changes when the page is zoomed or moved to another
+                    -- screen, so refresh the copy LocalUser keeps for ascii art rendering.
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | localState =
+                                    Local.mapModel
+                                        (\local ->
+                                            let
+                                                localUser : User.LocalUser
+                                                localUser =
+                                                    local.localUser
+                                            in
+                                            { local
+                                                | localUser =
+                                                    { localUser
+                                                        | devicePixelRatio = startupData.devicePixelRatio
+                                                    }
+                                            }
+                                        )
+                                        loggedIn.localState
+                              }
+                            , Command.none
+                            )
+                        )
+                        { model | startupData = startupData }
+            in
+            ( model2, Command.batch [ cmd, checkAppVersion False ] )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model
@@ -6554,7 +6586,12 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.timezone model.startupData.userAgent loginData model
+                                    loadedInitHelper
+                                        model.timezone
+                                        model.startupData.userAgent
+                                        model.startupData.devicePixelRatio
+                                        loginData
+                                        model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -7233,7 +7270,12 @@ updateLoadedFromBackend msg model =
                         (\loggedIn ->
                             ( { loggedIn
                                 | localState =
-                                    loginDataToLocalState model.startupData.userAgent model.timezone loginData |> Local.init
+                                    loginDataToLocalState
+                                        model.startupData.userAgent
+                                        model.timezone
+                                        model.startupData.devicePixelRatio
+                                        loginData
+                                        |> Local.init
                                 , isReloading = False
                               }
                             , Command.none
