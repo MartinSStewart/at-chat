@@ -405,7 +405,8 @@ skinToneView selectedSkinTone =
         , Html.Attributes.attribute "aria-label" "Skin tone"
         , Html.Attributes.title "Skin tone"
         , Html.Attributes.style "height" "100%"
-        , Html.Attributes.style "border" "0"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+        , Html.Attributes.style "border-radius" "4px"
         , Html.Attributes.style "padding" "0 4px"
         , Html.Attributes.style "font-size" "20px"
         , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
@@ -489,50 +490,60 @@ searchInput model skinTone items columns =
     in
     Ui.row
         [ Ui.Font.size 16
-        , (if isSearching then
-            Ui.none
-
-           else
-            Ui.el
-                [ Ui.centerY, Ui.paddingXY 8 0, Ui.Font.color MyUi.font3, MyUi.noPointerEvents ]
-                (Ui.text "Search by name")
-          )
-            |> Ui.inFront
+        , Ui.paddingXY 8 4
+        , Ui.spacing 8
         ]
-        [ Ui.Input.text
-            [ if isSearching then
-                Ui.background MyUi.background3
+        [ Ui.row
+            [ Ui.border 1
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.rounded 4
+            , Ui.clip
+            , Ui.height Ui.fill
+            , (if isSearching then
+                Ui.none
+
+               else
+                Ui.el
+                    [ Ui.centerY, Ui.paddingXY 8 0, Ui.Font.color MyUi.font3, MyUi.noPointerEvents ]
+                    (Ui.text "Search by name")
+              )
+                |> Ui.inFront
+            ]
+            [ Ui.Input.text
+                [ if isSearching then
+                    Ui.background MyUi.background3
+
+                  else
+                    Ui.background MyUi.background2
+                , Ui.border 0
+                , Ui.height Ui.fill
+                , Ui.paddingXY 8 8
+                , Ui.width Ui.fill
+                , Ui.id (Dom.idToString searchInputId)
+                , Ui.htmlAttribute
+                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model items columns))
+                ]
+                { onChange = TypedSearchText
+                , text = model.searchText
+                , placeholder = Nothing
+                , label = Ui.Input.labelHidden (Dom.idToString searchInputId)
+                }
+            , if isSearching then
+                MyUi.elButton
+                    (Dom.id "emoji_clearSearch")
+                    PressedClearSearch
+                    [ Ui.width (Ui.px 40)
+                    , Ui.background MyUi.background3
+                    , Ui.height Ui.fill
+                    , Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , MyUi.hoverText "Clear search"
+                    ]
+                    (Ui.html Icons.x)
 
               else
-                Ui.background MyUi.background2
-            , Ui.border 0
-            , Ui.height Ui.fill
-            , Ui.paddingXY 8 8
-            , Ui.width Ui.fill
-            , Ui.id (Dom.idToString searchInputId)
-            , Ui.htmlAttribute
-                (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model items columns))
+                Ui.none
             ]
-            { onChange = TypedSearchText
-            , text = model.searchText
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden (Dom.idToString searchInputId)
-            }
-        , if isSearching then
-            MyUi.elButton
-                (Dom.id "emoji_clearSearch")
-                PressedClearSearch
-                [ Ui.width (Ui.px 40)
-                , Ui.background MyUi.background3
-                , Ui.height Ui.fill
-                , Ui.contentCenterX
-                , Ui.contentCenterY
-                , MyUi.hoverText "Clear search"
-                ]
-                (Ui.html Icons.x)
-
-          else
-            Ui.none
         , skinToneView skinTone
         ]
 
