@@ -21,14 +21,14 @@ import Route exposing (ShowMembersTab(..))
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import UserSession
 import WordSpellingGame
 
 
 tests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 tests normalConfig =
     T.testGroup
         "Word Spelling Game"
@@ -1036,8 +1036,8 @@ appears in a column to the right of the status view; on a narrower one it overla
 close button, and is also dismissed when the player grabs a tray tile. This covers both layouts.
 -}
 wordDefinitions :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 wordDefinitions normalConfig =
     T.testGroup
         "Word definitions"
@@ -1066,8 +1066,8 @@ desktopBoardCell boardXOffset cx cy =
 -}
 placeLoadSolo :
     Int
-    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 placeLoadSolo boardXOffset admin =
     let
         pointerEvent : ( Float, Float ) -> Json.Encode.Value
@@ -1112,8 +1112,8 @@ placeLoadSolo boardXOffset admin =
 the right of the status view.
 -}
 wordDefinitionColumnTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 wordDefinitionColumnTest normalConfig =
     E2EHelper.startTest
         "Word definition in a right-hand column"
@@ -1153,8 +1153,8 @@ wordDefinitionColumnTest normalConfig =
 overlay has a close button and is also dismissed when the player interacts with their tray.
 -}
 wordDefinitionOverlayTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 wordDefinitionOverlayTest normalConfig =
     let
         pointerDown : ( Float, Float ) -> Json.Encode.Value
@@ -1206,24 +1206,24 @@ wordDefinitionOverlayTest normalConfig =
 
 {-| All games stored in guild channels (as opposed to DM channels) on the backend.
 -}
-guildChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameData )
+guildChannelGames : E2EHelper.BackendModel2 -> List ( Id ChannelMessageId, Game.BackendGameData )
 guildChannelGames backend =
-    SeqDict.values backend.guilds
+    SeqDict.values (E2EHelper.unwrapBackend backend).guilds
         |> List.concatMap (\guild -> SeqDict.values guild.channels)
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
 
 
 {-| All games stored in DM channels on the backend.
 -}
-dmChannelGames : BackendModel -> List ( Id ChannelMessageId, Game.BackendGameData )
+dmChannelGames : E2EHelper.BackendModel2 -> List ( Id ChannelMessageId, Game.BackendGameData )
 dmChannelGames backend =
-    SeqDict.values backend.dmChannels
+    SeqDict.values (E2EHelper.unwrapBackend backend).dmChannels
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
 
 
 {-| The shared state of the single word spelling game running in a DM channel.
 -}
-dmWordSpellingShared : BackendModel -> Result String WordSpellingGame.Shared
+dmWordSpellingShared : E2EHelper.BackendModel2 -> Result String WordSpellingGame.Shared
 dmWordSpellingShared backend =
     case dmChannelGames backend of
         [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
@@ -1314,7 +1314,7 @@ checkGame expected shared =
 {-| Assert the current turn and the number of place-word attempts left for the single word spelling
 game running in a DM channel.
 -}
-checkWordSpellingState : { turnCount : Int, attemptsLeft : Int } -> BackendModel -> Result String ()
+checkWordSpellingState : { turnCount : Int, attemptsLeft : Int } -> E2EHelper.BackendModel2 -> Result String ()
 checkWordSpellingState expected backend =
     case dmChannelGames backend of
         [ ( _, Game.GameData_WordSpellingGame _ _ shared ) ] ->
@@ -1403,8 +1403,8 @@ checkPopCount expected model =
 
 
 wordSpellingGamePremove :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 wordSpellingGamePremove normalConfig =
     E2EHelper.startTest
         "Word spelling premove"

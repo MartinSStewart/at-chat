@@ -7,12 +7,12 @@ import Effect.Test as T
 import Log
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
 voiceChatTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 voiceChatTest normalConfig =
     T.testGroup
         "Voice chat"
@@ -78,8 +78,8 @@ voiceChatTest normalConfig =
 
 
 cloudflareCostTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 cloudflareCostTest config =
     E2EHelper.startTest
         "Cloudflare cost alert logs and emails the admin"
@@ -108,7 +108,7 @@ cloudflareCostTest config =
         , T.checkBackend 200
             (\m ->
                 if
-                    Array.toList m.logs
+                    Array.toList (E2EHelper.unwrapBackend m).logs
                         |> List.any
                             (\entry ->
                                 case entry.log of

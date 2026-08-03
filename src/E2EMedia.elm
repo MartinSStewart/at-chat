@@ -11,12 +11,12 @@ import List.Extra
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
 imageViewerTests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 imageViewerTests imageUploadConfig =
     T.testGroup
         "Image viewer"
@@ -730,8 +730,8 @@ imageViewerTests imageUploadConfig =
 
 
 videoAttachmentTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 videoAttachmentTest videoUploadConfig =
     E2EHelper.startTest
         "Video attachments render inline and can be spoilered"
@@ -752,8 +752,8 @@ videoAttachmentTest videoUploadConfig =
 
 
 audioAttachmentTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 audioAttachmentTest audioUploadConfig =
     E2EHelper.startTest
         "Audio attachments render inline and can be spoilered"

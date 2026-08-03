@@ -28,14 +28,14 @@ import SeqDict
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
 {-| Pasting a large chunk of text that would push the message over the max message length converts the pasted text into a text file attachment instead of inserting it into the text input.
 -}
 largePasteBecomesAttachment :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 largePasteBecomesAttachment config =
     E2EHelper.startTest
         "Pasted text too long to fit in a message is attached as a text file instead"
@@ -105,8 +105,8 @@ copy of the channel and downloads it. The JSON should contain every message plus
 the publicly available data of everyone with access to the channel.
 -}
 exportChannelTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 exportChannelTest config =
     E2EHelper.startTest
         "Export a guild channel to a JSON file"
@@ -175,8 +175,8 @@ exportChannelTest config =
 the same "Export channel" button that guild channels have.
 -}
 exportDmChannelTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 exportDmChannelTest config =
     E2EHelper.startTest
         "Export a DM channel to a JSON file"
@@ -242,8 +242,8 @@ focus decoder requires before it will record the input as focused.
 -}
 focusSearchInput :
     Dom.HtmlId
-    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 focusSearchInput htmlId client =
     client.portEvent
         100
@@ -257,7 +257,7 @@ focusSearchInput htmlId client =
         )
 
 
-friendsSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+friendsSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 friendsSearchTest config =
     E2EHelper.startTest
         "Filter friends with the direct messages search input"
@@ -331,7 +331,7 @@ friendsSearchTest config =
         ]
 
 
-channelSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+channelSearchTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 channelSearchTest config =
     E2EHelper.startTest
         "Filter channels with the channel column search input"
@@ -398,7 +398,7 @@ channelSearchTest config =
         ]
 
 
-inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 inviteUserAndDmChat config =
     E2EHelper.startTest
         "Invite user and then have DM chat"
@@ -446,7 +446,7 @@ inviteUserAndDmChat config =
 {-| Clicking the profile image next to a message in a guild channel opens the DM channel
 with whoever wrote it.
 -}
-profileImageOpensDm : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+profileImageOpensDm : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 profileImageOpensDm config =
     E2EHelper.startTest
         "Clicking a profile image opens the DM channel with that user"
@@ -503,7 +503,7 @@ checkDmRouteWithUser otherUserId model =
             Err "Expected the frontend to have finished loading"
 
 
-inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 inactiveThreadsAreHiddenTest config =
     T.start
         "Inactive threads are hidden"

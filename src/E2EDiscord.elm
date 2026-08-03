@@ -42,7 +42,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import Unsafe
 import User
 import UserSession exposing (SetViewing(..), ToBeFilledInByBackend(..))
@@ -52,8 +52,8 @@ import UserSession exposing (SetViewing(..), ToBeFilledInByBackend(..))
 descriptive error if the admin isn't loaded/logged in.
 -}
 withAdminLocalState :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.Data FrontendModel BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Data FrontendModel E2EHelper.BackendModel2
     -> (LocalState.LocalState -> Result String ())
     -> Result String ()
 withAdminLocalState admin data fn =
@@ -79,9 +79,9 @@ checkDmVisibleMessageCountDmChannelId =
 (id 185574444641550336) from the admin frontend and checks it against a predicate.
 -}
 checkDmVisibleMessageCount :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> (Int -> Bool)
-    -> T.Data FrontendModel BackendModel
+    -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Result String ()
 checkDmVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
@@ -121,9 +121,9 @@ checkGuildVisibleMessageCountChannelId =
 checks it against a predicate.
 -}
 checkGuildVisibleMessageCount :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> (Int -> Bool)
-    -> T.Data FrontendModel BackendModel
+    -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Result String ()
 checkGuildVisibleMessageCount admin isExpected data =
     withAdminLocalState admin
@@ -157,9 +157,9 @@ guildEmojisUpdateGuildId =
 (guild 705745250815311942) and checks them against the expected names.
 -}
 checkGuildCustomEmojis :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> List String
-    -> T.Data FrontendModel BackendModel
+    -> T.Data FrontendModel E2EHelper.BackendModel2
     -> Result String ()
 checkGuildCustomEmojis admin expected data =
     withAdminLocalState admin
@@ -197,10 +197,10 @@ checkGuildCustomEmojis admin expected data =
 
 
 discordTests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
     -> String
-    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ E2EHelper.startTest
         "Got rich text embed"
@@ -257,9 +257,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         let
-                            customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmojiData
+                            customEmojiNamed : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> List CustomEmojiData
                             customEmojiNamed name data =
-                                SeqDict.values data.backend.customEmojis
+                                SeqDict.values (E2EHelper.unwrapBackend data.backend).customEmojis
                                     |> List.filter (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name == name)
                         in
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
@@ -320,16 +320,16 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ E2EHelper.andThenWebsocket
                     (\connection _ ->
                         let
-                            customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmojiData
+                            customEmojiNamed : String -> T.Data FrontendModel E2EHelper.BackendModel2 -> List CustomEmojiData
                             customEmojiNamed name data =
-                                SeqDict.values data.backend.customEmojis
+                                SeqDict.values (E2EHelper.unwrapBackend data.backend).customEmojis
                                     |> List.filter (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name == name)
 
                             lastMessageReactions :
-                                T.Data FrontendModel BackendModel
+                                T.Data FrontendModel E2EHelper.BackendModel2
                                 -> Result String (List EmojiOrCustomEmoji)
                             lastMessageReactions data =
-                                case SeqDict.get checkGuildVisibleMessageCountGuildId data.backend.discordGuilds of
+                                case SeqDict.get checkGuildVisibleMessageCountGuildId (E2EHelper.unwrapBackend data.backend).discordGuilds of
                                     Just guild ->
                                         case SeqDict.get checkGuildVisibleMessageCountChannelId guild.channels of
                                             Just channel ->
@@ -369,7 +369,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (\data ->
                                 case lastMessageReactions data of
                                     Ok [ EmojiOrCustomEmoji_CustomEmoji customEmojiId ] ->
-                                        case SeqDict.get customEmojiId data.backend.customEmojis of
+                                        case SeqDict.get customEmojiId (E2EHelper.unwrapBackend data.backend).customEmojis of
                                             Just customEmoji ->
                                                 if CustomEmoji.emojiNameToString customEmoji.name == "reactemoji" then
                                                     case customEmoji.url of
@@ -1384,7 +1384,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , T.checkState
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                        case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                             Just guild ->
                                 let
                                     memberIds : List (Discord.Id Discord.UserId)
@@ -1428,7 +1428,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , T.checkState
                         200
                         (\data ->
-                            case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                            case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                                 Just guild ->
                                     case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
@@ -1478,7 +1478,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     , T.checkState
                         200
                         (\data ->
-                            case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                            case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                                 Just guild ->
                                     case SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
@@ -1943,7 +1943,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                   T.checkState
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                        case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                             Just guild ->
                                 case SeqDict.get E2EHelper.privateDiscordChannelId guild.channels of
                                     Just channel ->
@@ -1973,7 +1973,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                   T.checkState
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                        case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                             Just backendGuild ->
                                 if List.member E2EHelper.secondDiscordUserId (MembersAndOwner.membersAndOwner backendGuild.membersAndOwner) then
                                     Ok ()
@@ -2075,7 +2075,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     500
                     (\data ->
                         case
-                            SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+                            SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
                                 |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.privateDiscordChannelId guild.channels)
                         of
                             Just channel ->
@@ -2102,7 +2102,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , T.checkState
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.secondDiscordUserId data.backend.discordUsers of
+                        case SeqDict.get E2EHelper.secondDiscordUserId (E2EHelper.unwrapBackend data.backend).discordUsers of
                             Just (DiscordUserData.NeedsAuthAgain _) ->
                                 Ok ()
 
@@ -2176,9 +2176,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                     -- has no special roles) is allowed to view the regular channel on the
                     -- backend. This is the exact check the backend uses to decide what to
                     -- serve, so it pinpoints whether the permission overwrites are current.
-                    secondUserCanView : Bool -> { a | backend : BackendModel } -> Result String ()
+                    secondUserCanView : Bool -> { a | backend : E2EHelper.BackendModel2 } -> Result String ()
                     secondUserCanView expected data =
-                        case SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds of
+                        case SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds of
                             Just guild ->
                                 case SeqDict.get E2EHelper.regularDiscordChannelId guild.channels of
                                     Just channel ->
@@ -2472,7 +2472,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             (\data ->
                                 case
-                                    SeqDict.get discordDmChannelId data.backend.discordDmChannels
+                                    SeqDict.get discordDmChannelId (E2EHelper.unwrapBackend data.backend).discordDmChannels
                                         |> Maybe.andThen
                                             (\channel -> NonemptyDict.get E2EHelper.currentDiscordUserId channel.members)
                                 of
@@ -2624,7 +2624,7 @@ timestamp is the current test time and the sequence number/message id are derive
 it. `content` is the raw Discord message content (so a mention is written as
 `<@userId>`).
 -}
-discordGuildMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordGuildMessage connection content =
     T.andThen
         100
@@ -2647,7 +2647,7 @@ channel A, sent by `AT` (`guildOnlyDiscordUserId`), a guild member the linked ad
 account shares no DM channel with. The message timestamp is the current test time and
 the sequence number/message id are derived from it.
 -}
-discordGuildMessageFromGuildOnlyUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGuildMessageFromGuildOnlyUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordGuildMessageFromGuildOnlyUser connection content =
     T.andThen
         100
@@ -2670,7 +2670,7 @@ channel the linked admin shares with user `137748026084163584`, sent by that oth
 user. The message timestamp is the current test time and the sequence number/message
 id are derived from it.
 -}
-discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordDmMessage connection content =
     T.andThen
         100
@@ -2693,7 +2693,7 @@ admin shares with user `137748026084163584`, sent by the linked admin account it
 if they wrote it in the Discord app). The message timestamp is the current test time and
 the sequence number/message id are derived from it.
 -}
-discordDmMessageFromLinkedUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordDmMessageFromLinkedUser : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordDmMessageFromLinkedUser connection content =
     T.andThen
         100
@@ -2714,7 +2714,7 @@ discordDmMessageFromLinkedUser connection content =
 {-| The number of messages the backend has posted to the Discord DM channel that
 `discordDmMessage` uses.
 -}
-discordDmMessagesPosted : T.Data FrontendModel BackendModel -> Int
+discordDmMessagesPosted : T.Data FrontendModel E2EHelper.BackendModel2 -> Int
 discordDmMessagesPosted data =
     List.Extra.count
         (\request ->
@@ -2742,7 +2742,7 @@ discordGroupDmChannelCreate =
 `discordGroupDmChannelCreate`, sent by `at0232`. The message timestamp is the current
 test time and the sequence number/message id are derived from it.
 -}
-discordGroupDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+discordGroupDmMessage : Websocket.Connection -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 discordGroupDmMessage connection content =
     T.andThen
         100
@@ -2765,10 +2765,10 @@ given private channel id shows a notification circle with the given count. The c
 rendered as the badge's `aria-label`.
 -}
 friendLabelHasNotificationCircle :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 friendLabelHasNotificationCircle user channelId count =
     user.checkView
         100
@@ -2785,10 +2785,10 @@ friendLabelHasNotificationCircle user channelId count =
 given private channel id shows no notification circle with the given count.
 -}
 friendLabelHasNoNotificationCircle :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
     -> String
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 friendLabelHasNoNotificationCircle user channelId count =
     user.checkView
         100
@@ -2873,11 +2873,11 @@ at0232DiscordDmChannelId =
 {-| Renders a Discord message the backend has stored as plain text, so that tests can
 compare the contents of a channel or a thread against a list of strings.
 -}
-discordMessageToString : BackendModel -> Message.Message messageId (Discord.Id Discord.UserId) -> String
+discordMessageToString : E2EHelper.BackendModel2 -> Message.Message messageId (Discord.Id Discord.UserId) -> String
 discordMessageToString backend message =
     case message of
         Message.UserTextMessage data ->
-            RichText.toStringWithGetter DiscordUserData.username True backend.discordUsers data.content
+            RichText.toStringWithGetter DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
 
         Message.UserJoinedMessage _ _ _ _ ->
             "<user joined>"
@@ -2922,13 +2922,13 @@ threadsToDebugString threads =
 
 {-| Check that the Bot Test guild's channel A contains exactly these messages (in order).
 -}
-checkDiscordChannelAMessages : List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkDiscordChannelAMessages : List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkDiscordChannelAMessages expected =
     T.checkState
         100
         (\data ->
             case
-                SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+                SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
                     |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
             of
                 Just channel ->
@@ -2956,13 +2956,13 @@ checkDiscordChannelAMessages expected =
 {-| Check the threads in the Bot Test guild's channel A against the index of the message
 each of them hangs off of and the messages written in them.
 -}
-checkDiscordChannelAThreads : List ( Int, List String ) -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkDiscordChannelAThreads : List ( Int, List String ) -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkDiscordChannelAThreads expected =
     T.checkState
         100
         (\data ->
             case
-                SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+                SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
                     |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
             of
                 Just channel ->
@@ -2996,10 +2996,10 @@ checkDiscordChannelAThreads expected =
 
 {-| The index of the most recent message in the Bot Test guild's channel A.
 -}
-lastDiscordGuildMessageId : BackendModel -> Maybe (Id.Id Id.ChannelMessageId)
+lastDiscordGuildMessageId : E2EHelper.BackendModel2 -> Maybe (Id.Id Id.ChannelMessageId)
 lastDiscordGuildMessageId backend =
     case
-        SeqDict.get E2EHelper.botTestGuild backend.discordGuilds
+        SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend backend).discordGuilds
             |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
     of
         Just channel ->
@@ -3017,8 +3017,8 @@ lastDiscordGuildMessageId backend =
 menu opens half a second later, once the long press timer fires.
 -}
 longPressLastDiscordGuildMessage :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 longPressLastDiscordGuildMessage actions =
     T.andThen
         100
@@ -3069,8 +3069,8 @@ longPressLastDiscordGuildMessage actions =
 continuation of the previous drag.
 -}
 releaseLongPress :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 releaseLongPress actions =
     actions.custom
         100
@@ -3109,9 +3109,9 @@ discordDmChannelId =
 
 {-| The most recent message in the Discord DM channel used by `discordDmMessage`.
 -}
-lastDiscordDmMessage : BackendModel -> Maybe ( Id.Id Id.ChannelMessageId, Message.Message Id.ChannelMessageId (Discord.Id Discord.UserId) )
+lastDiscordDmMessage : E2EHelper.BackendModel2 -> Maybe ( Id.Id Id.ChannelMessageId, Message.Message Id.ChannelMessageId (Discord.Id Discord.UserId) )
 lastDiscordDmMessage backend =
-    case SeqDict.get discordDmChannelId backend.discordDmChannels of
+    case SeqDict.get discordDmChannelId (E2EHelper.unwrapBackend backend).discordDmChannels of
         Just channel ->
             case IdArray.last channel.messages of
                 Just message ->

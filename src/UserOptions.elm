@@ -263,6 +263,11 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         model.name
                     , Ui.column
                         [ Ui.spacing 8 ]
+                        [ Ui.el [ Ui.Font.bold ] (Ui.text "Email")
+                        , Ui.text (EmailAddress.toString local.localUser.user.email)
+                        ]
+                    , Ui.column
+                        [ Ui.spacing 8 ]
                         [ Ui.el [ Ui.Font.bold ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]

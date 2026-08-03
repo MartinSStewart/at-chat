@@ -5351,6 +5351,9 @@ decodeDispatchUserEvent eventName =
         "THREAD_MEMBERS_UPDATE" ->
             JD.succeed DispatchUser_ThreadMembersUpdate
 
+        "THREAD_UPDATE" ->
+            JD.succeed DispatchUser_ThreadUpdate
+
         "CALL_CREATE" ->
             JD.succeed DispatchUser_CallCreate
 
@@ -5702,6 +5705,7 @@ type OpDispatchUserEvent
     | DispatchUser_GenericPushNotificationSent
     | DispatchUser_ReactionNotificationSent
     | DispatchUser_ThreadMembersUpdate
+    | DispatchUser_ThreadUpdate
     | DispatchUser_CallCreate
     | DispatchUser_CallUpdate
     | DispatchUser_CallDelete
@@ -6820,6 +6824,9 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_ThreadMembersUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_ThreadUpdate ->
                             ( model, [] )
 
                         DispatchUser_CallCreate ->
