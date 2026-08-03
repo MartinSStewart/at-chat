@@ -37,6 +37,8 @@ import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.Http as Http
 import Hex
+import Html
+import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
@@ -240,7 +242,7 @@ skinToneToString skinTone =
             "🏽"
 
         SkinTone4 ->
-            "🏽"
+            "🏾"
 
         SkinTone5 ->
             "🏿"
@@ -345,34 +347,93 @@ categoryButtonId category =
     Dom.id ("emoji_category_" ++ categoryToString category)
 
 
-skinToneView : Maybe SkinTone -> List (Element Msg)
+skinToneSelectorId : Dom.HtmlId
+skinToneSelectorId =
+    Dom.id "guild_skinToneSelector"
+
+
+skinToneToId : Maybe SkinTone -> String
+skinToneToId skinTone =
+    case skinTone of
+        Nothing ->
+            "default"
+
+        Just SkinTone1 ->
+            "1"
+
+        Just SkinTone2 ->
+            "2"
+
+        Just SkinTone3 ->
+            "3"
+
+        Just SkinTone4 ->
+            "4"
+
+        Just SkinTone5 ->
+            "5"
+
+
+skinToneFromId : String -> Maybe SkinTone
+skinToneFromId text =
+    case text of
+        "1" ->
+            Just SkinTone1
+
+        "2" ->
+            Just SkinTone2
+
+        "3" ->
+            Just SkinTone3
+
+        "4" ->
+            Just SkinTone4
+
+        "5" ->
+            Just SkinTone5
+
+        _ ->
+            Nothing
+
+
+skinToneView : Maybe SkinTone -> Element Msg
 skinToneView selectedSkinTone =
-    List.map
-        (\skinTone ->
-            let
-                text : String
-                text =
-                    case skinTone of
-                        Just skinTone2 ->
-                            skinToneToString skinTone2
+    Html.select
+        [ Html.Attributes.id (Dom.idToString skinToneSelectorId)
+        , Html.Attributes.value (skinToneToId selectedSkinTone)
+        , Html.Events.onInput (\text -> skinToneFromId text |> PressedSkinTone)
+        , Html.Attributes.attribute "aria-label" "Skin tone"
+        , Html.Attributes.title "Skin tone"
+        , Html.Attributes.style "height" "100%"
+        , Html.Attributes.style "border" "0"
+        , Html.Attributes.style "padding" "0 4px"
+        , Html.Attributes.style "font-size" "20px"
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white)
+        , Html.Attributes.style "cursor" "pointer"
+        ]
+        (List.map
+            (\skinTone ->
+                let
+                    text : String
+                    text =
+                        case skinTone of
+                            Nothing ->
+                                "👍"
 
-                        Nothing ->
-                            "🟨"
-            in
-            MyUi.elButton
-                (Dom.id ("guild_skinToneSelector_" ++ text))
-                (PressedSkinTone skinTone)
-                [ Ui.width (Ui.px emojiWidth)
-                , Ui.contentCenterX
-                , if selectedSkinTone == skinTone then
-                    Ui.opacity 1
-
-                  else
-                    Ui.opacity 0.3
-                ]
-                (Ui.text text)
+                            Just skinTone2 ->
+                                "👍" ++ skinToneToString skinTone2
+                in
+                Html.option
+                    [ Html.Attributes.value (skinToneToId skinTone)
+                    , Html.Attributes.selected (skinTone == selectedSkinTone)
+                    ]
+                    [ Html.text text ]
+            )
+            (Nothing :: List.map Just allSkinTones)
         )
-        (Nothing :: List.map Just allSkinTones)
+        |> Ui.html
+        |> Ui.el [ Ui.width Ui.shrink, Ui.height Ui.fill, MyUi.noShrinking ]
 
 
 emojiWidth : number
@@ -420,8 +481,8 @@ emojiButtonId index =
     Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
-searchInput : Model -> Array EmojiOrSticker -> Int -> Element Msg
-searchInput model items columns =
+searchInput : Model -> Maybe SkinTone -> Array EmojiOrSticker -> Int -> Element Msg
+searchInput model skinTone items columns =
     let
         isSearching =
             model.searchText /= ""
@@ -472,6 +533,7 @@ searchInput model items columns =
 
           else
             Ui.none
+        , skinToneView skinTone
         ]
 
 
@@ -702,7 +764,7 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                         )
                         (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
                     )
-                , searchInput model emojis columns
+                , searchInput model userData.skinTone emojis columns
                 , Ui.row
                     [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
                     (List.indexedMap
@@ -752,7 +814,7 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                     , MyUi.noShrinking
                     , Ui.paddingXY 8 0
                     ]
-                    ((case model.emojiHovered of
+                    (case model.emojiHovered of
                         Just (EmojiOrSticker_UnicodeEmoji emoji) ->
                             Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
                                 :: (case SeqDict.get emoji emojiData2.emojis of
@@ -793,16 +855,6 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
 
                         Nothing ->
                             []
-                     )
-                        ++ [ skinToneView userData.skinTone
-                                |> Ui.row
-                                    [ if isMobile then
-                                        Ui.alignLeft
-
-                                      else
-                                        Ui.alignRight
-                                    ]
-                           ]
                     )
                 ]
 
