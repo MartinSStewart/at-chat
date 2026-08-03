@@ -354,6 +354,12 @@ notificationEmail =
                 , Sticker (Id.fromInt 2)
                 , normal " custom emoji "
                 , CustomEmoji (Id.fromInt 3)
+                , CodeBlock (Language (NonemptyString 'a' "scii")) """════════════════════════════
+_,  ____ ____  ,-
+¢ºº < Yo.│ No.> ··?\\
+/¥\\  ¯¯¯¯ ¯¯¯¯  /V\\
+/¯|    ___      ´╥`
+░▒▓█"""
                 ]
 
         message =
