@@ -2206,9 +2206,6 @@ toBackendLog toBackend =
                 Local_SetDomainWhitelist _ _ ->
                     ToBackendLog_Local_SetDomainWhitelist
 
-                Local_SetEmojiCategory _ ->
-                    ToBackendLog_Local_SetEmojiCategory
-
                 Local_SetEmojiSkinTone _ ->
                     ToBackendLog_Local_SetEmojiSkinTone
 

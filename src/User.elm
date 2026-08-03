@@ -32,7 +32,6 @@ module User exposing
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
-    , setEmojiCategory
     , setEmojiSkinTone
     , setGuildNotificationLevel
     , setIcon
@@ -153,15 +152,6 @@ setEmailNotifications emailNotifications user =
     { user | emailNotifications = emailNotifications }
 
 
-setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
-setEmojiCategory category user =
-    let
-        emojiConfig =
-            user.emojiConfig
-    in
-    { user | emojiConfig = { emojiConfig | category = category } }
-
-
 setEmojiSkinTone : Maybe SkinTone -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 setEmojiSkinTone skinTone user =
     let
@@ -253,7 +243,7 @@ init createdAt name email userIsAdmin =
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
-    , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
+    , emojiConfig = { skinTone = Nothing, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
     , availableCustomEmojis = SeqSet.empty
     , muteSettings = MuteSettings.init

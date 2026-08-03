@@ -1375,11 +1375,7 @@ updateLoaded msg model =
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_SetEmojiCategory category |> Just)
-                                { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Nothing } }
-                                Command.none
+                            Debug.todo ""
                         )
                         model
 

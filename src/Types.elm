@@ -992,7 +992,6 @@ type LocalChange
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
-    | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange

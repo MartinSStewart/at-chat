@@ -241,9 +241,6 @@ pendingChangesText localChange =
         Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
 
-        Local_SetEmojiCategory _ ->
-            "Selected emoji category"
-
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
@@ -3495,14 +3492,6 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user } }
-
-                Local_SetEmojiCategory category ->
-                    let
-                        localUser : LocalUser
-                        localUser =
-                            local.localUser
-                    in
-                    { local | localUser = { localUser | user = User.setEmojiCategory category localUser.user } }
 
                 Local_SetEmojiSkinTone maybeSkinTone ->
                     let

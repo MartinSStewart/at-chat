@@ -101,40 +101,45 @@ type EmojiCategory
     | TravelAndPlaces
 
 
+emojiCategoryToString : EmojiCategory -> String
+emojiCategoryToString emojiCategory =
+    case emojiCategory of
+        Activities ->
+            "Activities"
+
+        AnimalsAndNature ->
+            "Animals & Nature"
+
+        Components ->
+            "Component"
+
+        Flags ->
+            "Flags"
+
+        FoodAndDrink ->
+            "Food & Drink"
+
+        Objects ->
+            "Objects"
+
+        PeopleAndBody ->
+            "People & Body"
+
+        SmileysAndEmotion ->
+            "Smileys & Emotion"
+
+        Symbols ->
+            "Symbols"
+
+        TravelAndPlaces ->
+            "Travel & Places"
+
+
 categoryToString : Category -> String
 categoryToString category =
     case category of
         EmojiCategory emojiCategory ->
-            case emojiCategory of
-                Activities ->
-                    "Activities"
-
-                AnimalsAndNature ->
-                    "Animals & Nature"
-
-                Components ->
-                    "Component"
-
-                Flags ->
-                    "Flags"
-
-                FoodAndDrink ->
-                    "Food & Drink"
-
-                Objects ->
-                    "Objects"
-
-                PeopleAndBody ->
-                    "People & Body"
-
-                SmileysAndEmotion ->
-                    "Smileys & Emotion"
-
-                Symbols ->
-                    "Symbols"
-
-                TravelAndPlaces ->
-                    "Travel & Places"
+            emojiCategoryToString emojiCategory
 
         StickerCategory ->
             "Stickers"
@@ -266,7 +271,6 @@ type alias Model =
 
 type alias EmojiConfig =
     { skinTone : Maybe SkinTone
-    , category : Category
     , lastUsedEmojis : Array EmojiOrCustomEmoji
     }
 
@@ -482,7 +486,7 @@ emojiButtonId index =
     Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
-searchInput : Model -> Maybe SkinTone -> Array EmojiOrSticker -> Int -> Element Msg
+searchInput : Model -> Maybe SkinTone -> List ( Int, Element Msg ) -> Int -> Element Msg
 searchInput model skinTone items columns =
     let
         isSearching =
@@ -553,7 +557,7 @@ setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
 
 
-decodeArrowKey : Model -> Array EmojiOrSticker -> Int -> Json.Decode.Decoder ( Msg, Bool )
+decodeArrowKey : Model -> List ( Int, Element Msg ) -> Int -> Json.Decode.Decoder ( Msg, Bool )
 decodeArrowKey model items columns =
     Json.Decode.field "key" Json.Decode.string
         |> Json.Decode.andThen
@@ -561,17 +565,19 @@ decodeArrowKey model items columns =
                 let
                     count : Int
                     count =
-                        Array.length items
+                        Debug.todo ""
 
+                    --Array.length items
                     currentIndex : Maybe Int
                     currentIndex =
-                        case model.emojiHovered of
-                            Just hovered ->
-                                findIndex hovered items
+                        Debug.todo ""
 
-                            Nothing ->
-                                Nothing
-
+                    --case model.emojiHovered of
+                    --    Just hovered ->
+                    --        findIndex hovered items
+                    --
+                    --    Nothing ->
+                    --        Nothing
                     moveTo : Int -> Json.Decode.Decoder ( Msg, Bool )
                     moveTo delta =
                         if count == 0 then
@@ -592,12 +598,14 @@ decodeArrowKey model items columns =
                                             else
                                                 0
                             in
-                            case Array.get newIndex items of
-                                Just item ->
-                                    Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
+                            Debug.todo ""
 
-                                Nothing ->
-                                    Json.Decode.fail ""
+                    --case Array.get newIndex items of
+                    --    Just item ->
+                    --        Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
+                    --
+                    --    Nothing ->
+                    --        Json.Decode.fail ""
                 in
                 case key of
                     "ArrowLeft" ->
@@ -637,13 +645,14 @@ decodeArrowKey model items columns =
                                 Json.Decode.succeed ( PressedSelectEmoji hovered, True )
 
                             Nothing ->
-                                case Array.get 0 items of
-                                    Just first ->
-                                        Json.Decode.succeed ( PressedSelectEmoji first, True )
+                                Debug.todo ""
 
-                                    Nothing ->
-                                        Json.Decode.succeed ( NoOp, False )
-
+                    --case Array.get 0 items of
+                    --    Just first ->
+                    --        Json.Decode.succeed ( PressedSelectEmoji first, True )
+                    --
+                    --    Nothing ->
+                    --        Json.Decode.succeed ( NoOp, False )
                     _ ->
                         Json.Decode.succeed ( NoOp, False )
             )
@@ -675,9 +684,30 @@ type EmojiOrSticker
     | EmojiOrSticker_CustomEmoji (Id CustomEmojiId)
 
 
+emojiButtonHelper : Int -> EmojiOrSticker -> { a | emojiHovered : Maybe EmojiOrSticker } -> Element Msg -> Element Msg
+emojiButtonHelper index item model content =
+    MyUi.elButton
+        (emojiButtonId index)
+        (PressedSelectEmoji item)
+        [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
+        , Ui.attrIf
+            (model.emojiHovered == Just item)
+            (Ui.background MyUi.hoverHighlight)
+        , Ui.contentCenterX
+        , Ui.width Ui.shrink
+        ]
+        content
+
+
+emojiCategoryContainer : String -> List (Element msg) -> Element msg
+emojiCategoryContainer title content =
+    Ui.column
+        []
+        [ Ui.el [ Ui.Font.size 16 ] (Ui.text title), Ui.row [ Ui.wrap ] content ]
+
+
 selector :
-    Bool
-    -> Int
+    Int
     -> Model
     -> EmojiConfig
     -> Maybe CachedEmojiData
@@ -686,14 +716,10 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector isMobile width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
-                isSearching : Bool
-                isSearching =
-                    model.searchText /= ""
-
                 selectorWidth : Int
                 selectorWidth =
                     min 620 width
@@ -702,45 +728,103 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                 columns =
                     max 1 (selectorWidth // emojiWidth)
 
-                emojis : Array EmojiOrSticker
+                emojis : List ( Int, Element Msg )
                 emojis =
-                    if isSearching then
-                        let
-                            query : String
-                            query =
-                                String.toLower model.searchText |> String.filter Char.isAlphaNum
-                        in
-                        Array.foldl
-                            (\{ shortName, emoji } set ->
-                                if String.contains query (String.filter Char.isAlphaNum shortName) then
-                                    SeqSet.insert emoji set
+                    List.map
+                        (\category ->
+                            case category of
+                                EmojiCategory emojiCategory ->
+                                    let
+                                        list =
+                                            SeqDict.get emojiCategory emojiData2.categories |> Maybe.withDefault []
+                                    in
+                                    ( List.length list
+                                    , List.indexedMap
+                                        (\index item ->
+                                            emojiWithSkinTone userData.skinTone item emojiData2
+                                                |> Ui.text
+                                                |> emojiButtonHelper index (EmojiOrSticker_UnicodeEmoji item) model
+                                        )
+                                        list
+                                        |> emojiCategoryContainer (emojiCategoryToString emojiCategory)
+                                    )
 
-                                else
-                                    set
-                            )
-                            SeqSet.empty
-                            emojiData2.shortNames
-                            |> SeqSet.toList
-                            |> List.map EmojiOrSticker_UnicodeEmoji
-                            |> Array.fromList
+                                StickerCategory ->
+                                    let
+                                        list =
+                                            SeqSet.toList availableStickers
+                                    in
+                                    ( List.length list
+                                    , List.indexedMap
+                                        (\index stickerId ->
+                                            Sticker.view "2lh" stickerId stickersData Sticker.LoopForever
+                                                |> Ui.html
+                                                |> emojiButtonHelper index (EmojiOrSticker_Sticker stickerId) model
+                                        )
+                                        list
+                                        |> emojiCategoryContainer "Stickers"
+                                    )
 
-                    else
-                        case userData.category of
-                            EmojiCategory emojiCategory ->
-                                SeqDict.get emojiCategory emojiData2.categories
-                                    |> Maybe.withDefault []
-                                    |> List.map EmojiOrSticker_UnicodeEmoji
-                                    |> Array.fromList
+                                CustomEmojiCategory ->
+                                    let
+                                        list =
+                                            SeqSet.toList availableCustomEmojis
+                                    in
+                                    ( List.length list
+                                    , List.indexedMap
+                                        (\index customEmojiId ->
+                                            CustomEmoji.view
+                                                (String.fromInt emojiWidth ++ "px")
+                                                "0"
+                                                customEmojiId
+                                                customEmojisData
+                                                Sticker.LoopForever
+                                                |> Ui.html
+                                                |> emojiButtonHelper index (EmojiOrSticker_CustomEmoji customEmojiId) model
+                                        )
+                                        list
+                                        |> emojiCategoryContainer "Custom emojis"
+                                    )
+                        )
+                        (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
 
-                            StickerCategory ->
-                                SeqSet.toList availableStickers
-                                    |> List.map EmojiOrSticker_Sticker
-                                    |> Array.fromList
-
-                            CustomEmojiCategory ->
-                                SeqSet.toList availableCustomEmojis
-                                    |> List.map EmojiOrSticker_CustomEmoji
-                                    |> Array.fromList
+                --if isSearching then
+                --    let
+                --        query : String
+                --        query =
+                --            String.toLower model.searchText |> String.filter Char.isAlphaNum
+                --    in
+                --    Array.foldl
+                --        (\{ shortName, emoji } set ->
+                --            if String.contains query (String.filter Char.isAlphaNum shortName) then
+                --                SeqSet.insert emoji set
+                --
+                --            else
+                --                set
+                --        )
+                --        SeqSet.empty
+                --        emojiData2.shortNames
+                --        |> SeqSet.toList
+                --        |> List.map EmojiOrSticker_UnicodeEmoji
+                --        |> Array.fromList
+                --
+                --else
+                --    case userData.category of
+                --        EmojiCategory emojiCategory ->
+                --            SeqDict.get emojiCategory emojiData2.categories
+                --                |> Maybe.withDefault []
+                --                |> List.map EmojiOrSticker_UnicodeEmoji
+                --                |> Array.fromList
+                --
+                --        StickerCategory ->
+                --            SeqSet.toList availableStickers
+                --                |> List.map EmojiOrSticker_Sticker
+                --                |> Array.fromList
+                --
+                --        CustomEmojiCategory ->
+                --            SeqSet.toList availableCustomEmojis
+                --                |> List.map EmojiOrSticker_CustomEmoji
+                --                |> Array.fromList
             in
             Ui.column
                 [ Ui.width (Ui.px selectorWidth)
@@ -754,64 +838,10 @@ selector isMobile width model userData emojiData availableCustomEmojis customEmo
                 , Ui.heightMin 0
                 , Ui.clip
                 ]
-                [ Ui.row
-                    [ MyUi.noShrinking ]
-                    (List.filterMap
-                        (\category ->
-                            case category of
-                                EmojiCategory Components ->
-                                    Nothing
-
-                                _ ->
-                                    MyUi.elButton
-                                        (categoryButtonId category)
-                                        (PressedCategory category)
-                                        [ Ui.Font.center
-                                        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-                                        , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
-                                        ]
-                                        (categoryToEmojiString userData.skinTone category)
-                                        |> Just
-                        )
-                        (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
-                    )
-                , searchInput model userData.skinTone emojis columns
-                , Ui.row
-                    [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
-                    (List.indexedMap
-                        (\index item ->
-                            let
-                                text =
-                                    case item of
-                                        EmojiOrSticker_UnicodeEmoji emoji ->
-                                            emojiWithSkinTone userData.skinTone emoji emojiData2 |> Ui.text
-
-                                        EmojiOrSticker_Sticker stickerId ->
-                                            Sticker.view "2lh" stickerId stickersData Sticker.LoopForever |> Ui.html
-
-                                        EmojiOrSticker_CustomEmoji id ->
-                                            CustomEmoji.view
-                                                (String.fromInt emojiWidth ++ "px")
-                                                "0"
-                                                id
-                                                customEmojisData
-                                                Sticker.LoopForever
-                                                |> Ui.html
-                            in
-                            MyUi.elButton
-                                (emojiButtonId index)
-                                (PressedSelectEmoji item)
-                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
-                                , Ui.attrIf
-                                    (model.emojiHovered == Just item)
-                                    (Ui.background MyUi.hoverHighlight)
-                                , Ui.contentCenterX
-                                , Ui.width Ui.shrink
-                                ]
-                                text
-                        )
-                        (Array.toList emojis)
-                    )
+                [ searchInput model userData.skinTone emojis columns
+                , Ui.column
+                    []
+                    (List.map (\( _, element ) -> element) emojis)
                     |> Ui.el
                         [ Ui.background MyUi.background3
                         , Ui.scrollable
