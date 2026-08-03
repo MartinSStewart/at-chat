@@ -89,7 +89,7 @@ spoilerBackground =
 
 codeBackground : String
 codeBackground =
-    "rgb(90,100,120)"
+    MyUi.colorToStyle MyUi.background2
 
 
 codeBorder : String
