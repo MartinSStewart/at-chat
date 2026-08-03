@@ -17,10 +17,10 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
-    , devicePixelRatioChanged
     , execCommand
     , fixCursorPosition
     , focusChanged
+    , gotDevicePixelRatio
     , hapticFeedback
     , loadServiceWorkerData
     , loadStartupData
@@ -28,6 +28,7 @@ port module Ports exposing
     , registerPushSubscription
     , registerPushSubscriptionToJs
     , registerServiceWorker
+    , requestDevicePixelRatio
     , requestNotificationPermission
     , selectionChanged
     , serviceWorkerData
@@ -368,7 +369,10 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-port device_pixel_ratio_changed_from_js : (Json.Decode.Value -> msg) -> Sub msg
+port request_device_pixel_ratio_to_js : Json.Encode.Value -> Cmd msg
+
+
+port device_pixel_ratio_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port shift_scroll_by_element_delta_to_js : Json.Encode.Value -> Cmd msg
@@ -425,13 +429,22 @@ visualViewportResized msg =
         (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
 
 
-{-| Fires when the page is zoomed or moved to a screen with a different pixel density.
+{-| Zooming the page changes the device pixel ratio and resizes the window at the same time,
+so this is requested on resize rather than watched for.
 -}
-devicePixelRatioChanged : (Float -> msg) -> Subscription FrontendOnly msg
-devicePixelRatioChanged msg =
+requestDevicePixelRatio : Command FrontendOnly toMsg msg
+requestDevicePixelRatio =
+    Command.sendToJs
+        "request_device_pixel_ratio_to_js"
+        request_device_pixel_ratio_to_js
+        Json.Encode.null
+
+
+gotDevicePixelRatio : (Float -> msg) -> Subscription FrontendOnly msg
+gotDevicePixelRatio msg =
     Subscription.fromJs
-        "device_pixel_ratio_changed_from_js"
-        device_pixel_ratio_changed_from_js
+        "device_pixel_ratio_from_js"
+        device_pixel_ratio_from_js
         (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 1 |> msg)
 
 

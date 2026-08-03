@@ -200,7 +200,7 @@ subscriptions _ model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
-        , Ports.devicePixelRatioChanged GotDevicePixelRatio
+        , Ports.gotDevicePixelRatio GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
@@ -731,7 +731,17 @@ updateLoaded msg model =
 
         GotWindowSize width height ->
             FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }, Command.none ))
+                (\loggedIn ->
+                    ( { loggedIn | drawingMode = Drawing.resetAnchor loggedIn.drawingMode }
+                    , -- Zooming the page changes the device pixel ratio and resizes the window at
+                      -- the same time, so this is where a new ratio turns up. Ask for it so ascii
+                      -- art can pick a font size that lands on whole device pixels. Moving the
+                      -- window to a screen with a different pixel density doesn't always resize it,
+                      -- but the startup data gets re-sent whenever the window regains focus, and
+                      -- that carries the ratio too.
+                      Ports.requestDevicePixelRatio
+                    )
+                )
                 { model | windowSize = Coord.xy width height }
 
         GotTimezone _ ->
