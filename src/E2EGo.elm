@@ -12,12 +12,12 @@ import Json.Decode
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
 tests :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 tests normalConfig =
     T.testGroup
         "Go matches"
@@ -56,8 +56,8 @@ tests normalConfig =
 
 
 goMatchTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 goMatchTest normalConfig =
     E2EHelper.startTest
         "Two users play a Go match, one leaves and rejoins, then start a new match"
@@ -149,8 +149,8 @@ goMatchTest normalConfig =
 
 
 goTimeoutTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 goTimeoutTest normalConfig =
     E2EHelper.startTest
         "A player who runs out of time can't move, and both players see the loss-on-time result"
@@ -227,8 +227,8 @@ goTimeoutTest normalConfig =
 
 
 goGuildMatchTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 goGuildMatchTest normalConfig =
     E2EHelper.startTest
         "Two guild members play a Go match in a guild channel"
@@ -302,9 +302,9 @@ goGuildMatchTest normalConfig =
 
 {-| All Go matches stored in guild channels (as opposed to DM channels) on the backend.
 -}
-guildChannelGoGames : BackendModel -> List ( Id ChannelMessageId, Go.ValidatedSetup, Array Go.ActionWithTime )
+guildChannelGoGames : E2EHelper.BackendModel2 -> List ( Id ChannelMessageId, Go.ValidatedSetup, Array Go.ActionWithTime )
 guildChannelGoGames backend =
-    SeqDict.values backend.guilds
+    SeqDict.values (E2EHelper.unwrapBackend backend).guilds
         |> List.concatMap (\guild -> SeqDict.values guild.channels)
         |> List.concatMap (\channel -> SeqDict.toList channel.games)
         |> List.filterMap
@@ -319,8 +319,8 @@ guildChannelGoGames backend =
 
 
 publicGoMatchViewTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 publicGoMatchViewTest normalConfig =
     E2EHelper.startTest
         "A player shares a Go match link so a non-logged-in spectator can view it"

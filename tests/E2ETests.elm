@@ -50,13 +50,13 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import User exposing (NotificationLevel(..))
 import UserSession exposing (SetViewing(..))
 import VisibleMessages
 
 
-setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2))
 setup =
     T.viewerWith tests
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
@@ -66,7 +66,7 @@ setup =
         |> T.addStringFile "/public/compact-emoji.json"
 
 
-main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 main =
     T.startViewer setup
 
@@ -77,10 +77,10 @@ tests :
     -> String
     -> Bytes
     -> String
-    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
-        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
+        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel E2EHelper.BackendModel2 } -> HttpResponse
         handleNormalHttpRequests =
             handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 128 128))
 
@@ -235,11 +235,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         handleMultiFileUpload _ =
             UnhandledMultiFileUpload
 
-        normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         normalConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 handleNormalHttpRequests
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -248,22 +248,22 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Same as normalConfig except the upload response reports no image size,
         -- like the Rust server does for files it can't decode as an image.
-        nonImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        nonImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         nonImageUploadConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
                 handleMultiFileUpload
                 E2EHelper.domain
 
-        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         imageUploadConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 handleNormalHttpRequests
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -276,11 +276,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Same as imageUploadConfig except the uploaded image is reported as
         -- being 800x100 pixels, wide enough to get scaled down to fit the screen
-        wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        wideImageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         wideImageUploadConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 (handleHttpRequestsWithUploadedImageSize (Just (Coord.xy 800 100)))
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -293,11 +293,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads a video file. The upload response reports no image size, just
         -- like the Rust server does for files it can't decode as an image.
-        videoUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        videoUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         videoUploadConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -310,11 +310,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
         -- Uploads an audio file. Like videoUploadConfig, the upload response
         -- reports no image size.
-        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        audioUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
         audioUploadConfig =
             T.Config
                 Frontend.app_
-                Backend.app_
+                E2EHelper.backendApp
                 (handleHttpRequestsWithUploadedImageSize Nothing)
                 E2EHelper.handlePortToJs
                 handleFileRequest
@@ -375,7 +375,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkState
                     100
                     (\data ->
-                        if data.backend.discordLinkingEnabled then
+                        if (E2EHelper.unwrapBackend data.backend).discordLinkingEnabled then
                             Ok ()
 
                         else
@@ -385,7 +385,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkState
                     100
                     (\data ->
-                        if data.backend.discordLinkingEnabled then
+                        if (E2EHelper.unwrapBackend data.backend).discordLinkingEnabled then
                             Err "Discord account linking should have been disabled after toggling the checkbox"
 
                         else
@@ -417,7 +417,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkState
                     100
                     (\data ->
-                        if SeqDict.isEmpty data.backend.discordUsers then
+                        if SeqDict.isEmpty (E2EHelper.unwrapBackend data.backend).discordUsers then
                             Ok ()
 
                         else
@@ -467,13 +467,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkState
                     100
                     (\data ->
-                        if SecretId.toString data.backend.serverSecret == E2EHelper.regeneratedServerSecretValue then
+                        if SecretId.toString (E2EHelper.unwrapBackend data.backend).serverSecret == E2EHelper.regeneratedServerSecretValue then
                             Ok ()
 
                         else
                             Err
                                 ("Backend server secret was not updated, got: "
-                                    ++ SecretId.toString data.backend.serverSecret
+                                    ++ SecretId.toString (E2EHelper.unwrapBackend data.backend).serverSecret
                                 )
                     )
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Last regenerated at " ])
@@ -495,7 +495,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             E2EHelper.desktopWindow
             (\admin user ->
                 let
-                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     checkCards elmCampCardCount meetdownCardCount =
                         [ admin.checkView
                             100
@@ -712,7 +712,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 let
                     checkHover :
                         (Maybe Emoji.EmojiOrSticker -> Result String ())
-                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     checkHover predicate =
                         admin.checkModel
                             100
@@ -1534,7 +1534,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        case NonemptyDict.get (Id.fromInt 2) backend.users of
+                        case NonemptyDict.get (Id.fromInt 2) (E2EHelper.unwrapBackend backend).users of
                             Just user2 ->
                                 if MuteSettings.isGuildSpecificallyMute user2.muteSettings (Id.fromInt 1) == MuteSettings.IsMuted then
                                     Ok ()
@@ -2275,7 +2275,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         E2EHelper.startTime
         (T.Config
             Frontend.app_
-            Backend.app_
+            E2EHelper.backendApp
             handleNormalHttpRequests
             E2EHelper.handlePortToJs
             (\requestData ->
@@ -2325,14 +2325,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (\data ->
                                 let
                                     deleteGuildActions =
-                                        SeqDict.keys data.backend.guilds
+                                        SeqDict.keys (E2EHelper.unwrapBackend data.backend).guilds
                                             |> List.map
                                                 (\guildId ->
                                                     admin.click 100 (Dom.id ("Admin_deleteGuildButton_" ++ Id.toString guildId))
                                                 )
 
                                     deleteUserActions =
-                                        NonemptyDict.toList data.backend.users
+                                        NonemptyDict.toList (E2EHelper.unwrapBackend data.backend).users
                                             |> List.filterMap
                                                 (\( userId, backendUser ) ->
                                                     if backendUser.isAdmin then
@@ -2361,12 +2361,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             100
                             (\afterImportData ->
                                 if
-                                    (beforeExportData.backend.guilds == afterImportData.backend.guilds)
-                                        && (beforeExportData.backend.dmChannels == afterImportData.backend.dmChannels)
-                                        && (beforeExportData.backend.discordGuilds == afterImportData.backend.discordGuilds)
-                                        && (beforeExportData.backend.discordDmChannels == afterImportData.backend.discordDmChannels)
-                                        && (beforeExportData.backend.users == afterImportData.backend.users)
-                                        && (beforeExportData.backend.discordUsers == afterImportData.backend.discordUsers)
+                                    ((E2EHelper.unwrapBackend beforeExportData.backend).guilds == (E2EHelper.unwrapBackend afterImportData.backend).guilds)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).dmChannels == (E2EHelper.unwrapBackend afterImportData.backend).dmChannels)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordGuilds == (E2EHelper.unwrapBackend afterImportData.backend).discordGuilds)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordDmChannels == (E2EHelper.unwrapBackend afterImportData.backend).discordDmChannels)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).users == (E2EHelper.unwrapBackend afterImportData.backend).users)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordUsers == (E2EHelper.unwrapBackend afterImportData.backend).discordUsers)
                                 then
                                     Ok ()
 
@@ -2384,7 +2384,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         E2EHelper.startTime
         (T.Config
             Frontend.app_
-            Backend.app_
+            E2EHelper.backendApp
             handleNormalHttpRequests
             E2EHelper.handlePortToJs
             (\requestData ->
@@ -2454,14 +2454,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (\data ->
                                 let
                                     deleteGuildActions =
-                                        SeqDict.keys data.backend.guilds
+                                        SeqDict.keys (E2EHelper.unwrapBackend data.backend).guilds
                                             |> List.map
                                                 (\guildId ->
                                                     admin.click 100 (Dom.id ("Admin_deleteGuildButton_" ++ Id.toString guildId))
                                                 )
 
                                     deleteUserActions =
-                                        NonemptyDict.toList data.backend.users
+                                        NonemptyDict.toList (E2EHelper.unwrapBackend data.backend).users
                                             |> List.filterMap
                                                 (\( userId, backendUser ) ->
                                                     if backendUser.isAdmin then
@@ -2503,12 +2503,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             100
                             (\afterImportData ->
                                 if
-                                    (beforeExportData.backend.guilds == afterImportData.backend.guilds)
-                                        && (beforeExportData.backend.dmChannels == afterImportData.backend.dmChannels)
-                                        && (beforeExportData.backend.discordGuilds == afterImportData.backend.discordGuilds)
-                                        && (beforeExportData.backend.discordDmChannels == afterImportData.backend.discordDmChannels)
-                                        && (beforeExportData.backend.users == afterImportData.backend.users)
-                                        && (beforeExportData.backend.discordUsers == afterImportData.backend.discordUsers)
+                                    ((E2EHelper.unwrapBackend beforeExportData.backend).guilds == (E2EHelper.unwrapBackend afterImportData.backend).guilds)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).dmChannels == (E2EHelper.unwrapBackend afterImportData.backend).dmChannels)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordGuilds == (E2EHelper.unwrapBackend afterImportData.backend).discordGuilds)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordDmChannels == (E2EHelper.unwrapBackend afterImportData.backend).discordDmChannels)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).users == (E2EHelper.unwrapBackend afterImportData.backend).users)
+                                        && ((E2EHelper.unwrapBackend beforeExportData.backend).discordUsers == (E2EHelper.unwrapBackend afterImportData.backend).discordUsers)
                                 then
                                     Ok ()
 
@@ -2605,7 +2605,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                 , T.checkBackend
                                                     100
                                                     (\backend ->
-                                                        case SeqDict.get guildId backend.guilds of
+                                                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
                                                             Just guild ->
                                                                 case MembersAndOwner.isMember secondUserId guild.membersAndOwner of
                                                                     MembersAndOwner.IsMember ->
@@ -2621,7 +2621,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                 , T.checkBackend
                                                     100
                                                     (\backend ->
-                                                        case SeqDict.get guildId backend.guilds of
+                                                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
                                                             Just guild ->
                                                                 if SeqDict.isEmpty guild.invites then
                                                                     Ok ()
@@ -2647,7 +2647,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         , T.checkBackend
                                                             100
                                                             (\backend ->
-                                                                case SeqDict.get guildId backend.guilds of
+                                                                case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
                                                                     Just guild ->
                                                                         case MembersAndOwner.isMember thirdUserId guild.membersAndOwner of
                                                                             MembersAndOwner.IsNotMember ->
@@ -2747,7 +2747,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        case SeqDict.get guildId backend.guilds of
+                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
                             Just guild ->
                                 if GuildName.toString guild.name == "Renamed guild!" then
                                     Ok ()
@@ -2771,7 +2771,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        if SeqDict.member guildId backend.guilds then
+                        if SeqDict.member guildId (E2EHelper.unwrapBackend backend).guilds then
                             Ok ()
 
                         else
@@ -2784,7 +2784,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                        case ( SeqDict.member guildId (E2EHelper.unwrapBackend backend).guilds, SeqDict.get guildId (E2EHelper.unwrapBackend backend).deletedGuilds ) of
                             ( False, Just _ ) ->
                                 Ok ()
 
@@ -2805,7 +2805,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             newGuildId =
                                 Id.fromInt 2
                         in
-                        case ( SeqDict.member guildId backend.guilds, SeqDict.member newGuildId backend.guilds ) of
+                        case ( SeqDict.member guildId (E2EHelper.unwrapBackend backend).guilds, SeqDict.member newGuildId (E2EHelper.unwrapBackend backend).guilds ) of
                             ( False, True ) ->
                                 Ok ()
 
@@ -2813,14 +2813,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 Err "Deleted guild ID should not be reused"
 
                             ( False, False ) ->
-                                Err ("Expected newly created guild at id 2, got ids: " ++ String.join "," (List.map (Id.toInt >> String.fromInt) (SeqDict.keys backend.guilds)))
+                                Err ("Expected newly created guild at id 2, got ids: " ++ String.join "," (List.map (Id.toInt >> String.fromInt) (SeqDict.keys (E2EHelper.unwrapBackend backend).guilds)))
                     )
                 ]
             )
         , T.checkBackend
             (Duration.days 31 |> Duration.inMilliseconds)
             (\backend ->
-                if SeqDict.isEmpty backend.deletedGuilds then
+                if SeqDict.isEmpty (E2EHelper.unwrapBackend backend).deletedGuilds then
                     Ok ()
 
                 else
@@ -2847,7 +2847,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                        case ( SeqDict.member guildId (E2EHelper.unwrapBackend backend).guilds, SeqDict.get guildId (E2EHelper.unwrapBackend backend).deletedGuilds ) of
                             ( False, Just _ ) ->
                                 Ok ()
 
@@ -2864,7 +2864,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , T.checkBackend
                     100
                     (\backend ->
-                        case ( SeqDict.member guildId backend.guilds, SeqDict.member guildId backend.deletedGuilds ) of
+                        case ( SeqDict.member guildId (E2EHelper.unwrapBackend backend).guilds, SeqDict.member guildId (E2EHelper.unwrapBackend backend).deletedGuilds ) of
                             ( True, False ) ->
                                 Ok ()
 
@@ -2882,7 +2882,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     ]
 
 
-backupRequests : T.Data FrontendModel BackendModel -> List HttpRequest
+backupRequests : T.Data FrontendModel E2EHelper.BackendModel2 -> List HttpRequest
 backupRequests data =
     List.filter
         (\request ->
@@ -2894,8 +2894,8 @@ backupRequests data =
 
 
 sendMessageRateLimitTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 sendMessageRateLimitTest config =
     E2EHelper.startTest
         "SendMessage rate limiting"
@@ -2914,10 +2914,10 @@ sendMessageRateLimitTest config =
                         Id.fromInt 0
 
                     sendMessage :
-                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                         -> Float
                         -> Int
-                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     sendMessage client delayInMs changeIndex =
                         client.sendToBackend
                             delayInMs
@@ -2931,9 +2931,9 @@ sendMessageRateLimitTest config =
                                 )
                             )
 
-                    getMessageCount : BackendModel -> Int
+                    getMessageCount : E2EHelper.BackendModel2 -> Int
                     getMessageCount backend =
-                        case SeqDict.get guildId backend.guilds of
+                        case SeqDict.get guildId (E2EHelper.unwrapBackend backend).guilds of
                             Just guild ->
                                 case SeqDict.get channelId guild.channels of
                                     Just channel ->
@@ -2945,7 +2945,7 @@ sendMessageRateLimitTest config =
                             Nothing ->
                                 -1
 
-                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     checkMessageCount label expected =
                         T.checkBackend
                             100
@@ -2994,7 +2994,7 @@ sendMessageRateLimitTest config =
                             (\backend ->
                                 let
                                     actual =
-                                        SeqDict.foldl (\_ array count -> Array.length array + count) 0 backend.sendMessageRateLimits
+                                        SeqDict.foldl (\_ array count -> Array.length array + count) 0 (E2EHelper.unwrapBackend backend).sendMessageRateLimits
                                 in
                                 if actual == 2 then
                                     Ok ()
@@ -3017,10 +3017,10 @@ inspects every ToFrontend they receive, trying to read or modify the private
 channel's data. The test verifies the attacker can do neither.
 -}
 attackerTriesToReadPrivateDiscordChannel :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
     -> String
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSupplemental =
     let
         -- The distinctive text the admin puts in the private channel's messages. The
@@ -3036,7 +3036,7 @@ attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSuppleme
             "SECRETPRIVATEDATA"
 
         privateChannel data =
-            SeqDict.get E2EHelper.botTestGuild data.backend.discordGuilds
+            SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
                 |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.privateDiscordChannelId guild.channels)
 
         privateChannelMessageCount data =
@@ -3166,10 +3166,10 @@ attackerTriesToReadPrivateDiscordChannel config discordOpReady discordOpSuppleme
 
 
 attackerTriesToLeakSensitiveData :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
     -> String
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
     T.start
         "Attacker tries to leak/modify sensitive data"
@@ -3227,85 +3227,85 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                 let
                                                     errors : List String
                                                     errors =
-                                                        (if SeqDict.get guildId before.backend.guilds == SeqDict.get guildId after.backend.guilds then
+                                                        (if SeqDict.get guildId (E2EHelper.unwrapBackend before.backend).guilds == SeqDict.get guildId (E2EHelper.unwrapBackend after.backend).guilds then
                                                             []
 
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
-                                                            ++ (if Id.toInt before.backend.nextGuildId <= Id.toInt after.backend.nextGuildId then
+                                                            ++ (if Id.toInt (E2EHelper.unwrapBackend before.backend).nextGuildId <= Id.toInt (E2EHelper.unwrapBackend after.backend).nextGuildId then
                                                                     []
 
                                                                 else
                                                                     [ "Next guild ID data was modified by attacker" ]
                                                                )
-                                                            ++ (if SeqDict.get guildId before.backend.deletedGuilds == SeqDict.get guildId after.backend.deletedGuilds then
+                                                            ++ (if SeqDict.get guildId (E2EHelper.unwrapBackend before.backend).deletedGuilds == SeqDict.get guildId (E2EHelper.unwrapBackend after.backend).deletedGuilds then
                                                                     []
 
                                                                 else
                                                                     [ "Deleted guild data was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.discordGuilds == after.backend.discordGuilds then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).discordGuilds == (E2EHelper.unwrapBackend after.backend).discordGuilds then
                                                                     []
 
                                                                 else
                                                                     [ "Discord guild data was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.discordDmChannels == after.backend.discordDmChannels then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).discordDmChannels == (E2EHelper.unwrapBackend after.backend).discordDmChannels then
                                                                     []
 
                                                                 else
                                                                     [ "Discord DM data was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.discordUsers == after.backend.discordUsers then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).discordUsers == (E2EHelper.unwrapBackend after.backend).discordUsers then
                                                                     []
 
                                                                 else
                                                                     [ "Discord user data was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.pendingDiscordCreateMessages == after.backend.pendingDiscordCreateMessages then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).pendingDiscordCreateMessages == (E2EHelper.unwrapBackend after.backend).pendingDiscordCreateMessages then
                                                                     []
 
                                                                 else
                                                                     [ "Pending Discord guild messages modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.pendingDiscordCreateDmMessages == after.backend.pendingDiscordCreateDmMessages then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).pendingDiscordCreateDmMessages == (E2EHelper.unwrapBackend after.backend).pendingDiscordCreateDmMessages then
                                                                     []
 
                                                                 else
                                                                     [ "Pending Discord DM messages modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.dmChannels == after.backend.dmChannels then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).dmChannels == (E2EHelper.unwrapBackend after.backend).dmChannels then
                                                                     []
 
                                                                 else
                                                                     [ "DM channels were modified by attacker" ]
                                                                )
-                                                            ++ (if NonemptyDict.remove attackerUserId before.backend.users == NonemptyDict.remove attackerUserId after.backend.users then
+                                                            ++ (if NonemptyDict.remove attackerUserId (E2EHelper.unwrapBackend before.backend).users == NonemptyDict.remove attackerUserId (E2EHelper.unwrapBackend after.backend).users then
                                                                     []
 
                                                                 else
                                                                     [ "Users were modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.privateVapidKey == after.backend.privateVapidKey then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).privateVapidKey == (E2EHelper.unwrapBackend after.backend).privateVapidKey then
                                                                     []
 
                                                                 else
                                                                     [ "Private VAPID key was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.slackClientSecret == after.backend.slackClientSecret then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).slackClientSecret == (E2EHelper.unwrapBackend after.backend).slackClientSecret then
                                                                     []
 
                                                                 else
                                                                     [ "Slack client secret was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.openRouterKey == after.backend.openRouterKey then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).openRouterKey == (E2EHelper.unwrapBackend after.backend).openRouterKey then
                                                                     []
 
                                                                 else
                                                                     [ "OpenRouter key was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.emailNotificationsEnabled == after.backend.emailNotificationsEnabled then
+                                                            ++ (if (E2EHelper.unwrapBackend before.backend).emailNotificationsEnabled == (E2EHelper.unwrapBackend after.backend).emailNotificationsEnabled then
                                                                     []
 
                                                                 else

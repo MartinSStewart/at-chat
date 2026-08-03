@@ -13,13 +13,13 @@ import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 
 
 loginTests :
     Bool
-    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    -> T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2)
 loginTests isMobile normalConfig =
     let
         windowSize : { width : number, height : number }
@@ -107,9 +107,9 @@ loginTests isMobile normalConfig =
                 , T.andThen
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.sessionId0 data.backend.sessions of
+                        case SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).sessions of
                             Just { userId } ->
-                                case SeqDict.get userId data.backend.twoFactorAuthenticationSetup of
+                                case SeqDict.get userId (E2EHelper.unwrapBackend data.backend).twoFactorAuthenticationSetup of
                                     Just { secret } ->
                                         case TwoFactorAuthentication.getConfig "" secret of
                                             Ok key ->
@@ -155,9 +155,9 @@ loginTests isMobile normalConfig =
                 , T.andThen
                     100
                     (\data ->
-                        case SeqDict.get E2EHelper.sessionId0 data.backend.pendingLogins of
+                        case SeqDict.get E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).pendingLogins of
                             Just (WaitingForTwoFactorToken { userId }) ->
-                                case SeqDict.get userId data.backend.twoFactorAuthentication of
+                                case SeqDict.get userId (E2EHelper.unwrapBackend data.backend).twoFactorAuthentication of
                                     Just { secret } ->
                                         case TwoFactorAuthentication.getConfig "" secret of
                                             Ok key ->
@@ -199,7 +199,7 @@ loginTests isMobile normalConfig =
                                                 , T.checkState
                                                     100
                                                     (\data2 ->
-                                                        if SeqDict.member userId data2.backend.twoFactorAuthentication then
+                                                        if SeqDict.member userId (E2EHelper.unwrapBackend data2.backend).twoFactorAuthentication then
                                                             Err "2FA should have been disabled for the user"
 
                                                         else
@@ -249,7 +249,7 @@ loginTests isMobile normalConfig =
                 , T.checkState
                     100
                     (\data ->
-                        if SeqDict.member E2EHelper.sessionId0 data.backend.sessions then
+                        if SeqDict.member E2EHelper.sessionId0 (E2EHelper.unwrapBackend data.backend).sessions then
                             Err "The wrong recovery password shouldn't have logged anyone in"
 
                         else
