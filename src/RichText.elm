@@ -240,6 +240,9 @@ asciiFontSize containerWidth devicePixelRatio text =
                 |> Maybe.withDefault 1
                 |> max 1
 
+        rows =
+            String.indexes "\n" text |> List.length |> max 1
+
         roomInDevicePixels : Int
         roomInDevicePixels =
             (containerWidth - 2 * (codeBorderWidth + codePaddingX))
@@ -249,7 +252,7 @@ asciiFontSize containerWidth devicePixelRatio text =
 
         scale : Int
         scale =
-            roomInDevicePixels // (10 * columns) |> max 1
+            min (400 // (18 * rows)) (roomInDevicePixels // (10 * columns)) |> clamp 1 3
     in
     String.fromFloat (18 * toFloat scale / devicePixelRatio) ++ "px"
 
