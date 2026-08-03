@@ -4,20 +4,16 @@
 ascii.ttf is a pixel font. Every existing glyph is built from axis aligned
 rectangles on a fixed grid:
 
-  * the em is 1024 units tall and is exactly 18 design pixels
-  * the advance is 569 units and is exactly 10 design pixels
+  * the em is 1152 units tall and is exactly 18 design pixels, so a pixel is
+    64 units (see scripts/rescale-ascii-font.py, which has to run first)
+  * the advance is 640 units and is exactly 10 design pixels
   * the baseline sits on a grid line, so the cell covers rows 13 (top)
-    down to -4 (bottom) and columns 0 (left) to 9 (right)
+    down to -4 (bottom) and columns 0 (left) to 9 (right), and its full
+    height of 18 pixels is exactly one em, which is what lets the vertical
+    strokes and blocks join up with the line above at line-height 1
   * strokes are 1 design pixel thick (`H` has 1px stems, `-` is a 1px bar)
   * `|`, `+` and `-` put their strokes on column 4 and row 4, so the box
     drawing lines use the same centre and line up with them
-
-COLUMN_EDGE / ROW_EDGE below are the exact unit coordinates the existing
-glyphs already use, so new strokes land on the same pixels as the letters.
-The one exception is the top edge: the font's own topmost grid line is 796,
-but the cell has to be exactly 1024 units tall for `│` and `█` to join up
-with the line above (baselines are 1em apart at line-height 1), so row 13
-is stretched by one unit to 797 = -227 + 1024.
 
 Run from the repo root:
 
@@ -40,33 +36,9 @@ FONT = os.path.join(
     "ascii.ttf",
 )
 
-ADVANCE = 569
-
-# x of the left edge of column c, for c in 0..10
-COLUMN_EDGE = [0, 57, 114, 171, 228, 284, 341, 398, 455, 512, 569]
-
-# y of the bottom edge of row r, for r in -4..14
-ROW_EDGE = {
-    -4: -227,
-    -3: -170,
-    -2: -114,
-    -1: -57,
-    0: 0,
-    1: 57,
-    2: 114,
-    3: 170,
-    4: 227,
-    5: 284,
-    6: 341,
-    7: 398,
-    8: 455,
-    9: 512,
-    10: 569,
-    11: 626,
-    12: 682,
-    13: 739,
-    14: 797,
-}
+UPEM = 1152
+PIXEL = UPEM // 18  # 64 units per design pixel, and the baseline is at 0
+ADVANCE = 10 * PIXEL
 
 LEFT, RIGHT = 0, 9  # first and last column of the cell
 BOTTOM, TOP = -4, 13  # first and last row of the cell
@@ -188,26 +160,21 @@ BOX_DRAWING = {
 }
 
 
-def shade(keep):
-    """Dither the whole cell, keeping the pixels `keep(col, row)` selects.
+def shade(chosen):
+    """Dither the whole cell, filling the pixels `chosen(col, row)` selects.
 
-    The pattern has to survive tiling: cells are 10 columns wide and 18 rows
+    The shades have to survive tiling: cells are 10 columns wide and 18 rows
     tall, both even, so anything with a period of 2 continues unbroken into
     the neighbouring cell and the line above and below. That rules out the
     4x4 CP437 patterns (4 divides neither 10 nor 18) and leaves a 2x2 dither,
     which gives the same 25% / 50% / 75% progression.
     """
-    rects = []
-    for r in range(BOTTOM, TOP + 1):
-        run = None
-        for c in range(LEFT, RIGHT + 2):
-            on = c <= RIGHT and keep(c, r)
-            if on and run is None:
-                run = c
-            elif not on and run is not None:
-                rects.append((run, c - 1, r, r))
-                run = None
-    return rects
+    return [
+        (c, c, r, r)
+        for r in range(BOTTOM, TOP + 1)
+        for c in range(LEFT, RIGHT + 1)
+        if chosen(c, r)
+    ]
 
 
 BLOCKS = {
@@ -217,32 +184,110 @@ BLOCKS = {
     0x2593: shade(lambda c, r: not (c % 2 == 0 and r % 2 == 0)),  # dark shade, 75%
 }
 
+SHAPES = dict(BOX_DRAWING)
+SHAPES.update(BLOCKS)
+
+
+def outline(rects):
+    """Trace the pixel set the rectangles cover into closed loops of cell corners.
+
+    Emitting the rectangles themselves would be simpler, but wherever two of them
+    meet along an edge the rasterizer leaves a grey seam down the join, which is
+    what the dark shade is made of. Tracing gives one contour per connected run of
+    pixels, so no two contours ever share an edge.
+
+    Each pixel contributes its four sides wound clockwise; a side shared with
+    another filled pixel cancels against its twin, and the sides that survive are
+    the outline. Winding falls out of that: outer loops come back clockwise like
+    the rest of the font, and enclosed holes come back the other way, which is
+    exactly what the non-zero fill wants.
+    """
+    filled = {
+        (c, r)
+        for c0, c1, r0, r1 in rects
+        for c in range(c0, c1 + 1)
+        for r in range(r0, r1 + 1)
+    }
+    edges = {}
+    for c, r in filled:
+        for start, end in (
+            ((c, r), (c, r + 1)),
+            ((c, r + 1), (c + 1, r + 1)),
+            ((c + 1, r + 1), (c + 1, r)),
+            ((c + 1, r), (c, r)),
+        ):
+            if edges.get(end) and start in edges[end]:
+                edges[end].remove(start)  # cancels against the neighbour's side
+                if not edges[end]:
+                    del edges[end]
+            else:
+                edges.setdefault(start, []).append(end)
+
+    loops = []
+    while edges:
+        start = next(iter(edges))
+        loop, point, heading = [start], start, None
+        while True:
+            options = edges[point]
+            if heading is None:
+                step = options[0]
+            else:
+                # Diagonally touching pixels leave two ways out of a corner. Taking
+                # the sharpest right turn keeps to the pixel we arrived on, so they
+                # stay separate loops instead of one that pinches itself at a point.
+                turns = [
+                    (heading[1], -heading[0]),
+                    heading,
+                    (-heading[1], heading[0]),
+                ]
+                step = next(
+                    p
+                    for t in turns
+                    for p in options
+                    if (p[0] - point[0], p[1] - point[1]) == t
+                )
+            options.remove(step)
+            if not options:
+                del edges[point]
+            heading = (step[0] - point[0], step[1] - point[1])
+            point = step
+            if point == start:
+                break
+            loop.append(point)
+        # drop the corners that only sit in the middle of a straight run
+        loops.append(
+            [
+                p
+                for i, p in enumerate(loop)
+                if (
+                    (p[0] - loop[i - 1][0], p[1] - loop[i - 1][1])
+                    != (loop[(i + 1) % len(loop)][0] - p[0], loop[(i + 1) % len(loop)][1] - p[1])
+                )
+            ]
+        )
+    return loops
+
 
 def build(rects):
-    """Turn cell rectangles into a TrueType glyph.
-
-    Contours are wound clockwise (up the left edge, across the top, down the
-    right edge), the same direction the existing glyphs use.
-    """
+    """Turn cell rectangles into a TrueType glyph."""
     pen = TTGlyphPen(None)
-    for c0, c1, r0, r1 in rects:
-        x0, x1 = COLUMN_EDGE[c0], COLUMN_EDGE[c1 + 1]
-        y0, y1 = ROW_EDGE[r0], ROW_EDGE[r1 + 1]
-        pen.moveTo((x0, y0))
-        pen.lineTo((x0, y1))
-        pen.lineTo((x1, y1))
-        pen.lineTo((x1, y0))
+    for loop in outline(rects):
+        pen.moveTo((loop[0][0] * PIXEL, loop[0][1] * PIXEL))
+        for c, r in loop[1:]:
+            pen.lineTo((c * PIXEL, r * PIXEL))
         pen.closePath()
     return pen.glyph()
 
 
 def main():
     font = TTFont(FONT)
+    if font["head"].unitsPerEm != UPEM:
+        sys.exit(
+            f"expected {UPEM} units per em, found {font['head'].unitsPerEm}."
+            " Run scripts/rescale-ascii-font.py first"
+        )
     glyf = font["glyf"]
     hmtx = font["hmtx"]
-
-    wanted = dict(BOX_DRAWING)
-    wanted.update(BLOCKS)
 
     order = list(font.getGlyphOrder())
     cmaps = [t for t in font["cmap"].tables if t.format == 4]
@@ -250,7 +295,7 @@ def main():
         sys.exit("expected a format 4 cmap subtable")
 
     added = 0
-    for codepoint, rects in sorted(wanted.items()):
+    for codepoint, rects in sorted(SHAPES.items()):
         name = "uni%04X" % codepoint
         if name not in order:
             order.append(name)
@@ -279,11 +324,11 @@ def main():
     font["head"].flags |= 1 << 1  # xMin == lsb for every glyph
 
     os2 = font["OS/2"]
-    os2.usLastCharIndex = max(os2.usLastCharIndex, max(wanted))
+    os2.usLastCharIndex = max(os2.usLastCharIndex, max(SHAPES))
     os2.ulUnicodeRange2 |= (1 << (47 - 32)) | (1 << (48 - 32))  # box drawing, blocks
 
     font.save(FONT)
-    print(f"{added} glyphs added, {len(wanted) - added} regenerated -> {FONT}")
+    print(f"{added} glyphs added, {len(SHAPES) - added} regenerated -> {FONT}")
 
 
 if __name__ == "__main__":
