@@ -1391,6 +1391,7 @@ adminData model lastLogPageViewed =
                             , messageCount = IdArray.length channel.messages
                             , threadCount = SeqDict.size channel.threads
                             , firstMessage = IdArray.get (Id.fromInt 0) channel.messages
+                            , permissionOverwrites = channel.permissionOverwrites
                             }
                         )
                         guild.channels
