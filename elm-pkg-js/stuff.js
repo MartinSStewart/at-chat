@@ -609,6 +609,22 @@ exports.init = async function init(app)
             app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
         });
 
+    // There is no devicepixelratiochange event. The way to watch it is to match a media query
+    // against the ratio we have now and wait for it to stop matching, which happens when the page
+    // is zoomed or dragged to a screen with a different pixel density. The listener is then
+    // re-armed against the new ratio, since the old query will never fire again.
+    function watchDevicePixelRatio() {
+        const query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+        query.addEventListener(
+            "change",
+            () => {
+                app.ports.device_pixel_ratio_changed_from_js.send(window.devicePixelRatio || 1);
+                watchDevicePixelRatio();
+            },
+            { once: true });
+    }
+    watchDevicePixelRatio();
+
     app.ports.request_notification_permission.subscribe((a) => {
         if ("Notification" in window) {
             Notification.requestPermission().then((permission) => {

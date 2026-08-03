@@ -129,6 +129,45 @@ app_ =
         }
 
 
+{-| LocalUser keeps a copy of the device pixel ratio so that ascii art can pick a font size
+that lands on whole device pixels without messageView needing another parameter. That copy
+has to be kept in step with the real value, which changes when the page is zoomed or moved
+to a screen with a different pixel density.
+-}
+setDevicePixelRatio : Float -> LoadedFrontend -> LoadedFrontend
+setDevicePixelRatio devicePixelRatio model =
+    let
+        startupData : Ports.StartupData
+        startupData =
+            model.startupData
+    in
+    { model
+        | startupData = { startupData | devicePixelRatio = devicePixelRatio }
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local
+                                            | localUser = { localUser | devicePixelRatio = devicePixelRatio }
+                                        }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
 checkAppVersion : Bool -> Command FrontendOnly toMsg FrontendMsg_
 checkAppVersion reloadOnNewVersion =
     Http.get
@@ -161,6 +200,7 @@ subscriptions _ model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
+        , Ports.devicePixelRatioChanged GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.serviceWorkerData GotServiceWorkerData
@@ -2856,36 +2896,12 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            let
-                ( model2, cmd ) =
-                    -- The device pixel ratio changes when the page is zoomed or moved to another
-                    -- screen, so refresh the copy LocalUser keeps for ascii art rendering.
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | localState =
-                                    Local.mapModel
-                                        (\local ->
-                                            let
-                                                localUser : User.LocalUser
-                                                localUser =
-                                                    local.localUser
-                                            in
-                                            { local
-                                                | localUser =
-                                                    { localUser
-                                                        | devicePixelRatio = startupData.devicePixelRatio
-                                                    }
-                                            }
-                                        )
-                                        loggedIn.localState
-                              }
-                            , Command.none
-                            )
-                        )
-                        { model | startupData = startupData }
-            in
-            ( model2, Command.batch [ cmd, checkAppVersion False ] )
+            ( setDevicePixelRatio startupData.devicePixelRatio { model | startupData = startupData }
+            , checkAppVersion False
+            )
+
+        GotDevicePixelRatio devicePixelRatio ->
+            ( setDevicePixelRatio devicePixelRatio model, Command.none )
 
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model

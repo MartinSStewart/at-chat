@@ -17,6 +17,7 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , devicePixelRatioChanged
     , execCommand
     , fixCursorPosition
     , focusChanged
@@ -367,6 +368,9 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
+port device_pixel_ratio_changed_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
 port shift_scroll_by_element_delta_to_js : Json.Encode.Value -> Cmd msg
 
 
@@ -419,6 +423,16 @@ visualViewportResized msg =
         "visual_viewport_resized_from_js"
         visual_viewport_resized_from_js
         (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
+
+
+{-| Fires when the page is zoomed or moved to a screen with a different pixel density.
+-}
+devicePixelRatioChanged : (Float -> msg) -> Subscription FrontendOnly msg
+devicePixelRatioChanged msg =
+    Subscription.fromJs
+        "device_pixel_ratio_changed_from_js"
+        device_pixel_ratio_changed_from_js
+        (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 1 |> msg)
 
 
 closeNotifications : Command FrontendOnly toMsg msg
