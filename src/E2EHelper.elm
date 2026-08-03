@@ -2652,9 +2652,6 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetDomainWhitelist _ _ ->
                     False
 
-                Local_SetEmojiCategory _ ->
-                    False
-
                 Local_SetEmojiSkinTone _ ->
                     False
 
@@ -3096,7 +3093,6 @@ allAttackerLocalChanges =
     , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
-    , Local_SetEmojiCategory (Emoji.EmojiCategory Emoji.Activities)
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
@@ -3115,7 +3111,6 @@ allAttackerLocalChanges =
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_SetDomainWhitelist False brokenDomain
     , Local_SetDomainWhitelist True brokenDomain
-    , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))

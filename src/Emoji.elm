@@ -486,8 +486,8 @@ emojiButtonId index =
     Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
-searchInput : Model -> Maybe SkinTone -> List ( Int, Element Msg ) -> Int -> Element Msg
-searchInput model skinTone items columns =
+searchInput : Model -> Maybe SkinTone -> List (List EmojiOrSticker) -> Int -> Element Msg
+searchInput model skinTone categories columns =
     let
         isSearching =
             model.searchText /= ""
@@ -525,7 +525,7 @@ searchInput model skinTone items columns =
                 , Ui.width Ui.fill
                 , Ui.id (Dom.idToString searchInputId)
                 , Ui.htmlAttribute
-                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model items columns))
+                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories columns))
                 ]
                 { onChange = TypedSearchText
                 , text = model.searchText
@@ -557,87 +557,185 @@ setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
 
 
-decodeArrowKey : Model -> List ( Int, Element Msg ) -> Int -> Json.Decode.Decoder ( Msg, Bool )
-decodeArrowKey model items columns =
+{-| Where a category's emojis start within the flattened list of every category, and how many
+there are. Empty categories are left out since there's nothing in them to move to.
+-}
+type alias CategoryRange =
+    { start : Int, count : Int }
+
+
+categoryRanges : List (List EmojiOrSticker) -> List CategoryRange
+categoryRanges categories =
+    List.foldl
+        (\category ( start, list ) ->
+            ( start + List.length category
+            , if List.isEmpty category then
+                list
+
+              else
+                { start = start, count = List.length category } :: list
+            )
+        )
+        ( 0, [] )
+        categories
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| The emoji one row above `index`, or Nothing if `index` is on the very first row of the
+selector. Each category starts a fresh grid, so moving up off the top row of one category lands
+on the last row of the previous one.
+-}
+moveUp : Int -> Int -> Maybe CategoryRange -> List CategoryRange -> Maybe Int
+moveUp columns index previous categories =
+    case categories of
+        current :: rest ->
+            if index < current.start + current.count then
+                let
+                    column : Int
+                    column =
+                        modBy columns (index - current.start)
+                in
+                if index - current.start >= columns then
+                    Just (index - columns)
+
+                else
+                    case previous of
+                        Just previous2 ->
+                            let
+                                lastRowStart : Int
+                                lastRowStart =
+                                    (previous2.count - 1) // columns * columns
+                            in
+                            Just (previous2.start + min (lastRowStart + column) (previous2.count - 1))
+
+                        Nothing ->
+                            Nothing
+
+            else
+                moveUp columns index (Just current) rest
+
+        [] ->
+            Nothing
+
+
+{-| The emoji one row below `index`, or Nothing if `index` is on the very last row of the
+selector. Moving down off the last row of a category lands on the first row of the next one.
+-}
+moveDown : Int -> Int -> List CategoryRange -> Maybe Int
+moveDown columns index categories =
+    case categories of
+        current :: rest ->
+            if index < current.start + current.count then
+                let
+                    local : Int
+                    local =
+                        index - current.start
+
+                    lastLocal : Int
+                    lastLocal =
+                        current.count - 1
+                in
+                if local + columns <= lastLocal then
+                    Just (index + columns)
+
+                else if local // columns < lastLocal // columns then
+                    -- There's another row below but it stops short of this column
+                    Just (current.start + lastLocal)
+
+                else
+                    case rest of
+                        next :: _ ->
+                            Just (next.start + min (modBy columns local) (next.count - 1))
+
+                        [] ->
+                            Nothing
+
+            else
+                moveDown columns index rest
+
+        [] ->
+            Nothing
+
+
+decodeArrowKey : Model -> List (List EmojiOrSticker) -> Int -> Json.Decode.Decoder ( Msg, Bool )
+decodeArrowKey model categories columns =
     Json.Decode.field "key" Json.Decode.string
         |> Json.Decode.andThen
             (\key ->
                 let
+                    items : Array EmojiOrSticker
+                    items =
+                        List.concat categories |> Array.fromList
+
                     count : Int
                     count =
-                        Debug.todo ""
+                        Array.length items
 
-                    --Array.length items
+                    ranges : List CategoryRange
+                    ranges =
+                        categoryRanges categories
+
                     currentIndex : Maybe Int
                     currentIndex =
-                        Debug.todo ""
+                        case model.emojiHovered of
+                            Just hovered ->
+                                findIndex hovered items
 
-                    --case model.emojiHovered of
-                    --    Just hovered ->
-                    --        findIndex hovered items
-                    --
-                    --    Nothing ->
-                    --        Nothing
+                            Nothing ->
+                                Nothing
+
                     moveTo : Int -> Json.Decode.Decoder ( Msg, Bool )
-                    moveTo delta =
-                        if count == 0 then
-                            Json.Decode.fail ""
+                    moveTo newIndex =
+                        case Array.get newIndex items of
+                            Just item ->
+                                Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
 
-                        else
-                            let
-                                newIndex : Int
-                                newIndex =
-                                    case currentIndex of
-                                        Just idx ->
-                                            clamp 0 (count - 1) (idx + delta)
-
-                                        Nothing ->
-                                            if delta < 0 then
-                                                count - 1
-
-                                            else
-                                                0
-                            in
-                            Debug.todo ""
-
-                    --case Array.get newIndex items of
-                    --    Just item ->
-                    --        Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
-                    --
-                    --    Nothing ->
-                    --        Json.Decode.fail ""
+                            Nothing ->
+                                Json.Decode.fail ""
                 in
                 case key of
                     "ArrowLeft" ->
                         case currentIndex of
-                            Just _ ->
-                                moveTo -1
+                            Just index ->
+                                moveTo (clamp 0 (count - 1) (index - 1))
 
                             Nothing ->
                                 Json.Decode.succeed ( NoOp, False )
 
                     "ArrowRight" ->
                         case currentIndex of
-                            Just _ ->
-                                moveTo 1
+                            Just index ->
+                                moveTo (clamp 0 (count - 1) (index + 1))
 
                             Nothing ->
                                 Json.Decode.succeed ( NoOp, False )
 
                     "ArrowUp" ->
                         case currentIndex of
-                            Just idx ->
-                                if idx < columns then
-                                    Json.Decode.succeed ( ClearEmojiHover, True )
+                            Just index ->
+                                case moveUp columns index Nothing ranges of
+                                    Just newIndex ->
+                                        moveTo newIndex
 
-                                else
-                                    moveTo -columns
+                                    Nothing ->
+                                        Json.Decode.succeed ( ClearEmojiHover, True )
 
                             Nothing ->
                                 Json.Decode.succeed ( NoOp, False )
 
                     "ArrowDown" ->
-                        moveTo columns
+                        case currentIndex of
+                            Just index ->
+                                case moveDown columns index ranges of
+                                    Just newIndex ->
+                                        moveTo newIndex
+
+                                    Nothing ->
+                                        Json.Decode.succeed ( NoOp, True )
+
+                            Nothing ->
+                                moveTo 0
 
                     "Enter" ->
                         case model.emojiHovered of
@@ -645,14 +743,13 @@ decodeArrowKey model items columns =
                                 Json.Decode.succeed ( PressedSelectEmoji hovered, True )
 
                             Nothing ->
-                                Debug.todo ""
+                                case Array.get 0 items of
+                                    Just first ->
+                                        Json.Decode.succeed ( PressedSelectEmoji first, True )
 
-                    --case Array.get 0 items of
-                    --    Just first ->
-                    --        Json.Decode.succeed ( PressedSelectEmoji first, True )
-                    --
-                    --    Nothing ->
-                    --        Json.Decode.succeed ( NoOp, False )
+                                    Nothing ->
+                                        Json.Decode.succeed ( NoOp, False )
+
                     _ ->
                         Json.Decode.succeed ( NoOp, False )
             )
@@ -728,65 +825,85 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                 columns =
                     max 1 (selectorWidth // emojiWidth)
 
-                emojis : List ( Int, Element Msg )
-                emojis =
-                    List.map
+                categories : List ( String, List EmojiOrSticker )
+                categories =
+                    List.filterMap
                         (\category ->
                             case category of
                                 EmojiCategory emojiCategory ->
-                                    let
-                                        list =
-                                            SeqDict.get emojiCategory emojiData2.categories |> Maybe.withDefault []
-                                    in
-                                    ( List.length list
-                                    , List.indexedMap
-                                        (\index item ->
-                                            emojiWithSkinTone userData.skinTone item emojiData2
-                                                |> Ui.text
-                                                |> emojiButtonHelper index (EmojiOrSticker_UnicodeEmoji item) model
-                                        )
-                                        list
-                                        |> emojiCategoryContainer (emojiCategoryToString emojiCategory)
-                                    )
+                                    case SeqDict.get emojiCategory emojiData2.categories of
+                                        Just [] ->
+                                            Nothing
+
+                                        Just list ->
+                                            ( emojiCategoryToString emojiCategory
+                                            , List.map EmojiOrSticker_UnicodeEmoji list
+                                            )
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
 
                                 StickerCategory ->
-                                    let
-                                        list =
-                                            SeqSet.toList availableStickers
-                                    in
-                                    ( List.length list
-                                    , List.indexedMap
-                                        (\index stickerId ->
-                                            Sticker.view "2lh" stickerId stickersData Sticker.LoopForever
-                                                |> Ui.html
-                                                |> emojiButtonHelper index (EmojiOrSticker_Sticker stickerId) model
-                                        )
-                                        list
-                                        |> emojiCategoryContainer "Stickers"
-                                    )
+                                    case SeqSet.toList availableStickers of
+                                        [] ->
+                                            Nothing
+
+                                        list ->
+                                            ( "Stickers", List.map EmojiOrSticker_Sticker list ) |> Just
 
                                 CustomEmojiCategory ->
-                                    let
-                                        list =
-                                            SeqSet.toList availableCustomEmojis
-                                    in
-                                    ( List.length list
-                                    , List.indexedMap
-                                        (\index customEmojiId ->
-                                            CustomEmoji.view
-                                                (String.fromInt emojiWidth ++ "px")
-                                                "0"
-                                                customEmojiId
-                                                customEmojisData
-                                                Sticker.LoopForever
-                                                |> Ui.html
-                                                |> emojiButtonHelper index (EmojiOrSticker_CustomEmoji customEmojiId) model
-                                        )
-                                        list
-                                        |> emojiCategoryContainer "Custom emojis"
-                                    )
+                                    case SeqSet.toList availableCustomEmojis of
+                                        [] ->
+                                            Nothing
+
+                                        list ->
+                                            ( "Custom emojis", List.map EmojiOrSticker_CustomEmoji list ) |> Just
                         )
                         (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
+
+                -- Emoji buttons are numbered across every category rather than restarting at 0 in
+                -- each one, so that the id we scroll to on arrow key presses is unique.
+                emojis : List ( List EmojiOrSticker, Element Msg )
+                emojis =
+                    List.foldl
+                        (\( title, list ) ( offset, sections ) ->
+                            ( offset + List.length list
+                            , ( list
+                              , List.indexedMap
+                                    (\index item ->
+                                        emojiButtonHelper
+                                            (offset + index)
+                                            item
+                                            model
+                                            (case item of
+                                                EmojiOrSticker_UnicodeEmoji emoji ->
+                                                    emojiWithSkinTone userData.skinTone emoji emojiData2 |> Ui.text
+
+                                                EmojiOrSticker_Sticker stickerId ->
+                                                    Sticker.view "2lh" stickerId stickersData Sticker.LoopForever
+                                                        |> Ui.html
+
+                                                EmojiOrSticker_CustomEmoji customEmojiId ->
+                                                    CustomEmoji.view
+                                                        (String.fromInt emojiWidth ++ "px")
+                                                        "0"
+                                                        customEmojiId
+                                                        customEmojisData
+                                                        Sticker.LoopForever
+                                                        |> Ui.html
+                                            )
+                                    )
+                                    list
+                                    |> emojiCategoryContainer title
+                              )
+                                :: sections
+                            )
+                        )
+                        ( 0, [] )
+                        categories
+                        |> Tuple.second
+                        |> List.reverse
 
                 --if isSearching then
                 --    let
@@ -838,10 +955,10 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                 , Ui.heightMin 0
                 , Ui.clip
                 ]
-                [ searchInput model userData.skinTone emojis columns
+                [ searchInput model userData.skinTone (List.map Tuple.first emojis) columns
                 , Ui.column
                     []
-                    (List.map (\( _, element ) -> element) emojis)
+                    (List.map Tuple.second emojis)
                     |> Ui.el
                         [ Ui.background MyUi.background3
                         , Ui.scrollable
