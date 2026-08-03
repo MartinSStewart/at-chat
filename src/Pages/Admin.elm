@@ -20,6 +20,7 @@ module Pages.Admin exposing
     , UsersChangeError(..)
     , applyChangesToBackendUsers
     , disconnectClient
+    , discordChannelReloadUser
     , endAllCalls
     , initForAdmin
     , initForUser
@@ -3482,8 +3483,8 @@ discordGuildsSection isMobile user adminData =
                                 ]
                             , if isExpanded then
                                 let
-                                    userThatCanReload : Maybe (Discord.Id Discord.UserId)
-                                    userThatCanReload =
+                                    linkedGuildMembers : List (Discord.Id Discord.UserId)
+                                    linkedGuildMembers =
                                         SeqDict.intersect
                                             (SeqDict.filter
                                                 (\_ discordUser ->
@@ -3498,13 +3499,14 @@ discordGuildsSection isMobile user adminData =
                                             )
                                             (SeqDict.insert owner { joinedAt = Nothing, roles = SeqSet.empty } members)
                                             |> SeqDict.keys
-                                            |> List.head
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (discordGuildRoles userThatCanReload guildId guild.roles
+                                    (discordGuildRoles (List.head linkedGuildMembers) guildId guild.roles
                                         :: discordGuildRoleMembers guildId guild.roles members adminData
-                                        :: List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels)
+                                        :: List.map
+                                            (discordGuildChannel linkedGuildMembers guild guildId adminData)
+                                            (SeqDict.toList guild.channels)
                                     )
 
                               else
@@ -3675,17 +3677,37 @@ discordGuildRoleMembers guildId roles members adminData =
         )
 
 
+{-| A linked user can only load a channel's messages if they are allowed to view that channel.
+Picking any linked guild member means private channels get loaded with a user Discord answers 403
+for, so the channel's permission overwrites decide who to load it with.
+-}
+discordChannelReloadUser :
+    List (Discord.Id Discord.UserId)
+    -> Discord.Id Discord.GuildId
+    -> AdminData_DiscordGuild
+    -> AdminData_DiscordChannel
+    -> Maybe (Discord.Id Discord.UserId)
+discordChannelReloadUser linkedGuildMembers guildId guild channel =
+    List.filter (LocalState.canViewDiscordChannel guildId channel guild) linkedGuildMembers
+        |> List.head
+
+
 discordGuildChannel :
-    Maybe (Discord.Id Discord.UserId)
+    List (Discord.Id Discord.UserId)
+    -> AdminData_DiscordGuild
     -> Discord.Id Discord.GuildId
     -> AdminData
     -> ( Discord.Id Discord.ChannelId, AdminData_DiscordChannel )
     -> Element Msg
-discordGuildChannel maybeUserId guildId adminData ( channelId, channel ) =
+discordGuildChannel linkedGuildMembers guild guildId adminData ( channelId, channel ) =
     let
         isReloading : Maybe (LoadingDiscordChannelStep Int)
         isReloading =
             LocalState.isDiscordGuildChannelReloading channelId adminData.loadingDiscordChannels
+
+        maybeUserId : Maybe (Discord.Id Discord.UserId)
+        maybeUserId =
+            discordChannelReloadUser linkedGuildMembers guildId guild channel
     in
     Ui.row
         [ Ui.spacing 8, Ui.Font.size 13 ]

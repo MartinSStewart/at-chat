@@ -907,6 +907,7 @@ type alias AdminData_DiscordChannel =
     , messageCount : Int
     , threadCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
+    , permissionOverwrites : List Discord.Overwrite
     }
 
 
