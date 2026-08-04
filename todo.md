@@ -32,6 +32,7 @@
 * A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
 * Two messages get sent and it seems to happen for Discord and normal users. In the latest case, it was in a DM and the
   user saw duplicated messages for both themselves and the other user.
+* Anchor position needs to be recalculated if a message comes in (or maybe lock the scroll position)
 
 Requested features:
 
