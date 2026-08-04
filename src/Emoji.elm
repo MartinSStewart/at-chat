@@ -209,6 +209,25 @@ categoryToEmojiString skinTone category =
             Ui.text "C"
 
 
+{-| Every category the selector shows, in the order they appear. Components is left out because
+it's made up of skin tone and hair modifiers rather than emojis anyone would want to send.
+-}
+allCategories : List Category
+allCategories =
+    StickerCategory
+        :: CustomEmojiCategory
+        :: List.filterMap
+            (\emojiCategory ->
+                case emojiCategory of
+                    Components ->
+                        Nothing
+
+                    _ ->
+                        EmojiCategory emojiCategory |> Just
+            )
+            allEmojiCategories
+
+
 allEmojiCategories : List EmojiCategory
 allEmojiCategories =
     [ SmileysAndEmotion
@@ -266,6 +285,7 @@ allSkinTones =
 type alias Model =
     { emojiHovered : Maybe EmojiOrSticker
     , searchText : String
+    , category : Category
     }
 
 
@@ -279,6 +299,7 @@ selectorInit : Model
 selectorInit =
     { emojiHovered = Nothing
     , searchText = ""
+    , category = StickerCategory
     }
 
 
@@ -301,7 +322,8 @@ type alias EmojiResponse =
 
 type Msg
     = PressedContainer
-    | PressedCategory Category
+    | PressedCategory Category Int
+    | ScrolledToCategory Category
     | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji EmojiOrSticker
@@ -321,8 +343,11 @@ isPressed msg =
         PressedSelectEmoji _ ->
             True
 
-        PressedCategory _ ->
+        PressedCategory _ _ ->
             True
+
+        ScrolledToCategory _ ->
+            False
 
         PressedSkinTone _ ->
             True
@@ -441,6 +466,9 @@ skinToneView selectedSkinTone =
         |> Ui.el [ Ui.width Ui.shrink, Ui.height Ui.fill, MyUi.noShrinking ]
 
 
+{-| Everything in the scrollable part of the selector has a fixed size so that the scroll position
+each category starts at can be worked out with arithmetic instead of `Dom.getElement`.
+-}
 emojiWidth : number
 emojiWidth =
     40
@@ -448,6 +476,31 @@ emojiWidth =
 
 emojiHeight : number
 emojiHeight =
+    40
+
+
+categoryTitleHeight : number
+categoryTitleHeight =
+    24
+
+
+categoryColumnWidth : number
+categoryColumnWidth =
+    40
+
+
+{-| Room set aside for the scrollbar so that the emojis wrap where we expect them to. Browsers that
+draw the scrollbar as an overlay leave this as a bit of empty space on the right instead.
+-}
+scrollbarWidth : number
+scrollbarWidth =
+    17
+
+
+{-| Height of the bar at the bottom that names whatever emoji is hovered.
+-}
+previewHeight : number
+previewHeight =
     50
 
 
@@ -555,6 +608,66 @@ searchInput model skinTone categories columns =
 setSearch : String -> Model -> Model
 setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
+
+
+{-| How tall a category's section is: its title, plus however many rows its emojis wrap onto.
+-}
+categorySectionHeight : Int -> Int -> Int
+categorySectionHeight columns itemCount =
+    categoryTitleHeight + ((itemCount + columns - 1) // columns * emojiHeight)
+
+
+{-| Each category paired with the scroll position its section starts at.
+-}
+categoryOffsets : Int -> List ( Category, List EmojiOrSticker ) -> List ( Category, Int )
+categoryOffsets columns categories =
+    List.foldl
+        (\( category, items ) ( offset, list ) ->
+            ( offset + categorySectionHeight columns (List.length items)
+            , ( category, offset ) :: list
+            )
+        )
+        ( 0, [] )
+        categories
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| The category whose section the top of the scroll container is showing.
+-}
+categoryAtScrollPosition : Int -> List ( Category, Int ) -> Maybe Category
+categoryAtScrollPosition scrollTop offsets =
+    List.foldl
+        (\( category, offset ) current ->
+            if offset <= scrollTop then
+                Just category
+
+            else
+                current
+        )
+        Nothing
+        offsets
+
+
+{-| Fails when scrolling hasn't brought a different category into view. A decoder that fails sends
+no message at all, which keeps us from running an update for every scroll event.
+-}
+decodeScroll : Category -> List ( Category, Int ) -> Json.Decode.Decoder Msg
+decodeScroll currentCategory offsets =
+    Json.Decode.at [ "target", "scrollTop" ] Json.Decode.float
+        |> Json.Decode.andThen
+            (\scrollTop ->
+                case categoryAtScrollPosition (round scrollTop) offsets of
+                    Just category ->
+                        if category == currentCategory then
+                            Json.Decode.fail ""
+
+                        else
+                            Json.Decode.succeed (ScrolledToCategory category)
+
+                    Nothing ->
+                        Json.Decode.fail ""
+            )
 
 
 {-| Where a category's emojis start within the flattened list of every category, and how many
@@ -791,7 +904,9 @@ emojiButtonHelper index item model content =
             (model.emojiHovered == Just item)
             (Ui.background MyUi.hoverHighlight)
         , Ui.contentCenterX
-        , Ui.width Ui.shrink
+        , Ui.contentCenterY
+        , Ui.width (Ui.px emojiWidth)
+        , Ui.height (Ui.px emojiHeight)
         ]
         content
 
@@ -800,7 +915,43 @@ emojiCategoryContainer : String -> List (Element msg) -> Element msg
 emojiCategoryContainer title content =
     Ui.column
         []
-        [ Ui.el [ Ui.Font.size 16 ] (Ui.text title), Ui.row [ Ui.wrap ] content ]
+        [ Ui.el
+            [ Ui.Font.size 16
+            , Ui.height (Ui.px categoryTitleHeight)
+            , Ui.contentCenterY
+            , Ui.Font.color MyUi.font3
+            ]
+            (Ui.text title)
+        , Ui.row [ Ui.wrap ] content
+        ]
+
+
+categoryColumn : Maybe SkinTone -> Maybe Category -> List ( Category, Int ) -> Element Msg
+categoryColumn skinTone selectedCategory offsets =
+    List.map
+        (\( category, offset ) ->
+            MyUi.elButton
+                (categoryButtonId category)
+                (PressedCategory category offset)
+                [ Ui.height (Ui.px categoryColumnWidth)
+                , Ui.contentCenterX
+                , Ui.contentCenterY
+                , Ui.Font.size 24
+                , MyUi.noShrinking
+                , MyUi.hoverText (categoryToString category)
+                , Ui.attrIf (Just category == selectedCategory) (Ui.background MyUi.background3)
+                ]
+                (categoryToEmojiString skinTone category)
+        )
+        offsets
+        |> Ui.column
+            [ Ui.width (Ui.px categoryColumnWidth)
+            , Ui.height Ui.fill
+            , Ui.heightMin 0
+            , Ui.scrollable
+            , MyUi.noShrinking
+            , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
+            ]
 
 
 selector :
@@ -823,9 +974,9 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
 
                 columns : Int
                 columns =
-                    max 1 (selectorWidth // emojiWidth)
+                    max 1 ((selectorWidth - categoryColumnWidth - scrollbarWidth) // emojiWidth)
 
-                categories : List ( String, List EmojiOrSticker )
+                categories : List ( Category, List EmojiOrSticker )
                 categories =
                     List.filterMap
                         (\category ->
@@ -836,10 +987,7 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                             Nothing
 
                                         Just list ->
-                                            ( emojiCategoryToString emojiCategory
-                                            , List.map EmojiOrSticker_UnicodeEmoji list
-                                            )
-                                                |> Just
+                                            ( category, List.map EmojiOrSticker_UnicodeEmoji list ) |> Just
 
                                         Nothing ->
                                             Nothing
@@ -850,7 +998,7 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                             Nothing
 
                                         list ->
-                                            ( "Stickers", List.map EmojiOrSticker_Sticker list ) |> Just
+                                            ( category, List.map EmojiOrSticker_Sticker list ) |> Just
 
                                 CustomEmojiCategory ->
                                     case SeqSet.toList availableCustomEmojis of
@@ -858,16 +1006,30 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                             Nothing
 
                                         list ->
-                                            ( "Custom emojis", List.map EmojiOrSticker_CustomEmoji list ) |> Just
+                                            ( category, List.map EmojiOrSticker_CustomEmoji list ) |> Just
                         )
-                        (StickerCategory :: CustomEmojiCategory :: List.map EmojiCategory allEmojiCategories)
+                        allCategories
+
+                offsets : List ( Category, Int )
+                offsets =
+                    categoryOffsets columns categories
+
+                -- The scroll container is rebuilt at the top every time the selector is opened, so
+                -- fall back to the first category when the one we remember isn't on screen.
+                selectedCategory : Maybe Category
+                selectedCategory =
+                    if List.any (\( category, _ ) -> category == model.category) offsets then
+                        Just model.category
+
+                    else
+                        List.head offsets |> Maybe.map Tuple.first
 
                 -- Emoji buttons are numbered across every category rather than restarting at 0 in
                 -- each one, so that the id we scroll to on arrow key presses is unique.
                 emojis : List ( List EmojiOrSticker, Element Msg )
                 emojis =
                     List.foldl
-                        (\( title, list ) ( offset, sections ) ->
+                        (\( category, list ) ( offset, sections ) ->
                             ( offset + List.length list
                             , ( list
                               , List.indexedMap
@@ -881,7 +1043,11 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                                     emojiWithSkinTone userData.skinTone emoji emojiData2 |> Ui.text
 
                                                 EmojiOrSticker_Sticker stickerId ->
-                                                    Sticker.view "2lh" stickerId stickersData Sticker.LoopForever
+                                                    Sticker.view
+                                                        (String.fromInt emojiWidth ++ "px")
+                                                        stickerId
+                                                        stickersData
+                                                        Sticker.LoopForever
                                                         |> Ui.html
 
                                                 EmojiOrSticker_CustomEmoji customEmojiId ->
@@ -895,7 +1061,7 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                             )
                                     )
                                     list
-                                    |> emojiCategoryContainer title
+                                    |> emojiCategoryContainer (categoryToString category)
                               )
                                 :: sections
                             )
@@ -956,17 +1122,24 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                 , Ui.clip
                 ]
                 [ searchInput model userData.skinTone (List.map Tuple.first emojis) columns
-                , Ui.column
-                    []
-                    (List.map Tuple.second emojis)
-                    |> Ui.el
-                        [ Ui.background MyUi.background3
-                        , Ui.scrollable
-                        , Ui.heightMin 0
-                        , Ui.id (Dom.idToString scrollContainerId)
-                        ]
                 , Ui.row
-                    [ Ui.height (Ui.px emojiHeight)
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ categoryColumn userData.skinTone selectedCategory offsets
+                    , Ui.column
+                        [ Ui.width (Ui.px (columns * emojiWidth)) ]
+                        (List.map Tuple.second emojis)
+                        |> Ui.el
+                            [ Ui.background MyUi.background3
+                            , Ui.scrollable
+                            , Ui.height Ui.fill
+                            , Ui.heightMin 0
+                            , Ui.id (Dom.idToString scrollContainerId)
+                            , Ui.htmlAttribute
+                                (Html.Events.on "scroll" (decodeScroll model.category offsets))
+                            ]
+                    ]
+                , Ui.row
+                    [ Ui.height (Ui.px previewHeight)
                     , Ui.contentCenterY
                     , Ui.spacing 8
                     , MyUi.noShrinking

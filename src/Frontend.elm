@@ -1368,14 +1368,30 @@ updateLoaded msg model =
                 Emoji.PressedContainer ->
                     ( model, Command.none )
 
-                Emoji.PressedCategory category ->
+                Emoji.PressedCategory category offset ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            Debug.todo ""
+                            ( { loggedIn | emojiSelector = { emojiSelector | category = category } }
+                            , Dom.setViewportOf Emoji.scrollContainerId 0 (toFloat offset)
+                                |> Task.attempt (\_ -> FrontendNoOp)
+                            )
+                        )
+                        model
+
+                Emoji.ScrolledToCategory category ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | category = category } }
+                            , Command.none
+                            )
                         )
                         model
 
@@ -5554,7 +5570,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
 
                         _ ->
                             EmojiSelectorHidden
-                , emojiSelector = { emojiSelectorModel | searchText = "" }
+                , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
             , Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
             )
@@ -6200,7 +6216,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
-                , emojiSelector = { emojiSelectorModel | searchText = "" }
+                , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
                 |> MessageMenu.close model
             , Command.none
