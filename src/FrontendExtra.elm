@@ -1914,7 +1914,27 @@ routeRequestChannelHelper sameChannel guildOrDmId tab threadRoute local loggedIn
             loggedIn
     , Command.batch
         [ if sameChannel then
-            Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+            -- Staying in the same channel but pointing at a message means the user followed a
+            -- reply header or a link to it, so bring that message into view instead of sticking
+            -- to the bottom of the conversation.
+            case threadRoute of
+                ViewThreadWithFriends _ (Just messageIndex) _ ->
+                    Scroll.smoothScrollTo
+                        Pages.Guild.conversationContainerId
+                        (Pages.Guild.threadMessageHtmlId messageIndex)
+                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                ViewThreadWithFriends _ Nothing _ ->
+                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
+
+                NoThreadWithFriends (Just messageIndex) _ ->
+                    Scroll.smoothScrollTo
+                        Pages.Guild.conversationContainerId
+                        (Pages.Guild.channelMessageHtmlId messageIndex)
+                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                NoThreadWithFriends Nothing _ ->
+                    Scroll.toBottomOfChannelIfAtBottom Pages.Guild.conversationContainerId SetScrollToBottom loggedIn.channelScrollPosition
 
           else
             let
