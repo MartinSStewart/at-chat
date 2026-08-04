@@ -1,4 +1,4 @@
-module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages)
+module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages, newMessagesWhileDrawing)
 
 import Audio
 import Coord
@@ -469,6 +469,75 @@ drawingScalesWithImages imageUploadConfig =
 
                             _ ->
                                 [ T.checkState 0 (\_ -> Err "No image message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| A message arriving while the drawing tab is open must not scroll the
+conversation, since that would throw off the stroke the user is drawing. The
+messages are counted in a warning above the message input instead.
+-}
+newMessagesWhileDrawing : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+newMessagesWhileDrawing config =
+    E2EHelper.startTest
+        "New messages don't scroll the channel while drawing"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "Draw on this message!"
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ admin.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+                                , admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+
+                                -- Nothing has arrived yet so there's no warning
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "while you were drawing" ])
+
+                                -- Messages from the other user are counted instead of scrolling
+                                -- the conversation
+                                , E2EHelper.writeMessage user 100 "Hello!"
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 new message while you were drawing" ])
+                                , E2EHelper.writeMessage user 100 "Hello again!"
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "2 new messages while you were drawing" ])
+                                , admin.snapshotView 100 { name = "New message warning while drawing" }
+
+                                -- Pressing the warning deselects the anchor and scrolls to the
+                                -- bottom of the channel
+                                , admin.click 100 Pages.Guild.newMessagesWhileDrawingId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "while you were drawing" ])
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
                     )
                 ]
             )

@@ -653,6 +653,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , E2EDrawing.drawOnMessages imageUploadConfig
     , E2EDrawing.drawingScalesWithImages wideImageUploadConfig
+    , E2EDrawing.newMessagesWhileDrawing normalConfig
     , E2EHelper.startTest
         "Friend label shows typing indicator"
         E2EHelper.startTime

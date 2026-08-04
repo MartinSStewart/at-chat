@@ -260,6 +260,9 @@ type alias LoggedIn2 =
     , games : SeqDict GuildOrDmId Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
+    , -- Messages that arrived in the conversation the user is looking at while the
+      -- drawing tab kept the conversation from scrolling to the bottom
+      newMessagesWhileDrawing : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
@@ -590,6 +593,7 @@ type FrontendMsg_
     | PressedLoadDebugData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
+    | PressedNewMessagesWhileDrawing
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
     | TypedFriendsSearch String
     | PressedClearFriendsSearch

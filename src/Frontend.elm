@@ -524,6 +524,7 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
             , games = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
+            , newMessagesWhileDrawing = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
@@ -1834,7 +1835,11 @@ updateLoaded msg model =
                                 Command.none
 
                         ScrolledToBottom ->
-                            ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
+                            -- Scrolling to the bottom yourself means you've seen the messages
+                            -- that arrived while the drawing tab held the scroll position
+                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileDrawing = 0 }
+                            , Command.none
+                            )
 
                         ScrolledToMiddle ->
                             ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
@@ -4463,6 +4468,22 @@ updateLoaded msg model =
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
 
+        PressedNewMessagesWhileDrawing ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | newMessagesWhileDrawing = 0
+
+                        -- The conversation scrolls away from the anchor the user picked
+                        -- so there's nothing left to draw on
+                        , drawingMode = Drawing.NoSelectedAnchor
+                        , channelScrollPosition = ScrolledToBottom
+                      }
+                    , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                    )
+                )
+                model
+
         LoadedPopSound result ->
             ( { model | popSound = result }, Command.none )
 
@@ -7037,6 +7058,18 @@ updateLoadedFromBackend msg model =
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
+                                        isDrawing : Bool
+                                        isDrawing =
+                                            Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw
+
+                                        isViewingConversation : Bool
+                                        isViewingConversation =
+                                            Route.toGuildOrDmId local.localUser.session.userId model.route
+                                                == Just
+                                                    ( GuildOrDmId guildOrDmId
+                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                                                    )
+
                                         helper channel =
                                             Command.batch
                                                 [ FrontendExtra.playNotificationSound
@@ -7047,22 +7080,33 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                                , if isDrawing then
+                                                    -- Scrolling would throw off the stroke the user is
+                                                    -- drawing. The new messages are counted instead and
+                                                    -- shown as a warning above the message input.
+                                                    Command.none
 
-                                                        else
-                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                  else
+                                                    case loggedIn2.channelScrollPosition of
+                                                        ScrolledToBottom ->
+                                                            if MyUi.isMobile model then
+                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToMiddle ->
-                                                        Command.none
+                                                            else
+                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToTop ->
-                                                        Command.none
+                                                        ScrolledToMiddle ->
+                                                            Command.none
+
+                                                        ScrolledToTop ->
+                                                            Command.none
                                                 ]
                                     in
-                                    ( loggedIn2
+                                    ( if isDrawing && isViewingConversation then
+                                        { loggedIn2 | newMessagesWhileDrawing = loggedIn2.newMessagesWhileDrawing + 1 }
+
+                                      else
+                                        loggedIn2
                                     , case guildOrDmId of
                                         GuildOrDmId_Guild guildId channelId ->
                                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -7083,6 +7127,18 @@ updateLoadedFromBackend msg model =
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
                                     let
+                                        isDrawing : Bool
+                                        isDrawing =
+                                            Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw
+
+                                        isViewingConversation : Bool
+                                        isViewingConversation =
+                                            Route.toGuildOrDmId local.localUser.session.userId model.route
+                                                == Just
+                                                    ( DiscordGuildOrDmId guildOrDmId
+                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                                                    )
+
                                         helper senderId channel =
                                             Command.batch
                                                 [ FrontendExtra.playNotificationSoundForDiscordMessage
@@ -7093,22 +7149,33 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                                , if isDrawing then
+                                                    -- Scrolling would throw off the stroke the user is
+                                                    -- drawing. The new messages are counted instead and
+                                                    -- shown as a warning above the message input.
+                                                    Command.none
 
-                                                        else
-                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                  else
+                                                    case loggedIn2.channelScrollPosition of
+                                                        ScrolledToBottom ->
+                                                            if MyUi.isMobile model then
+                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToMiddle ->
-                                                        Command.none
+                                                            else
+                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToTop ->
-                                                        Command.none
+                                                        ScrolledToMiddle ->
+                                                            Command.none
+
+                                                        ScrolledToTop ->
+                                                            Command.none
                                                 ]
                                     in
-                                    ( loggedIn2
+                                    ( if isDrawing && isViewingConversation then
+                                        { loggedIn2 | newMessagesWhileDrawing = loggedIn2.newMessagesWhileDrawing + 1 }
+
+                                      else
+                                        loggedIn2
                                     , case guildOrDmId of
                                         DiscordGuildOrDmId_Guild senderId guildId channelId ->
                                             case LocalState.getDiscordGuildAndChannel guildId channelId local of

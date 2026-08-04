@@ -25,6 +25,7 @@ module Id exposing
     , nextId
     , threadRouteToMessageId
     , threadRouteWithMessage
+    , threadRouteWithoutMaybeMessage
     , threadRouteWithoutMessage
     , toInt
     , toString
@@ -77,6 +78,16 @@ threadRouteWithoutMessage threadRoute =
             ViewThread threadId
 
         NoThreadWithMessage _ ->
+            NoThread
+
+
+threadRouteWithoutMaybeMessage : ThreadRouteWithMaybeMessage -> ThreadRoute
+threadRouteWithoutMaybeMessage threadRoute =
+    case threadRoute of
+        ViewThreadWithMaybeMessage threadId _ ->
+            ViewThread threadId
+
+        NoThreadWithMaybeMessage _ ->
             NoThread
 
 

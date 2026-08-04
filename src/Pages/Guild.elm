@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , newGuildFormInit
     , newGuildFormView
+    , newMessagesWhileDrawingId
     , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -4405,6 +4406,49 @@ replyToHeaderHelper onPress userId allUsers =
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
+newMessagesWhileDrawingId : HtmlId
+newMessagesWhileDrawingId =
+    Dom.id "guild_newMessagesWhileDrawing"
+
+
+{-| New messages don't scroll the conversation to the bottom while the drawing tab
+is open, since that would throw off the stroke the user is drawing. This warning
+sits above the message input to say how many messages were missed. Pressing it
+deselects the drawing anchor and scrolls to the bottom.
+-}
+newMessagesWhileDrawingView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
+newMessagesWhileDrawingView model loggedIn =
+    if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw && loggedIn.newMessagesWhileDrawing > 0 then
+        MyUi.elButton
+            newMessagesWhileDrawingId
+            PressedNewMessagesWhileDrawing
+            [ Ui.Font.color MyUi.font1
+            , Ui.background MyUi.buttonBackground
+            , Ui.paddingXY 12 8
+            , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+            , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.pointer
+            , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
+            ]
+            (Ui.Prose.paragraph
+                []
+                [ Ui.text
+                    ((if loggedIn.newMessagesWhileDrawing == 1 then
+                        "1 new message"
+
+                      else
+                        String.fromInt loggedIn.newMessagesWhileDrawing ++ " new messages"
+                     )
+                        ++ " while you were drawing. Click here to jump to the bottom."
+                    )
+                ]
+            )
+
+    else
+        Ui.none
+
+
 {-| Attributes added to the conversation while the drawing tab is open. Until
 an anchor is picked, valid anchor elements are highlighted when hovering over
 them. Once an anchor is picked an overlay captures mouse events for freehand
@@ -4592,7 +4636,8 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            [ newMessagesWhileDrawingView model loggedIn
+            , replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -4770,7 +4815,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            [ newMessagesWhileDrawingView model loggedIn
+            , replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
                 Ok () ->
                     MessageInput.view
@@ -5054,7 +5100,8 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader guildOrDmId replyTo allUsers channel
+            [ newMessagesWhileDrawingView model loggedIn
+            , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -5228,7 +5275,8 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader guildOrDmId replyTo allUsers channel
+            [ newMessagesWhileDrawingView model loggedIn
+            , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
