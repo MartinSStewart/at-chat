@@ -357,15 +357,25 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
 
                 Nothing ->
                     False
+
+        borderHalfRadius =
+            4
     in
     [ Ui.width Ui.shrink
     , Ui.height Ui.fill
-    , Ui.paddingWith { left = paddingLeft, right = paddingRight, top = 4, bottom = 4 }
+    , Ui.paddingWith { left = paddingLeft, right = paddingRight, top = borderHalfRadius, bottom = borderHalfRadius }
     , -- The rounded top corners are part of the side edges, which are painted outside
       -- the tab, so the tab itself is a plain rectangle
-      Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
-    , Ui.attrIf isSelected (MyUi.tabSideEdge 8 MyUi.channelHeaderHeight True MyUi.tabBackground)
-    , Ui.attrIf isSelected (MyUi.tabSideEdge 8 MyUi.channelHeaderHeight False MyUi.tabBackground)
+      Ui.attrIf
+        isSelected
+        (Ui.behindContent
+            (Ui.el
+                [ Ui.height Ui.fill, Ui.paddingXY 4 0 ]
+                (Ui.el [ Ui.background MyUi.tabBackground, Ui.height Ui.fill ] Ui.none)
+            )
+        )
+    , Ui.attrIf isSelected (MyUi.tabSideEdge (borderHalfRadius * 2) MyUi.channelHeaderHeight True MyUi.tabBackground)
+    , Ui.attrIf isSelected (MyUi.tabSideEdge (borderHalfRadius * 2) MyUi.channelHeaderHeight False MyUi.tabBackground)
     , Ui.contentCenterY
     , Ui.Font.color
         (if isSelected then

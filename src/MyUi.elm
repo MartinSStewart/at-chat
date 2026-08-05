@@ -920,20 +920,13 @@ the painted tab stays a rounded rectangle whose flat top spans exactly that widt
 tabSideEdge : Int -> Int -> Bool -> Ui.Color -> Ui.Attribute msg
 tabSideEdge radius tabHeight isLeft color =
     let
-        {- The edge, the tab and the tab body below it are all the same colour, so the
-           extra pixel covers the seams between them and the header's bottom border.
-        -}
-        overlap : Int
-        overlap =
-            1
-
         edgeWidth : Int
         edgeWidth =
-            radius * 2 + overlap
+            radius * 2
 
         edgeHeight : Int
         edgeHeight =
-            tabHeight + overlap
+            tabHeight
 
         r : String
         r =
@@ -967,9 +960,8 @@ tabSideEdge radius tabHeight isLeft color =
             else
                 String.join " "
                     [ "M 0,0"
-                    , "L " ++ String.fromInt overlap ++ ",0"
-                    , arc ++ "1 " ++ String.fromInt (radius + overlap) ++ "," ++ r
-                    , "L " ++ String.fromInt (radius + overlap) ++ "," ++ String.fromInt (edgeHeight - radius)
+                    , arc ++ "1 " ++ String.fromInt radius ++ "," ++ r
+                    , "L " ++ String.fromInt radius ++ "," ++ String.fromInt (edgeHeight - radius)
                     , arc ++ "0 " ++ w ++ "," ++ h
                     , "L 0," ++ h
                     , "Z"
@@ -978,13 +970,12 @@ tabSideEdge radius tabHeight isLeft color =
         translate : String
         translate =
             (if isLeft then
-                "translate(-" ++ String.fromInt (radius * 2) ++ "px, "
+                "translate(-" ++ String.fromFloat (toFloat radius * 1.5) ++ "px, "
 
              else
-                "translate(" ++ String.fromInt (radius * 2) ++ "px, "
+                "translate(" ++ String.fromFloat (toFloat radius * 1.5) ++ "px, "
             )
-                ++ String.fromInt overlap
-                ++ "px)"
+                ++ "0)"
     in
     Ui.inFront
         (Ui.el
