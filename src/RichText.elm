@@ -1038,7 +1038,7 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
                                 |> String.join "\n"
                            )
         )
-        (collapseShrugEmoticon list)
+        list
         |> String.concat
 
 
@@ -1931,45 +1931,6 @@ it was typed.
 shrugEmoticon : String
 shrugEmoticon =
     "¯\\_(ツ)_/¯"
-
-
-{-| Turn the escaped shrug nodes back into the characters the user typed. The escaped nodes are
-what gets stored, but writing them out with their backslashes would mean the text you get back
-from `toString` is longer than the text you typed. That matters for the message input, which
-draws the selection highlight itself and so has to line up with the source text character for
-character, and it's nicer to edit a message that shows the shrug the way it was written.
--}
-collapseShrugEmoticon : List (RichText userId) -> List (RichText userId)
-collapseShrugEmoticon list =
-    case list of
-        [] ->
-            []
-
-        head :: rest ->
-            case shrugEmoticonAt list of
-                Just collapsed ->
-                    collapseShrugEmoticon collapsed
-
-                Nothing ->
-                    head :: collapseShrugEmoticon rest
-
-
-{-| If the list starts with the nodes `shrugEmoticon` parses into, merge them into a single
-normal text node. `normalize` will have joined the leading and trailing normal text with whatever
-surrounds the shrug, so those two only have to end with and start with a macron.
--}
-shrugEmoticonAt : List (RichText userId) -> Maybe (List (RichText userId))
-shrugEmoticonAt list =
-    case list of
-        (NormalText char before) :: (EscapedChar EscapedBackslash) :: (EscapedChar EscapedItalic) :: (NormalText '(' "ツ)") :: (EscapedChar EscapedItalic) :: (NormalText '/' after) :: rest ->
-            if String.endsWith "¯" (String.cons char before) && String.startsWith "¯" after then
-                Just (NormalText char (before ++ "\\_(ツ)_/" ++ after) :: rest)
-
-            else
-                Nothing
-
-        _ ->
-            Nothing
 
 
 attachedFilePrefix : String
@@ -4815,7 +4776,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                         (List.indexedMap Tuple.pair (List.Nonempty.toList items))
         )
         ( index, output )
-        (collapseShrugEmoticon list)
+        list
 
 
 formatText : Maybe Range -> Int -> String -> Html msg
