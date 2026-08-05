@@ -209,25 +209,6 @@ categoryToEmojiString skinTone category =
             Ui.text "C"
 
 
-{-| Every category the selector shows, in the order they appear. Components is left out because
-it's made up of skin tone and hair modifiers rather than emojis anyone would want to send.
--}
-allCategories : List Category
-allCategories =
-    StickerCategory
-        :: CustomEmojiCategory
-        :: List.filterMap
-            (\emojiCategory ->
-                case emojiCategory of
-                    Components ->
-                        Nothing
-
-                    _ ->
-                        EmojiCategory emojiCategory |> Just
-            )
-            allEmojiCategories
-
-
 allEmojiCategories : List EmojiCategory
 allEmojiCategories =
     [ SmileysAndEmotion
@@ -1087,7 +1068,19 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                                 _ ->
                                     ( category, items ) |> Just
                         )
-                        allCategories
+                        (StickerCategory
+                            :: CustomEmojiCategory
+                            :: List.filterMap
+                                (\emojiCategory ->
+                                    case emojiCategory of
+                                        Components ->
+                                            Nothing
+
+                                        _ ->
+                                            EmojiCategory emojiCategory |> Just
+                                )
+                                allEmojiCategories
+                        )
 
                 -- Recently used emojis, most recent first. They aren't a category of their own:
                 -- nothing shows up for them in the column on the left, and they're reached by

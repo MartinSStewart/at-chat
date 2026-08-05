@@ -1933,20 +1933,6 @@ shrugEmoticon =
     "¯\\_(ツ)_/¯"
 
 
-{-| The nodes `shrugEmoticon` parses into, in reverse order because parseLoop builds its node
-list backwards.
--}
-shrugEmoticonRevNodes : List (RichText userId)
-shrugEmoticonRevNodes =
-    [ NormalText '/' "¯"
-    , EscapedChar EscapedItalic
-    , NormalText '(' "ツ)"
-    , EscapedChar EscapedItalic
-    , EscapedChar EscapedBackslash
-    , NormalText '¯' ""
-    ]
-
-
 {-| Turn the escaped shrug nodes back into the characters the user typed. The escaped nodes are
 what gets stored, but writing them out with their backslashes would mean the text you get back
 from `toString` is longer than the text you typed. That matters for the message input, which
@@ -2320,7 +2306,7 @@ parseLoop source index users modifiers accText revNodes =
                         users
                         modifiers
                         ""
-                        (shrugEmoticonRevNodes ++ flushText accText revNodes)
+                        (NormalText '¯' "\\_(ツ)_/¯" :: flushText accText revNodes)
 
                 else
                     parseLoop source (index + 1) users modifiers (accText ++ "¯") revNodes

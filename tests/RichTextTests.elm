@@ -19,7 +19,11 @@ import Url exposing (Protocol(..), Url)
 
 users : SeqDict.SeqDict (Id a) { name : PersonName }
 users =
-    SeqDict.fromList [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ), ( Id.fromInt 123, { name = Unsafe.personName "a" } ), ( Id.fromInt 12345, { name = Unsafe.personName "aa" } ) ]
+    SeqDict.fromList
+        [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } )
+        , ( Id.fromInt 123, { name = Unsafe.personName "a" } )
+        , ( Id.fromInt 12345, { name = Unsafe.personName "aa" } )
+        ]
 
 
 unsafeUrl : String -> Url
@@ -556,44 +560,13 @@ test =
                 (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []))
                 [ NormalText '\n' "- \n- b" ]
             )
-        , fromNonemptyStringTest
-            "¯\\_(ツ)_/¯"
-            (Nonempty
-                (NormalText '¯' "")
-                [ EscapedChar EscapedBackslash
-                , EscapedChar EscapedItalic
-                , NormalText '(' "ツ)"
-                , EscapedChar EscapedItalic
-                , NormalText '/' "¯"
-                ]
-            )
+        , fromNonemptyStringTest "¯\\_(ツ)_/¯" (Nonempty (NormalText '¯' "\\_(ツ)_/¯") [])
         , fromNonemptyStringTest
             "a ¯\\_(ツ)_/¯ b"
-            (Nonempty
-                (NormalText 'a' " ¯")
-                [ EscapedChar EscapedBackslash
-                , EscapedChar EscapedItalic
-                , NormalText '(' "ツ)"
-                , EscapedChar EscapedItalic
-                , NormalText '/' "¯ b"
-                ]
-            )
+            (Nonempty (NormalText 'a' " ¯\\_(ツ)_/¯ b") [])
         , fromNonemptyStringTest
             "*¯\\_(ツ)_/¯*"
-            (Nonempty
-                (Bold
-                    (Nonempty
-                        (NormalText '¯' "")
-                        [ EscapedChar EscapedBackslash
-                        , EscapedChar EscapedItalic
-                        , NormalText '(' "ツ)"
-                        , EscapedChar EscapedItalic
-                        , NormalText '/' "¯"
-                        ]
-                    )
-                )
-                []
-            )
+            (Nonempty (Bold (Nonempty (NormalText '¯' "\\_(ツ)_/¯") [])) [])
         , -- Not the shrug, so no special case and the backslash gets eaten as an escape like normal
           fromNonemptyStringTest "¯\\_(ツ)_/" (Nonempty (NormalText '¯' "") [ EscapedChar EscapedItalic, NormalText '(' "ツ)_/" ])
         , fromNonemptyStringTest "¯" (Nonempty (NormalText '¯' "") [])
