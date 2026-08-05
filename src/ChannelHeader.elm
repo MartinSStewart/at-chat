@@ -73,7 +73,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.row
                         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ Ui.Lazy.lazy2 gameButton isMobile currentChannelHeaderTab
-                        , drawButton isMobile currentChannelHeaderTab
+                        , drawingTab isMobile currentChannelHeaderTab
                         , showFilesButton
                         , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                         ]
@@ -95,8 +95,6 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
 
                       else
                         privateChatWith isMobile model.route (Route.toChannelHeaderTab model.route) otherUserId local name
-                    , drawButton isMobile (Route.toChannelHeaderTab model.route)
-                    , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                     ]
 
             GuildOrDmId_Guild _ _ ->
@@ -106,7 +104,7 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.text name
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
                         , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                         ]
@@ -132,8 +130,6 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
 
                       else
                         discordPrivateChatWith isMobile model.route currentChannelHeaderTab name
-                    , drawButton isMobile currentChannelHeaderTab
-                    , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                     ]
 
             DiscordGuildOrDmId_Guild _ _ _ ->
@@ -149,7 +145,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile currentChannelHeaderTab
+                        [ drawingTab isMobile currentChannelHeaderTab
                         , showFilesButton
                         , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                         ]
@@ -177,7 +173,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                     , Ui.text name
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-                        [ drawButton isMobile (Route.toChannelHeaderTab model.route)
+                        [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
                         , showFilesButton
                         , channelSettingsTab isMobile (Route.toShowMembersTab model.route |> Just)
                         ]
@@ -201,8 +197,8 @@ chattingWithYourself data local =
 {-| Toggles a mode where the user can draw freehand on top of messages, with a
 mouse, a finger or a pen.
 -}
-drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
-drawButton isMobile currentTab =
+drawingTab : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
+drawingTab isMobile currentTab =
     channelHeaderTab
         isMobile
         (Dom.id "channelHeader_drawOnMessages")
@@ -275,7 +271,7 @@ channelHeader isMobile content tabContent =
 
              else
                 [ Ui.el
-                    [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 0 }
+                    [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }
                     , Ui.contentCenterY
                     , Ui.height Ui.fill
                     ]
@@ -297,8 +293,7 @@ channelSettingsTab isMobile showMembers =
             MyUi.elButton
                 (Dom.id "guild_showMembers")
                 PressedShowMembers
-                [ Ui.alignRight
-                , Ui.width (Ui.px (24 + 24))
+                [ Ui.width (Ui.px (24 + 24))
                 , Ui.height Ui.fill
                 , Ui.paddingXY 12 0
                 , Ui.contentCenterY
@@ -407,7 +402,7 @@ privateChatWithYourself isMobile route currentTab local =
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
             , Ui.Lazy.lazy2 gameButton isMobile currentTab
-            , drawButton isMobile currentTab
+            , drawingTab isMobile currentTab
             , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
             ]
         ]
@@ -434,7 +429,7 @@ privateChatWith isMobile route currentTab otherUserId local name =
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
             , Ui.Lazy.lazy2 gameButton isMobile currentTab
-            , drawButton isMobile currentTab
+            , drawingTab isMobile currentTab
             , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
             ]
         ]
@@ -530,7 +525,11 @@ discordPrivateChatWith isMobile route currentTab name =
                     [ Ui.Font.exactWhitespace ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
-        , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
+        , Ui.row
+            [ Ui.alignRight, Ui.height Ui.fill ]
+            [ drawingTab isMobile currentTab
+            , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
+            ]
         ]
 
 
