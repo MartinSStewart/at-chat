@@ -492,14 +492,6 @@ categoryColumnWidth =
     40
 
 
-{-| Room set aside for the scrollbar so that the emojis wrap where we expect them to. Browsers that
-draw the scrollbar as an overlay leave this as a bit of empty space on the right instead.
--}
-scrollbarWidth : number
-scrollbarWidth =
-    17
-
-
 {-| Height of the bar at the bottom that names whatever emoji is hovered.
 -}
 previewHeight : number
@@ -959,6 +951,7 @@ categoryColumn skinTone selectedCategory offsets =
 
 selector :
     Int
+    -> Int
     -> Model
     -> EmojiConfig
     -> Maybe CachedEmojiData
@@ -967,7 +960,7 @@ selector :
     -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
+selector scrollbarWidth width model userData emojiData availableCustomEmojis customEmojisData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -990,7 +983,47 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                             Nothing
 
                                         Just list ->
-                                            ( category, List.map EmojiOrSticker_UnicodeEmoji list ) |> Just
+                                            let
+                                                text =
+                                                    String.trim model.searchText
+                                            in
+                                            if text == "" then
+                                                ( category, List.map EmojiOrSticker_UnicodeEmoji list ) |> Just
+
+                                            else
+                                                let
+                                                    query : String
+                                                    query =
+                                                        String.toLower model.searchText |> String.filter Char.isAlphaNum
+
+                                                    list2 : List EmojiOrSticker
+                                                    list2 =
+                                                        List.foldl
+                                                            (\emoji filteredList ->
+                                                                case SeqDict.get emoji emojiData2.emojis of
+                                                                    Just emojiData3 ->
+                                                                        if
+                                                                            List.any
+                                                                                (\shortName -> String.contains query (String.filter Char.isAlphaNum shortName))
+                                                                                emojiData3.shortNames
+                                                                        then
+                                                                            EmojiOrSticker_UnicodeEmoji emoji :: filteredList
+
+                                                                        else
+                                                                            filteredList
+
+                                                                    Nothing ->
+                                                                        filteredList
+                                                            )
+                                                            []
+                                                            list
+                                                in
+                                                case list2 of
+                                                    [] ->
+                                                        Nothing
+
+                                                    _ ->
+                                                        ( category, list2 ) |> Just
 
                                         Nothing ->
                                             Nothing
@@ -1145,44 +1178,6 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                         sections
                         |> Tuple.second
                         |> List.reverse
-
-                --if isSearching then
-                --    let
-                --        query : String
-                --        query =
-                --            String.toLower model.searchText |> String.filter Char.isAlphaNum
-                --    in
-                --    Array.foldl
-                --        (\{ shortName, emoji } set ->
-                --            if String.contains query (String.filter Char.isAlphaNum shortName) then
-                --                SeqSet.insert emoji set
-                --
-                --            else
-                --                set
-                --        )
-                --        SeqSet.empty
-                --        emojiData2.shortNames
-                --        |> SeqSet.toList
-                --        |> List.map EmojiOrSticker_UnicodeEmoji
-                --        |> Array.fromList
-                --
-                --else
-                --    case userData.category of
-                --        EmojiCategory emojiCategory ->
-                --            SeqDict.get emojiCategory emojiData2.categories
-                --                |> Maybe.withDefault []
-                --                |> List.map EmojiOrSticker_UnicodeEmoji
-                --                |> Array.fromList
-                --
-                --        StickerCategory ->
-                --            SeqSet.toList availableStickers
-                --                |> List.map EmojiOrSticker_Sticker
-                --                |> Array.fromList
-                --
-                --        CustomEmojiCategory ->
-                --            SeqSet.toList availableCustomEmojis
-                --                |> List.map EmojiOrSticker_CustomEmoji
-                --                |> Array.fromList
             in
             Ui.column
                 [ Ui.width (Ui.px selectorWidth)

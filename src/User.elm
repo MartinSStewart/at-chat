@@ -139,7 +139,7 @@ addRecentlyUsedEmoji emoji user =
         | emojiConfig =
             { emojiConfig
                 | lastUsedEmojis =
-                    if count > 30 then
+                    if count > 50 then
                         Array.push emoji (Array.slice (count - 20) count emojiConfig.lastUsedEmojis)
 
                     else
