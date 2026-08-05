@@ -299,7 +299,7 @@ selectorInit : Model
 selectorInit =
     { emojiHovered = Nothing
     , searchText = ""
-    , category = StickerCategory
+    , category = EmojiCategory SmileysAndEmotion
     }
 
 
@@ -506,7 +506,7 @@ previewHeight =
 
 selectorHeight : number
 selectorHeight =
-    400
+    500
 
 
 heart : UnicodeEmoji
@@ -539,6 +539,11 @@ emojiButtonId index =
     Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
+searchInputHeight : number
+searchInputHeight =
+    40
+
+
 searchInput : Model -> Maybe SkinTone -> List (List EmojiOrSticker) -> Int -> Element Msg
 searchInput model skinTone categories columns =
     let
@@ -549,6 +554,7 @@ searchInput model skinTone categories columns =
         [ Ui.Font.size 16
         , Ui.paddingXY 8 4
         , Ui.spacing 8
+        , Ui.height (Ui.px searchInputHeight)
         ]
         [ Ui.row
             [ Ui.border 1
@@ -578,7 +584,7 @@ searchInput model skinTone categories columns =
                 , Ui.width Ui.fill
                 , Ui.id (Dom.idToString searchInputId)
                 , Ui.htmlAttribute
-                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories columns))
+                    (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model categories (Debug.log "columns" columns)))
                 ]
                 { onChange = TypedSearchText
                 , text = model.searchText
@@ -614,7 +620,12 @@ setSearch text model =
 -}
 categorySectionHeight : Int -> Int -> Int
 categorySectionHeight columns itemCount =
-    categoryTitleHeight + ((itemCount + columns - 1) // columns * emojiHeight)
+    categoryTitleHeight + categorySectionBodyHeight columns itemCount
+
+
+categorySectionBodyHeight : Int -> Int -> Int
+categorySectionBodyHeight columns itemCount =
+    (itemCount + columns - 1) // columns * emojiHeight
 
 
 {-| Each category paired with the scroll position its section starts at.
@@ -944,14 +955,7 @@ categoryColumn skinTone selectedCategory offsets =
                 (categoryToEmojiString skinTone category)
         )
         offsets
-        |> Ui.column
-            [ Ui.width (Ui.px categoryColumnWidth)
-            , Ui.height Ui.fill
-            , Ui.heightMin 0
-            , Ui.scrollable
-            , MyUi.noShrinking
-            , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            ]
+        |> Ui.column [ Ui.width (Ui.px categoryColumnWidth), Ui.alignTop ]
 
 
 selector :
@@ -1029,46 +1033,58 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                 emojis : List ( List EmojiOrSticker, Element Msg )
                 emojis =
                     List.foldl
-                        (\( category, list ) ( offset, sections ) ->
-                            ( offset + List.length list
+                        (\( category, list ) ( previousCategory, offset, sections ) ->
+                            let
+                                itemCount =
+                                    List.length list
+                            in
+                            ( Just category
+                            , offset + itemCount
                             , ( list
-                              , List.indexedMap
-                                    (\index item ->
-                                        emojiButtonHelper
-                                            (offset + index)
-                                            item
-                                            model
-                                            (case item of
-                                                EmojiOrSticker_UnicodeEmoji emoji ->
-                                                    emojiWithSkinTone userData.skinTone emoji emojiData2 |> Ui.text
+                              , (if category == model.category || previousCategory == Just model.category then
+                                    List.indexedMap
+                                        (\index item ->
+                                            emojiButtonHelper
+                                                (offset + index)
+                                                item
+                                                model
+                                                (case item of
+                                                    EmojiOrSticker_UnicodeEmoji emoji ->
+                                                        emojiWithSkinTone userData.skinTone emoji emojiData2
+                                                            |> Ui.text
+                                                            |> Ui.el [ Ui.width (Ui.px emojiWidth), Ui.Font.center ]
 
-                                                EmojiOrSticker_Sticker stickerId ->
-                                                    Sticker.view
-                                                        (String.fromInt emojiWidth ++ "px")
-                                                        stickerId
-                                                        stickersData
-                                                        Sticker.LoopForever
-                                                        |> Ui.html
+                                                    EmojiOrSticker_Sticker stickerId ->
+                                                        Sticker.view
+                                                            (String.fromInt emojiWidth ++ "px")
+                                                            stickerId
+                                                            stickersData
+                                                            Sticker.LoopForever
+                                                            |> Ui.html
 
-                                                EmojiOrSticker_CustomEmoji customEmojiId ->
-                                                    CustomEmoji.view
-                                                        (String.fromInt emojiWidth ++ "px")
-                                                        "0"
-                                                        customEmojiId
-                                                        customEmojisData
-                                                        Sticker.LoopForever
-                                                        |> Ui.html
-                                            )
-                                    )
-                                    list
+                                                    EmojiOrSticker_CustomEmoji customEmojiId ->
+                                                        CustomEmoji.view
+                                                            (String.fromInt emojiWidth ++ "px")
+                                                            "0"
+                                                            customEmojiId
+                                                            customEmojisData
+                                                            Sticker.LoopForever
+                                                            |> Ui.html
+                                                )
+                                        )
+                                        list
+
+                                 else
+                                    [ Ui.el [ Ui.height (Ui.px (categorySectionBodyHeight columns itemCount)) ] Ui.none ]
+                                )
                                     |> emojiCategoryContainer (categoryToString category)
                               )
                                 :: sections
                             )
                         )
-                        ( 0, [] )
+                        ( Nothing, 0, [] )
                         categories
-                        |> Tuple.second
+                        |> (\( _, _, a ) -> a)
                         |> List.reverse
 
                 --if isSearching then
@@ -1131,11 +1147,11 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                         |> Ui.el
                             [ Ui.background MyUi.background3
                             , Ui.scrollable
-                            , Ui.height Ui.fill
+                            , Ui.clipX
+                            , Ui.height (Ui.px (selectorHeight - searchInputHeight - previewHeight))
                             , Ui.heightMin 0
                             , Ui.id (Dom.idToString scrollContainerId)
-                            , Ui.htmlAttribute
-                                (Html.Events.on "scroll" (decodeScroll model.category offsets))
+                            , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
                             ]
                     ]
                 , Ui.row
