@@ -222,8 +222,8 @@ showFilesButton =
         (Dom.id "guild_showFiles")
         (PressedLink Route.TextEditorRoute)
         [ Ui.alignRight
-        , Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 0
+        , Ui.width (Ui.px 48)
+        , Ui.paddingXY 12 0
         , Ui.height Ui.fill
         , Ui.contentCenterY
         , Ui.Font.color MyUi.font3
