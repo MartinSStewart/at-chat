@@ -626,6 +626,8 @@ dmThreadsTest config =
 
                 -- Unread thread messages notify the user, who has read none of them
                 , user.checkView 100 (Test.Html.Query.has [ threadNotification, dmNotification ])
+                , user.snapshotView 100 { name = "User perspective" }
+                , admin.snapshotView 100 { name = "Admin perspective" }
 
                 -- Writing in the thread reaches the other user, and the thread's messages
                 -- stay out of the DM itself
@@ -728,6 +730,7 @@ inactiveDmThreadsAreHiddenTest config =
                 , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
                 , E2EHelper.hasExactText admin [ "Hello in the thread!" ]
+                , admin.snapshotView 100 { name = "Inactive threads are hidden" }
                 ]
             )
         ]
