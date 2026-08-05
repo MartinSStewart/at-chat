@@ -957,8 +957,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-      -- The emojis used in the message are worked out by the frontend (it's the only place the
-      -- emoji data is loaded) and sent along so that they can be added to lastUsedEmojis
+      -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
     | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
