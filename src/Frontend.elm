@@ -2812,10 +2812,10 @@ updateLoaded msg model =
                                 Ports.requestNotificationPermission
 
                             PushNotifications ->
-                                Command.batch
-                                    [ Ports.requestNotificationPermission
-                                    , Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
-                                    ]
+                                -- Registering the push subscription asks for notification permission
+                                -- itself, since Safari on iOS needs that to happen before it awaits
+                                -- anything. Asking here too would race it for the same prompt.
+                                Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
                         )
                 )
                 model
