@@ -2998,13 +2998,26 @@ messageHover guildOrDmId threadRoute loggedIn model =
                         IsHovered
 
                 else
-                    IsNotHovered
+                    notHoveredWhileSelectingAnchor loggedIn model
 
             else
-                IsNotHovered
+                notHoveredWhileSelectingAnchor loggedIn model
 
         _ ->
-            IsNotHovered
+            notHoveredWhileSelectingAnchor loggedIn model
+
+
+{-| A message the pointer isn't hovering over. Fingers can't hover, so on mobile
+every message offers up its drawing anchors while the drawing tab waits for one
+to be picked, instead of only the hovered message.
+-}
+notHoveredWhileSelectingAnchor : LoggedIn2 -> LoadedFrontend -> IsHovered
+notHoveredWhileSelectingAnchor loggedIn model =
+    if MyUi.isMobile model && drawingIsSelectingAnchor loggedIn model then
+        IsHoveredWhileSelectingAnchor
+
+    else
+        IsNotHovered
 
 
 revealedChannelSpoilers : AnyGuildOrDmId -> LoggedIn2 -> SeqDict (Id ChannelMessageId) (NonemptySet Int)

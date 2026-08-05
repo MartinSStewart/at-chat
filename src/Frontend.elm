@@ -5020,10 +5020,10 @@ selectDrawingAnchor guildOrDmId anchorType elementPosition anchorHalfSize pointS
         model
 
 
-{-| Convert a mouse position (in viewport css pixels) into a point relative to the
-selected anchor's top left corner, in the anchor's coordinate space. When zoomed
-in the conversation is magnified around the center of the anchor, so the mouse
-position is mapped back through that same transform.
+{-| Convert a pointer position (in viewport css pixels) into a point relative to
+the selected anchor's top left corner, in the anchor's coordinate space. When
+zoomed in the conversation is magnified around the center of the anchor, so the
+pointer position is mapped back through that same transform.
 -}
 anchorRelativePoint : Drawing.SelectedAnchorData -> Float -> Float -> ( Float, Float )
 anchorRelativePoint selected x y =
@@ -5045,7 +5045,7 @@ updateDrawing drawingMsg model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             case ( drawingMsg, loggedIn.drawingMode ) of
-                ( Drawing.MouseDown x y, Drawing.SelectedAnchor selected ) ->
+                ( Drawing.PointerDown x y, Drawing.SelectedAnchor selected ) ->
                     case selected.stroke of
                         Nothing ->
                             FrontendExtra.handleLocalChange
@@ -5067,7 +5067,7 @@ updateDrawing drawingMsg model =
                         Just _ ->
                             ( loggedIn, Command.none )
 
-                ( Drawing.MouseMoved x y, Drawing.SelectedAnchor selected ) ->
+                ( Drawing.PointerMoved x y, Drawing.SelectedAnchor selected ) ->
                     case selected.stroke of
                         Just stroke ->
                             let
@@ -5083,7 +5083,7 @@ updateDrawing drawingMsg model =
                                     }
                             in
                             -- Points are sent in small batches to avoid sending a
-                            -- message to the backend for every mousemove event.
+                            -- message to the backend for every pointermove event.
                             if List.length unsent >= 4 then
                                 FrontendExtra.handleLocalChange
                                     model.time
@@ -5107,7 +5107,7 @@ updateDrawing drawingMsg model =
                         Nothing ->
                             ( loggedIn, Command.none )
 
-                ( Drawing.MouseUp, Drawing.SelectedAnchor selected ) ->
+                ( Drawing.PointerUp, Drawing.SelectedAnchor selected ) ->
                     case selected.stroke of
                         Just stroke ->
                             FrontendExtra.handleLocalChange
@@ -6442,62 +6442,74 @@ dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
 dragTarget startTouches model =
     case model.loginStatus of
         LoggedIn loggedIn ->
-            let
-                isMobile =
-                    MyUi.isMobile model
+            case loggedIn.drawingMode of
+                -- A finger drawing a stroke would otherwise drag the channel sidebar
+                -- along with it
+                Drawing.SelectedAnchor _ ->
+                    Nothing
 
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
-                centroid : Coord CssPixels
-                centroid =
-                    Touch.touchCentroid startTouches
-
-                insideBoard : Bool
-                insideBoard =
-                    case FrontendExtra.currentGame local model of
-                        Just { guildOrDmId, match, matchId } ->
-                            -- The board is laid out below the safe-area inset, so undo it before the
-                            -- hit-test (the call thumbnail above is positioned including the inset, so
-                            -- its check keeps the raw centroid).
-                            Game.insideBoard
-                                model.windowSize
-                                (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
-                                guildOrDmId
-                                matchId
-                                match
-                                loggedIn.games
-
-                        Nothing ->
-                            False
-            in
-            case Call.displayMode local.localUser.session.userId model.route local.calls of
-                Call.ShowLocalVideoAndCallThumbnail _ ->
-                    if Call.insideThumbnail centroid model loggedIn.voiceChat then
-                        Just Drag_CallThumbnail
-
-                    else if insideBoard then
-                        Just Drag_Game
-
-                    else if isMobile then
-                        Just Drag_Channel
-
-                    else
-                        Nothing
-
-                _ ->
-                    if insideBoard then
-                        Just Drag_Game
-
-                    else if isMobile then
-                        Just Drag_Channel
-
-                    else
-                        Nothing
+                Drawing.NoSelectedAnchor ->
+                    dragTargetHelper startTouches loggedIn model
 
         NotLoggedIn _ ->
             Nothing
+
+
+dragTargetHelper : NonemptyDict Int Touch -> LoggedIn2 -> LoadedFrontend -> Maybe DragTarget
+dragTargetHelper startTouches loggedIn model =
+    let
+        isMobile =
+            MyUi.isMobile model
+
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+
+        centroid : Coord CssPixels
+        centroid =
+            Touch.touchCentroid startTouches
+
+        insideBoard : Bool
+        insideBoard =
+            case FrontendExtra.currentGame local model of
+                Just { guildOrDmId, match, matchId } ->
+                    -- The board is laid out below the safe-area inset, so undo it before the
+                    -- hit-test (the call thumbnail above is positioned including the inset, so
+                    -- its check keeps the raw centroid).
+                    Game.insideBoard
+                        model.windowSize
+                        (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
+                        guildOrDmId
+                        matchId
+                        match
+                        loggedIn.games
+
+                Nothing ->
+                    False
+    in
+    case Call.displayMode local.localUser.session.userId model.route local.calls of
+        Call.ShowLocalVideoAndCallThumbnail _ ->
+            if Call.insideThumbnail centroid model loggedIn.voiceChat then
+                Just Drag_CallThumbnail
+
+            else if insideBoard then
+                Just Drag_Game
+
+            else if isMobile then
+                Just Drag_Channel
+
+            else
+                Nothing
+
+        _ ->
+            if insideBoard then
+                Just Drag_Game
+
+            else if isMobile then
+                Just Drag_Channel
+
+            else
+                Nothing
 
 
 dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode

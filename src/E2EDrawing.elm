@@ -1,4 +1,4 @@
-module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages, newMessagesWhileDrawing)
+module E2EDrawing exposing (drawOnMessages, drawWithTouch, drawingScalesWithImages, newMessagesWhileDrawing)
 
 import Audio
 import Coord
@@ -534,6 +534,67 @@ newMessagesWhileDrawing config =
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| Drawing works with a finger too. The tab is offered on mobile, the anchors of
+every message are tappable (there's nothing to hover with) and the stroke comes
+from touch pointer events.
+-}
+drawWithTouch : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+drawWithTouch config =
+    E2EHelper.startTest
+        "Draw on a message with a finger"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\admin user ->
+                [ E2EHelper.writeMessageMobile admin "Draw on this message!"
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ -- No mouseEnter first: the anchor has to be tappable without
+                                  -- the message being hovered
+                                  admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case E2EHelper.lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected the message to contain exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Message not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke drawn with a finger" }
                                 ]
 
                             Nothing ->

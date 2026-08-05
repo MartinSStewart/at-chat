@@ -110,9 +110,9 @@ type LocalChange
 
 
 type Msg
-    = MouseDown Float Float
-    | MouseMoved Float Float
-    | MouseUp
+    = PointerDown Float Float
+    | PointerMoved Float Float
+    | PointerUp
     | PressedUndo
     | PressedRedo
     | PressedZoom
@@ -499,7 +499,10 @@ zoomButtonId =
     Dom.id "drawing_zoom"
 
 
-{-| Transparent overlay that captures mouse events while the user is drawing.
+{-| Transparent overlay that captures pointer events while the user is drawing.
+Pointer events cover mice, fingers and pens with one set of handlers, and the
+browser implicitly captures touch and pen pointers on pointerdown so a stroke
+keeps being tracked even when it wanders outside the overlay.
 -}
 inputOverlay : Bool -> (Msg -> msg) -> Element msg
 inputOverlay strokeActive toMsg =
@@ -511,23 +514,21 @@ inputOverlay strokeActive toMsg =
          , Html.Attributes.style "width" "100%"
          , Html.Attributes.style "height" "100%"
          , Html.Attributes.style "cursor" "crosshair"
-         , Html.Events.on
-            "mousedown"
-            (Json.Decode.field "button" Json.Decode.int
-                |> Json.Decode.andThen
-                    (\button ->
-                        if button == 0 then
-                            decodeMousePosition MouseDown
-
-                        else
-                            Json.Decode.fail "Only drawing with the primary mouse button is supported"
-                    )
-            )
+         , -- Without this the browser scrolls the conversation (or zooms the page)
+           -- instead of handing us the finger and pen movements
+           Html.Attributes.style "touch-action" "none"
+         , -- A long press would otherwise start selecting the messages underneath
+           Html.Attributes.style "user-select" "none"
+         , Html.Attributes.style "-webkit-user-select" "none"
+         , Html.Events.on "pointerdown" decodePointerDown
          ]
             ++ (if strokeActive then
-                    [ Html.Events.on "mousemove" (decodeMousePosition MouseMoved)
-                    , Html.Events.on "mouseup" (Json.Decode.succeed MouseUp)
-                    , Html.Events.on "mouseleave" (Json.Decode.succeed MouseUp)
+                    [ Html.Events.on "pointermove" (decodePointerPosition PointerMoved)
+                    , Html.Events.on "pointerup" (Json.Decode.succeed PointerUp)
+                    , -- Fired when the browser takes the pointer away from us, for
+                      -- example when the system interprets the touch as a gesture
+                      Html.Events.on "pointercancel" (Json.Decode.succeed PointerUp)
+                    , Html.Events.on "pointerleave" (Json.Decode.succeed PointerUp)
                     ]
 
                 else
@@ -540,8 +541,28 @@ inputOverlay strokeActive toMsg =
         |> Ui.el [ Ui.height Ui.fill ]
 
 
-decodeMousePosition : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
-decodeMousePosition toMsg =
+{-| Only the primary button of the primary pointer draws. That leaves right clicks
+and the eraser end of a pen alone, and a second finger placed down mid stroke
+doesn't start a competing one.
+-}
+decodePointerDown : Json.Decode.Decoder Msg
+decodePointerDown =
+    Json.Decode.map2
+        Tuple.pair
+        (Json.Decode.field "button" Json.Decode.int)
+        (boolFieldWithDefault "isPrimary")
+        |> Json.Decode.andThen
+            (\( button, isPrimary ) ->
+                if button == 0 && isPrimary then
+                    decodePointerPosition PointerDown
+
+                else
+                    Json.Decode.fail "Only the primary pointer's primary button draws"
+            )
+
+
+decodePointerPosition : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
+decodePointerPosition toMsg =
     Json.Decode.map2
         toMsg
         (Json.Decode.field "clientX" Json.Decode.float)
@@ -631,6 +652,11 @@ events in tests might not.
 floatFieldWithDefault : String -> Json.Decode.Decoder Float
 floatFieldWithDefault fieldName =
     Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.float, Json.Decode.succeed 0 ]
+
+
+boolFieldWithDefault : String -> Json.Decode.Decoder Bool
+boolFieldWithDefault fieldName =
+    Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.bool, Json.Decode.succeed True ]
 
 
 undoRedoButton : HtmlId -> Msg -> String -> Bool -> Element Msg

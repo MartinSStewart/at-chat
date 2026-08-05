@@ -200,26 +200,22 @@ chattingWithYourself data local =
             False
 
 
-{-| Toggles a mode where the user can draw freehand on top of messages.
-Only available on non-mobile since it requires a mouse.
+{-| Toggles a mode where the user can draw freehand on top of messages, with a
+mouse, a finger or a pen.
 -}
 drawButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
 drawButton isMobile currentTab =
-    if isMobile then
-        Ui.none
-
-    else
-        channelHeaderTab
-            isMobile
-            (Dom.id "channelHeader_drawOnMessages")
-            ChannelHeaderTab_Draw
-            currentTab
-            (Ui.el
-                [ Ui.width (Ui.px 24)
-                , MyUi.hoverText "Draw on top of messages"
-                ]
-                (Ui.html Icons.paintbrush)
-            )
+    channelHeaderTab
+        isMobile
+        (Dom.id "channelHeader_drawOnMessages")
+        ChannelHeaderTab_Draw
+        currentTab
+        (Ui.el
+            [ Ui.width (Ui.px 24)
+            , MyUi.hoverText "Draw on top of messages"
+            ]
+            (Ui.html Icons.paintbrush)
+        )
 
 
 showFilesButton : Element FrontendMsg_
@@ -900,7 +896,7 @@ drawingTabView model local =
                     ( canUndo, canRedo ) =
                         drawingCanUndoOrRedo selected.guildOrDmId selected.anchorType local
                 in
-                [ Ui.text "Draw with the mouse. Press Escape or the pencil tab when you're done."
+                [ Ui.text "Draw with the mouse, a finger or a pen. Press Escape or the pencil tab when you're done."
                 , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
                 , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
                 , Drawing.undoRedoButton
