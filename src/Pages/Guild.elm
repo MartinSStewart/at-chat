@@ -2656,7 +2656,7 @@ guildSettingsView model loggedIn local guildId guild =
             , Ui.spacing 16
             , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
             ]
-            [ ChannelHeader.channelHeader isMobile Nothing (Ui.text "Guild settings") Nothing
+            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
@@ -9768,7 +9768,7 @@ newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
-        [ ChannelHeader.channelHeader isMobile2 Nothing (Ui.text "Create new channel") Nothing
+        [ ChannelHeader.channelHeader isMobile2 (Ui.text "Create new channel") Nothing
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
