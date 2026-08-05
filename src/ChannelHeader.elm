@@ -899,7 +899,12 @@ drawingTabView isMobile model local =
                     [ Ui.spacing 8 ]
                     [ Ui.text "Start drawing!"
                     , Ui.row
-                        [ Ui.spacing 8 ]
+                        [ if isMobile then
+                            Ui.spacing 8
+
+                          else
+                            Ui.spacing 16
+                        ]
                         [ Drawing.button (Dom.id "drawing_done") Drawing.PressedDone "Done" True
                         , Drawing.button Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
                         , Drawing.button Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
