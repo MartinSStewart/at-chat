@@ -504,6 +504,13 @@ selectorHeight =
     500
 
 
+{-| How much of the emoji list is on screen at once.
+-}
+scrollViewportHeight : number
+scrollViewportHeight =
+    selectorHeight - searchInputHeight - previewHeight
+
+
 heart : UnicodeEmoji
 heart =
     UnicodeEmoji "❤️"
@@ -658,6 +665,54 @@ categoryOffsets columns recentEmojis categories =
 
         [] ->
             []
+
+
+{-| Whether an emoji should show up in the list, based on its names and what's been typed into the
+search input. Everything is stripped down to letters and digits first so that searching for
+"thumbs up" finds ":thumbsup:".
+-}
+filterBySearch : String -> (a -> List String) -> List a -> List a
+filterBySearch query toNames list =
+    if query == "" then
+        list
+
+    else
+        List.filter
+            (\item ->
+                List.any
+                    (\name -> String.toLower name |> String.filter Char.isAlphaNum |> String.contains query)
+                    (toNames item)
+            )
+            list
+
+
+{-| The stretch of the list that could be on screen, given which category is at the top of the
+viewport. That's all we know about the scroll position, since listening for every scroll event just
+to keep track of it would make scrolling lag, so the scroll position is somewhere between that
+category's offset and the next one's and this covers either extreme.
+-}
+visibleRange : Int -> Maybe Category -> List ( Category, Int ) -> { from : Int, to : Int }
+visibleRange contentHeight selectedCategory offsets =
+    case offsets of
+        ( category, offset ) :: rest ->
+            if Just category == selectedCategory then
+                { from = offset
+                , to =
+                    (case rest of
+                        ( _, nextOffset ) :: _ ->
+                            nextOffset
+
+                        [] ->
+                            contentHeight
+                    )
+                        + scrollViewportHeight
+                }
+
+            else
+                visibleRange contentHeight selectedCategory rest
+
+        [] ->
+            { from = 0, to = scrollViewportHeight }
 
 
 {-| The category whose section the top of the scroll container is showing.
@@ -972,77 +1027,66 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                 columns =
                     max 1 ((selectorWidth - categoryColumnWidth - scrollbarWidth) // emojiWidth)
 
+                query : String
+                query =
+                    String.toLower model.searchText |> String.filter Char.isAlphaNum
+
+                itemNames : EmojiOrSticker -> List String
+                itemNames item =
+                    case item of
+                        EmojiOrSticker_UnicodeEmoji emoji ->
+                            case SeqDict.get emoji emojiData2.emojis of
+                                Just emojiData3 ->
+                                    emojiData3.shortNames
+
+                                Nothing ->
+                                    []
+
+                        EmojiOrSticker_Sticker stickerId ->
+                            case SeqDict.get stickerId stickersData of
+                                Just sticker ->
+                                    [ sticker.name ]
+
+                                Nothing ->
+                                    []
+
+                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                            case SeqDict.get customEmojiId customEmojisData of
+                                Just customEmoji ->
+                                    [ CustomEmoji.emojiNameToString customEmoji.name ]
+
+                                Nothing ->
+                                    []
+
                 categories : List ( Category, List EmojiOrSticker )
                 categories =
                     List.filterMap
                         (\category ->
-                            case category of
-                                EmojiCategory emojiCategory ->
-                                    case SeqDict.get emojiCategory emojiData2.categories of
-                                        Just [] ->
-                                            Nothing
+                            let
+                                items : List EmojiOrSticker
+                                items =
+                                    (case category of
+                                        EmojiCategory emojiCategory ->
+                                            SeqDict.get emojiCategory emojiData2.categories
+                                                |> Maybe.withDefault []
+                                                |> List.map EmojiOrSticker_UnicodeEmoji
 
-                                        Just list ->
-                                            let
-                                                text =
-                                                    String.trim model.searchText
-                                            in
-                                            if text == "" then
-                                                ( category, List.map EmojiOrSticker_UnicodeEmoji list ) |> Just
+                                        StickerCategory ->
+                                            SeqSet.toList availableStickers
+                                                |> List.map EmojiOrSticker_Sticker
 
-                                            else
-                                                let
-                                                    query : String
-                                                    query =
-                                                        String.toLower model.searchText |> String.filter Char.isAlphaNum
+                                        CustomEmojiCategory ->
+                                            SeqSet.toList availableCustomEmojis
+                                                |> List.map EmojiOrSticker_CustomEmoji
+                                    )
+                                        |> filterBySearch query itemNames
+                            in
+                            case items of
+                                [] ->
+                                    Nothing
 
-                                                    list2 : List EmojiOrSticker
-                                                    list2 =
-                                                        List.foldl
-                                                            (\emoji filteredList ->
-                                                                case SeqDict.get emoji emojiData2.emojis of
-                                                                    Just emojiData3 ->
-                                                                        if
-                                                                            List.any
-                                                                                (\shortName -> String.contains query (String.filter Char.isAlphaNum shortName))
-                                                                                emojiData3.shortNames
-                                                                        then
-                                                                            EmojiOrSticker_UnicodeEmoji emoji :: filteredList
-
-                                                                        else
-                                                                            filteredList
-
-                                                                    Nothing ->
-                                                                        filteredList
-                                                            )
-                                                            []
-                                                            list
-                                                in
-                                                case list2 of
-                                                    [] ->
-                                                        Nothing
-
-                                                    _ ->
-                                                        ( category, list2 ) |> Just
-
-                                        Nothing ->
-                                            Nothing
-
-                                StickerCategory ->
-                                    case SeqSet.toList availableStickers of
-                                        [] ->
-                                            Nothing
-
-                                        list ->
-                                            ( category, List.map EmojiOrSticker_Sticker list ) |> Just
-
-                                CustomEmojiCategory ->
-                                    case SeqSet.toList availableCustomEmojis of
-                                        [] ->
-                                            Nothing
-
-                                        list ->
-                                            ( category, List.map EmojiOrSticker_CustomEmoji list ) |> Just
+                                _ ->
+                                    ( category, items ) |> Just
                         )
                         allCategories
 
@@ -1076,6 +1120,7 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                             )
                             []
                         |> List.reverse
+                        |> filterBySearch query itemNames
 
                 offsets : List ( Category, Int )
                 offsets =
@@ -1091,53 +1136,57 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                     else
                         List.head offsets |> Maybe.map Tuple.first
 
-                sections : List { title : String, items : List EmojiOrSticker, isOnScreen : Bool }
+                sections : List { title : String, items : List EmojiOrSticker }
                 sections =
                     (if List.isEmpty recentEmojis then
                         []
 
                      else
-                        [ { title = "Recently used"
-                          , items = recentEmojis
-                          , isOnScreen = (List.head offsets |> Maybe.map Tuple.first) == selectedCategory
-                          }
-                        ]
+                        [ { title = "Recently used", items = recentEmojis } ]
                     )
-                        ++ (List.foldl
-                                (\( category, items ) ( previousCategory, list ) ->
-                                    ( Just category
-                                    , { title = categoryToString category
-                                      , items = items
-                                      , isOnScreen =
-                                            Just category == selectedCategory || previousCategory == selectedCategory
-                                      }
-                                        :: list
-                                    )
-                                )
-                                ( Nothing, [] )
-                                categories
-                                |> Tuple.second
-                                |> List.reverse
-                           )
+                        ++ List.map
+                            (\( category, items ) -> { title = categoryToString category, items = items })
+                            categories
+
+                contentHeight : Int
+                contentHeight =
+                    List.foldl
+                        (\section total -> total + categorySectionHeight columns (List.length section.items))
+                        0
+                        sections
+
+                -- Sections that can't be on screen are rendered as an empty element of the right
+                -- height instead. Which ones those are can't be worked out from the highlighted
+                -- category alone: once the categories have been filtered down they can be short
+                -- enough that several fit in the viewport at once.
+                onScreen : { from : Int, to : Int }
+                onScreen =
+                    visibleRange contentHeight selectedCategory offsets
 
                 -- Emoji buttons are numbered across every category rather than restarting at 0 in
                 -- each one, so that the id we scroll to on arrow key presses is unique.
                 emojis : List ( List EmojiOrSticker, Element Msg )
                 emojis =
                     List.foldl
-                        (\section ( offset, list ) ->
+                        (\section state ->
                             let
                                 itemCount : Int
                                 itemCount =
                                     List.length section.items
+
+                                height : Int
+                                height =
+                                    categorySectionHeight columns itemCount
                             in
-                            ( offset + itemCount
-                            , ( section.items
-                              , (if section.isOnScreen then
+                            { itemOffset = state.itemOffset + itemCount
+                            , top = state.top + height
+                            , sections =
+                                ( section.items
+                                , (if state.top < onScreen.to && state.top + height > onScreen.from then
                                     List.indexedMap
                                         (\index item ->
                                             emojiButtonHelper
-                                                (offset + index)
+                                                (state.itemOffset + index)
                                                 item
                                                 model
                                                 (case item of
@@ -1166,17 +1215,17 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                                         )
                                         section.items
 
-                                 else
+                                   else
                                     [ Ui.el [ Ui.height (Ui.px (categorySectionBodyHeight columns itemCount)) ] Ui.none ]
-                                )
+                                  )
                                     |> emojiCategoryContainer section.title
-                              )
-                                :: list
-                            )
+                                )
+                                    :: state.sections
+                            }
                         )
-                        ( 0, [] )
+                        { itemOffset = 0, top = 0, sections = [] }
                         sections
-                        |> Tuple.second
+                        |> .sections
                         |> List.reverse
             in
             Ui.column
@@ -1202,7 +1251,7 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                             [ Ui.background MyUi.background3
                             , Ui.scrollable
                             , Ui.clipX
-                            , Ui.height (Ui.px (selectorHeight - searchInputHeight - previewHeight))
+                            , Ui.height (Ui.px scrollViewportHeight)
                             , Ui.heightMin 0
                             , Ui.id (Dom.idToString scrollContainerId)
                             , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
