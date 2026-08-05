@@ -5044,135 +5044,140 @@ updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command Front
 updateDrawing drawingMsg model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
-            case ( drawingMsg, loggedIn.drawingMode ) of
-                ( Drawing.PointerDown x y, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Nothing ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_Drawing
-                                    selected.guildOrDmId
-                                    selected.anchorType
-                                    (Drawing.StartStroke
-                                        (anchorRelativePoint selected x y)
-                                    )
-                                    |> Just
-                                )
-                                { loggedIn
+            case loggedIn.drawingMode of
+                Drawing.SelectedAnchor selected ->
+                    case drawingMsg of
+                        Drawing.PointerDown x y ->
+                            case selected.stroke of
+                                Nothing ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_Drawing
+                                            selected.guildOrDmId
+                                            selected.anchorType
+                                            (Drawing.StartStroke
+                                                (anchorRelativePoint selected x y)
+                                            )
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | drawingMode =
+                                                Drawing.SelectedAnchor { selected | stroke = Just { unsent = [] } }
+                                        }
+                                        Command.none
+
+                                Just _ ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PointerMoved x y ->
+                            case selected.stroke of
+                                Just stroke ->
+                                    let
+                                        unsent : List ( Float, Float )
+                                        unsent =
+                                            anchorRelativePoint selected x y :: stroke.unsent
+
+                                        setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
+                                        setStroke newStroke =
+                                            { loggedIn
+                                                | drawingMode =
+                                                    Drawing.SelectedAnchor { selected | stroke = newStroke }
+                                            }
+                                    in
+                                    -- Points are sent in small batches to avoid sending a
+                                    -- message to the backend for every pointermove event.
+                                    if List.length unsent >= 4 then
+                                        FrontendExtra.handleLocalChange
+                                            model.time
+                                            (case List.Nonempty.fromList (List.reverse unsent) of
+                                                Just points ->
+                                                    Local_Drawing
+                                                        selected.guildOrDmId
+                                                        selected.anchorType
+                                                        (Drawing.ContinueStroke points)
+                                                        |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                            )
+                                            (setStroke (Just { unsent = [] }))
+                                            Command.none
+
+                                    else
+                                        ( setStroke (Just { unsent = unsent }), Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PointerUp ->
+                            case selected.stroke of
+                                Just stroke ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_Drawing
+                                            selected.guildOrDmId
+                                            selected.anchorType
+                                            (Drawing.EndStroke (List.reverse stroke.unsent))
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | drawingMode =
+                                                Drawing.SelectedAnchor { selected | stroke = Nothing }
+                                        }
+                                        Command.none
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PressedUndo ->
+                            FrontendExtra.drawingUndo selected loggedIn model
+
+                        Drawing.PressedRedo ->
+                            FrontendExtra.drawingRedo selected loggedIn model
+
+                        Drawing.PressedZoom ->
+                            if selected.zoom == 1 then
+                                ( { loggedIn
                                     | drawingMode =
-                                        Drawing.SelectedAnchor { selected | stroke = Just { unsent = [] } }
-                                }
-                                Command.none
+                                        Drawing.SelectedAnchor
+                                            { selected | zoom = Drawing.zoomLevel, zoomContainer = Nothing }
+                                  }
+                                  -- Measure the conversation container so the magnified view can be
+                                  -- pinned on the right spot of the anchor.
+                                , Dom.getElement Pages.Guild.conversationContainerId
+                                    |> Task.attempt
+                                        (\result ->
+                                            (case result of
+                                                Ok { element } ->
+                                                    Just { x = element.x, y = element.y, width = element.width, height = element.height }
 
-                        Just _ ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.PointerMoved x y, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Just stroke ->
-                            let
-                                unsent : List ( Float, Float )
-                                unsent =
-                                    anchorRelativePoint selected x y :: stroke.unsent
-
-                                setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
-                                setStroke newStroke =
-                                    { loggedIn
-                                        | drawingMode =
-                                            Drawing.SelectedAnchor { selected | stroke = newStroke }
-                                    }
-                            in
-                            -- Points are sent in small batches to avoid sending a
-                            -- message to the backend for every pointermove event.
-                            if List.length unsent >= 4 then
-                                FrontendExtra.handleLocalChange
-                                    model.time
-                                    (case List.Nonempty.fromList (List.reverse unsent) of
-                                        Just points ->
-                                            Local_Drawing
-                                                selected.guildOrDmId
-                                                selected.anchorType
-                                                (Drawing.ContinueStroke points)
-                                                |> Just
-
-                                        Nothing ->
-                                            Nothing
-                                    )
-                                    (setStroke (Just { unsent = [] }))
-                                    Command.none
+                                                Err _ ->
+                                                    Nothing
+                                            )
+                                                |> Drawing.GotZoomContainer
+                                                |> DrawingMsg
+                                        )
+                                )
 
                             else
-                                ( setStroke (Just { unsent = unsent }), Command.none )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.PointerUp, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Just stroke ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_Drawing
-                                    selected.guildOrDmId
-                                    selected.anchorType
-                                    (Drawing.EndStroke (List.reverse stroke.unsent))
-                                    |> Just
-                                )
-                                { loggedIn
+                                ( { loggedIn
                                     | drawingMode =
-                                        Drawing.SelectedAnchor { selected | stroke = Nothing }
-                                }
-                                Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.PressedUndo, Drawing.SelectedAnchor selected ) ->
-                    FrontendExtra.drawingUndo selected loggedIn model
-
-                ( Drawing.PressedRedo, Drawing.SelectedAnchor selected ) ->
-                    FrontendExtra.drawingRedo selected loggedIn model
-
-                ( Drawing.PressedZoom, Drawing.SelectedAnchor selected ) ->
-                    if selected.zoom == 1 then
-                        ( { loggedIn
-                            | drawingMode =
-                                Drawing.SelectedAnchor
-                                    { selected | zoom = Drawing.zoomLevel, zoomContainer = Nothing }
-                          }
-                          -- Measure the conversation container so the magnified view can be
-                          -- pinned on the right spot of the anchor.
-                        , Dom.getElement Pages.Guild.conversationContainerId
-                            |> Task.attempt
-                                (\result ->
-                                    (case result of
-                                        Ok { element } ->
-                                            Just { x = element.x, y = element.y, width = element.width, height = element.height }
-
-                                        Err _ ->
-                                            Nothing
-                                    )
-                                        |> Drawing.GotZoomContainer
-                                        |> DrawingMsg
+                                        Drawing.SelectedAnchor { selected | zoom = 1, zoomContainer = Nothing }
+                                  }
+                                , Command.none
                                 )
-                        )
 
-                    else
-                        ( { loggedIn
-                            | drawingMode =
-                                Drawing.SelectedAnchor { selected | zoom = 1, zoomContainer = Nothing }
-                          }
-                        , Command.none
-                        )
+                        Drawing.GotZoomContainer maybeContainer ->
+                            ( { loggedIn
+                                | drawingMode = Drawing.SelectedAnchor { selected | zoomContainer = maybeContainer }
+                              }
+                            , Command.none
+                            )
 
-                ( Drawing.GotZoomContainer maybeContainer, Drawing.SelectedAnchor selected ) ->
-                    ( { loggedIn
-                        | drawingMode = Drawing.SelectedAnchor { selected | zoomContainer = maybeContainer }
-                      }
-                    , Command.none
-                    )
+                        Drawing.PressedDone ->
+                            ( { loggedIn | drawingMode = Drawing.NoSelectedAnchor }, Command.none )
 
-                ( _, Drawing.NoSelectedAnchor ) ->
+                Drawing.NoSelectedAnchor ->
                     ( loggedIn, Command.none )
         )
         model

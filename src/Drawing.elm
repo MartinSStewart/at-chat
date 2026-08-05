@@ -10,6 +10,7 @@ module Drawing exposing
     , Stroke
     , anchorHighlight
     , anchorHighlightHtmlClass
+    , button
     , canRedo
     , canUndo
     , decodeWithTargetScreenPosition
@@ -25,7 +26,6 @@ module Drawing exposing
     , redoButtonId
     , resetAnchor
     , undoButtonId
-    , undoRedoButton
     , userColor
     , zoomButtonId
     , zoomCssOrigin
@@ -119,6 +119,7 @@ type Msg
     | -- The conversation container's viewport position and size, measured after
       -- toggling zoom on. Nothing if the measurement failed.
       GotZoomContainer (Maybe { x : Float, y : Float, width : Float, height : Float })
+    | PressedDone
 
 
 type Model
@@ -552,8 +553,8 @@ decodePointerDown =
         (Json.Decode.field "button" Json.Decode.int)
         (boolFieldWithDefault "isPrimary")
         |> Json.Decode.andThen
-            (\( button, isPrimary ) ->
-                if button == 0 && isPrimary then
+            (\( buttonValue, isPrimary ) ->
+                if buttonValue == 0 && isPrimary then
                     decodePointerPosition PointerDown
 
                 else
@@ -659,8 +660,8 @@ boolFieldWithDefault fieldName =
     Json.Decode.oneOf [ Json.Decode.field fieldName Json.Decode.bool, Json.Decode.succeed True ]
 
 
-undoRedoButton : HtmlId -> Msg -> String -> Bool -> Element Msg
-undoRedoButton htmlId onPress label isEnabled =
+button : HtmlId -> Msg -> String -> Bool -> Element Msg
+button htmlId onPress label isEnabled =
     MyUi.elButton
         htmlId
         onPress

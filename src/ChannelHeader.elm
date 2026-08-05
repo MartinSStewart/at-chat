@@ -83,7 +83,7 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     ]
         )
-        (tabBodyView local loggedIn model)
+        (tabBodyView isMobile local loggedIn model)
 
 
 thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -115,7 +115,7 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     ]
         )
-        (tabBodyView local loggedIn model)
+        (tabBodyView isMobile local loggedIn model)
 
 
 discordChannel : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -157,7 +157,7 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     ]
         )
-        (tabBodyView local loggedIn model)
+        (tabBodyView isMobile local loggedIn model)
 
 
 discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
@@ -185,7 +185,7 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
                         ]
                     ]
         )
-        (tabBodyView local loggedIn model)
+        (tabBodyView isMobile local loggedIn model)
 
 
 chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
@@ -534,8 +534,8 @@ discordPrivateChatWith isMobile currentTab name =
         ]
 
 
-tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg_)
-tabBodyView local loggedIn model =
+tabBodyView : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg_)
+tabBodyView isMobile local loggedIn model =
     case model.route of
         GuildRoute guildId channelRoute ->
             case channelRoute of
@@ -567,7 +567,7 @@ tabBodyView local loggedIn model =
                                     Nothing
 
                         ChannelHeaderTab_Draw ->
-                            drawingTabView loggedIn.drawingMode local |> Just
+                            drawingTabView isMobile loggedIn.drawingMode local |> Just
 
                 ChannelRoute _ _ _ ->
                     Nothing
@@ -612,7 +612,7 @@ tabBodyView local loggedIn model =
                                 |> Just
 
                         Just ChannelHeaderTab_Draw ->
-                            drawingTabView loggedIn.drawingMode local |> Just
+                            drawingTabView isMobile loggedIn.drawingMode local |> Just
 
                         Nothing ->
                             Nothing
@@ -648,7 +648,7 @@ tabBodyView local loggedIn model =
                             Nothing
 
                         ChannelHeaderTab_Draw ->
-                            drawingTabView loggedIn.drawingMode local |> Just
+                            drawingTabView isMobile loggedIn.drawingMode local |> Just
 
                 DiscordChannel_ChannelRoute _ _ _ ->
                     Nothing
@@ -711,7 +711,7 @@ tabBodyView local loggedIn model =
                         |> Just
 
                 Just ChannelHeaderTab_Draw ->
-                    drawingTabView loggedIn.drawingMode local |> Just
+                    drawingTabView isMobile loggedIn.drawingMode local |> Just
 
                 _ ->
                     Nothing
@@ -876,40 +876,45 @@ drawingCanUndoOrRedo guildOrDmId anchor local =
 
 {-| Shown in the channel header below the tab buttons while the drawing tab is selected.
 -}
-drawingTabView : Model -> LocalState -> Element FrontendMsg_
-drawingTabView model local =
-    Ui.row
-        [ Ui.paddingXY 16 12
+drawingTabView : Bool -> Model -> LocalState -> Element FrontendMsg_
+drawingTabView isMobile model local =
+    Ui.el
+        [ Ui.paddingXY 16 0
         , Ui.background MyUi.tabBackground
-        , Ui.Font.color MyUi.font2
-        , Ui.spacing 16
+        , Ui.contentCenterY
         , Ui.height (Ui.px 80)
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         ]
         (case model of
             NoSelectedAnchor ->
-                [ Ui.text "Click on a profile image, timestamp, or attachment to anchor your drawing to it." ]
+                Ui.text "Click on a profile image, timestamp, or attachment to anchor your drawing to it."
 
             SelectedAnchor selected ->
                 let
                     ( canUndo, canRedo ) =
                         drawingCanUndoOrRedo selected.guildOrDmId selected.anchorType local
                 in
-                [ Ui.text "Draw with the mouse, a finger or a pen. Press Escape or the pencil tab when you're done."
-                , Drawing.undoRedoButton Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
-                , Drawing.undoRedoButton Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
-                , Drawing.undoRedoButton
-                    Drawing.zoomButtonId
-                    Drawing.PressedZoom
-                    (if selected.zoom == 1 then
-                        "Zoom in"
+                Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.text "Start drawing!"
+                    , Ui.row
+                        [ Ui.spacing 8 ]
+                        [ Drawing.button (Dom.id "drawing_done") Drawing.PressedDone "Done" True
+                        , Drawing.button Drawing.undoButtonId Drawing.PressedUndo "Undo" canUndo
+                        , Drawing.button Drawing.redoButtonId Drawing.PressedRedo "Redo" canRedo
+                        , Drawing.button
+                            Drawing.zoomButtonId
+                            Drawing.PressedZoom
+                            (if selected.zoom == 1 then
+                                "Zoom in"
 
-                     else
-                        "Zoom out"
-                    )
-                    True
-                ]
+                             else
+                                "Zoom out"
+                            )
+                            True
+                        ]
+                    ]
         )
         |> Ui.map DrawingMsg
 
