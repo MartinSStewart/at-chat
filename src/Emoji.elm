@@ -13,6 +13,7 @@ module Emoji exposing
     , UnicodeEmoji(..)
     , emojiButtonId
     , emojiWithSkinTone
+    , emojisInText
     , fromString
     , heart
     , isPressed
@@ -1227,6 +1228,82 @@ emojiWithSkinTone maybeSkinTone emoji emojiData2 =
 
         Nothing ->
             toString emoji
+
+
+{-| The most code points a single emoji is made up of, taken from compact-emoji.json. Flags like
+🏴󠁧󠁢󠁥󠁮󠁧󠁿 are the longest.
+-}
+maxEmojiLength : Int
+maxEmojiLength =
+    8
+
+
+{-| The emojis in some text, in the order they first appear and without repeats. Skin tone
+modifiers are dropped first, so 👍🏽 counts as a use of 👍, which is how emojis are stored.
+
+The emoji data is only loaded in the frontend, so this is also the only place text can be picked
+apart into emojis.
+
+-}
+emojisInText : CachedEmojiData -> String -> List UnicodeEmoji
+emojisInText emojiData text =
+    List.foldl
+        (\skinTone text2 -> String.replace (skinToneToString skinTone) "" text2)
+        text
+        allSkinTones
+        |> String.toList
+        |> emojisInTextHelper emojiData.emojis []
+        |> List.reverse
+
+
+emojisInTextHelper : SeqDict UnicodeEmoji EmojiData -> List UnicodeEmoji -> List Char -> List UnicodeEmoji
+emojisInTextHelper emojis found chars =
+    case chars of
+        [] ->
+            found
+
+        _ :: rest ->
+            case emojiStartingWith emojis chars of
+                Just ( emoji, length ) ->
+                    emojisInTextHelper
+                        emojis
+                        (if List.member emoji found then
+                            found
+
+                         else
+                            emoji :: found
+                        )
+                        (List.drop length chars)
+
+                Nothing ->
+                    emojisInTextHelper emojis found rest
+
+
+{-| The emoji the text starts with and how many code points long it is. Longer emojis are tried
+first so that 👨‍👩‍👧 isn't mistaken for a 👨 followed by some junk.
+-}
+emojiStartingWith : SeqDict UnicodeEmoji EmojiData -> List Char -> Maybe ( UnicodeEmoji, Int )
+emojiStartingWith emojis chars =
+    List.foldl
+        (\length result ->
+            case result of
+                Just _ ->
+                    result
+
+                Nothing ->
+                    let
+                        emoji : UnicodeEmoji
+                        emoji =
+                            List.take length chars |> String.fromList |> UnicodeEmoji
+                    in
+                    if SeqDict.member emoji emojis then
+                        Just ( emoji, length )
+
+                    else
+                        Nothing
+        )
+        Nothing
+        (List.range 1 maxEmojiLength |> List.reverse)
 
 
 requestEmojiData : (Result Http.Error CachedEmojiData -> msg) -> Command restriction toFrontend msg

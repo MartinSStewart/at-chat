@@ -56,6 +56,7 @@ import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -1516,11 +1517,12 @@ sendGuildMessage :
     -> ThreadRouteWithMaybeMessage
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
+    -> List EmojiOrCustomEmoji
     -> UserSession
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
+sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
     case ( SeqDict.get channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
@@ -1675,7 +1677,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 , users =
                     NonemptyDict.insert
                         session.userId
-                        (case threadRouteWithMaybeReplyTo of
+                        ((case threadRouteWithMaybeReplyTo of
                             ViewThreadWithMaybeMessage threadMessageIndex _ ->
                                 { user
                                     | lastViewedThreads =
@@ -1696,6 +1698,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             (DmChannel.latestMessageId channel2)
                                             user.lastViewed
                                 }
+                         )
+                            |> User.addRecentlyUsedEmojis emojis
                         )
                         users2
                 , sendMessageRateLimits = sendMessageRateLimits
@@ -1704,7 +1708,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
             , Command.batch
                 [ LocalChangeResponse
                     changeId
-                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
+                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles emojis)
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toGuildExcludingOne
                     clientId
@@ -1739,13 +1743,14 @@ sendDm :
     -> ThreadRouteWithMaybeMessage
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
+    -> List EmojiOrCustomEmoji
     -> UserSession
     -> BackendUser
     -> BackendUser
     -> DmChannelId
     -> DmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user otherUser dmChannelId dmChannel =
+sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
         richText : Nonempty (RichText (Id UserId))
         richText =
@@ -1781,6 +1786,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         message
                         threadRouteWithReplyTo
                         attachedFiles
+                        emojis
                         stickers
                         model
             in
@@ -1789,13 +1795,15 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 , users =
                     NonemptyDict.insert
                         session.userId
-                        { user
+                        ({ user
                             | lastViewedThreads =
                                 SeqDict.insert
                                     ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
                                     messageId
                                     user.lastViewedThreads
-                        }
+                         }
+                            |> User.addRecentlyUsedEmojis emojis
+                        )
                         model.users
                 , sendMessageRateLimits = sendMessageRateLimits
                 , sessions = sessions
@@ -1833,6 +1841,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         message
                         threadRouteWithReplyTo
                         attachedFiles
+                        emojis
                         stickers
                         model
             in
@@ -1841,10 +1850,12 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 , users =
                     NonemptyDict.insert
                         session.userId
-                        { user
+                        ({ user
                             | lastViewed =
                                 SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewed
-                        }
+                         }
+                            |> User.addRecentlyUsedEmojis emojis
+                        )
                         model.users
                 , sendMessageRateLimits = sendMessageRateLimits
                 , sessions = sessions
@@ -2101,7 +2112,7 @@ toBackendLog toBackend =
                 Local_Admin _ ->
                     ToBackendLog_Local_Admin
 
-                Local_SendMessage _ _ _ _ _ ->
+                Local_SendMessage _ _ _ _ _ _ ->
                     ToBackendLog_Local_SendMessage
 
                 Local_Discord_SendMessage _ _ _ _ _ ->

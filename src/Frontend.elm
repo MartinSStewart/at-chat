@@ -3703,6 +3703,7 @@ updateLoaded msg model =
                                                             Nothing ->
                                                                 SeqDict.empty
                                                         )
+                                                        (emojisInMessage model.emojiData nonempty)
 
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     Local_Discord_SendMessage
@@ -5475,6 +5476,28 @@ messageHasReaction emoji guildOrDmId threadRoute local =
 
                 Nothing ->
                     False
+
+
+{-| The emojis a message uses, so that the backend can add them to the sender's recently used
+emojis. The backend can't work this out itself because the emoji data is only loaded in the
+frontend.
+-}
+emojisInMessage : Maybe Emoji.CachedEmojiData -> String.Nonempty.NonemptyString -> List EmojiOrCustomEmoji
+emojisInMessage emojiData text =
+    (case emojiData of
+        Just emojiData2 ->
+            Emoji.emojisInText emojiData2 (String.Nonempty.toString text)
+                |> List.map EmojiOrCustomEmoji_Emoji
+
+        Nothing ->
+            []
+    )
+        ++ (RichText.fromNonemptyString SeqDict.empty text
+                |> RichText.customEmojiIds
+                |> SeqSet.fromList
+                |> SeqSet.toList
+                |> List.map EmojiOrCustomEmoji_CustomEmoji
+           )
 
 
 scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_

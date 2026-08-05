@@ -47,6 +47,7 @@ import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (EmojiOrCustomEmoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
@@ -1276,10 +1277,11 @@ broadcastDm :
     -> UserTextMessageData messageId (Id UserId)
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
+    -> List EmojiOrCustomEmoji
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-broadcastDm changeId time clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles stickers model =
+broadcastDm changeId time clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles emojis stickers model =
     let
         isViewing : Bool
         isViewing =
@@ -1342,7 +1344,7 @@ broadcastDm changeId time clientId userId senderFrontendUser otherUserId text me
     , Command.batch
         [ LocalChangeResponse
             changeId
-            (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles)
+            (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles emojis)
             |> Lamdera.sendToFrontend clientId
         , toDmChannelExcludingOne
             clientId

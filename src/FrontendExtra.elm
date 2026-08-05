@@ -126,7 +126,7 @@ pendingChangesText localChange =
         Local_Admin adminChange ->
             Pages.Admin.pendingChangesText adminChange
 
-        Local_SendMessage _ _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ _ ->
             "Sent a message"
 
         Local_Discord_SendMessage _ _ _ _ _ ->
@@ -2564,7 +2564,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2599,6 +2599,7 @@ changeUpdate localMsg local =
                                                                 (MessageArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
+                                                        |> User.addRecentlyUsedEmojis emojis
                                             }
                                     }
 
@@ -2656,6 +2657,7 @@ changeUpdate localMsg local =
                                                         (DmChannel.latestFrontendMessageId dmChannel2)
                                                         user.lastViewed
                                             }
+                                                |> User.addRecentlyUsedEmojis emojis
                                     }
                             }
 

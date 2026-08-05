@@ -12,6 +12,7 @@ module User exposing
     , addNewCustomEmojis
     , addNewStickers
     , addRecentlyUsedEmoji
+    , addRecentlyUsedEmojis
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
@@ -145,6 +146,11 @@ addRecentlyUsedEmoji emoji user =
                         Array.push emoji emojiConfig.lastUsedEmojis
             }
     }
+
+
+addRecentlyUsedEmojis : List EmojiOrCustomEmoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+addRecentlyUsedEmojis emojis user =
+    List.foldl addRecentlyUsedEmoji user emojis
 
 
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }

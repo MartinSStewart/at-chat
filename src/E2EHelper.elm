@@ -2518,7 +2518,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Admin _ ->
                     True
 
-                Local_SendMessage _ _ _ _ _ ->
+                Local_SendMessage _ _ _ _ _ _ ->
                     True
 
                 Local_Discord_SendMessage _ _ _ _ _ ->
@@ -3087,10 +3087,10 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)

@@ -1006,6 +1006,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
                             (NoThreadWithMaybeMessage Nothing)
                             SeqDict.empty
+                            []
                         )
                     )
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
@@ -2985,6 +2986,7 @@ sendMessageRateLimitTest config =
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty
+                                    []
                                 )
                             )
 
