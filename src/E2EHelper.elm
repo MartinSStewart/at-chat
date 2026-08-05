@@ -76,6 +76,7 @@ module E2EHelper exposing
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
     , safariIphone
+    , scrollToBottom
     , scrollToMiddle
     , scrollToTop
     , secondDiscordToken
@@ -1665,6 +1666,26 @@ scrollToMiddle user =
             [ ( "target"
               , Json.Encode.object
                     [ ( "scrollTop", Json.Encode.float 1000 )
+                    , ( "scrollHeight", Json.Encode.float 2000 )
+                    , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
+                    ]
+              )
+            ]
+        )
+
+
+scrollToBottom :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+scrollToBottom user =
+    user.custom
+        100
+        Pages.Guild.conversationContainerId
+        "scroll"
+        (Json.Encode.object
+            [ ( "target"
+              , Json.Encode.object
+                    [ ( "scrollTop", Json.Encode.float (2000 - (desktopWindow.height - 40)) )
                     , ( "scrollHeight", Json.Encode.float 2000 )
                     , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
                     ]

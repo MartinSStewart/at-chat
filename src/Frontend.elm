@@ -524,7 +524,7 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
             , games = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
-            , newMessagesWhileDrawing = 0
+            , newMessagesWhileNotScrollToBottom = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
@@ -1836,8 +1836,8 @@ updateLoaded msg model =
 
                         ScrolledToBottom ->
                             -- Scrolling to the bottom yourself means you've seen the messages
-                            -- that arrived while the drawing tab held the scroll position
-                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileDrawing = 0 }
+                            -- that arrived while the conversation stayed where it was
+                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrollToBottom = 0 }
                             , Command.none
                             )
 
@@ -4468,11 +4468,11 @@ updateLoaded msg model =
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
 
-        PressedNewMessagesWhileDrawing ->
+        PressedNewMessagesWarning ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
-                        | newMessagesWhileDrawing = 0
+                        | newMessagesWhileNotScrollToBottom = 0
 
                         -- The conversation scrolls away from the anchor the user picked
                         -- so there's nothing left to draw on
@@ -7058,9 +7058,12 @@ updateLoadedFromBackend msg model =
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
-                                        isDrawing : Bool
-                                        isDrawing =
-                                            Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw
+                                        scrollsToBottom : Bool
+                                        scrollsToBottom =
+                                            -- The drawing tab holds the scroll position, otherwise the
+                                            -- new message would throw off the stroke the user is drawing
+                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
 
                                         isViewingConversation : Bool
                                         isViewingConversation =
@@ -7080,30 +7083,21 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , if isDrawing then
-                                                    -- Scrolling would throw off the stroke the user is
-                                                    -- drawing. The new messages are counted instead and
-                                                    -- shown as a warning above the message input.
-                                                    Command.none
+                                                , if scrollsToBottom then
+                                                    if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                                                    else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                   else
-                                                    case loggedIn2.channelScrollPosition of
-                                                        ScrolledToBottom ->
-                                                            if MyUi.isMobile model then
-                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                            else
-                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                        ScrolledToMiddle ->
-                                                            Command.none
-
-                                                        ScrolledToTop ->
-                                                            Command.none
+                                                    Command.none
                                                 ]
                                     in
-                                    ( if isDrawing && isViewingConversation then
-                                        { loggedIn2 | newMessagesWhileDrawing = loggedIn2.newMessagesWhileDrawing + 1 }
+                                    -- Messages that didn't scroll the conversation are counted so a
+                                    -- warning above the message input can offer to jump to them
+                                    ( if isViewingConversation && not scrollsToBottom then
+                                        { loggedIn2 | newMessagesWhileNotScrollToBottom = loggedIn2.newMessagesWhileNotScrollToBottom + 1 }
 
                                       else
                                         loggedIn2
@@ -7127,9 +7121,12 @@ updateLoadedFromBackend msg model =
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
                                     let
-                                        isDrawing : Bool
-                                        isDrawing =
-                                            Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw
+                                        scrollsToBottom : Bool
+                                        scrollsToBottom =
+                                            -- The drawing tab holds the scroll position, otherwise the
+                                            -- new message would throw off the stroke the user is drawing
+                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
 
                                         isViewingConversation : Bool
                                         isViewingConversation =
@@ -7149,30 +7146,21 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , if isDrawing then
-                                                    -- Scrolling would throw off the stroke the user is
-                                                    -- drawing. The new messages are counted instead and
-                                                    -- shown as a warning above the message input.
-                                                    Command.none
+                                                , if scrollsToBottom then
+                                                    if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+
+                                                    else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
                                                   else
-                                                    case loggedIn2.channelScrollPosition of
-                                                        ScrolledToBottom ->
-                                                            if MyUi.isMobile model then
-                                                                Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                            else
-                                                                Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
-
-                                                        ScrolledToMiddle ->
-                                                            Command.none
-
-                                                        ScrolledToTop ->
-                                                            Command.none
+                                                    Command.none
                                                 ]
                                     in
-                                    ( if isDrawing && isViewingConversation then
-                                        { loggedIn2 | newMessagesWhileDrawing = loggedIn2.newMessagesWhileDrawing + 1 }
+                                    -- Messages that didn't scroll the conversation are counted so a
+                                    -- warning above the message input can offer to jump to them
+                                    ( if isViewingConversation && not scrollsToBottom then
+                                        { loggedIn2 | newMessagesWhileNotScrollToBottom = loggedIn2.newMessagesWhileNotScrollToBottom + 1 }
 
                                       else
                                         loggedIn2

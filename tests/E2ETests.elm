@@ -38,6 +38,7 @@ import LoginForm
 import MembersAndOwner
 import MuteSettings
 import NonemptyDict
+import Pages.Guild
 import Pages.Home
 import PersonName
 import Range exposing (Range)
@@ -654,6 +655,58 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EDrawing.drawOnMessages imageUploadConfig
     , E2EDrawing.drawingScalesWithImages wideImageUploadConfig
     , E2EDrawing.newMessagesWhileDrawing normalConfig
+    , E2EHelper.startTest
+        "New message warning while scrolled up"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ -- Messages that arrive while the conversation is scrolled to the bottom
+                  -- scroll it down again, so there's nothing to warn about
+                  E2EHelper.writeMessage user 100 "Hello!"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+
+                -- Once the user has scrolled up the conversation stays where it is and
+                -- the messages they missed are counted instead
+                , E2EHelper.scrollToMiddle admin
+                , E2EHelper.writeMessage user 100 "Hello again!"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ]
+                    )
+                , E2EHelper.writeMessage user 100 "Anyone there?"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.text "2 new messages. Click here to jump to the bottom." ]
+                    )
+                , admin.snapshotView 100 { name = "New message warning while scrolled up" }
+
+                -- Scrolling back to the bottom yourself means you've seen them
+                , E2EHelper.scrollToBottom admin
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+
+                -- Pressing the warning also clears it
+                , E2EHelper.scrollToMiddle admin
+                , E2EHelper.writeMessage user 100 "One more"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ]
+                    )
+                , admin.click 100 Pages.Guild.newMessagesId
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                ]
+            )
+        ]
     , E2EHelper.startTest
         "Friend label shows typing indicator"
         E2EHelper.startTime

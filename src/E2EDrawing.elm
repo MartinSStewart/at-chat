@@ -508,23 +508,23 @@ newMessagesWhileDrawing config =
                                 -- Nothing has arrived yet so there's no warning
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "while you were drawing" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
 
                                 -- Messages from the other user are counted instead of scrolling
                                 -- the conversation
                                 , E2EHelper.writeMessage user 100 "Hello!"
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 new message while you were drawing" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ])
                                 , E2EHelper.writeMessage user 100 "Hello again!"
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "2 new messages while you were drawing" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "2 new messages. Click here to jump to the bottom." ])
                                 , admin.snapshotView 100 { name = "New message warning while drawing" }
 
                                 -- Pressing the warning deselects the anchor and scrolls to the
                                 -- bottom of the channel
-                                , admin.click 100 Pages.Guild.newMessagesWhileDrawingId
+                                , admin.click 100 Pages.Guild.newMessagesId
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
@@ -533,7 +533,7 @@ newMessagesWhileDrawing config =
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "while you were drawing" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
                                 ]
 
                             Nothing ->

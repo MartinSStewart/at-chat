@@ -1454,8 +1454,8 @@ routeRequest previousRoute newRoute model =
                                 else
                                     Drawing.init
                             , -- The new message warning belongs to the conversation that was
-                              -- being drawn on, and leaving it scrolls to the bottom anyway
-                              newMessagesWhileDrawing = 0
+                              -- left behind, and opening another one starts at the bottom
+                              newMessagesWhileNotScrollToBottom = 0
                         }
                         Command.none
                 )
@@ -2402,7 +2402,7 @@ isPressMsg msg =
                 _ ->
                     False
 
-        PressedNewMessagesWhileDrawing ->
+        PressedNewMessagesWarning ->
             True
 
         LoadedPopSound _ ->

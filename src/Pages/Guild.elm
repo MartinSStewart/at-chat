@@ -15,7 +15,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , newGuildFormInit
     , newGuildFormView
-    , newMessagesWhileDrawingId
+    , newMessagesId
     , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -4406,22 +4406,22 @@ replyToHeaderHelper onPress userId allUsers =
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
-newMessagesWhileDrawingId : HtmlId
-newMessagesWhileDrawingId =
-    Dom.id "guild_newMessagesWhileDrawing"
+newMessagesId : HtmlId
+newMessagesId =
+    Dom.id "guild_newMessages"
 
 
-{-| New messages don't scroll the conversation to the bottom while the drawing tab
-is open, since that would throw off the stroke the user is drawing. This warning
-sits above the message input to say how many messages were missed. Pressing it
+{-| Messages that arrived without the conversation scrolling to the bottom, either
+because the user had scrolled up or because the drawing tab held the scroll
+position, are counted in this warning above the message input. Pressing it
 deselects the drawing anchor and scrolls to the bottom.
 -}
-newMessagesWhileDrawingView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
-newMessagesWhileDrawingView model loggedIn =
-    if Route.toChannelHeaderTab model.route == Just ChannelHeaderTab_Draw && loggedIn.newMessagesWhileDrawing > 0 then
+newMessagesView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
+newMessagesView model loggedIn =
+    if loggedIn.newMessagesWhileNotScrollToBottom > 0 then
         MyUi.elButton
-            newMessagesWhileDrawingId
-            PressedNewMessagesWhileDrawing
+            newMessagesId
+            PressedNewMessagesWarning
             [ Ui.Font.color MyUi.font1
             , Ui.background MyUi.buttonBackground
             , Ui.paddingXY 12 8
@@ -4434,13 +4434,13 @@ newMessagesWhileDrawingView model loggedIn =
             (Ui.Prose.paragraph
                 []
                 [ Ui.text
-                    ((if loggedIn.newMessagesWhileDrawing == 1 then
+                    ((if loggedIn.newMessagesWhileNotScrollToBottom == 1 then
                         "1 new message"
 
                       else
-                        String.fromInt loggedIn.newMessagesWhileDrawing ++ " new messages"
+                        String.fromInt loggedIn.newMessagesWhileNotScrollToBottom ++ " new messages"
                      )
-                        ++ " while you were drawing. Click here to jump to the bottom."
+                        ++ ". Click here to jump to the bottom."
                     )
                 ]
             )
@@ -4636,7 +4636,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesWhileDrawingView model loggedIn
+            [ newMessagesView model loggedIn
             , replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -4815,7 +4815,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesWhileDrawingView model loggedIn
+            [ newMessagesView model loggedIn
             , replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
                 Ok () ->
@@ -5100,7 +5100,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesWhileDrawingView model loggedIn
+            [ newMessagesView model loggedIn
             , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
@@ -5275,7 +5275,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ newMessagesWhileDrawingView model loggedIn
+            [ newMessagesView model loggedIn
             , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
