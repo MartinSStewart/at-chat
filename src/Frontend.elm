@@ -1406,27 +1406,33 @@ updateLoaded msg model =
                         )
                         model
 
-                Emoji.MouseEnteredEmoji emoji ->
+                Emoji.MouseEnteredEmoji index emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            ( { loggedIn
+                                | emojiSelector =
+                                    { emojiSelector | emojiHovered = Just { index = index, emoji = emoji } }
+                              }
                             , Command.none
                             )
                         )
                         model
 
-                Emoji.KeyboardMovedHover emoji index ->
+                Emoji.KeyboardMovedHover index emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            ( { loggedIn
+                                | emojiSelector =
+                                    { emojiSelector | emojiHovered = Just { index = index, emoji = emoji } }
+                              }
                             , scrollEmojiIntoView index
                             )
                         )

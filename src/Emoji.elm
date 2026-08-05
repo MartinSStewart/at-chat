@@ -284,7 +284,9 @@ allSkinTones =
 
 
 type alias Model =
-    { emojiHovered : Maybe EmojiOrSticker
+    { -- Kept track of by index rather than by which emoji it is, because the recently used emojis
+      -- at the top repeat emojis that also show up further down in their own category
+      emojiHovered : Maybe { index : Int, emoji : EmojiOrSticker }
     , searchText : String
     , category : Category
     }
@@ -327,8 +329,8 @@ type Msg
     | ScrolledToCategory Category
     | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
-    | MouseEnteredEmoji EmojiOrSticker
-    | KeyboardMovedHover EmojiOrSticker Int
+    | MouseEnteredEmoji Int EmojiOrSticker
+    | KeyboardMovedHover Int EmojiOrSticker
     | ClearEmojiHover
     | TypedSearchText String
     | PressedClearSearch
@@ -353,7 +355,7 @@ isPressed msg =
         PressedSkinTone _ ->
             True
 
-        MouseEnteredEmoji _ ->
+        MouseEnteredEmoji _ _ ->
             False
 
         KeyboardMovedHover _ _ ->
@@ -629,20 +631,41 @@ categorySectionBodyHeight columns itemCount =
     (itemCount + columns - 1) // columns * emojiHeight
 
 
-{-| Each category paired with the scroll position its section starts at.
+{-| Each category paired with the scroll position its section starts at, which is also the position
+it's clicked to jump to.
+
+The first category is the exception: it jumps to the very top instead, so that the recently used
+emojis sitting above it are on screen alongside it.
+
 -}
-categoryOffsets : Int -> List ( Category, List EmojiOrSticker ) -> List ( Category, Int )
-categoryOffsets columns categories =
-    List.foldl
-        (\( category, items ) ( offset, list ) ->
-            ( offset + categorySectionHeight columns (List.length items)
-            , ( category, offset ) :: list
-            )
-        )
-        ( 0, [] )
-        categories
-        |> Tuple.second
-        |> List.reverse
+categoryOffsets : Int -> List EmojiOrSticker -> List ( Category, List EmojiOrSticker ) -> List ( Category, Int )
+categoryOffsets columns recentEmojis categories =
+    let
+        offsets : List ( Category, Int )
+        offsets =
+            List.foldl
+                (\( category, items ) ( offset, list ) ->
+                    ( offset + categorySectionHeight columns (List.length items)
+                    , ( category, offset ) :: list
+                    )
+                )
+                ( if List.isEmpty recentEmojis then
+                    0
+
+                  else
+                    categorySectionHeight columns (List.length recentEmojis)
+                , []
+                )
+                categories
+                |> Tuple.second
+                |> List.reverse
+    in
+    case offsets of
+        ( firstCategory, _ ) :: rest ->
+            ( firstCategory, 0 ) :: rest
+
+        [] ->
+            []
 
 
 {-| The category whose section the top of the scroll container is showing.
@@ -803,18 +826,13 @@ decodeArrowKey model categories columns =
 
                     currentIndex : Maybe Int
                     currentIndex =
-                        case model.emojiHovered of
-                            Just hovered ->
-                                findIndex hovered items
-
-                            Nothing ->
-                                Nothing
+                        Maybe.map .index model.emojiHovered
 
                     moveTo : Int -> Json.Decode.Decoder ( Msg, Bool )
                     moveTo newIndex =
                         case Array.get newIndex items of
                             Just item ->
-                                Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
+                                Json.Decode.succeed ( KeyboardMovedHover newIndex item, True )
 
                             Nothing ->
                                 Json.Decode.fail ""
@@ -865,7 +883,7 @@ decodeArrowKey model categories columns =
                     "Enter" ->
                         case model.emojiHovered of
                             Just hovered ->
-                                Json.Decode.succeed ( PressedSelectEmoji hovered, True )
+                                Json.Decode.succeed ( PressedSelectEmoji hovered.emoji, True )
 
                             Nothing ->
                                 case Array.get 0 items of
@@ -880,40 +898,20 @@ decodeArrowKey model categories columns =
             )
 
 
-findIndex : a -> Array a -> Maybe Int
-findIndex target array =
-    Array.foldl
-        (\item ( index, result ) ->
-            case result of
-                Just _ ->
-                    ( index + 1, result )
-
-                Nothing ->
-                    if item == target then
-                        ( index + 1, Just index )
-
-                    else
-                        ( index + 1, Nothing )
-        )
-        ( 0, Nothing )
-        array
-        |> Tuple.second
-
-
 type EmojiOrSticker
     = EmojiOrSticker_UnicodeEmoji UnicodeEmoji
     | EmojiOrSticker_Sticker (Id StickerId)
     | EmojiOrSticker_CustomEmoji (Id CustomEmojiId)
 
 
-emojiButtonHelper : Int -> EmojiOrSticker -> { a | emojiHovered : Maybe EmojiOrSticker } -> Element Msg -> Element Msg
+emojiButtonHelper : Int -> EmojiOrSticker -> { a | emojiHovered : Maybe { index : Int, emoji : EmojiOrSticker } } -> Element Msg -> Element Msg
 emojiButtonHelper index item model content =
     MyUi.elButton
         (emojiButtonId index)
         (PressedSelectEmoji item)
-        [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
+        [ Ui.Events.onMouseEnter (MouseEnteredEmoji index item)
         , Ui.attrIf
-            (model.emojiHovered == Just item)
+            (Maybe.map .index model.emojiHovered == Just index)
             (Ui.background MyUi.hoverHighlight)
         , Ui.contentCenterX
         , Ui.contentCenterY
@@ -1015,9 +1013,40 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                         )
                         allCategories
 
+                -- Recently used emojis, most recent first. They aren't a category of their own:
+                -- nothing shows up for them in the column on the left, and they're reached by
+                -- clicking the first category, which scrolls all the way to the top.
+                recentEmojis : List EmojiOrSticker
+                recentEmojis =
+                    Array.toList userData.lastUsedEmojis
+                        |> List.reverse
+                        |> List.filterMap
+                            (\emoji ->
+                                case emoji of
+                                    EmojiOrCustomEmoji_Emoji emoji2 ->
+                                        EmojiOrSticker_UnicodeEmoji emoji2 |> Just
+
+                                    EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                                        if SeqSet.member customEmojiId availableCustomEmojis then
+                                            EmojiOrSticker_CustomEmoji customEmojiId |> Just
+
+                                        else
+                                            Nothing
+                            )
+                        |> List.foldl
+                            (\emoji list ->
+                                if List.member emoji list then
+                                    list
+
+                                else
+                                    emoji :: list
+                            )
+                            []
+                        |> List.reverse
+
                 offsets : List ( Category, Int )
                 offsets =
-                    categoryOffsets columns categories
+                    categoryOffsets columns recentEmojis categories
 
                 -- The scroll container is rebuilt at the top every time the selector is opened, so
                 -- fall back to the first category when the one we remember isn't on screen.
@@ -1029,20 +1058,49 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                     else
                         List.head offsets |> Maybe.map Tuple.first
 
+                sections : List { title : String, items : List EmojiOrSticker, isOnScreen : Bool }
+                sections =
+                    (if List.isEmpty recentEmojis then
+                        []
+
+                     else
+                        [ { title = "Recently used"
+                          , items = recentEmojis
+                          , isOnScreen = (List.head offsets |> Maybe.map Tuple.first) == selectedCategory
+                          }
+                        ]
+                    )
+                        ++ (List.foldl
+                                (\( category, items ) ( previousCategory, list ) ->
+                                    ( Just category
+                                    , { title = categoryToString category
+                                      , items = items
+                                      , isOnScreen =
+                                            Just category == selectedCategory || previousCategory == selectedCategory
+                                      }
+                                        :: list
+                                    )
+                                )
+                                ( Nothing, [] )
+                                categories
+                                |> Tuple.second
+                                |> List.reverse
+                           )
+
                 -- Emoji buttons are numbered across every category rather than restarting at 0 in
                 -- each one, so that the id we scroll to on arrow key presses is unique.
                 emojis : List ( List EmojiOrSticker, Element Msg )
                 emojis =
                     List.foldl
-                        (\( category, list ) ( previousCategory, offset, sections ) ->
+                        (\section ( offset, list ) ->
                             let
+                                itemCount : Int
                                 itemCount =
-                                    List.length list
+                                    List.length section.items
                             in
-                            ( Just category
-                            , offset + itemCount
-                            , ( list
-                              , (if category == model.category || previousCategory == Just model.category then
+                            ( offset + itemCount
+                            , ( section.items
+                              , (if section.isOnScreen then
                                     List.indexedMap
                                         (\index item ->
                                             emojiButtonHelper
@@ -1073,19 +1131,19 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                                                             |> Ui.html
                                                 )
                                         )
-                                        list
+                                        section.items
 
                                  else
                                     [ Ui.el [ Ui.height (Ui.px (categorySectionBodyHeight columns itemCount)) ] Ui.none ]
                                 )
-                                    |> emojiCategoryContainer (categoryToString category)
+                                    |> emojiCategoryContainer section.title
                               )
-                                :: sections
+                                :: list
                             )
                         )
-                        ( Nothing, 0, [] )
-                        categories
-                        |> (\( _, _, a ) -> a)
+                        ( 0, [] )
+                        sections
+                        |> Tuple.second
                         |> List.reverse
 
                 --if isSearching then
@@ -1162,7 +1220,7 @@ selector width model userData emojiData availableCustomEmojis customEmojisData a
                     , MyUi.noShrinking
                     , Ui.paddingXY 8 0
                     ]
-                    (case model.emojiHovered of
+                    (case Maybe.map .emoji model.emojiHovered of
                         Just (EmojiOrSticker_UnicodeEmoji emoji) ->
                             Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
                                 :: (case SeqDict.get emoji emojiData2.emojis of
