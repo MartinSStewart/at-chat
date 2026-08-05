@@ -83,6 +83,8 @@ stringFuzzer =
         , "❓"
         , "\u{FEFF}"
         , "-"
+        , "¯"
+        , "¯\\_(ツ)_/¯"
         ]
 
 
@@ -554,6 +556,58 @@ test =
                 (BulletPoint NoLeadingLineBreak (Nonempty [ NormalText 'a' "" ] []))
                 [ NormalText '\n' "- \n- b" ]
             )
+        , fromNonemptyStringTest
+            "¯\\_(ツ)_/¯"
+            (Nonempty
+                (NormalText '¯' "")
+                [ EscapedChar EscapedBackslash
+                , EscapedChar EscapedItalic
+                , NormalText '(' "ツ)"
+                , EscapedChar EscapedItalic
+                , NormalText '/' "¯"
+                ]
+            )
+        , fromNonemptyStringTest
+            "a ¯\\_(ツ)_/¯ b"
+            (Nonempty
+                (NormalText 'a' " ¯")
+                [ EscapedChar EscapedBackslash
+                , EscapedChar EscapedItalic
+                , NormalText '(' "ツ)"
+                , EscapedChar EscapedItalic
+                , NormalText '/' "¯ b"
+                ]
+            )
+        , fromNonemptyStringTest
+            "*¯\\_(ツ)_/¯*"
+            (Nonempty
+                (Bold
+                    (Nonempty
+                        (NormalText '¯' "")
+                        [ EscapedChar EscapedBackslash
+                        , EscapedChar EscapedItalic
+                        , NormalText '(' "ツ)"
+                        , EscapedChar EscapedItalic
+                        , NormalText '/' "¯"
+                        ]
+                    )
+                )
+                []
+            )
+        , -- Not the shrug, so no special case and the backslash gets eaten as an escape like normal
+          fromNonemptyStringTest "¯\\_(ツ)_/" (Nonempty (NormalText '¯' "") [ EscapedChar EscapedItalic, NormalText '(' "ツ)_/" ])
+        , fromNonemptyStringTest "¯" (Nonempty (NormalText '¯' "") [])
+        , toStringTest
+            (Nonempty
+                (NormalText '¯' "")
+                [ EscapedChar EscapedBackslash
+                , EscapedChar EscapedItalic
+                , NormalText '(' "ツ)"
+                , EscapedChar EscapedItalic
+                , NormalText '/' "¯"
+                ]
+            )
+            "¯\\_(ツ)_/¯"
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
             , selectionHighlightTest "a*bold*c"
@@ -571,6 +625,7 @@ test =
             , selectionHighlightTest "a||*b*||c"
             , selectionHighlightTest "a```elm\nfoo = 1\n```b"
             , selectionHighlightTest "a```\nplain\n```b"
+            , selectionHighlightTest "a¯\\_(ツ)_/¯b"
             ]
         ]
 

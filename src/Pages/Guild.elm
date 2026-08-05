@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , newGuildFormInit
     , newGuildFormView
+    , newMessagesId
     , profileImageButtonId
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -738,7 +739,7 @@ unreadOverviewChannels local allDiscordUsers =
                         unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) dmChannel
                             |> Maybe.map
                                 (\unread ->
-                                    [ { source = User.toStringAlt otherUserId local.localUser |> Ui.text
+                                    [ { source = dmSource otherUserId local.localUser
                                       , route =
                                             DmRoute
                                                 { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -767,7 +768,11 @@ unreadOverviewChannels local allDiscordUsers =
                                         thread
                                         |> Maybe.map
                                             (\unread ->
-                                                { source = Ui.text (User.toStringAlt otherUserId local.localUser)
+                                                { source =
+                                                    dmThreadSource
+                                                        otherUserId
+                                                        local.localUser
+                                                        (threadPreviewText allUsers threadId dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -947,6 +952,34 @@ threadSource guildName channelName threadName =
             [ Ui.text (GuildName.toString guildName)
             , Ui.text "/"
             , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+{-| A DM is named after the person on the other end of it. Only their name is bold,
+so it stands out from the words around it the way a guild and channel name does.
+-}
+dmSource : Id UserId -> LocalUser -> Element msg
+dmSource otherUserId localUser =
+    Ui.row
+        [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noShrinking ]
+        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text "Chat with")
+        , Ui.text (User.toStringAlt otherUserId localUser)
+        ]
+
+
+{-| A thread in a DM. Like threadSource, the DM keeps its full width and the thread
+name is the part that gets cut short when there isn't enough room.
+-}
+dmThreadSource : Id UserId -> LocalUser -> String -> Element msg
+dmThreadSource otherUserId localUser threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ dmSource otherUserId localUser
             , Ui.text "/"
             ]
         , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
@@ -2623,7 +2656,7 @@ guildSettingsView model loggedIn local guildId guild =
             , Ui.spacing 16
             , MyUi.scrollable (GuildColumn.canScroll (MyUi.isMobile model) model.drag)
             ]
-            [ ChannelHeader.channelHeader isMobile Nothing (Ui.text "Guild settings") Nothing
+            [ ChannelHeader.channelHeader isMobile (Ui.text "Guild settings") Nothing
             , Ui.column
                 [ Ui.paddingXY 8 0 ]
                 [ Ui.el [ Ui.paddingXY 8 0, Ui.Font.bold ] (Ui.text "Owner")
@@ -2997,13 +3030,26 @@ messageHover guildOrDmId threadRoute loggedIn model =
                         IsHovered
 
                 else
-                    IsNotHovered
+                    notHoveredWhileSelectingAnchor loggedIn model
 
             else
-                IsNotHovered
+                notHoveredWhileSelectingAnchor loggedIn model
 
         _ ->
-            IsNotHovered
+            notHoveredWhileSelectingAnchor loggedIn model
+
+
+{-| A message the pointer isn't hovering over. Fingers can't hover, so on mobile
+every message offers up its drawing anchors while the drawing tab waits for one
+to be picked, instead of only the hovered message.
+-}
+notHoveredWhileSelectingAnchor : LoggedIn2 -> LoadedFrontend -> IsHovered
+notHoveredWhileSelectingAnchor loggedIn model =
+    if MyUi.isMobile model && drawingIsSelectingAnchor loggedIn model then
+        IsHoveredWhileSelectingAnchor
+
+    else
+        IsNotHovered
 
 
 revealedChannelSpoilers : AnyGuildOrDmId -> LoggedIn2 -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -4405,6 +4451,49 @@ replyToHeaderHelper onPress userId allUsers =
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
+newMessagesId : HtmlId
+newMessagesId =
+    Dom.id "guild_newMessages"
+
+
+{-| Messages that arrived without the conversation scrolling to the bottom, either
+because the user had scrolled up or because the drawing tab held the scroll
+position, are counted in this warning above the message input. Pressing it
+deselects the drawing anchor and scrolls to the bottom.
+-}
+newMessagesView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
+newMessagesView model loggedIn =
+    if loggedIn.newMessagesWhileNotScrolledToBottom > 0 then
+        MyUi.elButton
+            newMessagesId
+            PressedNewMessagesWarning
+            [ Ui.Font.color MyUi.font1
+            , Ui.background MyUi.buttonBackground
+            , Ui.paddingXY 12 8
+            , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+            , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.pointer
+            , MyUi.hover (MyUi.isMobile model) [ Ui.Anim.backgroundColor MyUi.highlightedBorder ]
+            ]
+            (Ui.Prose.paragraph
+                []
+                [ Ui.text
+                    ((if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
+                        "1 new message"
+
+                      else
+                        String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages"
+                     )
+                        ++ ". Click here to jump to the bottom."
+                    )
+                ]
+            )
+
+    else
+        Ui.none
+
+
 {-| Attributes added to the conversation while the drawing tab is open. Until
 an anchor is picked, valid anchor elements are highlighted when hovering over
 them. Once an anchor is picked an overlay captures mouse events for freehand
@@ -4592,7 +4681,8 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            [ newMessagesView model loggedIn
+            , replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -4770,7 +4860,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
+            [ newMessagesView model loggedIn
+            , replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
                 Ok () ->
                     MessageInput.view
@@ -5054,7 +5145,8 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader guildOrDmId replyTo allUsers channel
+            [ newMessagesView model loggedIn
+            , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -5228,7 +5320,8 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ replyToHeader guildOrDmId replyTo allUsers channel
+            [ newMessagesView model loggedIn
+            , replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -8434,6 +8527,104 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
         )
 
 
+{-| The threads of one DM, listed underneath it in the friends column. The
+`threadRoute` is the one being viewed in this DM, or Nothing when another DM (or
+no DM at all) is open.
+-}
+dmColumnThreads :
+    Bool
+    -> Time.Posix
+    -> Maybe ThreadRouteWithFriends
+    -> LocalUser
+    -> Id UserId
+    -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId)) }
+    -> SeqDict (Id ChannelMessageId) FrontendThread
+    -> Element FrontendMsg_
+dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
+    let
+        threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
+        threads2 =
+            List.filterMap
+                (\( threadMessageIndex, thread ) ->
+                    let
+                        isSelected : Bool
+                        isSelected =
+                            case threadRoute of
+                                Just (ViewThreadWithFriends b _ _) ->
+                                    b == threadMessageIndex
+
+                                _ ->
+                                    False
+
+                        isMuted =
+                            MuteSettings.isDmMuted
+                                localUser.user.muteSettings
+                                otherUserId
+                                (ViewThread threadMessageIndex)
+
+                        hasNotifications : ChannelNotificationType
+                        hasNotifications =
+                            case isMuted of
+                                IsMuted ->
+                                    NoNotification
+
+                                IsNotMuted ->
+                                    -- Every message in a DM is meant for you, so unread ones
+                                    -- always get the red count. Guild channels save that for
+                                    -- messages that mention you and show the plain one otherwise.
+                                    case
+                                        GuildColumn.newMessageCount
+                                            (SeqDict.get
+                                                ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                                localUser.user.lastViewedThreads
+                                            )
+                                            thread
+                                            |> OneOrGreater.fromInt
+                                    of
+                                        Just unreadCount ->
+                                            NewMessageForUser unreadCount
+
+                                        Nothing ->
+                                            NoNotification
+                    in
+                    case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
+                        ( NoNotification, False, Just message ) ->
+                            if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
+                                Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Just ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected )
+                )
+                (SeqDict.toList threads)
+
+        count =
+            List.length threads2
+    in
+    List.indexedMap
+        (\index ( threadMessageIndex, ( isMuted, hasNotifications ), isSelected ) ->
+            channelColumnThreadsHelper
+                isMobile
+                isSelected
+                isMuted
+                hasNotifications
+                index
+                count
+                (Dom.id ("guild_viewDmThread_" ++ Id.toString otherUserId ++ "_" ++ Id.toString threadMessageIndex))
+                (DmRoute
+                    { channelId = DmChannelId.fromUserIds otherUserId localUser.session.userId
+                    , threadRoute = ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab
+                    , tab = Nothing
+                    }
+                )
+                (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
+        )
+        threads2
+        |> Ui.column []
+
+
 channelColumnThreads :
     Bool
     -> Time.Posix
@@ -8918,7 +9109,7 @@ friendsColumn :
     -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg_
-friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus openedOtherUserId dmChannels discordDmChannels localUser =
+friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocus dmChannelSelection dmChannels discordDmChannels localUser =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -8949,31 +9140,69 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     case User.getUser otherUserId localUser of
                         Just otherUser ->
                             if matchesSearch otherUser.name then
+                                let
+                                    -- The route being viewed in this DM, or Nothing when the
+                                    -- open DM belongs to somebody else
+                                    threadRoute : Maybe ThreadRouteWithFriends
+                                    threadRoute =
+                                        case dmChannelSelection of
+                                            SelectedDmChannel dmRoute ->
+                                                if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
+                                                    Just dmRoute.threadRoute
+
+                                                else
+                                                    Nothing
+
+                                            SelectedDiscordDmChannel _ ->
+                                                Nothing
+
+                                            NoDmChannelSelected ->
+                                                Nothing
+                                in
                                 ( case MessageArray.last dmChannel.messages of
                                     Just message2 ->
                                         Message.createdAt message2
 
                                     _ ->
                                         Time.millisToPosix 0
-                                , Ui.Lazy.lazy6
-                                    (if isMobile then
-                                        friendLabelMobile
+                                , Ui.column
+                                    []
+                                    [ Ui.Lazy.lazy6
+                                        (if isMobile then
+                                            friendLabelMobile
 
-                                     else
-                                        friendLabelNotMobile
-                                    )
-                                    currentTime
-                                    (case openedOtherUserId of
-                                        SelectedDmChannel dmRoute ->
-                                            DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
+                                         else
+                                            friendLabelNotMobile
+                                        )
+                                        currentTime
+                                        (case threadRoute of
+                                            Just (NoThreadWithFriends _ _) ->
+                                                True
 
-                                        _ ->
-                                            False
-                                    )
-                                    localUser
-                                    otherUserId
-                                    otherUser
-                                    dmChannel
+                                            _ ->
+                                                False
+                                        )
+                                        localUser
+                                        otherUserId
+                                        otherUser
+                                        dmChannel
+                                    , dmColumnThreads
+                                        isMobile
+                                        (Time.millisToPosix currentTime)
+                                        threadRoute
+                                        localUser
+                                        otherUserId
+                                        dmChannel
+                                        (case threadRoute of
+                                            -- A thread that was just opened isn't in the local
+                                            -- state yet but still belongs in the list
+                                            Just (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                                SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
+
+                                            _ ->
+                                                dmChannel.threads
+                                        )
+                                    ]
                                 )
                                     |> Just
 
@@ -9013,7 +9242,7 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                     discordFriendLabelNotMobile
                                 )
                                 currentTime
-                                (case openedOtherUserId of
+                                (case dmChannelSelection of
                                     SelectedDiscordDmChannel routeData ->
                                         routeData.channelId == channelId
 
@@ -9539,7 +9768,7 @@ newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
-        [ ChannelHeader.channelHeader isMobile2 Nothing (Ui.text "Create new channel") Nothing
+        [ ChannelHeader.channelHeader isMobile2 (Ui.text "Create new channel") Nothing
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)

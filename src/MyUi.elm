@@ -84,6 +84,7 @@ module MyUi exposing
     , selectedTextBackground
     , simpleButton
     , tabBackground
+    , tabSideEdge
     , textLinkColor
     , textLinkColorOnDarkBackground
     , timeElapsed
@@ -908,6 +909,103 @@ deleteButton htmlId onPress =
 hoverText : String -> Ui.Attribute msg
 hoverText text =
     Ui.htmlAttribute (Html.Attributes.title text)
+
+
+{-| The whole left or right edge of a selected tab, painted just outside the tab's
+clickable area: the rounded top corner, the straight side below it and the corner at
+the bottom that curves outward into the tab body. The tab itself only paints the flat
+middle, so its clickable width can match the plain buttons sitting next to it while
+the painted tab stays a rounded rectangle whose flat top spans exactly that width.
+-}
+tabSideEdge : Int -> Int -> Bool -> Ui.Color -> Ui.Attribute msg
+tabSideEdge radius tabHeight isLeft color =
+    let
+        edgeWidth : Int
+        edgeWidth =
+            radius * 2
+
+        edgeHeight : Int
+        edgeHeight =
+            tabHeight
+
+        r : String
+        r =
+            String.fromInt radius
+
+        w : String
+        w =
+            String.fromInt edgeWidth
+
+        h : String
+        h =
+            String.fromInt edgeHeight
+
+        arc : String
+        arc =
+            "A " ++ r ++ " " ++ r ++ " 0 0 "
+
+        path : String
+        path =
+            if isLeft then
+                String.join " "
+                    [ "M " ++ w ++ ",0"
+                    , "L " ++ String.fromInt (radius * 2) ++ ",0"
+                    , arc ++ "0 " ++ r ++ "," ++ r
+                    , "L " ++ r ++ "," ++ String.fromInt (edgeHeight - radius)
+                    , arc ++ "1 0," ++ h
+                    , "L " ++ w ++ "," ++ h
+                    , "Z"
+                    ]
+
+            else
+                String.join " "
+                    [ "M 0,0"
+                    , arc ++ "1 " ++ String.fromInt radius ++ "," ++ r
+                    , "L " ++ String.fromInt radius ++ "," ++ String.fromInt (edgeHeight - radius)
+                    , arc ++ "0 " ++ w ++ "," ++ h
+                    , "L 0," ++ h
+                    , "Z"
+                    ]
+
+        translate : String
+        translate =
+            (if isLeft then
+                "translate(-" ++ String.fromFloat (toFloat radius * 1.5) ++ "px, "
+
+             else
+                "translate(" ++ String.fromFloat (toFloat radius * 1.5) ++ "px, "
+            )
+                ++ "0)"
+    in
+    Ui.inFront
+        (Ui.el
+            [ Ui.alignBottom
+            , if isLeft then
+                Ui.alignLeft
+
+              else
+                Ui.alignRight
+            , Ui.width (Ui.px edgeWidth)
+            , Ui.height (Ui.px edgeHeight)
+            , Ui.Font.color color
+            , htmlStyle "transform" translate
+            , htmlStyle "pointer-events" "none"
+            ]
+            (Svg.svg
+                [ Svg.Attributes.width w
+                , Svg.Attributes.height h
+                , Svg.Attributes.viewBox ("0 0 " ++ w ++ " " ++ h)
+                , Svg.Attributes.style "display:block"
+                ]
+                [ Svg.path
+                    [ Svg.Attributes.d path
+                    , Svg.Attributes.fill "currentColor"
+                    ]
+                    []
+                ]
+                |> Ui.html
+            )
+        )
 
 
 outwardBottomCorner : Int -> Bool -> Ui.Color -> Ui.Attribute msg

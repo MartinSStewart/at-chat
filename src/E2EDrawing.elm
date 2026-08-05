@@ -1,4 +1,4 @@
-module E2EDrawing exposing (drawOnMessages, drawingScalesWithImages)
+module E2EDrawing exposing (drawOnMessages, drawWithTouch, drawingScalesWithImages, newMessagesWhileDrawing)
 
 import Audio
 import Coord
@@ -72,7 +72,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 30 25)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                 , E2EHelper.drawZigzagStroke admin
 
                                 -- The stroke is visible for the user that drew it and, in
@@ -164,7 +164,7 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 Pages.Guild.channelTextInputId
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
                                 , admin.checkView
                                     100
                                     (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
@@ -186,7 +186,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 2)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 2)
@@ -225,7 +225,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 400 300)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 3)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 3)
@@ -262,7 +262,7 @@ drawOnMessages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 100)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                 , E2EHelper.drawWideZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 4)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 4)
@@ -292,7 +292,7 @@ drawOnMessages imageUploadConfig =
                                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
 
                                 -- All four drawings are persisted so they survive loading the page again
                                 , T.connectFrontend
@@ -395,7 +395,7 @@ drawingScalesWithImages imageUploadConfig =
                                     (E2EHelper.drawingAnchorClick 100 50)
                                 , admin.checkView
                                     100
-                                    (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                 , E2EHelper.drawZigzagStroke admin
                                 , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
                                 , user.checkView 100 (E2EHelper.expectPolylineCount 1)
@@ -469,6 +469,136 @@ drawingScalesWithImages imageUploadConfig =
 
                             _ ->
                                 [ T.checkState 0 (\_ -> Err "No image message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| A message arriving while the drawing tab is open must not scroll the
+conversation, since that would throw off the stroke the user is drawing. The
+messages are counted in a warning above the message input instead.
+-}
+newMessagesWhileDrawing : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+newMessagesWhileDrawing config =
+    E2EHelper.startTest
+        "New messages don't scroll the channel while drawing"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                [ E2EHelper.writeMessage admin 100 "Draw on this message!"
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ admin.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+                                , admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+
+                                -- Nothing has arrived yet so there's no warning
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+
+                                -- Messages from the other user are counted instead of scrolling
+                                -- the conversation
+                                , E2EHelper.writeMessage user 100 "Hello!"
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "1 new message. Click here to jump to the bottom." ])
+                                , E2EHelper.writeMessage user 100 "Hello again!"
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "2 new messages. Click here to jump to the bottom." ])
+                                , admin.snapshotView 100 { name = "New message warning while drawing" }
+
+                                -- Pressing the warning deselects the anchor and scrolls to the
+                                -- bottom of the channel
+                                , admin.click 100 Pages.Guild.newMessagesId
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Click here to jump to the bottom" ])
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| Drawing works with a finger too. The tab is offered on mobile, the anchors of
+every message are tappable (there's nothing to hover with) and the stroke comes
+from touch pointer events.
+-}
+drawWithTouch : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2 -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+drawWithTouch config =
+    E2EHelper.startTest
+        "Draw on a message with a finger"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.iphone14Window
+            (\admin user ->
+                [ E2EHelper.writeMessageMobile admin "Draw on this message!"
+                , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Click on a profile image" ])
+                , T.andThen
+                    100
+                    (\data ->
+                        case E2EHelper.lastGuildChannelMessage data.backend of
+                            Just ( _, messageId, _ ) ->
+                                [ -- No mouseEnter first: the anchor has to be tappable without
+                                  -- the message being hovered
+                                  admin.custom
+                                    100
+                                    (Drawing.profileImageAnchorId messageId)
+                                    "click"
+                                    (E2EHelper.drawingAnchorClick 30 25)
+                                , admin.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
+                                , E2EHelper.drawZigzagStroke admin
+                                , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , user.checkView 100 (E2EHelper.expectPolylineCount 1)
+                                , T.checkState
+                                    100
+                                    (\data2 ->
+                                        case E2EHelper.lastGuildChannelMessage data2.backend of
+                                            Just ( _, _, message ) ->
+                                                if List.length (Message.drawing Drawing.UserIconAnchor message).finished == 1 then
+                                                    Ok ()
+
+                                                else
+                                                    Err "Expected the message to contain exactly one finished stroke"
+
+                                            Nothing ->
+                                                Err "Message not found on the backend"
+                                    )
+                                , admin.snapshotView 100 { name = "Drawing stroke drawn with a finger" }
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "No message found to draw on") ]
                     )
                 ]
             )

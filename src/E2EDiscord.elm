@@ -1641,7 +1641,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                             (E2EHelper.drawingAnchorClick 30 25)
                                         , admin.checkView
                                             100
-                                            (Test.Html.Query.has [ Test.Html.Selector.text "Draw with the mouse" ])
+                                            (Test.Html.Query.has [ Test.Html.Selector.text "Start drawing!" ])
                                         , E2EHelper.drawZigzagStroke admin
                                         , admin.checkView 100 (E2EHelper.expectPolylineCount 1)
 
@@ -1665,7 +1665,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         , admin.click 100 (Dom.id "channelHeader_drawOnMessages")
                                         , admin.checkView
                                             100
-                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Draw with the mouse" ])
+                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Start drawing!" ])
                                         ]
 
                                     Nothing ->

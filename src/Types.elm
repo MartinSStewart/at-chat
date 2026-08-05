@@ -260,6 +260,10 @@ type alias LoggedIn2 =
     , games : SeqDict GuildOrDmId Game.Model
     , fileDragOverCount : FileDrag
     , drawingMode : Drawing.Model
+    , -- Messages that arrived in the conversation the user is looking at without it
+      -- scrolling to the bottom, either because the user had scrolled up or because
+      -- the drawing tab held the scroll position
+      newMessagesWhileNotScrolledToBottom : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String
@@ -590,6 +594,7 @@ type FrontendMsg_
     | PressedLoadDebugData
     | GotServiceWorkerData String
     | DrawingMsg Drawing.Msg
+    | PressedNewMessagesWarning
     | LoadedPopSound (Result Audio.LoadError Audio.Source)
     | TypedFriendsSearch String
     | PressedClearFriendsSearch

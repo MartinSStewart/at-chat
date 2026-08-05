@@ -1,8 +1,10 @@
 module E2EMisc exposing
     ( channelSearchTest
+    , dmThreadsTest
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
+    , inactiveDmThreadsAreHiddenTest
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
@@ -476,6 +478,30 @@ profileImageOpensDm config =
         ]
 
 
+checkDmThreadRoute : Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkDmThreadRoute threadMessageIndex model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.route of
+                Route.DmRoute dmRoute ->
+                    case dmRoute.threadRoute of
+                        Route.ViewThreadWithFriends index _ _ ->
+                            if index == threadMessageIndex then
+                                Ok ()
+
+                            else
+                                Err "The DM thread route points at the wrong message"
+
+                        Route.NoThreadWithFriends _ _ ->
+                            Err "Expected the DM route to be viewing a thread"
+
+                _ ->
+                    Err "Expected to be viewing a DM channel"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
 checkDmRouteWithUser : Id.Id Id.UserId -> FrontendModel -> Result String ()
 checkDmRouteWithUser otherUserId model =
     case Audio.userModel model of
@@ -551,6 +577,184 @@ inactiveThreadsAreHiddenTest config =
                 , E2EHelper.writeMessage admin 100 "Hello again from thread!"
                 , admin.navigateBack 100
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                ]
+            )
+        ]
+
+
+{-| DM threads carry their own route, are listed underneath the DM in the friends
+column and notify with the red count that every unread DM message gets.
+-}
+dmThreadsTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+dmThreadsTest config =
+    E2EHelper.startTest
+        "DM threads"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin user ->
+                let
+                    -- The DM holds one unread message and the thread inside it two, so the
+                    -- two notification counts can be told apart. The DM's own icon counts
+                    -- both, which makes three.
+                    threadNotification : Test.Html.Selector.Selector
+                    threadNotification =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2")
+
+                    dmNotification : Test.Html.Selector.Selector
+                    dmNotification =
+                        Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3")
+                in
+                [ -- The user waits on the friends page while the admin writes to them
+                  user.click 100 (Dom.id "guildIcon_showFriends")
+                , E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Hello in a DM!"
+                , E2EHelper.createThread admin (Id.fromInt 0)
+                , E2EHelper.writeMessage admin 100 "First message in the DM thread"
+                , E2EHelper.writeMessage admin 100 "Second message in the DM thread"
+
+                -- Opening a thread from a DM message puts the thread in the route
+                , admin.checkModel 100 (checkDmThreadRoute (Id.fromInt 0))
+
+                -- The thread is listed underneath the DM for both of them. The admin sees
+                -- it under the user (id 2) and the user sees it under the admin (id 0).
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_0_0" ])
+
+                -- Unread thread messages notify the user, who has read none of them
+                , user.checkView 100 (Test.Html.Query.has [ threadNotification, dmNotification ])
+
+                -- The unread overview names the DM after the person on the other end of
+                -- it, and the thread after the message it hangs off
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find
+                            [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0" ]
+                            html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Chat with", Test.Html.Selector.exactText "AT" ]
+                    )
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find
+                            [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0_thread_0" ]
+                            html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Chat with"
+                                , Test.Html.Selector.exactText "AT"
+                                , Test.Html.Selector.exactText "Hello in a DM!"
+                                ]
+                    )
+                , user.snapshotView 100 { name = "User perspective" }
+                , admin.snapshotView 100 { name = "Admin perspective" }
+
+                -- Writing in the thread reaches the other user, and the thread's messages
+                -- stay out of the DM itself
+                , user.click 100 (Dom.id "guild_viewDmThread_0_0")
+                , E2EHelper.hasExactText user [ "First message in the DM thread", "Second message in the DM thread" ]
+                , E2EHelper.writeMessage user 100 "Reply from the user"
+                , E2EHelper.hasExactText admin [ "Reply from the user" ]
+                , user.click 100 (Dom.id "guild_friendLabel_0")
+                , E2EHelper.hasExactText user [ "Hello in a DM!" ]
+                , E2EHelper.hasNotExactText user [ "First message in the DM thread", "Reply from the user" ]
+
+                -- Reading the thread took its notification away. The DM's own message is
+                -- still unread until the DM itself is opened, so its icon drops from three
+                -- to one instead of disappearing.
+                , user.checkView 100 (Test.Html.Query.hasNot [ threadNotification, dmNotification ])
+
+                -- The thread is stored on the backend, so loading its url from scratch
+                -- shows the messages and lists the thread under the DM again
+                , T.connectFrontend
+                    100
+                    E2EHelper.sessionId1
+                    (Route.encode
+                        (Route.DmRoute
+                            { channelId = DmChannelId.fromUserIds (Id.fromInt 0) (Id.fromInt 2)
+                            , threadRoute = Route.ViewThreadWithFriends (Id.fromInt 0) Nothing Route.HideMembersTab
+                            , tab = Nothing
+                            }
+                        )
+                    )
+                    E2EHelper.desktopWindow
+                    (\userReload ->
+                        [ T.andThen
+                            10
+                            (\data ->
+                                [ userReload.portEvent
+                                    10
+                                    "load_startup_data_from_js"
+                                    (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                                ]
+                            )
+                        , E2EHelper.hasExactText
+                            userReload
+                            [ "First message in the DM thread", "Reply from the user" ]
+                        , userReload.checkView
+                            2000
+                            (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_0_0" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+{-| Just like a guild channel's threads, a DM thread drops out of the friends
+column once it's been quiet for a week, and comes back as soon as it's opened
+again.
+-}
+inactiveDmThreadsAreHiddenTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+inactiveDmThreadsAreHiddenTest config =
+    E2EHelper.startTest
+        "Inactive DM threads are hidden"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.openDm admin 100 "2"
+                , E2EHelper.writeMessage admin 100 "Hello in a DM!"
+                , E2EHelper.createThread admin (Id.fromInt 0)
+                , E2EHelper.writeMessage admin 100 "Hello in the thread!"
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
+                ]
+            )
+        , T.connectFrontend
+            (Duration.days 7.1 |> Duration.inMilliseconds)
+            E2EHelper.sessionId0
+            "/"
+            E2EHelper.desktopWindow
+            (\admin ->
+                [ T.andThen
+                    10
+                    (\data ->
+                        [ admin.portEvent
+                            10
+                            "load_startup_data_from_js"
+                            (E2EHelper.startupDataJson data.time E2EHelper.firefoxDesktop)
+                        ]
+                    )
+
+                -- A week without a message and nothing unread in it, so the thread is gone
+                -- from the column
+                , admin.checkView
+                    2000
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
+
+                -- Opening it from the DM message it hangs off puts it back
+                , admin.click 100 (Dom.id "guild_friendLabel_2")
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
+                , E2EHelper.hasExactText admin [ "Hello in the thread!" ]
+                , admin.snapshotView 100 { name = "Inactive threads are hidden" }
                 ]
             )
         ]

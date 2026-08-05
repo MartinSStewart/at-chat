@@ -76,6 +76,7 @@ module E2EHelper exposing
     , regularDiscordChannelCreateEvent
     , regularDiscordChannelId
     , safariIphone
+    , scrollToBottom
     , scrollToMiddle
     , scrollToTop
     , secondDiscordToken
@@ -1665,6 +1666,26 @@ scrollToMiddle user =
             [ ( "target"
               , Json.Encode.object
                     [ ( "scrollTop", Json.Encode.float 1000 )
+                    , ( "scrollHeight", Json.Encode.float 2000 )
+                    , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
+                    ]
+              )
+            ]
+        )
+
+
+scrollToBottom :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
+scrollToBottom user =
+    user.custom
+        100
+        Pages.Guild.conversationContainerId
+        "scroll"
+        (Json.Encode.object
+            [ ( "target"
+              , Json.Encode.object
+                    [ ( "scrollTop", Json.Encode.float (2000 - (desktopWindow.height - 40)) )
                     , ( "scrollHeight", Json.Encode.float 2000 )
                     , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
                     ]
@@ -3619,13 +3640,13 @@ drawZigzagStroke :
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 drawZigzagStroke client =
     T.group
-        [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 50 30)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 80 60)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 110 30)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 140 60)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 30)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 200 60)
-        , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+        [ client.custom 100 Drawing.inputOverlayId "pointerdown" (drawingPointerEvent 50 30)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 80 60)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 110 30)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 140 60)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 170 30)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 200 60)
+        , client.custom 100 Drawing.inputOverlayId "pointerup" (Json.Encode.object [])
         ]
 
 
@@ -3639,13 +3660,13 @@ drawWideZigzagStroke :
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
 drawWideZigzagStroke client =
     T.group
-        [ client.custom 100 Drawing.inputOverlayId "mousedown" (drawingMouseEvent 40 130)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 170 220)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 300 130)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 430 220)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 560 130)
-        , client.custom 30 Drawing.inputOverlayId "mousemove" (drawingMouseEvent 620 220)
-        , client.custom 100 Drawing.inputOverlayId "mouseup" (Json.Encode.object [])
+        [ client.custom 100 Drawing.inputOverlayId "pointerdown" (drawingPointerEvent 40 130)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 170 220)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 300 130)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 430 220)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 560 130)
+        , client.custom 30 Drawing.inputOverlayId "pointermove" (drawingPointerEvent 620 220)
+        , client.custom 100 Drawing.inputOverlayId "pointerup" (Json.Encode.object [])
         ]
 
 
@@ -3655,10 +3676,11 @@ expectPolylineCount count query =
         |> Test.Html.Query.count (Expect.equal count)
 
 
-drawingMouseEvent : Float -> Float -> Json.Encode.Value
-drawingMouseEvent x y =
+drawingPointerEvent : Float -> Float -> Json.Encode.Value
+drawingPointerEvent x y =
     Json.Encode.object
         [ ( "button", Json.Encode.int 0 )
+        , ( "isPrimary", Json.Encode.bool True )
         , ( "clientX", Json.Encode.float x )
         , ( "clientY", Json.Encode.float y )
         ]

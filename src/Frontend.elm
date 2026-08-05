@@ -524,6 +524,7 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
             , games = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
+            , newMessagesWhileNotScrolledToBottom = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
@@ -1834,7 +1835,11 @@ updateLoaded msg model =
                                 Command.none
 
                         ScrolledToBottom ->
-                            ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
+                            -- Scrolling to the bottom yourself means you've seen the messages
+                            -- that arrived while the conversation stayed where it was
+                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrolledToBottom = 0 }
+                            , Command.none
+                            )
 
                         ScrolledToMiddle ->
                             ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
@@ -2807,10 +2812,10 @@ updateLoaded msg model =
                                 Ports.requestNotificationPermission
 
                             PushNotifications ->
-                                Command.batch
-                                    [ Ports.requestNotificationPermission
-                                    , Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
-                                    ]
+                                -- Registering the push subscription asks for notification permission
+                                -- itself, since Safari on iOS needs that to happen before it awaits
+                                -- anything. Asking here too would race it for the same prompt.
+                                Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
                         )
                 )
                 model
@@ -4463,6 +4468,22 @@ updateLoaded msg model =
         DrawingMsg drawingMsg ->
             updateDrawing drawingMsg model
 
+        PressedNewMessagesWarning ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | newMessagesWhileNotScrolledToBottom = 0
+
+                        -- The conversation scrolls away from the anchor the user picked
+                        -- so there's nothing left to draw on
+                        , drawingMode = Drawing.NoSelectedAnchor
+                        , channelScrollPosition = ScrolledToBottom
+                      }
+                    , Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                    )
+                )
+                model
+
         LoadedPopSound result ->
             ( { model | popSound = result }, Command.none )
 
@@ -4999,10 +5020,10 @@ selectDrawingAnchor guildOrDmId anchorType elementPosition anchorHalfSize pointS
         model
 
 
-{-| Convert a mouse position (in viewport css pixels) into a point relative to the
-selected anchor's top left corner, in the anchor's coordinate space. When zoomed
-in the conversation is magnified around the center of the anchor, so the mouse
-position is mapped back through that same transform.
+{-| Convert a pointer position (in viewport css pixels) into a point relative to
+the selected anchor's top left corner, in the anchor's coordinate space. When
+zoomed in the conversation is magnified around the center of the anchor, so the
+pointer position is mapped back through that same transform.
 -}
 anchorRelativePoint : Drawing.SelectedAnchorData -> Float -> Float -> ( Float, Float )
 anchorRelativePoint selected x y =
@@ -5023,135 +5044,140 @@ updateDrawing : Drawing.Msg -> LoadedFrontend -> ( LoadedFrontend, Command Front
 updateDrawing drawingMsg model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
-            case ( drawingMsg, loggedIn.drawingMode ) of
-                ( Drawing.MouseDown x y, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Nothing ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_Drawing
-                                    selected.guildOrDmId
-                                    selected.anchorType
-                                    (Drawing.StartStroke
-                                        (anchorRelativePoint selected x y)
-                                    )
-                                    |> Just
-                                )
-                                { loggedIn
+            case loggedIn.drawingMode of
+                Drawing.SelectedAnchor selected ->
+                    case drawingMsg of
+                        Drawing.PointerDown x y ->
+                            case selected.stroke of
+                                Nothing ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_Drawing
+                                            selected.guildOrDmId
+                                            selected.anchorType
+                                            (Drawing.StartStroke
+                                                (anchorRelativePoint selected x y)
+                                            )
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | drawingMode =
+                                                Drawing.SelectedAnchor { selected | stroke = Just { unsent = [] } }
+                                        }
+                                        Command.none
+
+                                Just _ ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PointerMoved x y ->
+                            case selected.stroke of
+                                Just stroke ->
+                                    let
+                                        unsent : List ( Float, Float )
+                                        unsent =
+                                            anchorRelativePoint selected x y :: stroke.unsent
+
+                                        setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
+                                        setStroke newStroke =
+                                            { loggedIn
+                                                | drawingMode =
+                                                    Drawing.SelectedAnchor { selected | stroke = newStroke }
+                                            }
+                                    in
+                                    -- Points are sent in small batches to avoid sending a
+                                    -- message to the backend for every pointermove event.
+                                    if List.length unsent >= 4 then
+                                        FrontendExtra.handleLocalChange
+                                            model.time
+                                            (case List.Nonempty.fromList (List.reverse unsent) of
+                                                Just points ->
+                                                    Local_Drawing
+                                                        selected.guildOrDmId
+                                                        selected.anchorType
+                                                        (Drawing.ContinueStroke points)
+                                                        |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                            )
+                                            (setStroke (Just { unsent = [] }))
+                                            Command.none
+
+                                    else
+                                        ( setStroke (Just { unsent = unsent }), Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PointerUp ->
+                            case selected.stroke of
+                                Just stroke ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_Drawing
+                                            selected.guildOrDmId
+                                            selected.anchorType
+                                            (Drawing.EndStroke (List.reverse stroke.unsent))
+                                            |> Just
+                                        )
+                                        { loggedIn
+                                            | drawingMode =
+                                                Drawing.SelectedAnchor { selected | stroke = Nothing }
+                                        }
+                                        Command.none
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        Drawing.PressedUndo ->
+                            FrontendExtra.drawingUndo selected loggedIn model
+
+                        Drawing.PressedRedo ->
+                            FrontendExtra.drawingRedo selected loggedIn model
+
+                        Drawing.PressedZoom ->
+                            if selected.zoom == 1 then
+                                ( { loggedIn
                                     | drawingMode =
-                                        Drawing.SelectedAnchor { selected | stroke = Just { unsent = [] } }
-                                }
-                                Command.none
+                                        Drawing.SelectedAnchor
+                                            { selected | zoom = Drawing.zoomLevel, zoomContainer = Nothing }
+                                  }
+                                  -- Measure the conversation container so the magnified view can be
+                                  -- pinned on the right spot of the anchor.
+                                , Dom.getElement Pages.Guild.conversationContainerId
+                                    |> Task.attempt
+                                        (\result ->
+                                            (case result of
+                                                Ok { element } ->
+                                                    Just { x = element.x, y = element.y, width = element.width, height = element.height }
 
-                        Just _ ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.MouseMoved x y, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Just stroke ->
-                            let
-                                unsent : List ( Float, Float )
-                                unsent =
-                                    anchorRelativePoint selected x y :: stroke.unsent
-
-                                setStroke : Maybe Drawing.ActiveStroke -> LoggedIn2
-                                setStroke newStroke =
-                                    { loggedIn
-                                        | drawingMode =
-                                            Drawing.SelectedAnchor { selected | stroke = newStroke }
-                                    }
-                            in
-                            -- Points are sent in small batches to avoid sending a
-                            -- message to the backend for every mousemove event.
-                            if List.length unsent >= 4 then
-                                FrontendExtra.handleLocalChange
-                                    model.time
-                                    (case List.Nonempty.fromList (List.reverse unsent) of
-                                        Just points ->
-                                            Local_Drawing
-                                                selected.guildOrDmId
-                                                selected.anchorType
-                                                (Drawing.ContinueStroke points)
-                                                |> Just
-
-                                        Nothing ->
-                                            Nothing
-                                    )
-                                    (setStroke (Just { unsent = [] }))
-                                    Command.none
+                                                Err _ ->
+                                                    Nothing
+                                            )
+                                                |> Drawing.GotZoomContainer
+                                                |> DrawingMsg
+                                        )
+                                )
 
                             else
-                                ( setStroke (Just { unsent = unsent }), Command.none )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.MouseUp, Drawing.SelectedAnchor selected ) ->
-                    case selected.stroke of
-                        Just stroke ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_Drawing
-                                    selected.guildOrDmId
-                                    selected.anchorType
-                                    (Drawing.EndStroke (List.reverse stroke.unsent))
-                                    |> Just
-                                )
-                                { loggedIn
+                                ( { loggedIn
                                     | drawingMode =
-                                        Drawing.SelectedAnchor { selected | stroke = Nothing }
-                                }
-                                Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-
-                ( Drawing.PressedUndo, Drawing.SelectedAnchor selected ) ->
-                    FrontendExtra.drawingUndo selected loggedIn model
-
-                ( Drawing.PressedRedo, Drawing.SelectedAnchor selected ) ->
-                    FrontendExtra.drawingRedo selected loggedIn model
-
-                ( Drawing.PressedZoom, Drawing.SelectedAnchor selected ) ->
-                    if selected.zoom == 1 then
-                        ( { loggedIn
-                            | drawingMode =
-                                Drawing.SelectedAnchor
-                                    { selected | zoom = Drawing.zoomLevel, zoomContainer = Nothing }
-                          }
-                          -- Measure the conversation container so the magnified view can be
-                          -- pinned on the right spot of the anchor.
-                        , Dom.getElement Pages.Guild.conversationContainerId
-                            |> Task.attempt
-                                (\result ->
-                                    (case result of
-                                        Ok { element } ->
-                                            Just { x = element.x, y = element.y, width = element.width, height = element.height }
-
-                                        Err _ ->
-                                            Nothing
-                                    )
-                                        |> Drawing.GotZoomContainer
-                                        |> DrawingMsg
+                                        Drawing.SelectedAnchor { selected | zoom = 1, zoomContainer = Nothing }
+                                  }
+                                , Command.none
                                 )
-                        )
 
-                    else
-                        ( { loggedIn
-                            | drawingMode =
-                                Drawing.SelectedAnchor { selected | zoom = 1, zoomContainer = Nothing }
-                          }
-                        , Command.none
-                        )
+                        Drawing.GotZoomContainer maybeContainer ->
+                            ( { loggedIn
+                                | drawingMode = Drawing.SelectedAnchor { selected | zoomContainer = maybeContainer }
+                              }
+                            , Command.none
+                            )
 
-                ( Drawing.GotZoomContainer maybeContainer, Drawing.SelectedAnchor selected ) ->
-                    ( { loggedIn
-                        | drawingMode = Drawing.SelectedAnchor { selected | zoomContainer = maybeContainer }
-                      }
-                    , Command.none
-                    )
+                        Drawing.PressedDone ->
+                            ( { loggedIn | drawingMode = Drawing.NoSelectedAnchor }, Command.none )
 
-                ( _, Drawing.NoSelectedAnchor ) ->
+                Drawing.NoSelectedAnchor ->
                     ( loggedIn, Command.none )
         )
         model
@@ -6421,62 +6447,74 @@ dragTarget : NonemptyDict Int Touch -> LoadedFrontend -> Maybe DragTarget
 dragTarget startTouches model =
     case model.loginStatus of
         LoggedIn loggedIn ->
-            let
-                isMobile =
-                    MyUi.isMobile model
+            case loggedIn.drawingMode of
+                -- A finger drawing a stroke would otherwise drag the channel sidebar
+                -- along with it
+                Drawing.SelectedAnchor _ ->
+                    Nothing
 
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
-                centroid : Coord CssPixels
-                centroid =
-                    Touch.touchCentroid startTouches
-
-                insideBoard : Bool
-                insideBoard =
-                    case FrontendExtra.currentGame local model of
-                        Just { guildOrDmId, match, matchId } ->
-                            -- The board is laid out below the safe-area inset, so undo it before the
-                            -- hit-test (the call thumbnail above is positioned including the inset, so
-                            -- its check keeps the raw centroid).
-                            Game.insideBoard
-                                model.windowSize
-                                (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
-                                guildOrDmId
-                                matchId
-                                match
-                                loggedIn.games
-
-                        Nothing ->
-                            False
-            in
-            case Call.displayMode local.localUser.session.userId model.route local.calls of
-                Call.ShowLocalVideoAndCallThumbnail _ ->
-                    if Call.insideThumbnail centroid model loggedIn.voiceChat then
-                        Just Drag_CallThumbnail
-
-                    else if insideBoard then
-                        Just Drag_Game
-
-                    else if isMobile then
-                        Just Drag_Channel
-
-                    else
-                        Nothing
-
-                _ ->
-                    if insideBoard then
-                        Just Drag_Game
-
-                    else if isMobile then
-                        Just Drag_Channel
-
-                    else
-                        Nothing
+                Drawing.NoSelectedAnchor ->
+                    dragTargetHelper startTouches loggedIn model
 
         NotLoggedIn _ ->
             Nothing
+
+
+dragTargetHelper : NonemptyDict Int Touch -> LoggedIn2 -> LoadedFrontend -> Maybe DragTarget
+dragTargetHelper startTouches loggedIn model =
+    let
+        isMobile =
+            MyUi.isMobile model
+
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+
+        centroid : Coord CssPixels
+        centroid =
+            Touch.touchCentroid startTouches
+
+        insideBoard : Bool
+        insideBoard =
+            case FrontendExtra.currentGame local model of
+                Just { guildOrDmId, match, matchId } ->
+                    -- The board is laid out below the safe-area inset, so undo it before the
+                    -- hit-test (the call thumbnail above is positioned including the inset, so
+                    -- its check keeps the raw centroid).
+                    Game.insideBoard
+                        model.windowSize
+                        (Touch.touchCentroid (Touch.removeSafeAreaTopInset model.startupData.safeAreaInsetTop startTouches))
+                        guildOrDmId
+                        matchId
+                        match
+                        loggedIn.games
+
+                Nothing ->
+                    False
+    in
+    case Call.displayMode local.localUser.session.userId model.route local.calls of
+        Call.ShowLocalVideoAndCallThumbnail _ ->
+            if Call.insideThumbnail centroid model loggedIn.voiceChat then
+                Just Drag_CallThumbnail
+
+            else if insideBoard then
+                Just Drag_Game
+
+            else if isMobile then
+                Just Drag_Channel
+
+            else
+                Nothing
+
+        _ ->
+            if insideBoard then
+                Just Drag_Game
+
+            else if isMobile then
+                Just Drag_Channel
+
+            else
+                Nothing
 
 
 dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode
@@ -7037,6 +7075,21 @@ updateLoadedFromBackend msg model =
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
+                                        scrolledToBottom : Bool
+                                        scrolledToBottom =
+                                            -- The drawing tab holds the scroll position, otherwise the
+                                            -- new message would throw off the stroke the user is drawing
+                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+
+                                        isViewingConversation : Bool
+                                        isViewingConversation =
+                                            Route.toGuildOrDmId local.localUser.session.userId model.route
+                                                == Just
+                                                    ( GuildOrDmId guildOrDmId
+                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                                                    )
+
                                         helper channel =
                                             Command.batch
                                                 [ FrontendExtra.playNotificationSound
@@ -7047,22 +7100,35 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                                , if scrolledToBottom then
+                                                    if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                        else
-                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                    else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToMiddle ->
-                                                        Command.none
-
-                                                    ScrolledToTop ->
-                                                        Command.none
+                                                  else
+                                                    Command.none
                                                 ]
                                     in
-                                    ( loggedIn2
+                                    ( if isViewingConversation && not scrolledToBottom then
+                                        { loggedIn2
+                                            | newMessagesWhileNotScrolledToBottom =
+                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                            , channelScrollPosition =
+                                                case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        ScrolledToMiddle
+
+                                                    ScrolledToTop ->
+                                                        loggedIn2.channelScrollPosition
+
+                                                    ScrolledToMiddle ->
+                                                        loggedIn2.channelScrollPosition
+                                        }
+
+                                      else
+                                        loggedIn2
                                     , case guildOrDmId of
                                         GuildOrDmId_Guild guildId channelId ->
                                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -7083,6 +7149,21 @@ updateLoadedFromBackend msg model =
 
                                 Server_Discord_SendMessage _ guildOrDmId _ content maybeRepliedTo _ _ ->
                                     let
+                                        scrollsToBottom : Bool
+                                        scrollsToBottom =
+                                            -- The drawing tab holds the scroll position, otherwise the
+                                            -- new message would throw off the stroke the user is drawing
+                                            (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
+                                                && (loggedIn2.channelScrollPosition == ScrolledToBottom)
+
+                                        isViewingConversation : Bool
+                                        isViewingConversation =
+                                            Route.toGuildOrDmId local.localUser.session.userId model.route
+                                                == Just
+                                                    ( DiscordGuildOrDmId guildOrDmId
+                                                    , Id.threadRouteWithoutMaybeMessage maybeRepliedTo
+                                                    )
+
                                         helper senderId channel =
                                             Command.batch
                                                 [ FrontendExtra.playNotificationSoundForDiscordMessage
@@ -7093,22 +7174,35 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , case loggedIn2.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
+                                                , if scrollsToBottom then
+                                                    if MyUi.isMobile model then
+                                                        Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                        else
-                                                            Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
+                                                    else
+                                                        Scroll.toBottomOfChannel Pages.Guild.conversationContainerId SetScrollToBottom
 
-                                                    ScrolledToMiddle ->
-                                                        Command.none
-
-                                                    ScrolledToTop ->
-                                                        Command.none
+                                                  else
+                                                    Command.none
                                                 ]
                                     in
-                                    ( loggedIn2
+                                    ( if isViewingConversation && not scrollsToBottom then
+                                        { loggedIn2
+                                            | newMessagesWhileNotScrolledToBottom =
+                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                            , channelScrollPosition =
+                                                case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        ScrolledToMiddle
+
+                                                    ScrolledToTop ->
+                                                        loggedIn2.channelScrollPosition
+
+                                                    ScrolledToMiddle ->
+                                                        loggedIn2.channelScrollPosition
+                                        }
+
+                                      else
+                                        loggedIn2
                                     , case guildOrDmId of
                                         DiscordGuildOrDmId_Guild senderId guildId channelId ->
                                             case LocalState.getDiscordGuildAndChannel guildId channelId local of

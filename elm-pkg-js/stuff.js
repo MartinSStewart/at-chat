@@ -14,6 +14,18 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
+async function requestNotificationPermission(app) {
+    if (!("Notification" in window)) {
+        app.ports.check_notification_permission_from_js.send("unsupported");
+        return "unsupported";
+    }
+
+    const permission = await Notification.requestPermission();
+    app.ports.check_notification_permission_from_js.send(permission);
+
+    return permission;
+}
+
 async function loadAudio(url, context, sounds) {
     try {
         const response = await fetch("/" + url + ".mp3");
@@ -416,9 +428,16 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+    app.ports.register_push_subscription_to_js.subscribe(async (publicKey) => {
         if (navigator.serviceWorker) {
             try {
+                const permission = await requestNotificationPermission(app);
+
+                if (permission !== "granted") {
+                    app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ "Notification permission is " + permission ]});
+                    return;
+                }
+
                 navigator.serviceWorker.ready
                 .then(function(registration) {
 
@@ -614,15 +633,15 @@ exports.init = async function init(app)
     });
 
     app.ports.request_notification_permission.subscribe((a) => {
-        if ("Notification" in window) {
-            Notification.requestPermission().then((permission) => {
-                if (permission === "granted") {
-                    const notification = new Notification("Notifications enabled");
-                }
-                app.ports.check_notification_permission_from_js.send(permission);
-            });
-        } else {
-            app.ports.check_notification_permission_from_js.send("unsupported");
+        const permission = requestNotificationPermission(app);
+        if (permission === "granted") {
+            // iOS only lets the service worker create notifications, so this throws there. It's
+            // only a confirmation that permission went through, so carry on without it.
+            try {
+                new Notification("Notifications enabled");
+            } catch (error) {
+                console.log(error);
+            }
         }
     })
 

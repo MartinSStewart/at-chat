@@ -4,6 +4,7 @@ module Scroll exposing
     , decodeScrollToBottom
     , smoothScroll
     , smoothScrollBy
+    , smoothScrollTo
     , toBottomOfChannel
     , toBottomOfChannelIfAtBottom
     , toBottomOfChannelSmooth
@@ -76,6 +77,28 @@ smoothScroll conversationContainerId targetId =
                         viewport.x
                         viewport.y
                         (viewport.y + element.y - MyUi.channelHeaderHeight)
+            )
+
+
+{-| Animates the whole way to the target. `smoothScroll` jumps instantly when the target starts
+out at or below the top of the window, which is fine when we've just switched channel and there's
+nothing on screen worth following, but jarring when the user is staying put and only moving to
+another message in the conversation they're already reading.
+-}
+smoothScrollTo : HtmlId -> HtmlId -> Task FrontendOnly Dom.Error ()
+smoothScrollTo conversationContainerId targetId =
+    Task.map2
+        Tuple.pair
+        (Dom.getElement targetId)
+        (Dom.getViewportOf conversationContainerId)
+        |> Task.andThen
+            (\( { element }, { viewport } ) ->
+                smoothScrollY
+                    conversationContainerId
+                    0
+                    viewport.x
+                    viewport.y
+                    (viewport.y + element.y - MyUi.channelHeaderHeight)
             )
 
 

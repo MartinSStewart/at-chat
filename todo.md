@@ -2,7 +2,6 @@
 * Typing indicator not appearing for Discord guilds (won't do, due to server overhead or added complexity of
   managing individual Discord guild subscriptions)
 * Changing tabs and then returning to a channel causes it to unload all old messages
-* Two messages get sent if a linked Discord user starts a thread
 * Finding an emoji via text search and then trying to click it fails on mobile
 * Push notification sent even when viewing DM channel
 * Login/signup button doesn't work if failed to link Discord message is visible
@@ -31,6 +30,8 @@
 * Adding images to an existing Discord message doesn't work
 * Mouse hover doesn't trigger an animated image in unreadOverview
 * A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
+* Two messages get sent and it seems to happen for Discord and normal users. In the latest case, it was in a DM and the
+  user saw duplicated messages for both themselves and the other user.
 
 Requested features:
 
