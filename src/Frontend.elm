@@ -524,7 +524,7 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
             , games = SeqDict.empty
             , fileDragOverCount = NoFileDrag Nothing
             , drawingMode = Drawing.init
-            , newMessagesWhileNotScrollToBottom = 0
+            , newMessagesWhileNotScrolledToBottom = 0
             , showInviteLinkQrCode = Nothing
             , friendsSearch = ""
             , channelSearch = ""
@@ -1837,7 +1837,7 @@ updateLoaded msg model =
                         ScrolledToBottom ->
                             -- Scrolling to the bottom yourself means you've seen the messages
                             -- that arrived while the conversation stayed where it was
-                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrollToBottom = 0 }
+                            ( { loggedIn | channelScrollPosition = scrollPosition, newMessagesWhileNotScrolledToBottom = 0 }
                             , Command.none
                             )
 
@@ -4472,7 +4472,7 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
-                        | newMessagesWhileNotScrollToBottom = 0
+                        | newMessagesWhileNotScrolledToBottom = 0
 
                         -- The conversation scrolls away from the anchor the user picked
                         -- so there's nothing left to draw on
@@ -7058,8 +7058,8 @@ updateLoadedFromBackend msg model =
 
                                 Server_SendMessage senderId _ _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
-                                        scrollsToBottom : Bool
-                                        scrollsToBottom =
+                                        scrolledToBottom : Bool
+                                        scrolledToBottom =
                                             -- The drawing tab holds the scroll position, otherwise the
                                             -- new message would throw off the stroke the user is drawing
                                             (Route.toChannelHeaderTab model.route /= Just ChannelHeaderTab_Draw)
@@ -7083,7 +7083,7 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , if scrollsToBottom then
+                                                , if scrolledToBottom then
                                                     if MyUi.isMobile model then
                                                         Scroll.toBottomOfChannelSmooth Pages.Guild.conversationContainerId SetScrollToBottom
 
@@ -7094,10 +7094,21 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                                 ]
                                     in
-                                    -- Messages that didn't scroll the conversation are counted so a
-                                    -- warning above the message input can offer to jump to them
-                                    ( if isViewingConversation && not scrollsToBottom then
-                                        { loggedIn2 | newMessagesWhileNotScrollToBottom = loggedIn2.newMessagesWhileNotScrollToBottom + 1 }
+                                    ( if isViewingConversation && not scrolledToBottom then
+                                        { loggedIn2
+                                            | newMessagesWhileNotScrolledToBottom =
+                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                            , channelScrollPosition =
+                                                case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        ScrolledToMiddle
+
+                                                    ScrolledToTop ->
+                                                        loggedIn2.channelScrollPosition
+
+                                                    ScrolledToMiddle ->
+                                                        loggedIn2.channelScrollPosition
+                                        }
 
                                       else
                                         loggedIn2
@@ -7157,10 +7168,21 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                                 ]
                                     in
-                                    -- Messages that didn't scroll the conversation are counted so a
-                                    -- warning above the message input can offer to jump to them
                                     ( if isViewingConversation && not scrollsToBottom then
-                                        { loggedIn2 | newMessagesWhileNotScrollToBottom = loggedIn2.newMessagesWhileNotScrollToBottom + 1 }
+                                        { loggedIn2
+                                            | newMessagesWhileNotScrolledToBottom =
+                                                loggedIn2.newMessagesWhileNotScrolledToBottom + 1
+                                            , channelScrollPosition =
+                                                case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        ScrolledToMiddle
+
+                                                    ScrolledToTop ->
+                                                        loggedIn2.channelScrollPosition
+
+                                                    ScrolledToMiddle ->
+                                                        loggedIn2.channelScrollPosition
+                                        }
 
                                       else
                                         loggedIn2

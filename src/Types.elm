@@ -263,7 +263,7 @@ type alias LoggedIn2 =
     , -- Messages that arrived in the conversation the user is looking at without it
       -- scrolling to the bottom, either because the user had scrolled up or because
       -- the drawing tab held the scroll position
-      newMessagesWhileNotScrollToBottom : Int
+      newMessagesWhileNotScrolledToBottom : Int
     , showInviteLinkQrCode : Maybe (SecretId InviteLinkId)
     , friendsSearch : String
     , channelSearch : String

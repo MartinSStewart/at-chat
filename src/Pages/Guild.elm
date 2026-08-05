@@ -4418,7 +4418,7 @@ deselects the drawing anchor and scrolls to the bottom.
 -}
 newMessagesView : LoadedFrontend -> LoggedIn2 -> Element FrontendMsg_
 newMessagesView model loggedIn =
-    if loggedIn.newMessagesWhileNotScrollToBottom > 0 then
+    if loggedIn.newMessagesWhileNotScrolledToBottom > 0 then
         MyUi.elButton
             newMessagesId
             PressedNewMessagesWarning
@@ -4434,11 +4434,11 @@ newMessagesView model loggedIn =
             (Ui.Prose.paragraph
                 []
                 [ Ui.text
-                    ((if loggedIn.newMessagesWhileNotScrollToBottom == 1 then
+                    ((if loggedIn.newMessagesWhileNotScrolledToBottom == 1 then
                         "1 new message"
 
                       else
-                        String.fromInt loggedIn.newMessagesWhileNotScrollToBottom ++ " new messages"
+                        String.fromInt loggedIn.newMessagesWhileNotScrolledToBottom ++ " new messages"
                      )
                         ++ ". Click here to jump to the bottom."
                     )

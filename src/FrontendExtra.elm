@@ -1455,7 +1455,7 @@ routeRequest previousRoute newRoute model =
                                     Drawing.init
                             , -- The new message warning belongs to the conversation that was
                               -- left behind, and opening another one starts at the bottom
-                              newMessagesWhileNotScrollToBottom = 0
+                              newMessagesWhileNotScrolledToBottom = 0
                         }
                         Command.none
                 )
