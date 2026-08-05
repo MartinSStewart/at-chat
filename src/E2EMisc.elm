@@ -626,6 +626,30 @@ dmThreadsTest config =
 
                 -- Unread thread messages notify the user, who has read none of them
                 , user.checkView 100 (Test.Html.Query.has [ threadNotification, dmNotification ])
+
+                -- The unread overview names the DM after the person on the other end of
+                -- it, and the thread after the message it hangs off
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find
+                            [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0" ]
+                            html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Chat with", Test.Html.Selector.exactText "AT" ]
+                    )
+                , user.checkView
+                    100
+                    (\html ->
+                        Test.Html.Query.find
+                            [ Test.Html.Selector.id "guild_unreadOverviewOpenChannel_dm_0_thread_0" ]
+                            html
+                            |> Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Chat with"
+                                , Test.Html.Selector.exactText "AT"
+                                , Test.Html.Selector.exactText "Hello in a DM!"
+                                ]
+                    )
                 , user.snapshotView 100 { name = "User perspective" }
                 , admin.snapshotView 100 { name = "Admin perspective" }
 

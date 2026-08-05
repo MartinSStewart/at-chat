@@ -739,7 +739,7 @@ unreadOverviewChannels local allDiscordUsers =
                         unreadMessages (SeqDict.get guildOrDmId currentUser.lastViewed) dmChannel
                             |> Maybe.map
                                 (\unread ->
-                                    [ { source = User.toStringAlt otherUserId local.localUser |> Ui.text
+                                    [ { source = dmSource otherUserId local.localUser
                                       , route =
                                             DmRoute
                                                 { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -768,7 +768,11 @@ unreadOverviewChannels local allDiscordUsers =
                                         thread
                                         |> Maybe.map
                                             (\unread ->
-                                                { source = Ui.text (User.toStringAlt otherUserId local.localUser)
+                                                { source =
+                                                    dmThreadSource
+                                                        otherUserId
+                                                        local.localUser
+                                                        (threadPreviewText allUsers threadId dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -948,6 +952,34 @@ threadSource guildName channelName threadName =
             [ Ui.text (GuildName.toString guildName)
             , Ui.text "/"
             , Ui.row [ Ui.width Ui.shrink ] [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channelName) ]
+            , Ui.text "/"
+            ]
+        , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
+        ]
+
+
+{-| A DM is named after the person on the other end of it. Only their name is bold,
+so it stands out from the words around it the way a guild and channel name does.
+-}
+dmSource : Id UserId -> LocalUser -> Element msg
+dmSource otherUserId localUser =
+    Ui.row
+        [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noShrinking ]
+        [ Ui.el [ Ui.Font.weight 400, Ui.width Ui.shrink ] (Ui.text "Chat with")
+        , Ui.text (User.toStringAlt otherUserId localUser)
+        ]
+
+
+{-| A thread in a DM. Like threadSource, the DM keeps its full width and the thread
+name is the part that gets cut short when there isn't enough room.
+-}
+dmThreadSource : Id UserId -> LocalUser -> String -> Element msg
+dmThreadSource otherUserId localUser threadName =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, MyUi.noShrinking ]
+            [ dmSource otherUserId localUser
             , Ui.text "/"
             ]
         , Ui.el [ Ui.clipWithEllipsis, MyUi.hoverText threadName ] (Ui.text threadName)
