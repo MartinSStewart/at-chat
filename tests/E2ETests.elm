@@ -2281,7 +2281,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_131")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_132")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
                         , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -2296,7 +2296,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
                         , tabA.click 100 (Dom.id "emoji_category_People & Body")
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_351")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_1430")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "👍" ])
                         , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")

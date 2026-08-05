@@ -580,7 +580,7 @@ test =
                 , NormalText '/' "¯"
                 ]
             )
-            "¯\\_(ツ)_/¯"
+            "¯\\\\\\_(ツ)\\_/¯"
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
             , selectionHighlightTest "a*bold*c"
