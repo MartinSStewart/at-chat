@@ -14,29 +14,14 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
-// Ask the user for notification permission and tell Elm what they picked. Safari on iOS only
-// opens the prompt while a user gesture is still active, so callers have to reach this before
-// awaiting anything else in a click handler.
 async function requestNotificationPermission(app) {
     if (!("Notification" in window)) {
         app.ports.check_notification_permission_from_js.send("unsupported");
         return "unsupported";
     }
 
-    // Nothing to prompt for once the user has answered: this resolves with the existing
-    // permission right away, so it's safe to call on every attempt to enable notifications.
     const permission = await Notification.requestPermission();
     app.ports.check_notification_permission_from_js.send(permission);
-
-    if (permission === "granted") {
-        // iOS only lets the service worker create notifications, so this throws there. It's
-        // only a confirmation that permission went through, so carry on without it.
-        try {
-            new Notification("Notifications enabled");
-        } catch (error) {
-            console.log(error);
-        }
-    }
 
     return permission;
 }
@@ -446,13 +431,6 @@ exports.init = async function init(app)
     app.ports.register_push_subscription_to_js.subscribe(async (publicKey) => {
         if (navigator.serviceWorker) {
             try {
-                // pushManager.subscribe() opens the notification permission prompt when permission
-                // hasn't been granted yet, and Safari on iOS only allows that while the click that
-                // got us here is still active ("Push notification prompting can only be done from a
-                // user gesture"). Awaiting navigator.serviceWorker.ready below outlives the click,
-                // so ask for permission here instead: this call still happens inside the gesture,
-                // and once permission is granted subscribe() has nothing to prompt for and iOS lets
-                // it run without one.
                 const permission = await requestNotificationPermission(app);
 
                 if (permission !== "granted") {
@@ -655,7 +633,16 @@ exports.init = async function init(app)
     });
 
     app.ports.request_notification_permission.subscribe((a) => {
-        requestNotificationPermission(app);
+        const permission = requestNotificationPermission(app);
+        if (permission === "granted") {
+            // iOS only lets the service worker create notifications, so this throws there. It's
+            // only a confirmation that permission went through, so carry on without it.
+            try {
+                new Notification("Notifications enabled");
+            } catch (error) {
+                console.log(error);
+            }
+        }
     })
 
     app.ports.show_notification.subscribe((a) => {
