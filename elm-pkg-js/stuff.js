@@ -14,6 +14,31 @@ function arrayBufferToBase64Url(buffer) {
         .replace(/=+$/, "");
 }
 
+// Safari on iOS only opens the notification permission prompt while a user gesture is still
+// active, and enabling push notifications asks for permission from two ports at once
+// (request_notification_permission and register_push_subscription_to_js). Both go through
+// here so the user only sees one prompt no matter which port gets there first.
+let pendingPermissionRequest = null;
+
+function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+        return Promise.resolve("unsupported");
+    }
+
+    if (Notification.permission !== "default") {
+        return Promise.resolve(Notification.permission);
+    }
+
+    if (!pendingPermissionRequest) {
+        pendingPermissionRequest = Notification.requestPermission().then((permission) => {
+            pendingPermissionRequest = null;
+            return permission;
+        });
+    }
+
+    return pendingPermissionRequest;
+}
+
 async function loadAudio(url, context, sounds) {
     try {
         const response = await fetch("/" + url + ".mp3");
@@ -416,9 +441,23 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+    app.ports.register_push_subscription_to_js.subscribe(async (publicKey) => {
         if (navigator.serviceWorker) {
             try {
+                // pushManager.subscribe() opens the notification permission prompt when permission
+                // hasn't been granted yet, and Safari on iOS only allows that while the click that
+                // got us here is still active ("Push notification prompting can only be done from a
+                // user gesture"). Awaiting navigator.serviceWorker.ready below outlives the click,
+                // so ask for permission here instead: this call still happens inside the gesture,
+                // and once permission is granted subscribe() has nothing to prompt for and iOS lets
+                // it run without one.
+                const permission = await requestNotificationPermission();
+
+                if (permission !== "granted") {
+                    app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ "Notification permission is " + permission ]});
+                    return;
+                }
+
                 navigator.serviceWorker.ready
                 .then(function(registration) {
 
@@ -614,16 +653,19 @@ exports.init = async function init(app)
     });
 
     app.ports.request_notification_permission.subscribe((a) => {
-        if ("Notification" in window) {
-            Notification.requestPermission().then((permission) => {
-                if (permission === "granted") {
-                    const notification = new Notification("Notifications enabled");
+        requestNotificationPermission().then((permission) => {
+            app.ports.check_notification_permission_from_js.send(permission);
+
+            if (permission === "granted") {
+                // iOS only lets the service worker create notifications, so this throws there. It's
+                // only a confirmation that permission went through, so carry on without it.
+                try {
+                    new Notification("Notifications enabled");
+                } catch (error) {
+                    console.log(error);
                 }
-                app.ports.check_notification_permission_from_js.send(permission);
-            });
-        } else {
-            app.ports.check_notification_permission_from_js.send("unsupported");
-        }
+            }
+        });
     })
 
     app.ports.show_notification.subscribe((a) => {
