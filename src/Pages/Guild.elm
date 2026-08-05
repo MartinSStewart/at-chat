@@ -8495,17 +8495,20 @@ discordChannelColumn isMobile time localUser routeData guild canScroll2 channelS
         )
 
 
+{-| The threads of one DM, listed underneath it in the friends column. The
+`threadRoute` is the one being viewed in this DM, or Nothing when another DM (or
+no DM at all) is open.
+-}
 dmColumnThreads :
     Bool
     -> Time.Posix
     -> Maybe ThreadRouteWithFriends
-    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
     -> Id UserId
     -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Id UserId)) }
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg_
-dmColumnThreads isMobile now threadRoute directMentions localUser otherUserId channel threads =
+dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
     let
         threads2 : List ( Id ChannelMessageId, ( IsMuted, ChannelNotificationType ), Bool )
         threads2 =
@@ -8529,18 +8532,28 @@ dmColumnThreads isMobile now threadRoute directMentions localUser otherUserId ch
 
                         hasNotifications : ChannelNotificationType
                         hasNotifications =
-                            --GuildColumn.channelOrThreadHasNotifications
-                            --    isMuted
-                            --    directMentions
-                            --    (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                            --    channelId
-                            --    (ViewThread threadMessageIndex)
-                            --    (SeqDict.get
-                            --        ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
-                            --        localUser.user.lastViewedThreads
-                            --    )
-                            --    thread
-                            NoNotification
+                            case isMuted of
+                                IsMuted ->
+                                    NoNotification
+
+                                IsNotMuted ->
+                                    -- Every message in a DM is meant for you, so unread ones
+                                    -- always get the red count. Guild channels save that for
+                                    -- messages that mention you and show the plain one otherwise.
+                                    case
+                                        GuildColumn.newMessageCount
+                                            (SeqDict.get
+                                                ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                                localUser.user.lastViewedThreads
+                                            )
+                                            thread
+                                            |> OneOrGreater.fromInt
+                                    of
+                                        Just unreadCount ->
+                                            NewMessageForUser unreadCount
+
+                                        Nothing ->
+                                            NoNotification
                     in
                     case ( hasNotifications, isSelected, MessageArray.last thread.messages ) of
                         ( NoNotification, False, Just message ) ->
@@ -9095,6 +9108,25 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                     case User.getUser otherUserId localUser of
                         Just otherUser ->
                             if matchesSearch otherUser.name then
+                                let
+                                    -- The route being viewed in this DM, or Nothing when the
+                                    -- open DM belongs to somebody else
+                                    threadRoute : Maybe ThreadRouteWithFriends
+                                    threadRoute =
+                                        case dmChannelSelection of
+                                            SelectedDmChannel dmRoute ->
+                                                if DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId then
+                                                    Just dmRoute.threadRoute
+
+                                                else
+                                                    Nothing
+
+                                            SelectedDiscordDmChannel _ ->
+                                                Nothing
+
+                                            NoDmChannelSelected ->
+                                                Nothing
+                                in
                                 ( case MessageArray.last dmChannel.messages of
                                     Just message2 ->
                                         Message.createdAt message2
@@ -9111,14 +9143,9 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                             friendLabelNotMobile
                                         )
                                         currentTime
-                                        (case dmChannelSelection of
-                                            SelectedDmChannel dmRoute ->
-                                                case dmRoute.threadRoute of
-                                                    NoThreadWithFriends _ _ ->
-                                                        DmChannelId.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
-
-                                                    ViewThreadWithFriends id maybeId showMembersTab ->
-                                                        False
+                                        (case threadRoute of
+                                            Just (NoThreadWithFriends _ _) ->
+                                                True
 
                                             _ ->
                                                 False
@@ -9130,21 +9157,19 @@ friendsColumn canScroll2 isMobile currentTime friendsSearch friendsSearchHasFocu
                                     , dmColumnThreads
                                         isMobile
                                         (Time.millisToPosix currentTime)
-                                        (case dmChannelSelection of
-                                            SelectedDmChannel routeData ->
-                                                Just routeData.threadRoute
-
-                                            SelectedDiscordDmChannel discordDmRouteData ->
-                                                Nothing
-
-                                            NoDmChannelSelected ->
-                                                Nothing
-                                        )
-                                        Nothing
+                                        threadRoute
                                         localUser
                                         otherUserId
                                         dmChannel
-                                        dmChannel.threads
+                                        (case threadRoute of
+                                            -- A thread that was just opened isn't in the local
+                                            -- state yet but still belongs in the list
+                                            Just (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                                SeqDict.insert threadMessageIndex Thread.frontendInit dmChannel.threads
+
+                                            _ ->
+                                                dmChannel.threads
+                                        )
                                     ]
                                 )
                                     |> Just

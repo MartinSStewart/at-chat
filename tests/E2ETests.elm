@@ -356,6 +356,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , E2EMisc.inactiveThreadsAreHiddenTest normalConfig
+    , E2EMisc.dmThreadsTest normalConfig
+    , E2EMisc.inactiveDmThreadsAreHiddenTest normalConfig
     , E2EHelper.startTest
         "Admin can disable Discord account linking"
         E2EHelper.startTime
