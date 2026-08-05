@@ -199,7 +199,7 @@ mouse, a finger or a pen.
 -}
 drawingTab : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
 drawingTab isMobile currentTab =
-    channelHeaderTab
+    channelHeaderIconTab
         isMobile
         (Dom.id "channelHeader_drawOnMessages")
         ChannelHeaderTab_Draw
@@ -361,10 +361,11 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
     [ Ui.width Ui.shrink
     , Ui.height Ui.fill
     , Ui.paddingWith { left = paddingLeft, right = paddingRight, top = 4, bottom = 4 }
-    , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-    , Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
-    , Ui.attrIf isSelected (MyUi.outwardBottomCorner 8 True MyUi.tabBackground)
-    , Ui.attrIf isSelected (MyUi.outwardBottomCorner 8 False MyUi.tabBackground)
+    , -- The rounded top corners are part of the side edges, which are painted outside
+      -- the tab, so the tab itself is a plain rectangle
+      Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
+    , Ui.attrIf isSelected (MyUi.tabSideEdge 8 MyUi.channelHeaderHeight True MyUi.tabBackground)
+    , Ui.attrIf isSelected (MyUi.tabSideEdge 8 MyUi.channelHeaderHeight False MyUi.tabBackground)
     , Ui.contentCenterY
     , Ui.Font.color
         (if isSelected then
@@ -386,6 +387,20 @@ channelHeaderTab :
     -> Element FrontendMsg_
 channelHeaderTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
+
+
+{-| A tab holding nothing but a 24px icon. The 12px of padding on either side make it
+48px wide, the same as the plain icon buttons it sits next to in the header.
+-}
+channelHeaderIconTab :
+    Bool
+    -> HtmlId
+    -> ChannelHeaderTab
+    -> Maybe ChannelHeaderTab
+    -> Element FrontendMsg_
+    -> Element FrontendMsg_
+channelHeaderIconTab isMobile htmlId tab currentTab content =
+    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 12 12 isMobile tab currentTab) content
 
 
 privateChatWithYourself : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> Element FrontendMsg_
@@ -437,7 +452,7 @@ privateChatWith isMobile route currentTab otherUserId local name =
 
 gameButton : Bool -> Maybe ChannelHeaderTab -> Element FrontendMsg_
 gameButton isMobile currentTab =
-    channelHeaderTab
+    channelHeaderIconTab
         isMobile
         (Dom.id "guild_openGamesTab")
         (ChannelHeaderTab_Games Nothing)
@@ -499,7 +514,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
     Ui.row
         [ Ui.width Ui.shrink, Ui.spacing 8, Ui.height Ui.fill, Ui.contentCenterY ]
         [ joined
-        , channelHeaderTab
+        , channelHeaderIconTab
             isMobile
             (Dom.id "guild_voiceChat")
             ChannelHeaderTab_VoiceChat
