@@ -1368,18 +1368,30 @@ updateLoaded msg model =
                 Emoji.PressedContainer ->
                     ( model, Command.none )
 
-                Emoji.PressedCategory category ->
+                Emoji.PressedCategory category offset ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_SetEmojiCategory category |> Just)
-                                { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Nothing } }
-                                Command.none
+                            ( { loggedIn | emojiSelector = { emojiSelector | category = category } }
+                            , Dom.setViewportOf Emoji.scrollContainerId 0 (toFloat offset)
+                                |> Task.attempt (\_ -> FrontendNoOp)
+                            )
+                        )
+                        model
+
+                Emoji.ScrolledToCategory category ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | category = category } }
+                            , Command.none
+                            )
                         )
                         model
 
@@ -1394,27 +1406,33 @@ updateLoaded msg model =
                         )
                         model
 
-                Emoji.MouseEnteredEmoji emoji ->
+                Emoji.MouseEnteredEmoji index emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            ( { loggedIn
+                                | emojiSelector =
+                                    { emojiSelector | emojiHovered = Just { index = index, emoji = emoji } }
+                              }
                             , Command.none
                             )
                         )
                         model
 
-                Emoji.KeyboardMovedHover emoji index ->
+                Emoji.KeyboardMovedHover index emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
                                 emojiSelector =
                                     loggedIn.emojiSelector
                             in
-                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            ( { loggedIn
+                                | emojiSelector =
+                                    { emojiSelector | emojiHovered = Just { index = index, emoji = emoji } }
+                              }
                             , scrollEmojiIntoView index
                             )
                         )
@@ -3691,6 +3709,7 @@ updateLoaded msg model =
                                                             Nothing ->
                                                                 SeqDict.empty
                                                         )
+                                                        (emojisInMessage model.emojiData nonempty)
 
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     Local_Discord_SendMessage
@@ -5465,6 +5484,28 @@ messageHasReaction emoji guildOrDmId threadRoute local =
                     False
 
 
+{-| The emojis a message uses, so that the backend can add them to the sender's recently used
+emojis. The backend can't work this out itself because the emoji data is only loaded in the
+frontend.
+-}
+emojisInMessage : Maybe Emoji.CachedEmojiData -> String.Nonempty.NonemptyString -> List EmojiOrCustomEmoji
+emojisInMessage emojiData text =
+    (case emojiData of
+        Just emojiData2 ->
+            Emoji.emojisInText emojiData2 (String.Nonempty.toString text)
+                |> List.map EmojiOrCustomEmoji_Emoji
+
+        Nothing ->
+            []
+    )
+        ++ (RichText.fromNonemptyString SeqDict.empty text
+                |> RichText.customEmojiIds
+                |> SeqSet.fromList
+                |> SeqSet.toList
+                |> List.map EmojiOrCustomEmoji_CustomEmoji
+           )
+
+
 scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg_
 scrollEmojiIntoView index =
     Task.map3
@@ -5558,9 +5599,9 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
 
                         _ ->
                             EmojiSelectorHidden
-                , emojiSelector = { emojiSelectorModel | searchText = "" }
+                , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
-            , Command.none
+            , Dom.focus Emoji.searchInputId |> Task.attempt (\_ -> SetFocus)
             )
         )
         model
@@ -6204,7 +6245,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
-                , emojiSelector = { emojiSelectorModel | searchText = "" }
+                , emojiSelector = { emojiSelectorModel | searchText = "", category = Emoji.selectorInit.category }
               }
                 |> MessageMenu.close model
             , Command.none

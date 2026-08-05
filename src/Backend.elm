@@ -2757,7 +2757,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model time)
 
-                Local_SendMessage _ guildOrDmId text threadRoute attachedFiles ->
+                Local_SendMessage _ guildOrDmId text threadRoute attachedFiles emojis ->
                     if String.Nonempty.length text > RichText.maxLength then
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
@@ -2778,6 +2778,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         threadRoute
                                         text
                                         (BackendExtra.validateAttachedFiles model.files attachedFiles)
+                                        emojis
                                     )
 
                             GuildOrDmId_Dm otherUserId ->
@@ -2794,6 +2795,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         threadRoute
                                         text
                                         (BackendExtra.validateAttachedFiles model.files attachedFiles)
+                                        emojis
                                     )
 
                 Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
@@ -5211,22 +5213,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     NonemptyDict.insert
                                         session.userId
                                         (User.setDomainWhitelist enable domain user)
-                                        model.users
-                              }
-                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                            )
-                        )
-
-                Local_SetEmojiCategory category ->
-                    BackendExtra.asUser
-                        model
-                        sessionId
-                        (\session user ->
-                            ( { model
-                                | users =
-                                    NonemptyDict.insert
-                                        session.userId
-                                        (User.setEmojiCategory category user)
                                         model.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)

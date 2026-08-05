@@ -12,6 +12,7 @@ module User exposing
     , addNewCustomEmojis
     , addNewStickers
     , addRecentlyUsedEmoji
+    , addRecentlyUsedEmojis
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
@@ -32,7 +33,6 @@ module User exposing
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
     , setEmailNotifications
-    , setEmojiCategory
     , setEmojiSkinTone
     , setGuildNotificationLevel
     , setIcon
@@ -52,7 +52,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
+import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)
@@ -139,7 +139,7 @@ addRecentlyUsedEmoji emoji user =
         | emojiConfig =
             { emojiConfig
                 | lastUsedEmojis =
-                    if count > 30 then
+                    if count > 50 then
                         Array.push emoji (Array.slice (count - 20) count emojiConfig.lastUsedEmojis)
 
                     else
@@ -148,18 +148,14 @@ addRecentlyUsedEmoji emoji user =
     }
 
 
+addRecentlyUsedEmojis : List EmojiOrCustomEmoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+addRecentlyUsedEmojis emojis user =
+    List.foldl addRecentlyUsedEmoji user emojis
+
+
 setEmailNotifications : EmailNotifications -> { a | emailNotifications : EmailNotifications } -> { a | emailNotifications : EmailNotifications }
 setEmailNotifications emailNotifications user =
     { user | emailNotifications = emailNotifications }
-
-
-setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
-setEmojiCategory category user =
-    let
-        emojiConfig =
-            user.emojiConfig
-    in
-    { user | emojiConfig = { emojiConfig | category = category } }
 
 
 setEmojiSkinTone : Maybe SkinTone -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
@@ -253,7 +249,7 @@ init createdAt name email userIsAdmin =
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
-    , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
+    , emojiConfig = { skinTone = Nothing, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
     , availableCustomEmojis = SeqSet.empty
     , muteSettings = MuteSettings.init

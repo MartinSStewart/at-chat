@@ -957,7 +957,8 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+      -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
+    | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
     | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
@@ -992,7 +993,6 @@ type LocalChange
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
-    | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange

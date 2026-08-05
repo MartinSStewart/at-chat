@@ -126,7 +126,7 @@ pendingChangesText localChange =
         Local_Admin adminChange ->
             Pages.Admin.pendingChangesText adminChange
 
-        Local_SendMessage _ _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ _ ->
             "Sent a message"
 
         Local_Discord_SendMessage _ _ _ _ _ ->
@@ -240,9 +240,6 @@ pendingChangesText localChange =
 
         Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
-
-        Local_SetEmojiCategory _ ->
-            "Selected emoji category"
 
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
@@ -2567,7 +2564,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2602,6 +2599,7 @@ changeUpdate localMsg local =
                                                                 (MessageArray.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
+                                                        |> User.addRecentlyUsedEmojis emojis
                                             }
                                     }
 
@@ -2659,6 +2657,7 @@ changeUpdate localMsg local =
                                                         (DmChannel.latestFrontendMessageId dmChannel2)
                                                         user.lastViewed
                                             }
+                                                |> User.addRecentlyUsedEmojis emojis
                                     }
                             }
 
@@ -3495,14 +3494,6 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user } }
-
-                Local_SetEmojiCategory category ->
-                    let
-                        localUser : LocalUser
-                        localUser =
-                            local.localUser
-                    in
-                    { local | localUser = { localUser | user = User.setEmojiCategory category localUser.user } }
 
                 Local_SetEmojiSkinTone maybeSkinTone ->
                     let

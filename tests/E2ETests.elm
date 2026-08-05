@@ -768,7 +768,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\admin _ ->
                 let
                     checkHover :
-                        (Maybe Emoji.EmojiOrSticker -> Result String ())
+                        (Maybe { index : Int, emoji : Emoji.EmojiOrSticker } -> Result String ())
                         -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
                     checkHover predicate =
                         admin.checkModel
@@ -787,15 +787,18 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                         Err "Admin frontend didn't finish loading"
                             )
 
-                    expectHovered : Maybe Emoji.EmojiOrSticker -> Maybe Emoji.EmojiOrSticker -> Result String ()
+                    expectHovered :
+                        Maybe Emoji.EmojiOrSticker
+                        -> Maybe { index : Int, emoji : Emoji.EmojiOrSticker }
+                        -> Result String ()
                     expectHovered expected actual =
-                        if actual == expected then
+                        if Maybe.map .emoji actual == expected then
                             Ok ()
 
                         else
                             Err ("Expected emojiHovered to be " ++ Debug.toString expected ++ " but was " ++ Debug.toString actual)
 
-                    expectSomeHovered : Maybe Emoji.EmojiOrSticker -> Result String ()
+                    expectSomeHovered : Maybe { index : Int, emoji : Emoji.EmojiOrSticker } -> Result String ()
                     expectSomeHovered actual =
                         case actual of
                             Just _ ->
@@ -1006,6 +1009,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
                             (NoThreadWithMaybeMessage Nothing)
                             SeqDict.empty
+                            []
                         )
                     )
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
@@ -2985,6 +2989,7 @@ sendMessageRateLimitTest config =
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty
+                                    []
                                 )
                             )
 

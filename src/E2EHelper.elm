@@ -121,7 +121,7 @@ import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), Requ
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
-import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
+import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -2518,7 +2518,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Admin _ ->
                     True
 
-                Local_SendMessage _ _ _ _ _ ->
+                Local_SendMessage _ _ _ _ _ _ ->
                     True
 
                 Local_Discord_SendMessage _ _ _ _ _ ->
@@ -2650,9 +2650,6 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     False
 
                 Local_SetDomainWhitelist _ _ ->
-                    False
-
-                Local_SetEmojiCategory _ ->
                     False
 
                 Local_SetEmojiSkinTone _ ->
@@ -3090,13 +3087,12 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
-    , Local_SetEmojiCategory (Emoji.EmojiCategory Emoji.Activities)
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
@@ -3115,7 +3111,6 @@ allAttackerLocalChanges =
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_SetDomainWhitelist False brokenDomain
     , Local_SetDomainWhitelist True brokenDomain
-    , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
