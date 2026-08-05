@@ -43,7 +43,6 @@ module RichText exposing
 
 import Array exposing (Array)
 import Basics.Extra
-import Color.Convert
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)

@@ -52,7 +52,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserData, DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
+import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
 import GuildIcon
 import Html exposing (Html)

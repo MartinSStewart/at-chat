@@ -121,7 +121,7 @@ import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), Requ
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed
-import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
+import Emoji exposing (EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
