@@ -1378,7 +1378,39 @@ emailViewHelper config dropNextLineBreak state nonempty =
                 Timestamp time ->
                     ( False
                     , currentList
-                        ++ emailNormalTextView (timestampToDiscordString time) state
+                        ++ [ Email.Html.span
+                                (List.filterMap identity
+                                    [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+                                    , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                                    , emailAttrIf state.bold (Email.Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                                    , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+                                    ]
+                                    ++ [ Email.Html.Attributes.backgroundColor codeBackground
+                                       , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
+                                       , Email.Html.Attributes.padding "0 4px 0 4px"
+                                       , Email.Html.Attributes.borderRadius "4px"
+                                       ]
+                                )
+                                [ Email.Html.text (dateAndTimeToString Time.utc time) ]
+                           ]
+                      --++ [ Html.span
+                      --           [ emailAttrIf state.italic (Email.Html.Attributes.style "font-style" "italic")
+                      --           , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                      --           , emailAttrIf state.bold (Email.Html.Attributes.style "font-weight" "700")
+                      --           , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                      --           , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+                      --           , -- Subdued like inline code, so a timestamp doesn't compete with the bright blue
+                      --             -- of a user mention
+                      --             Email.Html.Attributes.style "background-color" codeBackground
+                      --           , Email.Html.Attributes.style "padding" "1px 3px"
+                      --           , Email.Html.Attributes.style "border-radius" "3px"
+                      --           , Email.Html.Attributes.style "white-space" "nowrap"
+                      --           , -- Today's timestamps leave the date out, so hovering brings it back
+                      --             Email.Html.Attributes.title (dateAndTimeToString timezone time)
+                      --           ]
+                      --           [ Email.Html.text (timestampToString now timezone time) ]
+                      --   ]
                     )
         )
         ( dropNextLineBreak, [] )
@@ -3147,7 +3179,7 @@ timestampToString now timezone time =
 
 dateAndTimeToString : Time.Zone -> Time.Posix -> String
 dateAndTimeToString timezone time =
-    MyUi.timestamp time timezone ++ ", " ++ MyUi.datestamp timezone time
+    MyUi.datestamp timezone time ++ " at " ++ MyUi.timestamp time timezone
 
 
 isSameDay : Time.Zone -> Time.Posix -> Time.Posix -> Bool
