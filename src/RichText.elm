@@ -141,6 +141,7 @@ type RichText userId
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
     | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
+    | Timestamp Time.Posix
 
 
 type HasLeadingLineBreak
