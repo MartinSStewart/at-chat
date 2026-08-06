@@ -12,6 +12,7 @@ module E2EMisc exposing
     )
 
 import Audio
+import DmChannel
 import DmChannelId
 import Duration
 import E2EHelper
@@ -23,6 +24,7 @@ import Html.Attributes
 import Id
 import Json.Encode
 import Local
+import LocalState exposing (LocalState)
 import Message
 import Pages.Guild
 import Route
@@ -502,6 +504,44 @@ checkDmThreadRoute threadMessageIndex model =
             Err "Expected the frontend to have finished loading"
 
 
+{-| Writing a message counts as reading it, so the thread it went into holds nothing
+unread for the person who wrote it.
+-}
+checkDmThreadIsRead : Id.Id Id.UserId -> Id.Id Id.ChannelMessageId -> FrontendModel -> Result String ()
+checkDmThreadIsRead otherUserId threadMessageIndex model =
+    case Audio.userModel model of
+        Types.Loaded loaded ->
+            case loaded.loginStatus of
+                Types.LoggedIn loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+
+                        newestMessageId : Maybe (Id.Id Id.ThreadMessageId)
+                        newestMessageId =
+                            SeqDict.get otherUserId local.dmChannels
+                                |> Maybe.andThen (\dmChannel -> SeqDict.get threadMessageIndex dmChannel.threads)
+                                |> Maybe.map DmChannel.latestFrontendThreadMessageId
+                    in
+                    if
+                        SeqDict.get
+                            ( Id.GuildOrDmId (Id.GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                            local.localUser.user.lastViewedThreads
+                            == newestMessageId
+                    then
+                        Ok ()
+
+                    else
+                        Err "Expected the newest message in the DM thread to have been read"
+
+                Types.NotLoggedIn _ ->
+                    Err "Expected the frontend to be logged in"
+
+        Types.Loading _ ->
+            Err "Expected the frontend to have finished loading"
+
+
 checkDmRouteWithUser : Id.Id Id.UserId -> FrontendModel -> Result String ()
 checkDmRouteWithUser otherUserId model =
     case Audio.userModel model of
@@ -619,6 +659,9 @@ dmThreadsTest config =
                 -- Opening a thread from a DM message puts the thread in the route
                 , admin.checkModel 100 (checkDmThreadRoute (Id.fromInt 0))
 
+                -- The admin wrote those two thread messages, so neither is unread for them
+                , admin.checkModel 100 (checkDmThreadIsRead (Id.fromInt 2) (Id.fromInt 0))
+
                 -- The thread is listed underneath the DM for both of them. The admin sees
                 -- it under the user (id 2) and the user sees it under the admin (id 0).
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
@@ -658,6 +701,7 @@ dmThreadsTest config =
                 , user.click 100 (Dom.id "guild_viewDmThread_0_0")
                 , E2EHelper.hasExactText user [ "First message in the DM thread", "Second message in the DM thread" ]
                 , E2EHelper.writeMessage user 100 "Reply from the user"
+                , user.checkModel 100 (checkDmThreadIsRead (Id.fromInt 0) (Id.fromInt 0))
                 , E2EHelper.hasExactText admin [ "Reply from the user" ]
                 , user.click 100 (Dom.id "guild_friendLabel_0")
                 , E2EHelper.hasExactText user [ "Hello in a DM!" ]

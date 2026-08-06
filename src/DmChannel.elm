@@ -6,6 +6,7 @@ module DmChannel exposing
     , backendInit
     , frontendInit
     , latestFrontendMessageId
+    , latestFrontendThreadMessageId
     , latestMessageId
     , latestThreadMessageId
     , loadMessages
@@ -144,6 +145,11 @@ latestFrontendMessageId channel =
 latestThreadMessageId : { a | messages : IdArray ThreadMessageId b } -> Id ThreadMessageId
 latestThreadMessageId thread =
     IdArray.length thread.messages - 1 |> Id.fromInt
+
+
+latestFrontendThreadMessageId : { a | messages : MessageArray ThreadMessageId b } -> Id ThreadMessageId
+latestFrontendThreadMessageId thread =
+    MessageArray.length thread.messages - 1 |> Id.fromInt
 
 
 toFrontendHelper :
