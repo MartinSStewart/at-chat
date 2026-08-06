@@ -590,7 +590,7 @@ test =
             , timestampViewTest "Less than a minute away is now" 0 30000 "00:00 (now)"
             , timestampViewTest "Something earlier today counts up from it" 9000000 0 "00:00 (2\u{00A0}hours 30\u{00A0}minutes ago)"
             , timestampViewTest "A whole number of hours leaves the minutes out" 0 7200000 "02:00 (in 2\u{00A0}hours)"
-            , timestampViewTest "Another day gets the date instead" 0 1786013400000 "10:50, 06/08/26"
+            , timestampViewTest "Another day gets the date instead" 0 1786013400000 "August 6, 2026 at 10:50"
             ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
