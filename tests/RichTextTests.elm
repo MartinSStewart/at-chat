@@ -1,5 +1,6 @@
 module RichTextTests exposing (simpleTest, test)
 
+import Effect.Time as Time
 import Expect
 import Fuzz exposing (Fuzzer)
 import Html
@@ -9,6 +10,7 @@ import MyUi
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
+import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Test.Html.Query
@@ -581,6 +583,15 @@ test =
                 ]
             )
             "¯\\\\\\_(ツ)\\_/¯"
+        , Test.describe
+            "Timestamp display"
+            [ timestampViewTest "Something later today counts down to it" 0 9000000 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
+            , timestampViewTest "A minute away is singular" 0 60000 "00:01 (in 1\u{00A0}minute)"
+            , timestampViewTest "Less than a minute away is now" 0 30000 "00:00 (now)"
+            , timestampViewTest "Something earlier today counts up from it" 9000000 0 "00:00 (2\u{00A0}hours 30\u{00A0}minutes ago)"
+            , timestampViewTest "A whole number of hours leaves the minutes out" 0 7200000 "02:00 (in 2\u{00A0}hours)"
+            , timestampViewTest "Another day gets the date instead" 0 1786013400000 "10:50, 06/08/26"
+            ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
             , selectionHighlightTest "a*bold*c"
@@ -601,6 +612,31 @@ test =
             , selectionHighlightTest "a¯\\_(ツ)_/¯b"
             ]
         ]
+
+
+{-| Timestamps are rendered from the reader's point of view, so what they read depends on
+what the time is when the message is drawn.
+-}
+timestampViewTest : String -> Int -> Int -> String -> Test
+timestampViewTest name now time expected =
+    Test.test
+        name
+        (\_ ->
+            RichText.preview
+                (\_ -> ())
+                { domainWhitelist = SeqSet.empty
+                , revealedSpoilers = SeqSet.empty
+                , users = users
+                , attachedFiles = SeqDict.empty
+                , customEmojis = SeqDict.empty
+                , timezone = Time.utc
+                , time = Time.millisToPosix now
+                }
+                (Nonempty (Timestamp (Time.millisToPosix time)) [])
+                |> Html.div []
+                |> Test.Html.Query.fromHtml
+                |> Test.Html.Query.has [ Test.Html.Selector.exactText expected ]
+        )
 
 
 {-| The message input draws the selection highlight itself (the textarea on top of the rich text has

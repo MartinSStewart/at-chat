@@ -537,6 +537,7 @@ unreadOverviewNotMobile local loggedIn model =
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , messageView
+                                                    model.time
                                                     False
                                                     containerWidth
                                                     False
@@ -566,6 +567,7 @@ unreadOverviewNotMobile local loggedIn model =
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , threadMessageView
+                                                    model.time
                                                     False
                                                     containerWidth
                                                     revealedSpoilers
@@ -593,6 +595,7 @@ unreadOverviewNotMobile local loggedIn model =
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , discordMessageView
+                                                    model.time
                                                     False
                                                     containerWidth
                                                     False
@@ -621,6 +624,7 @@ unreadOverviewNotMobile local loggedIn model =
                                             (\( messageId, message ) ->
                                                 ( Message.createdAt message |> Date.fromPosix local.localUser.timezone
                                                 , discordThreadMessageView
+                                                    model.time
                                                     False
                                                     containerWidth
                                                     revealedSpoilers
@@ -3203,6 +3207,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     messageView
+                                        model.time
                                         isMobile
                                         containerWidth
                                         False
@@ -3237,6 +3242,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             RichText.maxLength - String.length edit.text
                                     in
                                     messageEditingView
+                                        model.time
                                         isMobile
                                         guildOrDmId
                                         threadRoute2
@@ -3258,6 +3264,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
+                                                    model.time
                                                     isMobile
                                                     containerWidth
                                                     False
@@ -3277,7 +3284,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             Nothing ->
                                                 Ui.Lazy.lazy5
                                                     messageViewNotThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     local.localUser
                                                     index
@@ -3288,6 +3295,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
+                                                    model.time
                                                     isMobile
                                                     containerWidth
                                                     False
@@ -3307,7 +3315,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             Nothing ->
                                                 Ui.Lazy.lazy6
                                                     messageViewThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     local.localUser
                                                     index
@@ -3499,6 +3507,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     discordMessageView
+                                        model.time
                                         isMobile
                                         containerWidth
                                         False
@@ -3529,6 +3538,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     Nothing
                                     in
                                     messageEditingView
+                                        model.time
                                         isMobile
                                         guildOrDmId
                                         threadRoute2
@@ -3550,6 +3560,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         case maybeRepliedTo2 of
                                             Just _ ->
                                                 discordMessageView
+                                                    model.time
                                                     isMobile
                                                     containerWidth
                                                     False
@@ -3568,7 +3579,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                             Nothing ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     currentDiscordUserId
                                                     local.localUser
@@ -3580,6 +3591,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         case maybeRepliedTo2 of
                                             Just _ ->
                                                 discordMessageView
+                                                    model.time
                                                     isMobile
                                                     containerWidth
                                                     False
@@ -3597,7 +3609,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
                                             Nothing ->
                                                 discordMessageViewThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                                     revealedSpoilers
                                                     currentDiscordUserId
                                                     local.localUser
@@ -3812,6 +3824,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     threadMessageView
+                                        model.time
                                         isMobile
                                         containerWidth
                                         revealedSpoilers
@@ -3841,6 +3854,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                                     Nothing
                                     in
                                     threadMessageEditingView
+                                        model.time
                                         isMobile
                                         guildOrDmId
                                         threadId
@@ -3860,6 +3874,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                 case maybeRepliedTo2 of
                                     Just _ ->
                                         threadMessageView
+                                            model.time
                                             isMobile
                                             containerWidth
                                             revealedSpoilers
@@ -3877,7 +3892,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                     Nothing ->
                                         Ui.Lazy.lazy5
                                             threadMessageViewLazy
-                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                             revealedSpoilers
                                             local.localUser
                                             index
@@ -4021,6 +4036,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     discordThreadMessageView
+                                        model.time
                                         isMobile
                                         containerWidth
                                         revealedSpoilers
@@ -4049,6 +4065,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                                     Nothing
                                     in
                                     threadMessageEditingView
+                                        model.time
                                         isMobile
                                         guildOrDmId
                                         threadId
@@ -4068,6 +4085,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                 case maybeRepliedTo2 of
                                     Just _ ->
                                         discordThreadMessageView
+                                            model.time
                                             isMobile
                                             containerWidth
                                             revealedSpoilers
@@ -4084,7 +4102,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                     Nothing ->
                                         Ui.Lazy.lazy6
                                             discordThreadMessageViewLazy
-                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight model.time)
                                             revealedSpoilers
                                             currentDiscordUserId
                                             local.localUser
@@ -4180,8 +4198,14 @@ newContentLabel =
     ]
 
 
-encodeMessageView : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
-encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight =
+{-| The lazy wrappers a message view goes through take six arguments at most, so the flags,
+the container width and the current time travel as a single Int. The time is what the
+timestamps in a message count down from, rounded to the minute so that a message is only
+redrawn when that countdown would read differently. It is multiplied in rather than shifted
+in because Bitwise only reaches 32 bits.
+-}
+encodeMessageView : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Time.Posix -> Int
+encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight time =
     (if otherUserIsEditing then
         1
 
@@ -4227,10 +4251,39 @@ encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight
                 0
             )
         + Bitwise.shiftLeftBy 6 containerWidth
+        + (Time.posixToMillis time // msInMinute * timePackingOffset)
 
 
-decodeMessageView : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered, isMobile : Bool }
-decodeMessageView value =
+{-| Where the time starts in the Int `encodeMessageView` packs. The flags take the bottom
+six bits and the container width sits above them, so this leaves room for a container up to
+65535px wide, and the whole packed number stays well inside the range integers are exact in.
+-}
+timePackingOffset : Int
+timePackingOffset =
+    2 ^ 22
+
+
+msInMinute : Int
+msInMinute =
+    1000 * 60
+
+
+decodeMessageView :
+    Int
+    ->
+        { containerWidth : Int
+        , isEditing : Bool
+        , highlight : HighlightMessage
+        , isHovered : IsHovered
+        , isMobile : Bool
+        , time : Time.Posix
+        }
+decodeMessageView packed =
+    let
+        value : Int
+        value =
+            modBy timePackingOffset packed
+    in
     { isEditing = Bitwise.and 0x01 value == 1
     , isHovered =
         case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
@@ -4260,6 +4313,7 @@ decodeMessageView value =
                 NoHighlight
     , isMobile = Bitwise.shiftRightBy 5 value |> Bitwise.and 0x01 |> (==) 1
     , containerWidth = Bitwise.shiftRightBy 6 value
+    , time = packed // timePackingOffset * msInMinute |> Time.millisToPosix
     }
 
 
@@ -5408,6 +5462,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                                 RichText.maxLength - String.length edit.text
                         in
                         messageEditingView
+                            model.time
                             isMobile
                             guildOrDmId
                             (NoThreadWithMessage threadMessageIndex)
@@ -5425,6 +5480,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
 
                     else
                         messageView
+                            model.time
                             isMobile
                             (conversationWidth model)
                             True
@@ -5443,6 +5499,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
 
                 Nothing ->
                     messageView
+                        model.time
                         isMobile
                         (conversationWidth model)
                         True
@@ -5518,6 +5575,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                                         Nothing
                         in
                         messageEditingView
+                            model.time
                             isMobile
                             guildOrDmId
                             (NoThreadWithMessage threadMessageIndex)
@@ -5535,6 +5593,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
 
                     else
                         discordMessageView
+                            model.time
                             isMobile
                             (conversationWidth model)
                             True
@@ -5552,6 +5611,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
 
                 Nothing ->
                     discordMessageView
+                        model.time
                         isMobile
                         (conversationWidth model)
                         True
@@ -5785,7 +5845,8 @@ reactionPopup customEmojis allUsers animationMode emoji users =
 
 
 messageEditingView :
-    Bool
+    Time.Posix
+    -> Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> ThreadRouteWithMessage
     -> Message ChannelMessageId userId
@@ -5800,7 +5861,7 @@ messageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+messageEditingView time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -5855,6 +5916,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 [ replyToHeaderAboveMessage
                     isMobile
                     local.localUser.timezone
+                    time
                     maybeRepliedTo2
                     revealedSpoilers
                     local.localUser.customEmojis
@@ -5908,7 +5970,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone local.localUser.customEmojis allUsers messageId thread
+                        previewThreadLastMessage local.localUser.timezone time local.localUser.customEmojis allUsers messageId thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
@@ -5930,7 +5992,8 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
 
 
 threadMessageEditingView :
-    Bool
+    Time.Posix
+    -> Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id ChannelMessageId
     -> Id ThreadMessageId
@@ -5945,7 +6008,7 @@ threadMessageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+threadMessageEditingView time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -5993,6 +6056,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 [ replyToHeaderAboveMessage
                     isMobile
                     local.localUser.timezone
+                    time
                     maybeRepliedTo2
                     revealedSpoilers
                     local.localUser.customEmojis
@@ -6075,10 +6139,11 @@ messageViewNotThreadStarter :
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     messageView
+        time
         isMobile
         containerWidth
         False
@@ -6105,7 +6170,7 @@ discordMessageViewNotThreadStarter :
     -> Element MessageViewMsg
 discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { containerWidth, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     --Ui.el
@@ -6117,6 +6182,7 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
     --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
     --    ]
     discordMessageView
+        time
         isMobile
         containerWidth
         False
@@ -6142,10 +6208,11 @@ messageViewThreadStarter :
     -> Element MessageViewMsg
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     messageView
+        time
         isMobile
         containerWidth
         False
@@ -6173,10 +6240,11 @@ discordMessageViewThreadStarter :
     -> Element MessageViewMsg
 discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
-        { containerWidth, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     discordMessageView
+        time
         isMobile
         containerWidth
         False
@@ -6201,10 +6269,11 @@ threadMessageViewLazy :
     -> Element MessageViewMsg
 threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, isEditing, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     threadMessageView
+        time
         isMobile
         containerWidth
         revealedSpoilers
@@ -6229,10 +6298,11 @@ discordThreadMessageViewLazy :
     -> Element MessageViewMsg
 discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { containerWidth, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile, time } =
             decodeMessageView data
     in
     discordThreadMessageView
+        time
         isMobile
         containerWidth
         revealedSpoilers
@@ -6259,7 +6329,8 @@ profileImagePaddingRight =
 
 
 messageView :
-    Bool
+    Time.Posix
+    -> Bool
     -> Int
     -> Bool
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -6274,12 +6345,13 @@ messageView :
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
-messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+messageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
         UserTextMessage data ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 (case highlight of
@@ -6301,6 +6373,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 maybeThreadStarter
                 isHovered
                 (userTextMessageContent
+                    time
                     (Dom.id "spoiler")
                     containerWidth
                     isBeingEdited
@@ -6318,6 +6391,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6346,6 +6420,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6368,6 +6443,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6404,6 +6480,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6437,7 +6514,8 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
 
 
 discordMessageView :
-    Bool
+    Time.Posix
+    -> Bool
     -> Int
     -> Bool
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
@@ -6451,12 +6529,13 @@ discordMessageView :
     -> Id ChannelMessageId
     -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
-discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
         UserTextMessage data ->
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 (case highlight of
@@ -6478,6 +6557,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
                 maybeThreadStarter
                 isHovered
                 (discordUserTextMessageContent
+                    time
                     (Dom.id "spoiler")
                     containerWidth
                     isMobile
@@ -6494,6 +6574,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6522,6 +6603,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6544,6 +6626,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6580,6 +6663,7 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                time
                 localUser.customEmojis
                 allUsers
                 highlight
@@ -6613,7 +6697,8 @@ discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers high
 
 
 threadMessageView :
-    Bool
+    Time.Posix
+    -> Bool
     -> Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> HighlightMessage
@@ -6626,7 +6711,7 @@ threadMessageView :
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
-threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+threadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -6650,6 +6735,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 allUsers
                 isHovered
                 (userTextMessageContent
+                    time
                     (Dom.id "threadSpoiler")
                     containerWidth
                     isBeingEdited
@@ -6771,7 +6857,8 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
 
 
 discordThreadMessageView :
-    Bool
+    Time.Posix
+    -> Bool
     -> Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> HighlightMessage
@@ -6783,7 +6870,7 @@ discordThreadMessageView :
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
-discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHovered allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight isHovered allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -6807,6 +6894,7 @@ discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHo
                 allUsers
                 isHovered
                 (discordUserTextMessageContent
+                    time
                     (Dom.id "threadSpoiler")
                     containerWidth
                     isMobile
@@ -6957,7 +7045,8 @@ openDmButton messageId onPress =
 
 
 userTextMessageContent :
-    HtmlId
+    Time.Posix
+    -> HtmlId
     -> Int
     -> Bool
     -> Bool
@@ -6969,7 +7058,7 @@ userTextMessageContent :
     -> Id messageId
     -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -7014,6 +7103,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             [ replyToHeaderAboveMessage
                 isMobile
                 localUser.timezone
+                time
                 maybeRepliedTo2
                 revealedSpoilers
                 localUser.customEmojis
@@ -7055,6 +7145,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
+                    , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.userColor
@@ -7092,7 +7183,8 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 
 discordUserTextMessageContent :
-    HtmlId
+    Time.Posix
+    -> HtmlId
     -> Int
     -> Bool
     -> Maybe ( Id messageId, Message messageId (Discord.Id Discord.UserId) )
@@ -7103,7 +7195,7 @@ discordUserTextMessageContent :
     -> Id messageId
     -> UserTextMessageData messageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
-discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
+discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageId message2 =
     Ui.row
         []
         [ (case SeqDict.get message2.createdBy allUsers of
@@ -7148,6 +7240,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
             [ replyToHeaderAboveMessage
                 isMobile
                 localUser.timezone
+                time
                 maybeRepliedTo2
                 revealedSpoilers
                 localUser.customEmojis
@@ -7189,6 +7282,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
                     , timezone = localUser.timezone
+                    , time = time
                     , drawings = message2.imageAttachmentDrawings
                     , embedDrawings = message2.embedDrawings
                     , drawingUserColor = Drawing.discordUserColor
@@ -7285,12 +7379,13 @@ messagePreviewTimestamp createdAt timezone =
 replyToHeaderAboveMessage :
     Bool
     -> Time.Zone
+    -> Time.Posix
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+replyToHeaderAboveMessage isMobile timezone time maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
@@ -7298,6 +7393,7 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
                 repliedToIndex
                 (userTextMessagePreview
                     timezone
+                    time
                     customEmojis
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
@@ -7334,12 +7430,13 @@ replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers cus
 
 userTextMessagePreview :
     Time.Zone
+    -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview timezone customEmojis allUsers revealedSpoilers message =
+userTextMessagePreview timezone time customEmojis allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -7358,6 +7455,7 @@ userTextMessagePreview timezone customEmojis allUsers revealedSpoilers message =
                 , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
                 , timezone = timezone
+                , time = time
                 }
                 message.content
         )
@@ -7630,6 +7728,7 @@ orElseMaybe first second =
 messageContainer :
     Bool
     -> Time.Zone
+    -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> HighlightMessage
@@ -7642,7 +7741,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone currentTime customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -7739,7 +7838,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone customEmojis allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone currentTime customEmojis allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -7858,12 +7957,13 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
 
 previewThreadLastMessage :
     Time.Zone
+    -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone customEmojis allUsers messageId thread =
+previewThreadLastMessage timezone time customEmojis allUsers messageId thread =
     let
         lastMessage =
             MessageArray.last thread.messages
@@ -7923,6 +8023,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                         , customEmojis = customEmojis
                                         , domainWhitelist = SeqSet.empty
                                         , timezone = timezone
+                                        , time = time
                                         }
                                         data.content
 
@@ -9015,9 +9116,6 @@ friendsColumnLazy :
     -> Element FrontendMsg_
 friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId friendsSearch friendsSearchHasFocus local =
     let
-        msInMinute =
-            1000 * 60
-
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute

@@ -551,6 +551,9 @@ richTextToMessage previousText previousList nonempty =
                         )
                         ( currentText, list )
                         (List.Nonempty.toList items)
+
+                RichText.Timestamp time ->
+                    ( currentText ++ RichText.timestampToDiscordString time, list )
         )
         ( previousText, previousList )
         (List.Nonempty.toList nonempty)

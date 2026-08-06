@@ -33,6 +33,7 @@ module RichText exposing
     , stickers
     , stringToStickersAndCustomEmojis
     , textInputView
+    , timestampToDiscordString
     , toDiscord
     , toString
     , toStringWithGetter
@@ -330,6 +331,9 @@ spoilerAttachedFile fileId nonempty =
 
                 BulletPoint a items ->
                     BulletPoint a (List.Nonempty.map (mapBulletItem (spoilerAttachedFile fileId)) items)
+
+                Timestamp _ ->
+                    richText
         )
         nonempty
 
@@ -437,6 +441,9 @@ unspoilerAttachedFile fileId nonempty =
                                 , BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items)
                                 )
                                 []
+
+                        Timestamp _ ->
+                            Nonempty ( False, richText ) []
                 )
                 nonempty2
     in
@@ -511,6 +518,9 @@ unspoilerAttachedFile fileId nonempty =
                     Nonempty
                         (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items))
                         []
+
+                Timestamp _ ->
+                    Nonempty richText []
         )
         nonempty
 
@@ -602,6 +612,9 @@ removeAttachedFile shouldRemove list =
                             items
                         )
                         |> Just
+
+                Timestamp _ ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -665,6 +678,9 @@ hyperlinks nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap hyperlinks) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -732,6 +748,9 @@ attachmentsHelper isSpoilered nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap (attachmentsHelper isSpoilered)) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -794,6 +813,9 @@ customEmojiIds nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap customEmojiIds) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -856,6 +878,9 @@ stickers nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap stickers) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -1038,6 +1063,9 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
                                     )
                                 |> String.join "\n"
                            )
+
+                Timestamp time ->
+                    timestampToDiscordString time
         )
         list
         |> String.concat
@@ -1345,6 +1373,12 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                 ]
                                 (List.map (Email.Html.li []) listItems)
                            ]
+                    )
+
+                Timestamp time ->
+                    ( False
+                    , currentList
+                        ++ emailNormalTextView (timestampToDiscordString time) state
                     )
         )
         ( dropNextLineBreak, [] )
@@ -1816,6 +1850,9 @@ normalize nonempty =
                     List.Nonempty.cons
                         (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items))
                         nonempty2
+
+                Timestamp time ->
+                    List.Nonempty.cons (Timestamp time) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -1880,6 +1917,9 @@ normalize nonempty =
 
                 BulletPoint hasLeadingLineBreak items ->
                     BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items)
+
+                Timestamp time ->
+                    Timestamp time
             )
             []
         )
@@ -2934,6 +2974,9 @@ mentionsUserHelper set nonempty =
                         )
                         set2
                         (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    set2
         )
         set
         nonempty
@@ -3004,6 +3047,7 @@ preview onPressLink config nonempty =
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
+        , time = config.time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
         , drawingUserColor = always ""
@@ -3026,6 +3070,9 @@ type alias Config a userId =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
+    , -- Timestamps say how long is left until the moment they point at, so the view needs
+      -- to know what the time is now
+      time : Time.Posix
     , drawings : SeqDict (Id FileId) (Drawing userId)
     , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> String
@@ -3041,6 +3088,7 @@ type alias PreviewConfig a userId =
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , timezone : Time.Zone
+    , time : Time.Posix
     }
 
 
@@ -3061,6 +3109,113 @@ normalTextView text state =
         ]
         [ Html.text text ]
     ]
+
+
+{-| A timestamp is a moment in time rather than a piece of text, so everyone reading the
+message sees it in their own timezone. The date is what's worth knowing about something
+days away, but for something happening later today the date says nothing the clock doesn't,
+so how long is left takes its place.
+-}
+timestampView : Time.Posix -> Time.Zone -> RichTextState -> Time.Posix -> Html msg
+timestampView now timezone state time =
+    Html.span
+        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
+        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+        , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+        , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
+        , -- Subdued like inline code, so a timestamp doesn't compete with the bright blue
+          -- of a user mention
+          Html.Attributes.style "background-color" codeBackground
+        , Html.Attributes.style "padding" "1px 3px"
+        , Html.Attributes.style "border-radius" "3px"
+        , Html.Attributes.style "white-space" "nowrap"
+        , -- Today's timestamps leave the date out, so hovering brings it back
+          Html.Attributes.title (dateAndTimeToString timezone time)
+        ]
+        [ Html.text (timestampToString now timezone time) ]
+
+
+timestampToString : Time.Posix -> Time.Zone -> Time.Posix -> String
+timestampToString now timezone time =
+    if isSameDay timezone now time then
+        MyUi.timestamp time timezone ++ " (" ++ timeUntilToString now time ++ ")"
+
+    else
+        dateAndTimeToString timezone time
+
+
+dateAndTimeToString : Time.Zone -> Time.Posix -> String
+dateAndTimeToString timezone time =
+    MyUi.timestamp time timezone ++ ", " ++ MyUi.datestamp timezone time
+
+
+isSameDay : Time.Zone -> Time.Posix -> Time.Posix -> Bool
+isSameDay timezone a b =
+    (Time.toYear timezone a == Time.toYear timezone b)
+        && (Time.toMonth timezone a == Time.toMonth timezone b)
+        && (Time.toDay timezone a == Time.toDay timezone b)
+
+
+{-| Both are on the same day, so this never has to reach for anything longer than hours.
+-}
+timeUntilToString : Time.Posix -> Time.Posix -> String
+timeUntilToString now time =
+    let
+        minutesLeft : Int
+        minutesLeft =
+            (Time.posixToMillis time - Time.posixToMillis now) // 60000
+
+        hours : Int
+        hours =
+            abs minutesLeft // 60
+
+        minutes : Int
+        minutes =
+            modBy 60 (abs minutesLeft)
+
+        amount : String
+        amount =
+            if hours == 0 then
+                pluralize minutes "minute"
+
+            else if minutes == 0 then
+                pluralize hours "hour"
+
+            else
+                pluralize hours "hour" ++ " " ++ pluralize minutes "minute"
+    in
+    if minutesLeft == 0 then
+        "now"
+
+    else if minutesLeft > 0 then
+        "in " ++ amount
+
+    else
+        amount ++ " ago"
+
+
+pluralize : Int -> String -> String
+pluralize amount unit =
+    String.fromInt amount
+        ++ "\u{00A0}"
+        ++ unit
+        ++ (if amount == 1 then
+                ""
+
+            else
+                "s"
+           )
+
+
+{-| Discord's timestamp syntax, which is where timestamps come from
+(<https://discord.com/developers/docs/reference#message-formatting>). The trailing format
+hint is dropped when parsing, since at-chat picks the format it shows the timestamp in, so
+timestamps are written back out with `f`, the hint closest to that.
+-}
+timestampToDiscordString : Time.Posix -> String
+timestampToDiscordString time =
+    "<t:" ++ String.fromInt (Time.posixToMillis time // 1000) ++ ":f>"
 
 
 type alias PressedImageData =
@@ -3738,6 +3893,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 NoLargeContent ->
                                     List.concatMap (\a -> Html.text " • " :: a) listItems
                            )
+                    )
+
+                Timestamp time ->
+                    ( ( False, spoilerIndex2 )
+                    , embedIndex2
+                    , currentList ++ [ timestampView config.time config.timezone state time ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -4775,6 +4936,16 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                         )
                         ( index2, output2 )
                         (List.indexedMap Tuple.pair (List.Nonempty.toList items))
+
+                Timestamp time ->
+                    let
+                        text : String
+                        text =
+                            timestampToDiscordString time
+                    in
+                    ( index2 + String.length text
+                    , Array.push (formatText selection index2 text) output2
+                    )
         )
         ( index, output )
         list
@@ -5349,6 +5520,20 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             Nothing ->
                                 bailOutHelper ()
 
+                    Just "t" ->
+                        case tryParseDiscordTimestamp source index of
+                            Just ( time, nextIndex ) ->
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    nextIndex
+                                    modifiers
+                                    ""
+                                    (Timestamp time :: flushText accText revNodes)
+
+                            Nothing ->
+                                bailOutHelper ()
+
                     _ ->
                         bailOutHelper ()
 
@@ -5759,6 +5944,9 @@ toDiscordHelper customEmojis content =
                                 |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis bulletItem)
                                 |> String.join "\n"
                            )
+
+                Timestamp time ->
+                    timestampToDiscordString time
         )
         content
         |> String.concat
@@ -5863,6 +6051,44 @@ tryParseDiscordMention source index =
                 Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
 
             Nothing ->
+                Nothing
+
+    else
+        Nothing
+
+
+{-| Discord's timestamp syntax: `<t:1786013400>`, or `<t:1786013400:f>` where the trailing
+letter hints at the format Discord should show it in. at-chat picks its own format, so the
+hint is read past and thrown away.
+-}
+tryParseDiscordTimestamp : String -> Int -> Maybe ( Time.Posix, Int )
+tryParseDiscordTimestamp source index =
+    let
+        len : Int
+        len =
+            String.length source
+
+        afterColon : Int
+        afterColon =
+            index + 3
+
+        digitEnd : Int
+        digitEnd =
+            skipDigits source afterColon len
+    in
+    if stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
+        case ( String.toInt (String.slice afterColon digitEnd source), stringAt digitEnd source ) of
+            ( Just seconds, Just ">" ) ->
+                Just ( Time.millisToPosix (seconds * 1000), digitEnd + 1 )
+
+            ( Just seconds, Just ":" ) ->
+                if stringAt (digitEnd + 2) source == Just ">" then
+                    Just ( Time.millisToPosix (seconds * 1000), digitEnd + 3 )
+
+                else
+                    Nothing
+
+            _ ->
                 Nothing
 
     else

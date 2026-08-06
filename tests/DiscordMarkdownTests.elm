@@ -2,6 +2,7 @@ module DiscordMarkdownTests exposing (test)
 
 import CustomEmoji exposing (EmojiName)
 import Discord
+import Effect.Time as Time
 import Expect
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
@@ -299,6 +300,30 @@ discordSpecificTests =
                         , UserMention userId
                         , NormalText ' ' "how are you?"
                         ]
+        , Test.test "timestamp with a format hint" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400:s>"
+                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+        , Test.test "timestamp without a format hint" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400>"
+                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+        , Test.test "timestamp with text around it" <|
+            \_ ->
+                fromDiscordHelper "Starts at <t:1786013400:f>, be there"
+                    |> Expect.equal
+                        [ NormalText 'S' "tarts at "
+                        , Timestamp (Time.millisToPosix 1786013400000)
+                        , NormalText ',' " be there"
+                        ]
+        , Test.test "a timestamp missing its closing bracket stays text" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400:f"
+                    |> Expect.equal [ NormalText '<' "t:1786013400:f" ]
+        , Test.test "a timestamp without a time stays text" <|
+            \_ ->
+                fromDiscordHelper "<t::f>"
+                    |> Expect.equal [ NormalText '<' "t::f>" ]
 
         --, Test.test "custom emoji" <|
         --    \_ ->
