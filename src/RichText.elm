@@ -5843,8 +5843,36 @@ toDiscord :
     -> Result Int String
 toDiscord customEmojis content =
     let
+        list : List (RichText (Discord.Id Discord.UserId))
+        list =
+            List.Nonempty.toList content
+
+        {- Which characters have to be escaped depends on the whole message, since a `*` only
+           becomes formatting once a second one shows up to close it. Building the message
+           without escaping any of them first is the simplest way to count what's there,
+           formatting this converter writes itself included.
+        -}
+        unescaped : String
+        unescaped =
+            toDiscordHelper Set.empty customEmojis list
+
+        charsToEscape : Set Char
+        charsToEscape =
+            List.filter
+                (\char ->
+                    case char of
+                        '~' ->
+                            List.length (String.indexes "~~" unescaped) > 1
+
+                        _ ->
+                            List.length (String.indexes (String.fromChar char) unescaped) > 1
+                )
+                discordPairedChars
+                |> Set.fromList
+
+        text : String
         text =
-            toDiscordHelper customEmojis (List.Nonempty.toList content)
+            toDiscordHelper charsToEscape customEmojis list
     in
     if String.length text > maxLength then
         Err (maxLength - String.length text)
@@ -5876,10 +5904,11 @@ type alias DiscordCustomEmojiIdAndName =
 
 
 toDiscordHelper :
-    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    Set Char
+    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (RichText (Discord.Id Discord.UserId))
     -> String
-toDiscordHelper customEmojis content =
+toDiscordHelper charsToEscape customEmojis content =
     List.map
         (\item ->
             case item of
@@ -5887,25 +5916,25 @@ toDiscordHelper customEmojis content =
                     "<@!" ++ Discord.idToString discordUserId ++ ">"
 
                 NormalText char string ->
-                    escapeDiscordText (String.cons char string)
+                    escapeDiscordText charsToEscape (String.cons char string)
 
                 Bold nonempty ->
-                    "**" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "**"
+                    "**" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    "*" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "*"
+                    "*" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "*"
 
                 Underline nonempty ->
-                    "__" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "__"
+                    "__" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    "~~" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "~~"
+                    "~~" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    "||" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "||"
+                    "||" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "||"
 
                 BlockQuote _ list ->
-                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis list)
+                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper charsToEscape customEmojis list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -5920,7 +5949,7 @@ toDiscordHelper customEmojis content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    prefix ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Url.toString data
@@ -5947,7 +5976,7 @@ toDiscordHelper customEmojis content =
                     ""
 
                 EscapedChar char ->
-                    escapeDiscordText (escapedCharToString char)
+                    escapeDiscordText charsToEscape (escapedCharToString char)
 
                 Sticker _ ->
                     ""
@@ -5973,7 +6002,7 @@ toDiscordHelper customEmojis content =
                             ""
                     )
                         ++ (List.Nonempty.toList items
-                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis bulletItem)
+                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper charsToEscape customEmojis bulletItem)
                                 |> String.join "\n"
                            )
 
@@ -5994,15 +6023,78 @@ customEmojisFromDiscord text =
             (String.indexes "<a:" text)
 
 
-escapeDiscordText : String -> String
-escapeDiscordText text =
-    String.replace "\\" "\\\\" text
-        |> String.replace "_" "\\_"
-        |> String.replace "*" "\\*"
-        |> String.replace "`" "\\`"
-        |> String.replace ">" "\\>"
-        |> String.replace "@" "\\@"
-        |> String.replace "~" "\\~"
+{-| Discord only hides the backslash when it is escaping something it would otherwise have
+read as formatting. Escaping a character that was never going to be formatting leaves a
+backslash the reader can see, so a message holding a single `_` has to be sent as a single
+`_`, not as `\\_`.
+
+`charsToEscape` says which of `discordPairedChars` this message actually has to hide, worked
+out once for the whole message by `toDiscord`.
+
+-}
+escapeDiscordText : Set Char -> String -> String
+escapeDiscordText charsToEscape text =
+    Set.foldl
+        (\char text2 ->
+            let
+                asString : String
+                asString =
+                    String.fromChar char
+            in
+            String.replace asString ("\\" ++ asString) text2
+        )
+        -- The backslash goes first so the ones the other passes add aren't escaped again
+        (String.replace "\\" "\\\\" text)
+        charsToEscape
+        |> escapeBlockQuotes
+        |> escapeMassMentions
+
+
+{-| `>` only opens a block quote at the start of a line, so `2 > 1` is left alone.
+-}
+escapeBlockQuotes : String -> String
+escapeBlockQuotes text =
+    case String.split "\n" text of
+        -- Whether the first line starts a line of the message or carries on from formatting
+        -- that came before it isn't knowable from here, and `>` after a bold word is far
+        -- more common than a message that opens with an unquoted `>`
+        firstLine :: rest ->
+            List.map
+                (\line ->
+                    let
+                        withoutIndent : String
+                        withoutIndent =
+                            String.trimLeft line
+                    in
+                    if String.startsWith ">" withoutIndent then
+                        String.dropRight (String.length withoutIndent) line ++ "\\" ++ withoutIndent
+
+                    else
+                        line
+                )
+                rest
+                |> (::) firstLine
+                |> String.join "\n"
+
+        [] ->
+            text
+
+
+{-| `@` isn't formatting, so escaping every one of them would put a backslash in the middle
+of every email address. Only the two that ping the whole channel are worth hiding.
+-}
+escapeMassMentions : String -> String
+escapeMassMentions text =
+    String.replace "@everyone" "\\@everyone" text
+        |> String.replace "@here" "\\@here"
+
+
+{-| Discord reads these as formatting only when a second one closes them (`~` needs to come
+in twos to begin with), so a message that holds just one of them can send it as it is.
+-}
+discordPairedChars : List Char
+discordPairedChars =
+    [ '`', '*', '_', '~' ]
 
 
 discordParseInner :

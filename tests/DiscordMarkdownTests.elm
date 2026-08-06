@@ -22,6 +22,7 @@ test =
         "Discord Markdown parser tests"
         [ basicFormattingTests
         , discordSpecificTests
+        , escapingTests
 
         --, codeTests
         --, edgeCaseTests
@@ -50,6 +51,55 @@ emojiName =
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
     RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
+
+
+{-| What Discord is sent when someone writes `source` in at-chat.
+-}
+toDiscordTest : String -> String -> Test
+toDiscordTest source expected =
+    Test.test
+        (Debug.toString source ++ " is sent to Discord as " ++ Debug.toString expected)
+        (\_ ->
+            case String.Nonempty.fromString source of
+                Just nonempty ->
+                    RichText.fromNonemptyString SeqDict.empty nonempty
+                        |> RichText.toDiscord customEmojis
+                        |> Expect.equal (Ok expected)
+
+                Nothing ->
+                    Expect.fail "Empty source text"
+        )
+
+
+{-| Discord leaves the backslash visible when it escapes something that was never going to be
+formatting, so a character is only escaped when Discord would otherwise have acted on it.
+-}
+escapingTests : Test
+escapingTests =
+    Test.describe
+        "Escaping text sent to Discord"
+        [ toDiscordTest "_" "_"
+        , toDiscordTest "a_b" "a_b"
+        , toDiscordTest "5 * 3" "5 * 3"
+        , toDiscordTest "a ` b" "a ` b"
+        , toDiscordTest "1 ~ 2" "1 ~ 2"
+        , -- Two of them can pair up into formatting, so now they have to be hidden
+          toDiscordTest "5 * 3 and 2 * 2" "5 \\* 3 and 2 \\* 2"
+        , -- A backslash always needs escaping, or Discord reads it as escaping what follows
+          toDiscordTest "back\\slash" "back\\\\slash"
+        , -- `@` isn't formatting, so only the two that ping the whole channel are hidden
+          toDiscordTest "a@b.com" "a@b.com"
+        , toDiscordTest "@everyone hi" "\\@everyone hi"
+        , toDiscordTest "@here hi" "\\@here hi"
+        , -- `>` only opens a block quote at the start of a line
+          toDiscordTest "2 > 1" "2 > 1"
+        , -- at-chat writes its own formatting out as Discord's
+          toDiscordTest "*bold*" "**bold**"
+        , toDiscordTest "_italic_" "*italic*"
+        , toDiscordTest "`code`" "`code`"
+        , -- A stray backtick next to a code span could open a second one, so it's hidden
+          toDiscordTest "`code` and a ` here" "`code` and a \\` here"
+        ]
 
 
 basicFormattingTests : Test

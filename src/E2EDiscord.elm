@@ -20,6 +20,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import IdArray
 import Iso8601
+import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -2523,6 +2524,36 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "Text sent to Discord is only escaped where Discord needs it"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , -- Discord leaves the backslash visible when it escapes something that was
+                  -- never going to be formatting, so a lone `_` has to arrive as a lone `_`
+                  E2EHelper.writeMessage admin 100 "_"
+                , E2EHelper.writeMessage admin 100 "a@b.com pays 2 > 1"
+                , T.checkState
+                    400
+                    (\data ->
+                        case discordMessageContentsPosted data of
+                            [ "a@b.com pays 2 > 1", "_" ] ->
+                                Ok ()
+
+                            contents ->
+                                Err ("Discord was sent " ++ Debug.toString contents)
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
@@ -2709,6 +2740,34 @@ discordDmMessageFromLinkedUser connection content =
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[]}}")
             ]
         )
+
+
+{-| The `content` of every message the backend has posted to Discord, most recent first,
+which is the text a Discord client would render.
+-}
+discordMessageContentsPosted : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+discordMessageContentsPosted data =
+    List.filterMap
+        (\request ->
+            case ( request.url, E2EHelper.decodeCustomRequest request ) of
+                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
+                    if customRequest.method == "POST" && String.endsWith "/messages" customRequest.url then
+                        Maybe.andThen
+                            (\body ->
+                                Json.Decode.decodeValue Json.Decode.string body
+                                    |> Result.andThen
+                                        (Json.Decode.decodeString (Json.Decode.field "content" Json.Decode.string))
+                                    |> Result.toMaybe
+                            )
+                            customRequest.body
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        data.httpRequests
 
 
 {-| The number of messages the backend has posted to the Discord DM channel that
