@@ -11,6 +11,7 @@
         "vendored/MartinSStewart/elm-audio/4.0.4/src",
         "visual-testing/src",
         "scripts/backup-downloader/src",
+        "scripts/discord-markdown/src",
         "tests"
     ],
     "elm-version": "0.19.1",
