@@ -82,26 +82,30 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         (tabBodyView isMobile local loggedIn model)
 
 
-thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
-thread isMobile name guildOrDmIdNoThread local loggedIn model =
+thread : Bool -> String -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg_
+thread isMobile name threadName guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                Ui.row
-                    [ Ui.height Ui.fill ]
-                    [ if otherUserId == local.localUser.session.userId then
-                        privateChatWithYourself isMobile model.route (Route.toChannelHeaderTab model.route) local
+                if otherUserId == local.localUser.session.userId then
+                    privateChatWithYourselfInThread isMobile model.route (Route.toChannelHeaderTab model.route) local threadName
 
-                      else
-                        privateChatWith isMobile model.route (Route.toChannelHeaderTab model.route) otherUserId local name
-                    ]
+                else
+                    privateChatWithInThread
+                        isMobile
+                        model.route
+                        (Route.toChannelHeaderTab model.route)
+                        otherUserId
+                        local
+                        name
+                        threadName
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
                     [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-                    , Ui.text name
+                    , Ui.text (name ++ " / " ++ threadName)
                     , Ui.row
                         [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
                         [ drawingTab isMobile (Route.toChannelHeaderTab model.route)
@@ -423,13 +427,7 @@ privateChatWithYourself isMobile route currentTab local =
             ChannelHeaderTab_ChannelDescription
             currentTab
             (Ui.text "Solo chat")
-        , Ui.row
-            [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-            [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , Ui.Lazy.lazy2 gameButton isMobile currentTab
-            , drawingTab isMobile currentTab
-            , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
-            ]
+        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
         ]
 
 
@@ -450,13 +448,68 @@ privateChatWith isMobile route currentTab otherUserId local name =
                     [ Ui.Font.exactWhitespace ]
                     [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ]
             )
-        , Ui.row
-            [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-            [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-            , Ui.Lazy.lazy2 gameButton isMobile currentTab
-            , drawingTab isMobile currentTab
-            , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
-            ]
+        , dmHeaderButtons isMobile route currentTab otherUserId local
+        ]
+
+
+{-| A thread is named after the message it started from, which can be arbitrarily long, so
+the thread name is what gets cut short when the header runs out of room.
+-}
+privateChatWithYourselfInThread : Bool -> Route -> Maybe ChannelHeaderTab -> LocalState -> String -> Element FrontendMsg_
+privateChatWithYourselfInThread isMobile route currentTab local threadName =
+    Ui.row
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
+        [ channelHeaderTab
+            isMobile
+            (Dom.id "guild_openDescription")
+            ChannelHeaderTab_ChannelDescription
+            currentTab
+            (Ui.text ("Solo chat / " ++ threadName))
+        , dmHeaderButtons isMobile route currentTab local.localUser.session.userId local
+        ]
+
+
+privateChatWithInThread :
+    Bool
+    -> Route
+    -> Maybe ChannelHeaderTab
+    -> Id UserId
+    -> LocalState
+    -> String
+    -> String
+    -> Element FrontendMsg_
+privateChatWithInThread isMobile route currentTab otherUserId local name threadName =
+    Ui.row
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
+        [ channelHeaderTab
+            isMobile
+            (Dom.id "guild_openDescription")
+            ChannelHeaderTab_ChannelDescription
+            currentTab
+            (if isMobile then
+                Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (name ++ " / " ++ threadName))
+
+             else
+                Ui.row
+                    [ Ui.Font.exactWhitespace ]
+                    [ Ui.text "Chat with "
+                    , Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text (name ++ " / " ++ threadName))
+                    ]
+            )
+        , dmHeaderButtons isMobile route currentTab otherUserId local
+        ]
+
+
+{-| The buttons on the right hand side of a DM's header.
+-}
+dmHeaderButtons : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> Element FrontendMsg_
+dmHeaderButtons isMobile route currentTab otherUserId local =
+    Ui.row
+        [ MyUi.noShrinking, Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+        [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
+        , Ui.Lazy.lazy2 gameButton isMobile currentTab
+        , drawingTab isMobile currentTab
+        , channelSettingsTab isMobile (Route.toShowMembersTab route |> Just)
         ]
 
 

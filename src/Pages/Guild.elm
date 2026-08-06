@@ -1243,6 +1243,11 @@ dmChannelView dmRoute loggedIn local model =
                                     model
                                     local
                                     (PersonName.toString otherUser.name)
+                                    (threadPreviewText
+                                        (LocalState.allUsers local.localUser)
+                                        threadMessageIndex
+                                        dmChannel
+                                    )
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
@@ -2462,12 +2467,11 @@ channelView channelRoute guildId guild loggedIn local model =
                                     loggedIn
                                     model
                                     local
-                                    (ChannelName.toString channel.name
-                                        ++ " / "
-                                        ++ threadPreviewText
-                                            (LocalState.allUsers local.localUser)
-                                            threadMessageIndex
-                                            channel
+                                    (ChannelName.toString channel.name)
+                                    (threadPreviewText
+                                        (LocalState.allUsers local.localUser)
+                                        threadMessageIndex
+                                        channel
                                     )
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
@@ -4995,9 +4999,10 @@ threadConversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> String
     -> FrontendThread
     -> Element FrontendMsg_
-threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
+threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name threadName channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -5037,7 +5042,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.thread isMobile name guildOrDmIdNoThread local loggedIn model
+        [ ChannelHeader.thread isMobile name threadName guildOrDmIdNoThread local loggedIn model
         , Ui.el
             ([ emojiSelector
                 isMobile
