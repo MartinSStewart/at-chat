@@ -474,7 +474,10 @@ unreadOverviewNotMobile local loggedIn model =
 
                     scaleFactor : Int
                     scaleFactor =
-                        round (dpi * toFloat containerWidth) // Coord.xRaw art.size |> clamp 1 3
+                        min
+                            (round (dpi * toFloat containerWidth) // Coord.xRaw art.size)
+                            (round (dpi * toFloat (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - 80)) // Coord.yRaw art.size)
+                            |> clamp 1 3
                 in
                 Ui.column
                     [ Ui.height Ui.fill
