@@ -2661,6 +2661,16 @@ parseLoop source index users modifiers accText revNodes =
                         Nothing ->
                             parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
 
+            "<" ->
+                -- Timestamps are written back out in Discord's syntax by toString, so reading it
+                -- here is what lets a message keep its timestamps when it's edited.
+                case tryParseDiscordTimestamp source index of
+                    Just ( time, nextIndex ) ->
+                        parseLoop source nextIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
+
+                    Nothing ->
+                        parseLoop source (index + 1) users modifiers (accText ++ "<") revNodes
+
             _ ->
                 let
                     nextIndex =
@@ -2993,7 +3003,7 @@ skipNormalChars source index =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" then
+        if c == "[" || c == "<" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" then
             index
 
         else
@@ -6180,6 +6190,9 @@ tryParseDiscordMention source index =
 {-| Discord's timestamp syntax: `<t:1786013400>`, or `<t:1786013400:f>` where the trailing
 letter hints at the format Discord should show it in. at-chat picks its own format, so the
 hint is read past and thrown away.
+
+`index` points at the opening `<`.
+
 -}
 tryParseDiscordTimestamp : String -> Int -> Maybe ( Time.Posix, Int )
 tryParseDiscordTimestamp source index =
@@ -6196,7 +6209,7 @@ tryParseDiscordTimestamp source index =
         digitEnd =
             skipDigits source afterColon len
     in
-    if stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
+    if stringAt (index + 1) source == Just "t" && stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
         case ( String.toInt (String.slice afterColon digitEnd source), stringAt digitEnd source ) of
             ( Just seconds, Just ">" ) ->
                 Just ( Time.millisToPosix (seconds * 1000), digitEnd + 1 )

@@ -585,6 +585,51 @@ test =
             )
             "¯\\\\\\_(ツ)\\_/¯"
         , Test.describe
+            "Timestamp parsing"
+            [ fromNonemptyStringTest
+                "<t:1786013400:f>"
+                (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])
+            , fromNonemptyStringTest
+                "<t:1786013400>"
+                (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])
+            , fromNonemptyStringTest
+                "Starts at <t:1786013400:f>, be there"
+                (Nonempty
+                    (NormalText 'S' "tarts at ")
+                    [ Timestamp (Time.millisToPosix 1786013400000), NormalText ',' " be there" ]
+                )
+            , fromNonemptyStringTest
+                "<t:1786013400:f"
+                (Nonempty (NormalText '<' "t:1786013400:f") [])
+            , fromNonemptyStringTest "<t::f>" (Nonempty (NormalText '<' "t::f>") [])
+            , fromNonemptyStringTest
+                "<x:1786013400>"
+                (Nonempty (NormalText '<' "x:1786013400>") [])
+            , fromNonemptyStringTest "a < b" (Nonempty (NormalText 'a' " < b") [])
+            , fromNonemptyStringTest
+                "*<t:1786013400:f>*"
+                (Nonempty (Bold (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])) [])
+            , -- Editing a message turns it back into text and parses the result, so a timestamp
+              -- that survives the trip is a timestamp that survives being edited.
+              Test.test
+                "A timestamp survives being written out as text and read back"
+                (\_ ->
+                    let
+                        original : Nonempty (RichText (Id ()))
+                        original =
+                            Nonempty
+                                (NormalText 'S' "tarts at ")
+                                [ Timestamp (Time.millisToPosix 1786013400000)
+                                , NormalText ',' " be there"
+                                ]
+                    in
+                    RichText.toString False users original
+                        |> String.Nonempty.fromString
+                        |> Maybe.map (RichText.fromNonemptyString users)
+                        |> Expect.equal (Just original)
+                )
+            ]
+        , Test.describe
             "Timestamp display"
             [ timestampViewTest "Something later today counts down to it" 0 9000000 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
             , timestampViewTest "A minute away is singular" 0 60000 "00:01 (in 1\u{00A0}minute)"
