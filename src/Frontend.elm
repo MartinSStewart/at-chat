@@ -3470,6 +3470,7 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.timezone
                                                                 model.time
                                                                 nameSoFar
                                                                 guildOrDmId
@@ -3785,6 +3786,7 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.timezone
                                                                 model.time
                                                                 nameSoFar
                                                                 guildOrDmId

@@ -6012,6 +6012,9 @@ parseTimeOfDay text =
                 [ hours, minutes ] ->
                     parseTimeOfDayHelper hours minutes
 
+                _ ->
+                    Nothing
+
 
 parseTimeOfDayHelper : String -> String -> Maybe { hours : Int, minutes : Int }
 parseTimeOfDayHelper hours minutes =
@@ -6022,6 +6025,22 @@ parseTimeOfDayHelper hours minutes =
 
             _ ->
                 Nothing
+
+    else
+        Nothing
+
+
+{-| The word that ends at `index`, or nothing if the caret isn't sitting at the end of one.
+-}
+lastWord : Int -> String -> Maybe String
+lastWord index text =
+    let
+        start : Int
+        start =
+            wordStart text index
+    in
+    if start < index then
+        String.slice start index text |> Just
 
     else
         Nothing

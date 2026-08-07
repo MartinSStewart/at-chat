@@ -21,7 +21,6 @@ module MessageInput exposing
 
 import Array
 import CustomEmoji exposing (CustomEmojiData)
-import Date
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -1048,21 +1047,21 @@ timestampDropdownList timezone time timestamp =
 
         TimeOfDay { hours, minutes } ->
             let
-                offsetMs : Int
-                offsetMs =
-                    (Time.toHour timezone time * 60 * 60 * 100)
+                sinceStartOfDayMs : Int
+                sinceStartOfDayMs =
+                    (Time.toHour timezone time * 60 * 60 * 1000)
                         + (Time.toMinute timezone time * 60 * 1000)
                         + (Time.toSecond timezone time * 1000)
                         + Time.toMillis timezone time
 
-                startOfDayMs : Int
-                startOfDayMs =
-                    (Time.posixToMillis time - offsetMs) // (60 * 1000)
+                startOfDay : Int
+                startOfDay =
+                    (Time.posixToMillis time - sinceStartOfDayMs) // (60 * 1000)
             in
-            [ startOfDayMs + hours * 60 + minutes |> TimeInMinutes.fromMinutes
-            , startOfDayMs + (hours + 12) * 60 + minutes |> TimeInMinutes.fromMinutes
-            , startOfDayMs + (hours + 24) * 60 + minutes |> TimeInMinutes.fromMinutes
-            , startOfDayMs + (hours + 36) * 60 + minutes |> TimeInMinutes.fromMinutes
+            [ startOfDay + hours * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDay + (hours + 12) * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDay + (hours + 24) * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDay + (hours + 36) * 60 + minutes |> TimeInMinutes.fromMinutes
             ]
 
 
@@ -1170,7 +1169,7 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
                             Nothing
 
                 TimestampSoFar range timestampData ->
-                    case timestampDropdownList time timestampData |> List.Extra.getAt dropdownIndex of
+                    case timestampDropdownList local.localUser.timezone time timestampData |> List.Extra.getAt dropdownIndex of
                         Just timestamp ->
                             ( range, RichText.dateAndTimeToString local.localUser.timezone timestamp ) |> Just
 
@@ -1343,7 +1342,7 @@ dropdownView isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdo
                                 index
                                 (Ui.text (RichText.timestampToString time local.localUser.timezone timestamp2))
                         )
-                        (timestampDropdownList time timestamp)
+                        (timestampDropdownList local.localUser.timezone time timestamp)
 
                 dropdownViewHeight : Int
                 dropdownViewHeight =
