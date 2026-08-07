@@ -572,6 +572,7 @@ test =
         , -- Not the shrug, so no special case and the backslash gets eaten as an escape like normal
           fromNonemptyStringTest "¯\\_(ツ)_/" (Nonempty (NormalText '¯' "") [ EscapedChar EscapedItalic, NormalText '(' "ツ)_/" ])
         , fromNonemptyStringTest "¯" (Nonempty (NormalText '¯' "") [])
+        , fromNonemptyStringTest "https://a.comhttps://a.com" (Nonempty (NormalText 'h' "ttps://a.comhttps://a.com") [])
         , toStringTest
             (Nonempty
                 (NormalText '¯' "")
