@@ -695,14 +695,9 @@ pub struct ExposureTime {
 }
 
 #[derive(Debug, Serialize)]
-pub struct VideoMetadata {
-    pub video_size: (u32, u32),
-}
-
-#[derive(Debug, Serialize)]
 pub struct UploadResponse {
     image_metadata: Option<ImageMetadata>,
-    video_metadata: Option<VideoMetadata>,
+    video_metadata: Option<video::VideoMetadata>,
     hash: String,
 }
 
@@ -865,25 +860,20 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
             }
         }
         // Not something the image crate can read. It might still be a video, in
-        // which case the dimensions are in the container header.
+        // which case the container header has plenty to say about it.
         _ => {
-            let video_size: Option<(u32, u32)> = video::video_dimensions(&bytes);
+            let metadata: Option<video::VideoMetadata> = video::video_metadata(&bytes);
+            let video_size: (u32, u32) = match &metadata {
+                Some(metadata2) => metadata2.video_size,
+                None => (0, 0),
+            };
 
-            match is_file_upload_allowed(
-                hash.clone(),
-                size,
-                session_id2,
-                video_size.unwrap_or((0, 0)),
-            )
-            .await
-            {
+            match is_file_upload_allowed(hash.clone(), size, session_id2, video_size).await {
                 Ok(()) => {
                     let path = filepath(&hash);
                     let response: String = serde_json::to_string(&UploadResponse {
                         image_metadata: None,
-                        video_metadata: video_size.map(|video_size2| VideoMetadata {
-                            video_size: video_size2,
-                        }),
+                        video_metadata: metadata,
                         hash: hash.clone(),
                     })
                     .unwrap();
