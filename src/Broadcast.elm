@@ -499,7 +499,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
     let
         plainText : String
         plainText =
-            RichText.toString True (NonemptyDict.toSeqDict model.users) message.content
+            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -669,7 +669,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 )
                                 (case message of
                                     UserTextMessage message2 ->
-                                        RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
+                                        RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers message2.content
 
                                     UserJoinedMessage _ _ _ _ ->
                                         "New user joined!"
@@ -1269,6 +1269,7 @@ toEveryoneWhoCanSeeUserIncludingUser userId change model =
 broadcastDm :
     ChangeId
     -> Time.Posix
+    -> Time.Zone
     -> ClientId
     -> Id UserId
     -> FrontendUser
@@ -1281,7 +1282,7 @@ broadcastDm :
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
-broadcastDm changeId time clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles emojis stickers model =
+broadcastDm changeId time timezone clientId userId senderFrontendUser otherUserId text message threadRouteWithReplyTo attachedFiles emojis stickers model =
     let
         isViewing : Bool
         isViewing =
@@ -1344,7 +1345,7 @@ broadcastDm changeId time clientId userId senderFrontendUser otherUserId text me
     , Command.batch
         [ LocalChangeResponse
             changeId
-            (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles emojis)
+            (Local_SendMessage time timezone (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles emojis)
             |> Lamdera.sendToFrontend clientId
         , toDmChannelExcludingOne
             clientId

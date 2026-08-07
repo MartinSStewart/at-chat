@@ -15,6 +15,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Test.Html.Query
 import Test.Html.Selector
+import TimeInMinutes
 import Unsafe
 import Url exposing (Protocol(..), Url)
 
@@ -462,8 +463,8 @@ test =
                     text =
                         NonemptyString '#' " hello\n## world"
                 in
-                RichText.fromNonemptyString users text
-                    |> RichText.toString False users
+                RichText.fromNonemptyString Time.utc users text
+                    |> RichText.toString Time.utc False users
                     |> Expect.equal (String.Nonempty.toString text)
             )
         , fromNonemptyStringTest "\n>no space" (Nonempty (NormalText '\n' ">no space") [])
@@ -485,8 +486,8 @@ test =
                     text =
                         NonemptyString '>' " asdf\n> f"
                 in
-                RichText.fromNonemptyString users text
-                    |> RichText.toString False users
+                RichText.fromNonemptyString Time.utc users text
+                    |> RichText.toString Time.utc False users
                     |> Expect.equal (String.Nonempty.toString text)
             )
 
@@ -497,8 +498,8 @@ test =
             fuzzer
             "Round trip"
             (\text ->
-                RichText.fromNonemptyString users text
-                    |> RichText.toString False users
+                RichText.fromNonemptyString Time.utc users text
+                    |> RichText.toString Time.utc False users
                     |> Expect.equal (String.Nonempty.toString text)
             )
         , simpleTest
@@ -585,13 +586,95 @@ test =
             )
             "¯\\\\\\_(ツ)\\_/¯"
         , Test.describe
+            "Timestamp parsing"
+            [ fromNonemptyStringTest
+                "August 6, 2026 at 10:50"
+                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])
+            , fromNonemptyStringTest
+                "Starts at August 6, 2026 at 10:50, be there"
+                (Nonempty
+                    (NormalText 'S' "tarts at ")
+                    [ Timestamp (TimeInMinutes.fromMinutes 29766890), NormalText ',' " be there" ]
+                )
+            , fromNonemptyStringTest
+                "*August 6, 2026 at 10:50*"
+                (Nonempty (Bold (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])) [])
+            , -- Two hours ahead of UTC, a clock reads 10:50 two hours before it does in UTC.
+              fromNonemptyStringInZoneTest
+                "two hours ahead of UTC"
+                (Time.customZone 120 [])
+                "August 6, 2026 at 10:50"
+                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766770)) [])
+            , fromNonemptyStringInZoneTest
+                "eight hours behind UTC"
+                (Time.customZone -480 [])
+                "August 6, 2026 at 10:50"
+                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29767370)) [])
+            , -- The hour the clocks skip over on the day they go forward isn't a time anything
+              -- happens at, so there's nothing for this to mean.
+              fromNonemptyStringInZoneTest
+                "in the hour the clocks skip"
+                springForward
+                "March 29, 2026 at 02:30"
+                (Nonempty (NormalText 'M' "arch 29, 2026 at 02:30") [])
+            , fromNonemptyStringInZoneTest
+                "after the clocks go forward"
+                springForward
+                "March 29, 2026 at 03:30"
+                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29579130)) [])
+            , fromNonemptyStringTest
+                "February 31, 2026 at 10:50"
+                (Nonempty (NormalText 'F' "ebruary 31, 2026 at 10:50") [])
+            , fromNonemptyStringTest
+                "August 6, 2026 at 25:50"
+                (Nonempty (NormalText 'A' "ugust 6, 2026 at 25:50") [])
+            , -- The day is written without a leading zero, so reading this one back would give
+              -- text of a different length and shift everything after it along.
+              fromNonemptyStringTest
+                "August 06, 2026 at 10:50"
+                (Nonempty (NormalText 'A' "ugust 06, 2026 at 10:50") [])
+            , fromNonemptyStringTest
+                "August 6, 2026 at 10:5"
+                (Nonempty (NormalText 'A' "ugust 6, 2026 at 10:5") [])
+            , fromNonemptyStringTest
+                "August 6 2026 at 10:50"
+                (Nonempty (NormalText 'A' "ugust 6 2026 at 10:50") [])
+            , fromNonemptyStringTest
+                "Augus 6, 2026 at 10:50"
+                (Nonempty (NormalText 'A' "ugus 6, 2026 at 10:50") [])
+            , fromNonemptyStringTest
+                "March was cold and September is far off"
+                (Nonempty (NormalText 'M' "arch was cold and September is far off") [])
+            , -- Discord's syntax is only read on the way in from Discord, where
+              -- DiscordMarkdownTests covers it. Nothing writes it any more, so at-chat's own
+              -- parser has no reason to read it and leaves it as the text it looks like.
+              fromNonemptyStringTest
+                "<t:1786013400:f>"
+                (Nonempty (NormalText '<' "t:1786013400:f>") [])
+            , fromNonemptyStringTest
+                "<t:1786013400>"
+                (Nonempty (NormalText '<' "t:1786013400>") [])
+            , fromNonemptyStringTest
+                "<t:1786013400:f"
+                (Nonempty (NormalText '<' "t:1786013400:f") [])
+            , fromNonemptyStringTest "<t::f>" (Nonempty (NormalText '<' "t::f>") [])
+            , fromNonemptyStringTest
+                "<x:1786013400>"
+                (Nonempty (NormalText '<' "x:1786013400>") [])
+            , fromNonemptyStringTest "a < b" (Nonempty (NormalText 'a' " < b") [])
+            , roundTripTest "UTC" Time.utc
+            , roundTripTest "two hours ahead of UTC" (Time.customZone 120 [])
+            , roundTripTest "eight hours behind UTC" (Time.customZone -480 [])
+            , roundTripTest "a timezone that puts its clocks forward" springForward
+            ]
+        , Test.describe
             "Timestamp display"
-            [ timestampViewTest "Something later today counts down to it" 0 9000000 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
-            , timestampViewTest "A minute away is singular" 0 60000 "00:01 (in 1\u{00A0}minute)"
-            , timestampViewTest "Less than a minute away is now" 0 30000 "00:00 (now)"
+            [ timestampViewTest "Something later today counts down to it" 0 150 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
+            , timestampViewTest "A minute away is singular" 0 1 "00:01 (in 1\u{00A0}minute)"
+            , timestampViewTest "Less than a minute away is now" 30000 0 "00:00 (now)"
             , timestampViewTest "Something earlier today counts up from it" 9000000 0 "00:00 (2\u{00A0}hours 30\u{00A0}minutes ago)"
-            , timestampViewTest "A whole number of hours leaves the minutes out" 0 7200000 "02:00 (in 2\u{00A0}hours)"
-            , timestampViewTest "Another day gets the date instead" 0 1786013400000 "August 6, 2026 at 10:50"
+            , timestampViewTest "A whole number of hours leaves the minutes out" 0 120 "02:00 (in 2\u{00A0}hours)"
+            , timestampViewTest "Another day gets the date instead" 0 29766890 "August 6, 2026 at 10:50"
             ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
@@ -619,7 +702,7 @@ test =
 what the time is when the message is drawn.
 -}
 timestampViewTest : String -> Int -> Int -> String -> Test
-timestampViewTest name now time expected =
+timestampViewTest name now minutes expected =
     Test.test
         name
         (\_ ->
@@ -633,7 +716,7 @@ timestampViewTest name now time expected =
                 , timezone = Time.utc
                 , time = Time.millisToPosix now
                 }
-                (Nonempty (Timestamp (Time.millisToPosix time)) [])
+                (Nonempty (Timestamp (TimeInMinutes.fromMinutes minutes)) [])
                 |> Html.div []
                 |> Test.Html.Query.fromHtml
                 |> Test.Html.Query.has [ Test.Html.Selector.exactText expected ]
@@ -678,12 +761,13 @@ selectionHighlightTest source =
 expectHighlighted : NonemptyString -> Int -> String -> Expect.Expectation
 expectHighlighted source index char =
     RichText.textInputView
+        Time.utc
         users
         SeqDict.empty
         SeqDict.empty
         SeqDict.empty
         (Just { start = index, end = index + 1 })
-        (RichText.fromNonemptyString users source)
+        (RichText.fromNonemptyString Time.utc users source)
         |> Html.div []
         |> Test.Html.Query.fromHtml
         |> Test.Html.Query.findAll
@@ -710,14 +794,70 @@ fromNonemptyStringTest : String -> Nonempty (RichText (Id userId)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
-            Test.test (Debug.toString input) (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
+            Test.test (Debug.toString input) (\_ -> RichText.fromNonemptyString Time.utc users nonempty |> Expect.equal expected)
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
+
+
+{-| A timestamp is written as the date and time a clock in the reader's timezone shows, so
+what a piece of text means depends on which timezone it's read in.
+-}
+fromNonemptyStringInZoneTest : String -> Time.Zone -> String -> Nonempty (RichText (Id userId)) -> Test
+fromNonemptyStringInZoneTest name timezone input expected =
+    case String.Nonempty.fromString input of
+        Just nonempty ->
+            Test.test
+                (Debug.toString input ++ " read " ++ name)
+                (\_ -> RichText.fromNonemptyString timezone users nonempty |> Expect.equal expected)
+
+        Nothing ->
+            Debug.todo "Can't run a RichText parser on empty text"
+
+
+{-| A timezone that puts its clocks forward an hour at 01:00 UTC on March 29th 2026, so that
+the hour after 02:00 that morning is one its clocks never show.
+-}
+springForward : Time.Zone
+springForward =
+    Time.customZone 60 [ { start = 29579100, offset = 120 } ]
+
+
+{-| Editing a message turns it back into text and parses the result, so a timestamp only
+survives being edited if writing it out and reading it back is the identity.
+-}
+roundTripTest : String -> Time.Zone -> Test
+roundTripTest name timezone =
+    Test.test
+        ("A timestamp survives being written out as text and read back in " ++ name)
+        (\_ ->
+            List.map
+                (\minutes ->
+                    let
+                        original : Nonempty (RichText (Id ()))
+                        original =
+                            Nonempty
+                                (NormalText 'S' "tarts at ")
+                                [ Timestamp (TimeInMinutes.fromMinutes minutes)
+                                , NormalText ',' " be there"
+                                ]
+                    in
+                    ( RichText.toString timezone False users original
+                        |> String.Nonempty.fromString
+                        |> Maybe.map (RichText.fromNonemptyString timezone users)
+                    , Just original
+                    )
+                )
+                -- Either side of the morning the clocks go forward, and a date well away from it.
+                [ 29579099, 29579100, 29579101, 29579160, 29766890 ]
+                |> List.map (\( actual, expected ) -> ( actual == expected, actual, expected ))
+                |> List.filter (\( matched, _, _ ) -> not matched)
+                |> Expect.equalLists []
+        )
 
 
 toStringTest : Nonempty (RichText (Id userId)) -> String -> Test
 toStringTest input expected =
     Test.test
         (Debug.toString ("RichText.toString: " ++ expected))
-        (\_ -> RichText.toString False users input |> Expect.equal expected)
+        (\_ -> RichText.toString Time.utc False users input |> Expect.equal expected)

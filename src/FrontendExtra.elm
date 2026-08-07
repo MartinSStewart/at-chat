@@ -126,10 +126,10 @@ pendingChangesText localChange =
         Local_Admin adminChange ->
             Pages.Admin.pendingChangesText adminChange
 
-        Local_SendMessage _ _ _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ _ _ ->
             "Sent a message"
 
-        Local_Discord_SendMessage _ _ _ _ _ ->
+        Local_Discord_SendMessage _ _ _ _ _ _ ->
             "Sent a message"
 
         Local_NewChannel _ _ _ _ ->
@@ -165,13 +165,13 @@ pendingChangesText localChange =
         Local_RemoveReactionEmoji _ _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage _ _ _ _ _ ->
+        Local_SendEditMessage _ _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
+        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditDmMessage _ _ _ _ ->
+        Local_Discord_SendEditDmMessage _ _ _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->
@@ -382,6 +382,7 @@ layout model attributes child =
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
                                             MessageInput.dropdownView
                                                 isMobile
+                                                model.time
                                                 nameSoFar
                                                 guildOrDmId
                                                 local.localUser.user.emojiConfig.skinTone
@@ -395,6 +396,7 @@ layout model attributes child =
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
                                             MessageInput.dropdownView
                                                 isMobile
+                                                model.time
                                                 nameSoFar
                                                 guildOrDmId
                                                 local.localUser.user.emojiConfig.skinTone
@@ -1203,7 +1205,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     LocalState.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString True users content)
+                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users content)
 
                         _ ->
                             Command.none
@@ -1265,7 +1267,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)
-                                (RichText.toString True allUsers content)
+                                (RichText.toString local.localUser.timezone True allUsers content)
 
                         _ ->
                             Command.none
@@ -2503,6 +2505,7 @@ textToRichText text memberIds local =
             LocalState.allUsers local.localUser
     in
     RichText.fromNonemptyString
+        local.localUser.timezone
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId allUsers of
@@ -2530,6 +2533,7 @@ textToDiscordRichText text memberIds local =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
     in
     RichText.fromNonemptyString
+        local.localUser.timezone
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId allUsers of
@@ -2564,7 +2568,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
+                Local_SendMessage createdAt _ guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2693,7 +2697,7 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Local_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Local_Discord_SendMessage createdAt _ guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -2900,10 +2904,10 @@ changeUpdate localMsg local =
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     removeReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
 
-                Local_SendEditMessage time guildOrDmId threadRoute newContent attachedFiles ->
+                Local_SendEditMessage time _ guildOrDmId threadRoute newContent attachedFiles ->
                     editMessage time local.localUser.session.userId guildOrDmId newContent attachedFiles threadRoute local
 
-                Local_Discord_SendEditGuildMessage time currentUserId guildId channelId threadRoute newContent ->
+                Local_Discord_SendEditGuildMessage time _ currentUserId guildId channelId threadRoute newContent ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -2930,7 +2934,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Local_Discord_SendEditDmMessage time dmData messageId newContent ->
+                Local_Discord_SendEditDmMessage time _ dmData messageId newContent ->
                     { local
                         | discordDmChannels =
                             SeqDict.updateIfExists
@@ -5899,12 +5903,94 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
                     _ ->
                         helper (index - 1) text
+
+        -- Unlike a mention or an emoji there's no symbol to look back for, so this reads the
+        -- two words the caret sits at the end of. It's only asked about that one position,
+        -- since the words it reads are the ones the dropdown replaces, and anywhere further
+        -- back is text the caret has already left.
+        timeOffsetSoFar : Int -> String -> Maybe NameSoFar
+        timeOffsetSoFar caret text =
+            let
+                timeOffsetHelper : String -> String -> (Float -> MessageInput.TimestampData) -> Maybe NameSoFar
+                timeOffsetHelper valueText unit offsetType =
+                    case String.toFloat valueText of
+                        Just value ->
+                            offsetType value
+                                |> TimestampSoFar
+                                    { start = caret - String.length valueText - 1 - String.length unit
+                                    , end = caret
+                                    }
+                                |> Just
+
+                        Nothing ->
+                            Nothing
+            in
+            case lastTwoWords caret text |> List.map String.toLower of
+                [ value, "weeks" ] ->
+                    timeOffsetHelper value "weeks" MessageInput.WeekOffset
+
+                [ value, "week" ] ->
+                    timeOffsetHelper value "week" MessageInput.WeekOffset
+
+                [ value, "days" ] ->
+                    timeOffsetHelper value "days" MessageInput.DayOffset
+
+                [ value, "day" ] ->
+                    timeOffsetHelper value "day" MessageInput.DayOffset
+
+                [ value, "hours" ] ->
+                    timeOffsetHelper value "hours" MessageInput.HourOffset
+
+                [ value, "hour" ] ->
+                    timeOffsetHelper value "hour" MessageInput.HourOffset
+
+                [ value, "minutes" ] ->
+                    timeOffsetHelper value "minutes" MessageInput.MinuteOffset
+
+                [ value, "minute" ] ->
+                    timeOffsetHelper value "minute" MessageInput.MinuteOffset
+
+                _ ->
+                    case lastWord caret text |> Maybe.map String.toLower of
+                        Just valueText ->
+                            case parseTimeOfDay valueText of
+                                Just value2 ->
+                                    case
+                                        RichText.tryParseTimestamp
+                                            -- Timezone doesn't matter here, we just want to know if it's a timestamp
+                                            Time.utc
+                                            (lastFiveWords caret text |> Maybe.withDefault "")
+                                            0
+                                    of
+                                        Just _ ->
+                                            Nothing
+
+                                        Nothing ->
+                                            TimestampSoFar
+                                                { start = caret - String.length valueText, end = caret }
+                                                (MessageInput.TimeOfDay value2)
+                                                |> Just
+
+                                Nothing ->
+                                    Nothing
+
+                        _ ->
+                            Nothing
+
+        nameSoFar : Int -> String -> Maybe NameSoFar
+        nameSoFar caret text =
+            case timeOffsetSoFar caret text of
+                Just timeOffset ->
+                    Just timeOffset
+
+                Nothing ->
+                    helper caret text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
-                    helper selection.start (String.Nonempty.toString draft)
+                    nameSoFar selection.start (String.Nonempty.toString draft)
 
                 Nothing ->
                     Nothing
@@ -5912,7 +5998,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         else if htmlId == MessageMenu.editMessageTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                 Just edit ->
-                    helper selection.start edit.text
+                    nameSoFar selection.start edit.text
 
                 Nothing ->
                     Nothing
@@ -5922,6 +6008,123 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
     else
         Nothing
+
+
+parseTimeOfDay : String -> Maybe { hours : Int, minutes : Int }
+parseTimeOfDay text =
+    case String.split ":" text of
+        [ hours, minutes ] ->
+            parseTimeOfDayHelper hours minutes
+
+        _ ->
+            case String.split "." text of
+                [ hours, minutes ] ->
+                    parseTimeOfDayHelper hours minutes
+
+                _ ->
+                    Nothing
+
+
+parseTimeOfDayHelper : String -> String -> Maybe { hours : Int, minutes : Int }
+parseTimeOfDayHelper hours minutes =
+    if String.length hours <= 2 && String.length minutes == 2 then
+        case ( String.toInt hours, String.toInt minutes ) of
+            ( Just hours2, Just minutes2 ) ->
+                if hours2 < 24 && minutes2 < 60 then
+                    Just { hours = hours2, minutes = minutes2 }
+
+                else
+                    Nothing
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+lastFiveWords : Int -> String -> Maybe String
+lastFiveWords index text =
+    lastWordsHelper 5 index index text
+
+
+lastWordsHelper : Int -> Int -> Int -> String -> Maybe String
+lastWordsHelper count startIndex index text =
+    if count <= 0 then
+        String.slice (index + 1) startIndex text |> Just
+
+    else
+        case lastWord index text of
+            Just word ->
+                lastWordsHelper (count - 1) startIndex (index - String.length word - 1) text
+
+            Nothing ->
+                Nothing
+
+
+{-| The word that ends at `index`, or nothing if the caret isn't sitting at the end of one.
+-}
+lastWord : Int -> String -> Maybe String
+lastWord index text =
+    let
+        start : Int
+        start =
+            wordStart text index
+    in
+    if start < index then
+        String.slice start index text |> Just
+
+    else
+        Nothing
+
+
+{-| The two words that end at `index`, or nothing if there aren't two of them. They have to
+be a single space apart and the second has to end exactly where the caret is, because the
+dropdown replaces the text they cover and works out where that starts from how long they are.
+-}
+lastTwoWords : Int -> String -> List String
+lastTwoWords index text =
+    let
+        secondStart : Int
+        secondStart =
+            wordStart text index
+
+        firstStart : Int
+        firstStart =
+            wordStart text (secondStart - 1)
+    in
+    if
+        (secondStart < index)
+            && (String.slice (secondStart - 1) secondStart text == " ")
+            && (firstStart < secondStart - 1)
+    then
+        [ String.slice firstStart (secondStart - 1) text, String.slice secondStart index text ]
+
+    else
+        []
+
+
+{-| Where the run of characters ending at `end` starts, taking a word to run up to the
+whitespace in front of it.
+-}
+wordStart : String -> Int -> Int
+wordStart text end =
+    if end <= 0 then
+        0
+
+    else
+        case String.slice (end - 1) end text of
+            " " ->
+                end
+
+            "\n" ->
+                end
+
+            "\u{000D}" ->
+                end
+
+            _ ->
+                wordStart text (end - 1)
 
 
 handleUndo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -6190,7 +6393,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString False (LocalState.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
@@ -6262,6 +6465,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 { messageIndex = index
                                                 , text =
                                                     RichText.toString
+                                                        local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                         message.content

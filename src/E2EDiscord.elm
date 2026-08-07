@@ -2444,6 +2444,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (ChangeId 0)
                                 (Local_Discord_SendMessage
                                     E2EHelper.startTime
+                                    Time.utc
                                     (DiscordGuildOrDmId_Dm
                                         { currentUserId = E2EHelper.currentDiscordUserId
                                         , channelId = discordDmChannelId
@@ -2500,6 +2501,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (ChangeId 1)
                                 (Local_Discord_SendMessage
                                     E2EHelper.startTime
+                                    Time.utc
                                     (DiscordGuildOrDmId_Dm
                                         { currentUserId = E2EHelper.currentDiscordUserId
                                         , channelId = discordDmChannelId
@@ -2967,7 +2969,7 @@ discordMessageToString : E2EHelper.BackendModel2 -> Message.Message messageId (D
 discordMessageToString backend message =
     case message of
         Message.UserTextMessage data ->
-            RichText.toStringWithGetter DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
+            RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
 
         Message.UserJoinedMessage _ _ _ _ ->
             "<user joined>"

@@ -429,11 +429,11 @@ messageReactionsNoThread messageId channel =
             SeqDict.empty
 
 
-messageToString : SeqDict userId { a | name : PersonName } -> Message messageId userId -> String
-messageToString allUsers3 message =
+messageToString : Time.Zone -> SeqDict userId { a | name : PersonName } -> Message messageId userId -> String
+messageToString timezone allUsers3 message =
     case message of
         UserTextMessage a ->
-            RichText.toString False allUsers3 a.content
+            RichText.toString timezone False allUsers3 a.content
 
         UserJoinedMessage _ userId _ _ ->
             User.toString userId allUsers3

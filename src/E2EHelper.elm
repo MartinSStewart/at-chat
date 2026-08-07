@@ -2518,10 +2518,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Admin _ ->
                     True
 
-                Local_SendMessage _ _ _ _ _ _ ->
+                Local_SendMessage _ _ _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendMessage _ _ _ _ _ ->
+                Local_Discord_SendMessage _ _ _ _ _ _ ->
                     True
 
                 Local_NewChannel _ _ _ _ ->
@@ -2557,13 +2557,13 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_RemoveReactionEmoji _ _ _ ->
                     True
 
-                Local_SendEditMessage _ _ _ _ _ ->
+                Local_SendEditMessage _ _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
+                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendEditDmMessage _ _ _ _ ->
+                Local_Discord_SendEditDmMessage _ _ _ _ _ ->
                     True
 
                 Local_MemberEditTyping _ _ _ ->
@@ -3064,10 +3064,10 @@ allAttackerLocalChanges =
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) normalText
-    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendEditDmMessage messageTime Time.utc discordDmData (Id.fromInt 0) normalText
+    , Local_Discord_SendEditGuildMessage messageTime Time.utc discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
+    , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime Time.utc discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_EditGuildName legitGuildId (Unsafe.guildName "hacked")
     , Local_Invalid
@@ -3086,11 +3086,11 @@ allAttackerLocalChanges =
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData { endpoint = domain, expirationTime = Nothing, keys = { auth = "auth", p256dh = "p256dh" } })
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
-    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty []
+    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty []
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
-    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
+    , Local_SendEditMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime Time.utc (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty [ EmojiOrCustomEmoji_Emoji Emoji.heart ]
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
@@ -3275,10 +3275,10 @@ attackerPrivateDiscordChannelChanges =
     , Local_SetLastViewed (anyAsUser attackerDiscordUserId) threadRouteWithMessage
 
     -- Write/modify attempts.
-    , Local_Discord_SendMessage messageTime (asUser attackerDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
-    , Local_Discord_SendMessage messageTime (asUser adminDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
-    , Local_Discord_SendEditGuildMessage messageTime attackerDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
-    , Local_Discord_SendEditGuildMessage messageTime adminDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
+    , Local_Discord_SendMessage messageTime Time.utc (asUser attackerDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime Time.utc (asUser adminDiscordUserId) hackedText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendEditGuildMessage messageTime Time.utc attackerDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
+    , Local_Discord_SendEditGuildMessage messageTime Time.utc adminDiscordUserId guildId privateDiscordChannelId threadRouteWithMessage hackedText
     , Local_DeleteMessage (anyAsUser attackerDiscordUserId) threadRouteWithMessage
     , Local_DeleteMessage (anyAsUser adminDiscordUserId) threadRouteWithMessage
     , Local_AddReactionEmoji (anyAsUser attackerDiscordUserId) threadRouteWithMessage emoji

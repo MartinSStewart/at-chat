@@ -392,8 +392,8 @@ type alias BackendModel =
     , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
-    , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
-    , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
+    , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId, Time.Zone )
+    , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId, Time.Zone )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel DiscordChannelReload)
     , signupsEnabled : Bool
@@ -958,8 +958,8 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
       -- The emojis used in the message are worked out by the frontend (less work for the backend and it doesn't matter if the frontend lies)
-    | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
-    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix Time.Zone GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (List EmojiOrCustomEmoji)
+    | Local_Discord_SendMessage Time.Posix Time.Zone DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -971,9 +971,9 @@ type LocalChange
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
-    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
+    | Local_SendEditMessage Time.Posix Time.Zone GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendEditGuildMessage Time.Posix Time.Zone (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
+    | Local_Discord_SendEditDmMessage Time.Posix Time.Zone DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage

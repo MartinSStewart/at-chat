@@ -337,6 +337,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.exportDmChannelTest normalConfig
     , E2EMisc.largePasteBecomesAttachment nonImageUploadConfig
     , E2EMisc.profileImageOpensDm normalConfig
+    , E2EMisc.timeOfDaySuggestionTest normalConfig
+    , E2EMisc.timeOffsetSuggestionTest normalConfig
+    , E2EMisc.noTimestampSuggestionTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"
@@ -1005,6 +1008,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     (LocalModelChangeRequest (ChangeId 1)
                         (Local_SendMessage
                             (Time.millisToPosix 0)
+                            Time.utc
                             (GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0))
                             (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
                             (NoThreadWithMaybeMessage Nothing)
@@ -2985,6 +2989,7 @@ sendMessageRateLimitTest config =
                             (LocalModelChangeRequest (ChangeId changeIndex)
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
+                                    Time.utc
                                     (GuildOrDmId_Guild guildId channelId)
                                     (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)

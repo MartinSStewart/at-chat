@@ -708,7 +708,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                         threadSource
                                                             guild.name
                                                             channel.name
-                                                            (threadPreviewText allUsers threadId channel)
+                                                            (threadPreviewText local.localUser.timezone allUsers threadId channel)
                                                     , route =
                                                         GuildRoute
                                                             guildId
@@ -779,7 +779,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                     dmThreadSource
                                                         otherUserId
                                                         local.localUser
-                                                        (threadPreviewText allUsers threadId dmChannel)
+                                                        (threadPreviewText local.localUser.timezone allUsers threadId dmChannel)
                                                 , route =
                                                     DmRoute
                                                         { channelId = DmChannelId.fromUserIds local.localUser.session.userId otherUserId
@@ -855,7 +855,7 @@ unreadOverviewChannels local allDiscordUsers =
                                                                     threadSource
                                                                         guild.name
                                                                         channel.name
-                                                                        (threadPreviewText allDiscordUsers threadId channel)
+                                                                        (threadPreviewText local.localUser.timezone allDiscordUsers threadId channel)
                                                                 , route =
                                                                     DiscordGuildRoute
                                                                         { currentDiscordUserId = currentDiscordUserId
@@ -1251,6 +1251,7 @@ dmChannelView dmRoute loggedIn local model =
                                     local
                                     (PersonName.toString otherUser.name)
                                     (threadPreviewText
+                                        local.localUser.timezone
                                         (LocalState.allUsers local.localUser)
                                         threadMessageIndex
                                         dmChannel
@@ -2438,14 +2439,15 @@ pageMissingMobile text =
 
 
 threadPreviewText :
-    SeqDict userId { a | name : PersonName }
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> { b | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId) }
     -> String
-threadPreviewText allUsers threadMessageIndex channel =
+threadPreviewText timezone allUsers threadMessageIndex channel =
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
-            LocalState.messageToString allUsers message
+            LocalState.messageToString timezone allUsers message
 
         _ ->
             "Thread not found"
@@ -2476,6 +2478,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     local
                                     (ChannelName.toString channel.name)
                                     (threadPreviewText
+                                        local.localUser.timezone
                                         (LocalState.allUsers local.localUser)
                                         threadMessageIndex
                                         channel
@@ -2545,6 +2548,7 @@ discordChannelView routeData guild loggedIn local model =
                                     (ChannelName.toString channel.name
                                         ++ " / "
                                         ++ threadPreviewText
+                                            local.localUser.timezone
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                             threadMessageIndex
                                             channel
@@ -3233,7 +3237,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         editRichText =
                                             case String.Nonempty.fromString edit.text of
                                                 Just nonempty ->
-                                                    RichText.fromNonemptyString allUsers nonempty |> Just
+                                                    RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                                 Nothing ->
                                                     Nothing
@@ -3532,7 +3536,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         editRichText =
                                             case String.Nonempty.fromString edit.text of
                                                 Just nonempty ->
-                                                    RichText.fromNonemptyString allUsers nonempty |> Just
+                                                    RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                                 Nothing ->
                                                     Nothing
@@ -3848,7 +3852,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         editRichText =
                                             case String.Nonempty.fromString editing.text of
                                                 Just text ->
-                                                    Just (RichText.fromNonemptyString allUsers text)
+                                                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                                                 Nothing ->
                                                     Nothing
@@ -4059,7 +4063,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         editRichText =
                                             case String.Nonempty.fromString editing.text of
                                                 Just text ->
-                                                    Just (RichText.fromNonemptyString allUsers text)
+                                                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                                                 Nothing ->
                                                     Nothing
@@ -4645,7 +4649,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         draftRichText =
             case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.drafts of
                 Just text ->
-                    Just (RichText.fromNonemptyString allUsers text)
+                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                 Nothing ->
                     Nothing
@@ -4829,7 +4833,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         draftRichText =
             case SeqDict.get guildOrDmId loggedIn.drafts of
                 Just text ->
-                    Just (RichText.fromNonemptyString allUsers text)
+                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                 Nothing ->
                     Nothing
@@ -5090,7 +5094,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         draftRichText =
             case SeqDict.get guildOrDmId loggedIn.drafts of
                 Just text ->
-                    Just (RichText.fromNonemptyString allUsers text)
+                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                 Nothing ->
                     Nothing
@@ -5282,7 +5286,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         draftRichText =
             case SeqDict.get guildOrDmId loggedIn.drafts of
                 Just text ->
-                    Just (RichText.fromNonemptyString allUsers text)
+                    Just (RichText.fromNonemptyString local.localUser.timezone allUsers text)
 
                 Nothing ->
                     Nothing
@@ -5453,7 +5457,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             editRichText =
                                 case String.Nonempty.fromString edit.text of
                                     Just nonempty ->
-                                        RichText.fromNonemptyString allUsers nonempty |> Just
+                                        RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                     Nothing ->
                                         Nothing
@@ -5569,7 +5573,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             editRichText =
                                 case String.Nonempty.fromString edit.text of
                                     Just nonempty ->
-                                        RichText.fromNonemptyString allUsers nonempty |> Just
+                                        RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                     Nothing ->
                                         Nothing
@@ -8725,7 +8729,7 @@ dmColumnThreads isMobile now threadRoute localUser otherUserId channel threads =
                     , tab = Nothing
                     }
                 )
-                (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -8806,7 +8810,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
                 count
                 (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
                 (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
-                (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (LocalState.allUsers localUser) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -8959,7 +8963,7 @@ discordChannelColumnThreads isMobile now routeData directMentions localUser chan
                             Nothing
                     }
                 )
-                (threadPreviewText (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
+                (threadPreviewText localUser.timezone (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers) threadMessageIndex channel)
         )
         threads2
         |> Ui.column []
@@ -9560,7 +9564,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString True allUsers a.content
+                                        ++ RichText.toString localUser.timezone True allUsers a.content
 
                                 UserJoinedMessage _ userId _ _ ->
                                     User.toString userId allUsers
@@ -9682,6 +9686,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                         ""
                                     )
                                         ++ RichText.toString
+                                            localUser.timezone
                                             True
                                             (LinkedAndOtherDiscordUsers.allDiscordUsers localUser.discordUsers)
                                             a.content

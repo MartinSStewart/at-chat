@@ -2306,14 +2306,15 @@ updateFromFrontend sessionId clientId msg model =
 
 
 discordStartThread :
-    DiscordFullUserData
+    Time.Zone
+    -> DiscordFullUserData
     -> DiscordBackendChannel
     -> Discord.Id Discord.ChannelId
     -> Id ChannelMessageId
     -> Discord.Id Discord.MessageId
     -> BackendModel
     -> Task BackendOnly Discord.HttpError Discord.Channel
-discordStartThread discordUser channel channelId threadId messageId model =
+discordStartThread timezone discordUser channel channelId threadId messageId model =
     Discord.startThreadFromMessagePayload
         (Discord.userToken discordUser.auth)
         { channelId = channelId
@@ -2323,7 +2324,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            RichText.toStringWithGetter DiscordUserData.username True model.discordUsers a.content
+                            RichText.toStringWithGetter timezone DiscordUserData.username True model.discordUsers a.content
 
                         UserJoinedMessage _ userId _ _ ->
                             case SeqDict.get userId model.discordUsers of
@@ -2757,7 +2758,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model time)
 
-                Local_SendMessage _ guildOrDmId text threadRoute attachedFiles emojis ->
+                Local_SendMessage _ timezone guildOrDmId text threadRoute attachedFiles emojis ->
                     if String.Nonempty.length text > RichText.maxLength then
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
@@ -2771,6 +2772,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     (BackendExtra.sendGuildMessage
                                         model
                                         time
+                                        timezone
                                         clientId
                                         changeId
                                         guildId
@@ -2789,6 +2791,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     (BackendExtra.sendDm
                                         model
                                         time
+                                        timezone
                                         clientId
                                         changeId
                                         otherUserId
@@ -2798,7 +2801,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         emojis
                                     )
 
-                Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
+                Local_Discord_SendMessage _ timezone guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
                             BackendExtra.asDiscordGuildChannelMember
@@ -2817,7 +2820,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                 richText =
-                                                    textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) model
+                                                    textToDiscordRichText
+                                                        timezone
+                                                        text
+                                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                        model
                                             in
                                             case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
                                                 ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
@@ -2825,7 +2832,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         | pendingDiscordCreateMessages =
                                                             SeqDict.insert
                                                                 ( currentDiscordUserId, channelId )
-                                                                ( clientId, changeId )
+                                                                ( clientId, changeId, timezone )
                                                                 model.pendingDiscordCreateMessages
                                                         , sendMessageRateLimits = sendMessageRateLimits
                                                       }
@@ -2874,7 +2881,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 | pendingDiscordCreateMessages =
                                                                     SeqDict.insert
                                                                         ( currentDiscordUserId, discordThreadId )
-                                                                        ( clientId, changeId )
+                                                                        ( clientId, changeId, timezone )
                                                                         model.pendingDiscordCreateMessages
                                                                 , sendMessageRateLimits = sendMessageRateLimits
                                                               }
@@ -2884,6 +2891,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                                 Nothing ->
                                                                     discordStartThread
+                                                                        timezone
                                                                         discordUser
                                                                         channel
                                                                         channelId
@@ -2954,6 +2962,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                 richText =
                                                     textToDiscordRichText
+                                                        timezone
                                                         text
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
@@ -2970,7 +2979,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         | pendingDiscordCreateDmMessages =
                                                             SeqDict.insert
                                                                 data
-                                                                ( clientId, changeId )
+                                                                ( clientId, changeId, timezone )
                                                                 model.pendingDiscordCreateDmMessages
                                                         , sendMessageRateLimits = sendMessageRateLimits
                                                       }
@@ -3752,7 +3761,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, Command.none )
                                 )
 
-                Local_SendEditMessage _ guildOrDmId threadRoute newContent attachedFiles ->
+                Local_SendEditMessage _ timezone guildOrDmId threadRoute newContent attachedFiles ->
                     if String.Nonempty.length newContent > RichText.maxLength then
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
@@ -3773,6 +3782,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             clientId
                                             changeId
                                             time
+                                            timezone
                                             newContent
                                             attachedFiles2
                                             guildId
@@ -3793,6 +3803,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             richText : Nonempty (RichText (Id UserId))
                                             richText =
                                                 RichText.fromNonemptyString
+                                                    timezone
                                                     (SeqDict.fromList
                                                         [ ( session.userId, user )
                                                         , ( otherUserId, otherUser )
@@ -3816,6 +3827,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , Command.batch
                                                     [ Local_SendEditMessage
                                                         time
+                                                        timezone
                                                         guildOrDmId
                                                         threadRoute
                                                         newContent
@@ -3845,7 +3857,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 )
                                     )
 
-                Local_Discord_SendEditGuildMessage _ currentUserId guildId channelId threadRoute newContent ->
+                Local_Discord_SendEditGuildMessage _ timezone currentUserId guildId channelId threadRoute newContent ->
                     BackendExtra.asDiscordGuildChannelMember
                         model
                         sessionId
@@ -3857,6 +3869,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                 richText =
                                     textToDiscordRichText
+                                        timezone
                                         newContent
                                         (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                         model
@@ -3883,6 +3896,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ Local_Discord_SendEditGuildMessage
                                             time
+                                            timezone
                                             currentUserId
                                             guildId
                                             channelId
@@ -3931,7 +3945,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
-                Local_Discord_SendEditDmMessage _ dmData messageId newContent ->
+                Local_Discord_SendEditDmMessage _ timezone dmData messageId newContent ->
                     BackendExtra.asDiscordDmUser
                         model
                         sessionId
@@ -3941,6 +3955,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                 richText =
                                     textToDiscordRichText
+                                        timezone
                                         newContent
                                         (NonemptyDict.keys channel.members |> List.Nonempty.toList)
                                         model
@@ -3962,7 +3977,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.insert dmData.channelId channel2 model.discordDmChannels
                                       }
                                     , Command.batch
-                                        [ Local_Discord_SendEditDmMessage time dmData messageId newContent
+                                        [ Local_Discord_SendEditDmMessage time timezone dmData messageId newContent
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , Broadcast.toDiscordDmChannelExcludingOne
@@ -6596,12 +6611,14 @@ handleWordSpellingGame time session clientId changeId guildOrDmId channel setCha
 
 
 textToDiscordRichText :
-    NonemptyString
+    Time.Zone
+    -> NonemptyString
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-textToDiscordRichText text memberIds model =
+textToDiscordRichText timezone text memberIds model =
     RichText.fromNonemptyString
+        timezone
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId model.discordUsers of
@@ -7509,6 +7526,7 @@ sendEditMessage :
     ClientId
     -> ChangeId
     -> Time.Posix
+    -> Time.Zone
     -> NonemptyString
     -> SeqDict (Id FileId) FileData
     -> Id GuildId
@@ -7518,13 +7536,14 @@ sendEditMessage :
     -> Id UserId
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendEditMessage clientId changeId time newContent attachedFiles2 guildId channelId threadRoute model2 userId guild =
+sendEditMessage clientId changeId time timezone newContent attachedFiles2 guildId channelId threadRoute model2 userId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
                 richText : Nonempty (RichText (Id UserId))
                 richText =
                     RichText.fromNonemptyString
+                        timezone
                         (List.foldl
                             (\memberId dict ->
                                 case NonemptyDict.get memberId model2.users of
@@ -7559,6 +7578,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                     , Command.batch
                         [ Local_SendEditMessage
                             time
+                            timezone
                             (GuildOrDmId_Guild guildId channelId)
                             threadRoute
                             newContent

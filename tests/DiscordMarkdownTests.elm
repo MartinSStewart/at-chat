@@ -13,6 +13,7 @@ import RichTextTests
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
+import TimeInMinutes
 import Unsafe
 import Url exposing (Url)
 
@@ -64,7 +65,7 @@ toDiscordTest source expected =
         (\_ ->
             case String.Nonempty.fromString source of
                 Just nonempty ->
-                    RichText.fromNonemptyString SeqDict.empty nonempty
+                    RichText.fromNonemptyString Time.utc SeqDict.empty nonempty
                         |> RichText.toDiscord customEmojis
                         |> Expect.equal (Ok expected)
 
@@ -145,7 +146,7 @@ roundTripTests =
                 let
                     written : Nonempty (RichText (Discord.Id Discord.UserId))
                     written =
-                        RichText.fromNonemptyString SeqDict.empty source
+                        RichText.fromNonemptyString Time.utc SeqDict.empty source
                 in
                 if List.Nonempty.all isPlainText written then
                     expectSurvivesDiscord source
@@ -246,7 +247,7 @@ expectSurvivesDiscord source =
     let
         written : Nonempty (RichText (Discord.Id Discord.UserId))
         written =
-            RichText.fromNonemptyString SeqDict.empty source
+            RichText.fromNonemptyString Time.utc SeqDict.empty source
     in
     case RichText.toDiscord customEmojis written of
         Ok sent ->
@@ -600,17 +601,17 @@ discordSpecificTests =
         , Test.test "timestamp with a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400:s>"
-                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+                    |> Expect.equal [ Timestamp (TimeInMinutes.fromMinutes 29766890) ]
         , Test.test "timestamp without a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400>"
-                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+                    |> Expect.equal [ Timestamp (TimeInMinutes.fromMinutes 29766890) ]
         , Test.test "timestamp with text around it" <|
             \_ ->
                 fromDiscordHelper "Starts at <t:1786013400:f>, be there"
                     |> Expect.equal
                         [ NormalText 'S' "tarts at "
-                        , Timestamp (Time.millisToPosix 1786013400000)
+                        , Timestamp (TimeInMinutes.fromMinutes 29766890)
                         , NormalText ',' " be there"
                         ]
         , Test.test "a timestamp missing its closing bracket stays text" <|

@@ -2221,11 +2221,11 @@ updateLoaded msg model =
                                     case maybe of
                                         Just draft ->
                                             case
-                                                RichText.fromNonemptyString allUsers draft
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers draft
                                                     |> RichText.removeAttachedFile (\a -> a == fileId)
                                             of
                                                 Just richText ->
-                                                    RichText.toString False allUsers richText
+                                                    RichText.toString local.localUser.timezone False allUsers richText
                                                         |> String.Nonempty.fromString
 
                                                 Nothing ->
@@ -2262,11 +2262,11 @@ updateLoaded msg model =
                                                 case String.Nonempty.fromString edit.text of
                                                     Just nonempty ->
                                                         case
-                                                            RichText.fromNonemptyString allUsers nonempty
+                                                            RichText.fromNonemptyString local.localUser.timezone allUsers nonempty
                                                                 |> RichText.removeAttachedFile (\a -> a == fileId)
                                                         of
                                                             Just richText ->
-                                                                RichText.toString False allUsers richText
+                                                                RichText.toString local.localUser.timezone False allUsers richText
 
                                                             Nothing ->
                                                                 edit.text
@@ -3357,6 +3357,7 @@ updateLoaded msg model =
                                                                 richText : Nonempty (RichText (Id UserId))
                                                                 richText =
                                                                     RichText.fromNonemptyString
+                                                                        local.localUser.timezone
                                                                         (LocalState.allUsers local.localUser)
                                                                         nonempty
                                                             in
@@ -3366,6 +3367,7 @@ updateLoaded msg model =
                                                             else
                                                                 Local_SendEditMessage
                                                                     model.time
+                                                                    model.timezone
                                                                     guildOrDmId2
                                                                     (case threadRoute of
                                                                         ViewThread threadId ->
@@ -3395,6 +3397,7 @@ updateLoaded msg model =
                                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                                 richText =
                                                                     RichText.fromNonemptyString
+                                                                        local.localUser.timezone
                                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                                         nonempty
                                                             in
@@ -3406,6 +3409,7 @@ updateLoaded msg model =
                                                                     DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
                                                                         Local_Discord_SendEditGuildMessage
                                                                             model.time
+                                                                            model.timezone
                                                                             currentUserId
                                                                             guildId
                                                                             channelId
@@ -3422,6 +3426,7 @@ updateLoaded msg model =
                                                                     DiscordGuildOrDmId_Dm data ->
                                                                         Local_Discord_SendEditDmMessage
                                                                             model.time
+                                                                            model.timezone
                                                                             data
                                                                             edit.messageIndex
                                                                             nonempty
@@ -3465,6 +3470,8 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.timezone
+                                                                model.time
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -3510,6 +3517,7 @@ updateLoaded msg model =
                                                     MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
+                                                        model.time
                                                         nameSoFar
                                                         guildOrDmId
                                                         MessageMenu.editMessageTextInputId
@@ -3690,6 +3698,7 @@ updateLoaded msg model =
                                                 GuildOrDmId guildOrDmId2 ->
                                                     Local_SendMessage
                                                         model.time
+                                                        model.timezone
                                                         guildOrDmId2
                                                         nonempty
                                                         (case threadRoute of
@@ -3714,6 +3723,7 @@ updateLoaded msg model =
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     Local_Discord_SendMessage
                                                         model.time
+                                                        model.timezone
                                                         guildOrDmId2
                                                         nonempty
                                                         (case threadRoute of
@@ -3776,6 +3786,8 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.timezone
+                                                                model.time
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -3819,6 +3831,7 @@ updateLoaded msg model =
                                                     MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
+                                                        model.time
                                                         nameSoFar
                                                         guildOrDmId
                                                         Pages.Guild.channelTextInputId
@@ -3987,16 +4000,20 @@ updateLoaded msg model =
                                         allUsers : SeqDict (Id UserId) FrontendUser
                                         allUsers =
                                             Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+
+                                        timezone : Time.Zone
+                                        timezone =
+                                            Local.model loggedIn.localState |> .localUser |> .timezone
                                     in
                                     (if removeSpoiler then
-                                        RichText.fromNonemptyString allUsers text
+                                        RichText.fromNonemptyString timezone allUsers text
                                             |> RichText.unspoilerAttachedFile fileId
 
                                      else
-                                        RichText.fromNonemptyString allUsers text
+                                        RichText.fromNonemptyString timezone allUsers text
                                             |> RichText.spoilerAttachedFile fileId
                                     )
-                                        |> RichText.toString False allUsers
+                                        |> RichText.toString timezone False allUsers
                                         |> String.Nonempty.fromString
                                         |> Maybe.withDefault text
                                 )
@@ -4021,18 +4038,22 @@ updateLoaded msg model =
                                                 allUsers : SeqDict (Id UserId) FrontendUser
                                                 allUsers =
                                                     Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+
+                                                timezone2 : Time.Zone
+                                                timezone2 =
+                                                    Local.model loggedIn.localState |> .localUser |> .timezone
                                             in
                                             { edit
                                                 | text =
                                                     (if removeSpoiler then
-                                                        RichText.fromNonemptyString allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
                                                             |> RichText.unspoilerAttachedFile fileId
 
                                                      else
-                                                        RichText.fromNonemptyString allUsers nonempty
+                                                        RichText.fromNonemptyString timezone2 allUsers nonempty
                                                             |> RichText.spoilerAttachedFile fileId
                                                     )
-                                                        |> RichText.toString False allUsers
+                                                        |> RichText.toString timezone2 False allUsers
                                             }
 
                                         Nothing ->
@@ -5498,7 +5519,7 @@ emojisInMessage emojiData text =
         Nothing ->
             []
     )
-        ++ (RichText.fromNonemptyString SeqDict.empty text
+        ++ (RichText.fromNonemptyString Time.utc SeqDict.empty text
                 |> RichText.customEmojiIds
                 |> SeqSet.fromList
                 |> SeqSet.toList
@@ -5711,6 +5732,9 @@ selectionChanged maybeHtmlId maybeRange model =
 
                                                         Nothing ->
                                                             False
+
+                                                Just (TimestampSoFar _ _) ->
+                                                    True
 
                                                 Nothing ->
                                                     False
@@ -6151,7 +6175,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString False (LocalState.allUsers local.localUser) message.content
+                                    ( RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just
@@ -6163,6 +6187,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                             case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
                                     ( RichText.toString
+                                        local.localUser.timezone
                                         False
                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                         message.content

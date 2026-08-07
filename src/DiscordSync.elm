@@ -999,7 +999,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                 Nothing ->
                                                     Nothing
                                             )
-                                            (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers richText)
+                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers richText)
                                             message
                                             model
 
@@ -1028,14 +1028,16 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                             { currentUserId = discordMessage.author.id, channelId = dmChannelId }
                                             model2.pendingDiscordCreateDmMessages
                                       of
-                                        Just ( clientId, changeId ) ->
+                                        Just ( clientId, changeId, timezone ) ->
                                             Command.batch
                                                 [ LocalChangeResponse
                                                     changeId
                                                     (Local_Discord_SendMessage
                                                         discordMessage.timestamp
+                                                        timezone
                                                         guildOrDmId
                                                         (RichText.toStringWithGetter
+                                                            timezone
                                                             DiscordUserData.username
                                                             False
                                                             model2.discordUsers
@@ -1439,14 +1441,16 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                           }
                                         , Command.batch
                                             [ case SeqDict.get ( discordMessage.author.id, threadOrChannelId ) model2.pendingDiscordCreateMessages of
-                                                Just ( clientId, changeId ) ->
+                                                Just ( clientId, changeId, timezone ) ->
                                                     Command.batch
                                                         [ LocalChangeResponse
                                                             changeId
                                                             (Local_Discord_SendMessage
                                                                 discordMessage.timestamp
+                                                                timezone
                                                                 guildOrDmId
                                                                 (RichText.toStringWithGetter
+                                                                    timezone
                                                                     DiscordUserData.username
                                                                     False
                                                                     model2.discordUsers

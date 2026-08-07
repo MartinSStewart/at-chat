@@ -1510,6 +1510,7 @@ wordListStatus wordList =
 sendGuildMessage :
     BackendModel
     -> Time.Posix
+    -> Time.Zone
     -> ClientId
     -> ChangeId
     -> Id GuildId
@@ -1522,13 +1523,14 @@ sendGuildMessage :
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
+sendGuildMessage model time timezone clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles emojis session user guild =
     case ( SeqDict.get channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
                 richText : Nonempty (RichText (Id UserId))
                 richText =
                     RichText.fromNonemptyString
+                        timezone
                         (List.foldl
                             (\memberId dict ->
                                 case NonemptyDict.get memberId model.users of
@@ -1708,7 +1710,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
             , Command.batch
                 [ LocalChangeResponse
                     changeId
-                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles emojis)
+                    (Local_SendMessage time timezone guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles emojis)
                     |> Lamdera.sendToFrontend clientId
                 , Broadcast.toGuildExcludingOne
                     clientId
@@ -1737,6 +1739,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
 sendDm :
     BackendModel
     -> Time.Posix
+    -> Time.Zone
     -> ClientId
     -> ChangeId
     -> Id UserId
@@ -1750,11 +1753,12 @@ sendDm :
     -> DmChannelId
     -> DmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
+sendDm model time timezone clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles emojis session user otherUser dmChannelId dmChannel =
     let
         richText : Nonempty (RichText (Id UserId))
         richText =
             RichText.fromNonemptyString
+                timezone
                 (SeqDict.fromList [ ( session.userId, user ), ( otherUserId, otherUser ) ])
                 text
     in
@@ -1778,6 +1782,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                     Broadcast.broadcastDm
                         changeId
                         time
+                        timezone
                         clientId
                         session.userId
                         (User.backendToFrontendForUser user)
@@ -1833,6 +1838,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                     Broadcast.broadcastDm
                         changeId
                         time
+                        timezone
                         clientId
                         session.userId
                         (User.backendToFrontendForUser user)
@@ -2112,10 +2118,10 @@ toBackendLog toBackend =
                 Local_Admin _ ->
                     ToBackendLog_Local_Admin
 
-                Local_SendMessage _ _ _ _ _ _ ->
+                Local_SendMessage _ _ _ _ _ _ _ ->
                     ToBackendLog_Local_SendMessage
 
-                Local_Discord_SendMessage _ _ _ _ _ ->
+                Local_Discord_SendMessage _ _ _ _ _ _ ->
                     ToBackendLog_Local_Discord_SendMessage
 
                 Local_NewChannel _ _ _ _ ->
@@ -2151,13 +2157,13 @@ toBackendLog toBackend =
                 Local_RemoveReactionEmoji _ _ _ ->
                     ToBackendLog_Local_RemoveReactionEmoji
 
-                Local_SendEditMessage _ _ _ _ _ ->
+                Local_SendEditMessage _ _ _ _ _ _ ->
                     ToBackendLog_Local_SendEditMessage
 
-                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
+                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
                     ToBackendLog_Local_Discord_SendEditGuildMessage
 
-                Local_Discord_SendEditDmMessage _ _ _ _ ->
+                Local_Discord_SendEditDmMessage _ _ _ _ _ ->
                     ToBackendLog_Local_Discord_SendEditDmMessage
 
                 Local_MemberEditTyping _ _ _ ->

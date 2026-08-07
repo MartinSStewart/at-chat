@@ -36,6 +36,7 @@ import Set
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Time
+import TimeInMinutes
 import Ui
 import Ui.Font
 import Unsafe
@@ -215,10 +216,10 @@ stickersSection =
             (Dom.id "channel")
             "Placeholder"
             123
-            (richText |> RichText.toString False SeqDict.empty)
+            (richText |> RichText.toString Time.utc False SeqDict.empty)
             (Just richText)
             SeqDict.empty
-            { userAgent = UserAgent.init, stickers = stickers, customEmojis = SeqDict.empty }
+            { userAgent = UserAgent.init, timezone = Time.utc, stickers = stickers, customEmojis = SeqDict.empty }
             { typedTextCounter = 0, textInputFocus = Nothing }
             SeqDict.empty
             |> Ui.map (\_ -> ())
@@ -338,7 +339,7 @@ notificationEmail =
                 , normal " and an escaped asterisk "
                 , EscapedChar EscapedBold
                 , normal ".\n"
-                , Timestamp (Time.millisToPosix 1000000)
+                , Timestamp (TimeInMinutes.fromMinutes 1000000)
                 , CodeBlock NoLanguage "a code block\nwith two lines"
                 , CodeBlock (Language (NonemptyString 'e' "lm")) "add a b =\n    a + b"
                 , BlockQuote NoLeadingLineBreak [ normal "A block quote" ]
@@ -573,7 +574,7 @@ embedExamples whitelistedDomains =
                 , devicePixelRatio = 1
                 }
                 (Array.fromList embeds)
-                (RichText.fromNonemptyString SeqDict.empty text)
+                (RichText.fromNonemptyString Time.utc SeqDict.empty text)
                 |> Html.div []
                 |> Ui.html
 
