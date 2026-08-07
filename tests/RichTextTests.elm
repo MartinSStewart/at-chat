@@ -8,6 +8,7 @@ import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import PersonName exposing (PersonName)
+import Quantity
 import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
 import SeqSet
@@ -588,15 +589,15 @@ test =
             "Timestamp parsing"
             [ fromNonemptyStringTest
                 "<t:1786013400:f>"
-                (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])
+                (Nonempty (Timestamp (Quantity.unsafe 1786013400)) [])
             , fromNonemptyStringTest
                 "<t:1786013400>"
-                (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])
+                (Nonempty (Timestamp (Quantity.unsafe 1786013400)) [])
             , fromNonemptyStringTest
                 "Starts at <t:1786013400:f>, be there"
                 (Nonempty
                     (NormalText 'S' "tarts at ")
-                    [ Timestamp (Time.millisToPosix 1786013400000), NormalText ',' " be there" ]
+                    [ Timestamp (Quantity.unsafe 1786013400), NormalText ',' " be there" ]
                 )
             , fromNonemptyStringTest
                 "<t:1786013400:f"
@@ -608,7 +609,7 @@ test =
             , fromNonemptyStringTest "a < b" (Nonempty (NormalText 'a' " < b") [])
             , fromNonemptyStringTest
                 "*<t:1786013400:f>*"
-                (Nonempty (Bold (Nonempty (Timestamp (Time.millisToPosix 1786013400000)) [])) [])
+                (Nonempty (Bold (Nonempty (Timestamp (Quantity.unsafe 1786013400)) [])) [])
             , -- Editing a message turns it back into text and parses the result, so a timestamp
               -- that survives the trip is a timestamp that survives being edited.
               Test.test
@@ -619,7 +620,7 @@ test =
                         original =
                             Nonempty
                                 (NormalText 'S' "tarts at ")
-                                [ Timestamp (Time.millisToPosix 1786013400000)
+                                [ Timestamp (Quantity.unsafe 1786013400)
                                 , NormalText ',' " be there"
                                 ]
                     in
@@ -631,12 +632,12 @@ test =
             ]
         , Test.describe
             "Timestamp display"
-            [ timestampViewTest "Something later today counts down to it" 0 9000000 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
-            , timestampViewTest "A minute away is singular" 0 60000 "00:01 (in 1\u{00A0}minute)"
-            , timestampViewTest "Less than a minute away is now" 0 30000 "00:00 (now)"
-            , timestampViewTest "Something earlier today counts up from it" 9000000 0 "00:00 (2\u{00A0}hours 30\u{00A0}minutes ago)"
-            , timestampViewTest "A whole number of hours leaves the minutes out" 0 7200000 "02:00 (in 2\u{00A0}hours)"
-            , timestampViewTest "Another day gets the date instead" 0 1786013400000 "August 6, 2026 at 10:50"
+            [ timestampViewTest "Something later today counts down to it" 0 9000 "02:30 (in 2\u{00A0}hours 30\u{00A0}minutes)"
+            , timestampViewTest "A minute away is singular" 0 60 "00:01 (in 1\u{00A0}minute)"
+            , timestampViewTest "Less than a minute away is now" 0 30 "00:00 (now)"
+            , timestampViewTest "Something earlier today counts up from it" 9000 0 "00:00 (2\u{00A0}hours 30\u{00A0}minutes ago)"
+            , timestampViewTest "A whole number of hours leaves the minutes out" 0 7200 "02:00 (in 2\u{00A0}hours)"
+            , timestampViewTest "Another day gets the date instead" 0 1786013400 "August 6, 2026 at 10:50"
             ]
         , Test.describe "Selection highlight in the message input"
             [ selectionHighlightTest "abc||spoiler||def"
@@ -678,7 +679,7 @@ timestampViewTest name now time expected =
                 , timezone = Time.utc
                 , time = Time.millisToPosix now
                 }
-                (Nonempty (Timestamp (Time.millisToPosix time)) [])
+                (Nonempty (Timestamp (Quantity.unsafe time)) [])
                 |> Html.div []
                 |> Test.Html.Query.fromHtml
                 |> Test.Html.Query.has [ Test.Html.Selector.exactText expected ]

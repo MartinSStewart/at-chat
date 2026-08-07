@@ -8,6 +8,7 @@ import Fuzz
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
+import Quantity
 import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
 import RichTextTests
 import SeqDict
@@ -600,17 +601,17 @@ discordSpecificTests =
         , Test.test "timestamp with a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400:s>"
-                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+                    |> Expect.equal [ Timestamp (Quantity.unsafe 1786013400) ]
         , Test.test "timestamp without a format hint" <|
             \_ ->
                 fromDiscordHelper "<t:1786013400>"
-                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+                    |> Expect.equal [ Timestamp (Quantity.unsafe 1786013400) ]
         , Test.test "timestamp with text around it" <|
             \_ ->
                 fromDiscordHelper "Starts at <t:1786013400:f>, be there"
                     |> Expect.equal
                         [ NormalText 'S' "tarts at "
-                        , Timestamp (Time.millisToPosix 1786013400000)
+                        , Timestamp (Quantity.unsafe 1786013400)
                         , NormalText ',' " be there"
                         ]
         , Test.test "a timestamp missing its closing bracket stays text" <|
