@@ -1392,7 +1392,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                        , Email.Html.Attributes.borderRadius "4px"
                                        ]
                                 )
-                                [ Email.Html.text (dateAndTimeToString Time.utc time) ]
+                                [ Email.Html.text (dateAndTimeToString Time.utc time ++ " (UTC)") ]
                            ]
                       --++ [ Html.span
                       --           [ emailAttrIf state.italic (Email.Html.Attributes.style "font-style" "italic")
