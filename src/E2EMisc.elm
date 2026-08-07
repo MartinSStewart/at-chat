@@ -8,7 +8,10 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , noTimestampSuggestionTest
     , profileImageOpensDm
+    , timeOfDaySuggestionTest
+    , timeOffsetSuggestionTest
     )
 
 import Audio
@@ -18,20 +21,24 @@ import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
+import Effect.Time
 import Expect
 import FileStatus
 import Html.Attributes
 import Id
 import Json.Encode
+import List.Nonempty
 import Local
 import LocalState exposing (LocalState)
 import Message
 import Pages.Guild
+import RichText
 import Route
 import SeqDict
 import String.Nonempty
 import Test.Html.Query
 import Test.Html.Selector
+import TimeInMinutes
 import Types exposing (BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 
 
@@ -799,6 +806,174 @@ inactiveDmThreadsAreHiddenTest config =
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewDmThread_2_0" ])
                 , E2EHelper.hasExactText admin [ "Hello in the thread!" ]
                 , admin.snapshotView 100 { name = "Inactive threads are hidden" }
+                ]
+            )
+        ]
+
+
+{-| Noon on the day `E2EHelper.startTime` falls on. The suggestions a timestamp dropdown makes
+are relative to the time the test is running at, so starting at midday leaves room either side
+of it for them to land on the same day and read as a time rather than a date.
+-}
+middayStartTime : Effect.Time.Posix
+middayStartTime =
+    Duration.addTo E2EHelper.startTime (Duration.hours 12)
+
+
+{-| The minutes of every timestamp in the most recent message the backend has stored.
+-}
+lastMessageTimestamps : E2EHelper.BackendModel2 -> List Int
+lastMessageTimestamps backend =
+    case E2EHelper.lastGuildChannelMessage backend of
+        Just ( _, _, Message.UserTextMessage data ) ->
+            List.Nonempty.toList data.content
+                |> List.filterMap
+                    (\part ->
+                        case part of
+                            RichText.Timestamp time ->
+                                TimeInMinutes.toSeconds time // 60 |> Just
+
+                            _ ->
+                                Nothing
+                    )
+
+        _ ->
+            []
+
+
+expectLastMessageTimestamps : List Int -> T.Data FrontendModel E2EHelper.BackendModel2 -> Result String ()
+expectLastMessageTimestamps expected data =
+    if lastMessageTimestamps data.backend == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected the stored message to hold timestamps at "
+                ++ Debug.toString expected
+                ++ " minutes but it held "
+                ++ Debug.toString (lastMessageTimestamps data.backend)
+            )
+
+
+{-| Writing a time of day offers the times a clock shows it at, and the one that's picked is
+still a timestamp by the time the backend has it.
+-}
+timeOfDaySuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+timeOfDaySuggestionTest config =
+    E2EHelper.startTest
+        "Writing a time of day suggests timestamps"
+        middayStartTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at 18:00"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a timestamp" ])
+
+                -- Suggestions that land on another day read as a date, which is the same text
+                -- that picking them writes into the message.
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 06:00" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 18:00" ])
+                ]
+            )
+        ]
+
+
+{-| Writing a time offset suggests times either side of now, and the timestamp that ends up in
+the message is still there after the message has been round tripped through an edit.
+-}
+timeOffsetSuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+timeOffsetSuggestionTest config =
+    E2EHelper.startTest
+        "Writing a time offset suggests a timestamp that survives being sent and edited"
+        middayStartTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                let
+                    withTimestamp : String
+                    withTimestamp =
+                        "Remind me in January 1, 1970 at 17:00"
+                in
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "Remind me in 5 hours"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 20, end = 20 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a timestamp" ])
+
+                -- Picking a suggestion closes the dropdown. What it writes into the message is
+                -- put there by js, which these tests don't run, so the text it would have left
+                -- behind is typed in its place.
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.input 100 Pages.Guild.channelTextInputId withTimestamp
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ 17 * 60 ])
+
+                -- The message shows the moment rather than the words that were typed.
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "17:00" ])
+
+                -- Editing turns the message back into text, which is where a timestamp that
+                -- can't be read back would be lost.
+                , E2EHelper.focusEvent admin 100 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "ArrowUp" []
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.id "editMessageTextInput"
+                        , Test.Html.Selector.attribute (Html.Attributes.value withTimestamp)
+                        ]
+                    )
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ 17 * 60 ])
+                ]
+            )
+        ]
+
+
+{-| The dropdown stays out of the way of text that isn't asking for a timestamp, including the
+time of day at the end of a timestamp that's already there.
+-}
+noTimestampSuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+noTimestampSuggestionTest config =
+    E2EHelper.startTest
+        "Text that isn't asking for a timestamp doesn't get one suggested"
+        middayStartTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+                , admin.input 100 Pages.Guild.channelTextInputId "see you later"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+
+                -- A unit needs a number in front of it to be an offset.
+                , admin.input 100 Pages.Guild.channelTextInputId "later that day"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 14, end = 14 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+
+                -- The 18:00 on the end of a timestamp is already part of one, so offering to
+                -- turn it into another would nest a timestamp inside the one that's there.
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at January 1, 1970 at 18:00"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 32, end = 32 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+
+                -- Away from the end of the words it reads, there's nothing to replace.
+                , admin.input 100 Pages.Guild.channelTextInputId "Remind me in 5 hours and also buy milk"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 38, end = 38 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
                 ]
             )
         ]
