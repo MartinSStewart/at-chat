@@ -4,6 +4,7 @@ module MessageInput exposing
     , NameSoFar(..)
     , NameSoFarData
     , TextInputFocus
+    , TimestampData(..)
     , availableCustomEmojisAndStickers
     , disabledView
     , discordUserDropdownList
@@ -21,10 +22,12 @@ module MessageInput exposing
 import Array
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
+import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
+import Effect.Time as Time
 import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import FileStatus exposing (FileId, FileStatus)
 import Html exposing (Html)
@@ -43,6 +46,7 @@ import MyUi
 import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
+import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
@@ -71,6 +75,12 @@ type alias TextInputFocus =
 type NameSoFar
     = NameSoFar NameSoFarData
     | EmojiSoFar NameSoFarData
+    | TimestampSoFar Range TimestampData
+
+
+type TimestampData
+    = HourOffset Int
+    | MinuteOffset Int
 
 
 type alias NameSoFarData =
@@ -944,6 +954,7 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
 
 pressedArrowInDropdown :
     Bool
+    -> Time.Posix
     -> NameSoFar
     -> AnyGuildOrDmId
     -> Int
@@ -951,7 +962,7 @@ pressedArrowInDropdown :
     -> Maybe CachedEmojiData
     -> LocalState
     -> Maybe MentionUserDropdown
-pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser emojiData local =
+pressedArrowInDropdown isMobile time nameSoFar guildOrDmId index maybePingUser emojiData local =
     case maybePingUser of
         Just pingUser ->
             let
@@ -999,8 +1010,21 @@ pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser emojiD
                         Nothing ->
                             Nothing
 
+                TimestampSoFar _ timestampData ->
+                    timestampDropdownList time timestampData |> List.length |> helper
+
         Nothing ->
             Nothing
+
+
+timestampDropdownList : Time.Posix -> TimestampData -> List (Quantity Int Seconds)
+timestampDropdownList time timestamp =
+    case timestamp of
+        HourOffset int ->
+            [ Time.posixToMillis time // 1000 - 60 * 60 * int |> Quantity.unsafe ]
+
+        MinuteOffset int ->
+            [ Time.posixToMillis time // 1000 - 60 * int |> Quantity.unsafe ]
 
 
 availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
@@ -1024,6 +1048,7 @@ availableCustomEmojisAndStickers guildOrDmId local =
 pressedDropdownItem :
     msg
     -> Bool
+    -> Time.Posix
     -> NameSoFar
     -> AnyGuildOrDmId
     -> HtmlId
@@ -1033,7 +1058,7 @@ pressedDropdownItem :
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId dropdownIndex pingUser emojiData local inputText =
+pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextInputId dropdownIndex pingUser emojiData local inputText =
     let
         maybeTextToInsert : Maybe ( Range, String )
         maybeTextToInsert =
@@ -1104,6 +1129,14 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
 
                         Nothing ->
                             Nothing
+
+                TimestampSoFar range timestampData ->
+                    case timestampDropdownList time timestampData |> List.Extra.getAt dropdownIndex of
+                        Just timestamp ->
+                            ( range, RichText.timestampToDiscordString timestamp ) |> Just
+
+                        Nothing ->
+                            Nothing
     in
     case ( pingUser, maybeTextToInsert ) of
         ( Just _, Just ( range, textToInsert ) ) ->
@@ -1125,6 +1158,7 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
 
 dropdownView :
     Bool
+    -> Time.Posix
     -> NameSoFar
     -> AnyGuildOrDmId
     -> Maybe SkinTone
@@ -1133,7 +1167,7 @@ dropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData local dropdownButtonId dropdown =
+dropdownView isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdownButtonId dropdown =
     case nameSoFar of
         NameSoFar nameSoFarData ->
             let
@@ -1166,11 +1200,11 @@ dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData local dropdownBut
                                 )
                                 (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local)
 
-                pingDropdownViewHeight : Int
-                pingDropdownViewHeight =
+                dropdownViewHeight : Int
+                dropdownViewHeight =
                     List.length rows * dropdownButtonHeight isMobile False
             in
-            dropdownContainer nameSoFar dropdown pingDropdownViewHeight rows
+            dropdownContainer nameSoFar dropdown dropdownViewHeight rows
 
         EmojiSoFar emojiSoFar ->
             case emojiData of
@@ -1256,6 +1290,28 @@ dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData local dropdownBut
                 Nothing ->
                     dropdownContainer nameSoFar dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
 
+        TimestampSoFar range timestamp ->
+            let
+                rows : List (Element Msg)
+                rows =
+                    List.indexedMap
+                        (\index timestamp2 ->
+                            dropdownButton
+                                isMobile
+                                False
+                                dropdown
+                                dropdownButtonId
+                                index
+                                (Ui.text (RichText.timestampToString time local.localUser.timezone timestamp2))
+                        )
+                        (timestampDropdownList time timestamp)
+
+                dropdownViewHeight : Int
+                dropdownViewHeight =
+                    List.length rows * dropdownButtonHeight isMobile False
+            in
+            dropdownContainer nameSoFar dropdown dropdownViewHeight rows
+
 
 dropdownContainer : NameSoFar -> MentionUserDropdown -> Int -> List (Element Msg) -> Element Msg
 dropdownContainer nameSoFar dropdown contentHeight content =
@@ -1287,10 +1343,13 @@ dropdownContainer nameSoFar dropdown contentHeight content =
             (Ui.text
                 (case nameSoFar of
                     NameSoFar _ ->
-                        "Mention a user:"
+                        "Mention a user"
 
                     EmojiSoFar _ ->
                         "Add a sticker or emoji"
+
+                    TimestampSoFar range timestampData ->
+                        "Add a timestamp"
                 )
             )
         , Ui.column [] content

@@ -3465,6 +3465,7 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.time
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -3510,6 +3511,7 @@ updateLoaded msg model =
                                                     MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
+                                                        model.time
                                                         nameSoFar
                                                         guildOrDmId
                                                         MessageMenu.editMessageTextInputId
@@ -3776,6 +3778,7 @@ updateLoaded msg model =
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
                                                                 (MyUi.isMobile model)
+                                                                model.time
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -3819,6 +3822,7 @@ updateLoaded msg model =
                                                     MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
+                                                        model.time
                                                         nameSoFar
                                                         guildOrDmId
                                                         Pages.Guild.channelTextInputId
@@ -5711,6 +5715,9 @@ selectionChanged maybeHtmlId maybeRange model =
 
                                                         Nothing ->
                                                             False
+
+                                                Just (TimestampSoFar _ timestamp) ->
+                                                    True
 
                                                 Nothing ->
                                                     False

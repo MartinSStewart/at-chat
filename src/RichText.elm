@@ -34,6 +34,7 @@ module RichText exposing
     , stringToStickersAndCustomEmojis
     , textInputView
     , timestampToDiscordString
+    , timestampToString
     , toDiscord
     , toString
     , toStringWithGetter
@@ -1394,7 +1395,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                        , Email.Html.Attributes.borderRadius "4px"
                                        ]
                                 )
-                                [ Email.Html.text (dateAndTimeToString Time.utc (Time.millisToPosix (Quantity.unwrap time * 1000)) ++ " (UTC)") ]
+                                [ Email.Html.text (dateAndTimeToString Time.utc time ++ " (UTC)") ]
                            ]
                       --++ [ Html.span
                       --           [ emailAttrIf state.italic (Email.Html.Attributes.style "font-style" "italic")
@@ -3227,7 +3228,7 @@ message sees it in their own timezone. The date is what's worth knowing about so
 days away, but for something happening later today the date says nothing the clock doesn't,
 so how long is left takes its place.
 -}
-timestampView : Time.Posix -> Time.Zone -> RichTextState -> Time.Posix -> Html msg
+timestampView : Time.Posix -> Time.Zone -> RichTextState -> Quantity Int Seconds -> Html msg
 timestampView now timezone state time =
     Html.span
         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
@@ -3247,18 +3248,26 @@ timestampView now timezone state time =
         [ Html.text (timestampToString now timezone time) ]
 
 
-timestampToString : Time.Posix -> Time.Zone -> Time.Posix -> String
+timestampToString : Time.Posix -> Time.Zone -> Quantity Int Seconds -> String
 timestampToString now timezone time =
-    if isSameDay timezone now time then
-        MyUi.timestamp time timezone ++ " (" ++ timeUntilToString now time ++ ")"
+    let
+        timeB =
+            Time.millisToPosix (Quantity.unwrap time * 1000)
+    in
+    if isSameDay timezone now timeB then
+        MyUi.timestamp timeB timezone ++ " (" ++ timeUntilToString now timeB ++ ")"
 
     else
         dateAndTimeToString timezone time
 
 
-dateAndTimeToString : Time.Zone -> Time.Posix -> String
+dateAndTimeToString : Time.Zone -> Quantity Int Seconds -> String
 dateAndTimeToString timezone time =
-    MyUi.datestamp timezone time ++ " at " ++ MyUi.timestamp time timezone
+    let
+        time2 =
+            Time.millisToPosix (Quantity.unwrap time * 1000)
+    in
+    MyUi.datestamp timezone time2 ++ " at " ++ MyUi.timestamp time2 timezone
 
 
 isSameDay : Time.Zone -> Time.Posix -> Time.Posix -> Bool
@@ -4009,13 +4018,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                 Timestamp time ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList
-                        ++ [ timestampView
-                                config.time
-                                config.timezone
-                                state
-                                (Time.millisToPosix (Quantity.unwrap time * 1000))
-                           ]
+                    , currentList ++ [ timestampView config.time config.timezone state time ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )

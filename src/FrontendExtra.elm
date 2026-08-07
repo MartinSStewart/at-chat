@@ -382,6 +382,7 @@ layout model attributes child =
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
                                             MessageInput.dropdownView
                                                 isMobile
+                                                model.time
                                                 nameSoFar
                                                 guildOrDmId
                                                 local.localUser.user.emojiConfig.skinTone
@@ -395,6 +396,7 @@ layout model attributes child =
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
                                             MessageInput.dropdownView
                                                 isMobile
+                                                model.time
                                                 nameSoFar
                                                 guildOrDmId
                                                 local.localUser.user.emojiConfig.skinTone
@@ -5872,6 +5874,9 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         helper index text =
             if PersonName.maxLength < selection.start - index || index <= 0 then
                 Nothing
+
+            else if String.slice (index - String.length "1 hour") index text == "1 hour" then
+                MessageInput.HourOffset 1 |> TimestampSoFar { start = index - String.length "1 hour", end = index } |> Just
 
             else
                 case String.slice (index - 1) index text of
