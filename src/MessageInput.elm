@@ -78,8 +78,10 @@ type NameSoFar
 
 
 type TimestampData
-    = HourOffset Int
-    | MinuteOffset Int
+    = WeekOffset Float
+    | DayOffset Float
+    | HourOffset Float
+    | MinuteOffset Float
 
 
 type alias NameSoFarData =
@@ -1022,16 +1024,24 @@ pressedArrowInDropdown isMobile time nameSoFar guildOrDmId index maybePingUser e
 
 timestampDropdownList : Time.Posix -> TimestampData -> List TimeInMinutes
 timestampDropdownList time timestamp =
+    let
+        helper scale value =
+            [ toFloat (Time.posixToMillis time // (60 * 1000)) + scale * value |> round |> TimeInMinutes.fromMinutes
+            , toFloat (Time.posixToMillis time // (60 * 1000)) - scale * value |> round |> TimeInMinutes.fromMinutes
+            ]
+    in
     case timestamp of
-        HourOffset int ->
-            [ Time.posixToMillis time // (60 * 1000) + 60 * int |> TimeInMinutes.fromMinutes
-            , Time.posixToMillis time // (60 * 1000) - 60 * int |> TimeInMinutes.fromMinutes
-            ]
+        WeekOffset value ->
+            helper (60 * 24 * 7) value
 
-        MinuteOffset int ->
-            [ Time.posixToMillis time // (60 * 1000) + int |> TimeInMinutes.fromMinutes
-            , Time.posixToMillis time // (60 * 1000) - int |> TimeInMinutes.fromMinutes
-            ]
+        DayOffset value ->
+            helper (60 * 24) value
+
+        HourOffset value ->
+            helper 60 value
+
+        MinuteOffset value ->
+            helper 1 value
 
 
 availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )

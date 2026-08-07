@@ -97,6 +97,7 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
+import String.Extra
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -126,10 +127,10 @@ pendingChangesText localChange =
         Local_Admin adminChange ->
             Pages.Admin.pendingChangesText adminChange
 
-        Local_SendMessage _ _ _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ _ _ ->
             "Sent a message"
 
-        Local_Discord_SendMessage _ _ _ _ _ ->
+        Local_Discord_SendMessage _ _ _ _ _ _ ->
             "Sent a message"
 
         Local_NewChannel _ _ _ _ ->
@@ -165,13 +166,13 @@ pendingChangesText localChange =
         Local_RemoveReactionEmoji _ _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage _ _ _ _ _ ->
+        Local_SendEditMessage _ _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
+        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditDmMessage _ _ _ _ ->
+        Local_Discord_SendEditDmMessage _ _ _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->
@@ -2568,7 +2569,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
+                Local_SendMessage createdAt _ guildOrDmId text threadRouteWithRepliedTo attachedFiles emojis ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2697,7 +2698,7 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Local_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Local_Discord_SendMessage createdAt _ guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -2904,10 +2905,10 @@ changeUpdate localMsg local =
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     removeReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
 
-                Local_SendEditMessage time guildOrDmId threadRoute newContent attachedFiles ->
+                Local_SendEditMessage time _ guildOrDmId threadRoute newContent attachedFiles ->
                     editMessage time local.localUser.session.userId guildOrDmId newContent attachedFiles threadRoute local
 
-                Local_Discord_SendEditGuildMessage time currentUserId guildId channelId threadRoute newContent ->
+                Local_Discord_SendEditGuildMessage time _ currentUserId guildId channelId threadRoute newContent ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -2934,7 +2935,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Local_Discord_SendEditDmMessage time dmData messageId newContent ->
+                Local_Discord_SendEditDmMessage time _ dmData messageId newContent ->
                     { local
                         | discordDmChannels =
                             SeqDict.updateIfExists
@@ -5877,9 +5878,6 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
             if PersonName.maxLength < selection.start - index || index <= 0 then
                 Nothing
 
-            else if String.slice (index - String.length "1 hour") index text == "1 hour" then
-                MessageInput.HourOffset 1 |> TimestampSoFar { start = index - String.length "1 hour", end = index } |> Just
-
             else
                 case String.slice (index - 1) index text of
                     "@" ->
@@ -5905,7 +5903,41 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                             Nothing
 
                     _ ->
-                        helper (index - 1) text
+                        let
+                            timeOffsetHelper value label offsetType =
+                                case String.toFloat value of
+                                    Just value2 ->
+                                        offsetType value2
+                                            |> TimestampSoFar { start = index - String.length value + 1 + 4, end = index }
+                                            |> Just
+
+                                    Nothing ->
+                                        helper (index - 1) text
+                        in
+                        case lastTwoWords index text |> List.map String.toLower of
+                            [ value, "weeks" ] ->
+                                timeOffsetHelper value "weeks" MessageInput.WeekOffset
+
+                            [ value, "week" ] ->
+                                timeOffsetHelper value "week" MessageInput.WeekOffset
+
+                            [ value, "days" ] ->
+                                timeOffsetHelper value "days" MessageInput.DayOffset
+
+                            [ value, "day" ] ->
+                                timeOffsetHelper value "day" MessageInput.DayOffset
+
+                            [ value, "hours" ] ->
+                                timeOffsetHelper value "hours" MessageInput.HourOffset
+
+                            [ value, "hour" ] ->
+                                timeOffsetHelper value "hour" MessageInput.HourOffset
+
+                            [ value, "minutes" ] ->
+                                timeOffsetHelper value "minutes" MessageInput.MinuteOffset
+
+                            [ value, "minute" ] ->
+                                timeOffsetHelper value "minute" MessageInput.MinuteOffset
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then

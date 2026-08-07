@@ -3367,6 +3367,7 @@ updateLoaded msg model =
                                                             else
                                                                 Local_SendEditMessage
                                                                     model.time
+                                                                    model.timezone
                                                                     guildOrDmId2
                                                                     (case threadRoute of
                                                                         ViewThread threadId ->
@@ -3408,6 +3409,7 @@ updateLoaded msg model =
                                                                     DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
                                                                         Local_Discord_SendEditGuildMessage
                                                                             model.time
+                                                                            model.timezone
                                                                             currentUserId
                                                                             guildId
                                                                             channelId
@@ -3424,6 +3426,7 @@ updateLoaded msg model =
                                                                     DiscordGuildOrDmId_Dm data ->
                                                                         Local_Discord_SendEditDmMessage
                                                                             model.time
+                                                                            model.timezone
                                                                             data
                                                                             edit.messageIndex
                                                                             nonempty
@@ -3694,6 +3697,7 @@ updateLoaded msg model =
                                                 GuildOrDmId guildOrDmId2 ->
                                                     Local_SendMessage
                                                         model.time
+                                                        model.timezone
                                                         guildOrDmId2
                                                         nonempty
                                                         (case threadRoute of
@@ -3718,6 +3722,7 @@ updateLoaded msg model =
                                                 DiscordGuildOrDmId guildOrDmId2 ->
                                                     Local_Discord_SendMessage
                                                         model.time
+                                                        model.timezone
                                                         guildOrDmId2
                                                         nonempty
                                                         (case threadRoute of
