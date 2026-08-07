@@ -50,6 +50,7 @@ import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
 import Drawing exposing (Drawing)
+import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Email.Html
@@ -70,6 +71,7 @@ import NonemptyExtra
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Point2d exposing (Point2d)
+import Quantity exposing (Quantity)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -142,7 +144,7 @@ type RichText userId
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
     | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
-    | Timestamp Time.Posix
+    | Timestamp (Quantity Int Seconds)
 
 
 type HasLeadingLineBreak
@@ -1392,7 +1394,7 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                        , Email.Html.Attributes.borderRadius "4px"
                                        ]
                                 )
-                                [ Email.Html.text (dateAndTimeToString Time.utc time ++ " (UTC)") ]
+                                [ Email.Html.text (dateAndTimeToString Time.utc (Time.millisToPosix (Quantity.unwrap time * 1000)) ++ " (UTC)") ]
                            ]
                       --++ [ Html.span
                       --           [ emailAttrIf state.italic (Email.Html.Attributes.style "font-style" "italic")
@@ -3322,9 +3324,9 @@ pluralize amount unit =
 hint is dropped when parsing, since at-chat picks the format it shows the timestamp in, so
 timestamps are written back out with `f`, the hint closest to that.
 -}
-timestampToDiscordString : Time.Posix -> String
+timestampToDiscordString : Quantity Int Seconds -> String
 timestampToDiscordString time =
-    "<t:" ++ String.fromInt (Time.posixToMillis time // 1000) ++ ":f>"
+    "<t:" ++ String.fromInt (Quantity.unwrap time) ++ ":f>"
 
 
 type alias PressedImageData =
@@ -4007,7 +4009,13 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                 Timestamp time ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ [ timestampView config.time config.timezone state time ]
+                    , currentList
+                        ++ [ timestampView
+                                config.time
+                                config.timezone
+                                state
+                                (Time.millisToPosix (Quantity.unwrap time * 1000))
+                           ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -6194,7 +6202,7 @@ hint is read past and thrown away.
 `index` points at the opening `<`.
 
 -}
-tryParseDiscordTimestamp : String -> Int -> Maybe ( Time.Posix, Int )
+tryParseDiscordTimestamp : String -> Int -> Maybe ( Quantity Int Seconds, Int )
 tryParseDiscordTimestamp source index =
     let
         len : Int
@@ -6212,11 +6220,11 @@ tryParseDiscordTimestamp source index =
     if stringAt (index + 1) source == Just "t" && stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
         case ( String.toInt (String.slice afterColon digitEnd source), stringAt digitEnd source ) of
             ( Just seconds, Just ">" ) ->
-                Just ( Time.millisToPosix (seconds * 1000), digitEnd + 1 )
+                Just ( Quantity.unsafe seconds, digitEnd + 1 )
 
             ( Just seconds, Just ":" ) ->
                 if stringAt (digitEnd + 2) source == Just ">" then
-                    Just ( Time.millisToPosix (seconds * 1000), digitEnd + 3 )
+                    Just ( Quantity.unsafe seconds, digitEnd + 3 )
 
                 else
                     Nothing

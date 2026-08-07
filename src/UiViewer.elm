@@ -28,6 +28,7 @@ import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
+import Quantity
 import RichText exposing (Domain, EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import Route
 import SeqDict exposing (SeqDict)
@@ -338,7 +339,7 @@ notificationEmail =
                 , normal " and an escaped asterisk "
                 , EscapedChar EscapedBold
                 , normal ".\n"
-                , Timestamp (Time.millisToPosix 1000000)
+                , Timestamp (Quantity.unsafe 1000000)
                 , CodeBlock NoLanguage "a code block\nwith two lines"
                 , CodeBlock (Language (NonemptyString 'e' "lm")) "add a b =\n    a + b"
                 , BlockQuote NoLeadingLineBreak [ normal "A block quote" ]
