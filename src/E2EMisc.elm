@@ -21,7 +21,7 @@ import Duration
 import E2EHelper
 import Effect.Browser.Dom as Dom
 import Effect.Test as T
-import Effect.Time
+import Effect.Time as Time
 import Expect
 import FileStatus
 import Html.Attributes
@@ -815,7 +815,7 @@ inactiveDmThreadsAreHiddenTest config =
 are relative to the time the test is running at, so starting at midday leaves room either side
 of it for them to land on the same day and read as a time rather than a date.
 -}
-middayStartTime : Effect.Time.Posix
+middayStartTime : Time.Posix
 middayStartTime =
     Duration.addTo E2EHelper.startTime (Duration.hours 12)
 
@@ -849,9 +849,9 @@ expectLastMessageTimestamps expected data =
     else
         Err
             ("Expected the stored message to hold timestamps at "
-                ++ Debug.toString expected
+                ++ String.join "," (List.map String.fromInt expected)
                 ++ " minutes but it held "
-                ++ Debug.toString (lastMessageTimestamps data.backend)
+                ++ String.join "," (List.map String.fromInt (lastMessageTimestamps data.backend))
             )
 
 
