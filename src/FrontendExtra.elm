@@ -5959,7 +5959,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                                         RichText.tryParseTimestamp
                                             -- Timezone doesn't matter here, we just want to know if it's a timestamp
                                             Time.utc
-                                            (String.join " " (last4Words caret text))
+                                            (String.join " " (lastFiveWords caret text))
                                             0
                                     of
                                         Just _ ->
@@ -6043,6 +6043,30 @@ parseTimeOfDayHelper hours minutes =
 
     else
         Nothing
+
+
+{-| The five words that end at `index`, or fewer if the text doesn't have that many. Five
+because that's how long a timestamp is: `August 6, 2026 at 10:50`.
+-}
+lastFiveWords : Int -> String -> List String
+lastFiveWords index text =
+    lastWordsHelper 5 index text
+
+
+lastWordsHelper : Int -> Int -> String -> List String
+lastWordsHelper count index text =
+    if count <= 0 then
+        []
+
+    else
+        case lastWord index text of
+            Just word ->
+                -- The character in front of the word is whatever separated it from the one
+                -- before, so stepping over it lands on the end of that one.
+                lastWordsHelper (count - 1) (index - String.length word - 1) text ++ [ word ]
+
+            Nothing ->
+                []
 
 
 {-| The word that ends at `index`, or nothing if the caret isn't sitting at the end of one.

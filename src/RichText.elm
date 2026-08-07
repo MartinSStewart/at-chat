@@ -3126,7 +3126,7 @@ skipNormalChars source index =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "<" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" || isMonthStart c then
+        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" || isMonthStart c then
             index
 
         else

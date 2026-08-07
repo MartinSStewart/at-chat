@@ -645,13 +645,15 @@ test =
             , fromNonemptyStringTest
                 "March was cold and September is far off"
                 (Nonempty (NormalText 'M' "arch was cold and September is far off") [])
-            , -- Discord's syntax is still what arrives from Discord, so it's still read here.
+            , -- Discord's syntax is only read on the way in from Discord, where
+              -- DiscordMarkdownTests covers it. Nothing writes it any more, so at-chat's own
+              -- parser has no reason to read it and leaves it as the text it looks like.
               fromNonemptyStringTest
                 "<t:1786013400:f>"
-                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])
+                (Nonempty (NormalText '<' "t:1786013400:f>") [])
             , fromNonemptyStringTest
                 "<t:1786013400>"
-                (Nonempty (Timestamp (TimeInMinutes.fromMinutes 29766890)) [])
+                (Nonempty (NormalText '<' "t:1786013400>") [])
             , fromNonemptyStringTest
                 "<t:1786013400:f"
                 (Nonempty (NormalText '<' "t:1786013400:f") [])
