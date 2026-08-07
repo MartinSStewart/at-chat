@@ -5951,7 +5951,22 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                     timeOffsetHelper value "minute" MessageInput.MinuteOffset
 
                 _ ->
-                    Nothing
+                    case lastWord caret text |> Maybe.map String.toLower of
+                        Just valueText ->
+                            case parseTimeOfDay valueText of
+                                Just value2 ->
+                                    TimestampSoFar
+                                        { start = caret - String.length valueText
+                                        , end = caret
+                                        }
+                                        (MessageInput.TimeOfDay value2)
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
+
+                        _ ->
+                            Nothing
 
         nameSoFar : Int -> String -> Maybe NameSoFar
         nameSoFar caret text =
@@ -5981,6 +5996,32 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
         else
             Nothing
+
+    else
+        Nothing
+
+
+parseTimeOfDay : String -> Maybe { hours : Int, minutes : Int }
+parseTimeOfDay text =
+    case String.split ":" text of
+        [ hours, minutes ] ->
+            parseTimeOfDayHelper hours minutes
+
+        _ ->
+            case String.split "." text of
+                [ hours, minutes ] ->
+                    parseTimeOfDayHelper hours minutes
+
+
+parseTimeOfDayHelper : String -> String -> Maybe { hours : Int, minutes : Int }
+parseTimeOfDayHelper hours minutes =
+    if String.length hours <= 2 && String.length minutes == 2 then
+        case ( String.toInt hours, String.toInt minutes ) of
+            ( Just hours2, Just minutes2 ) ->
+                Just { hours = hours2, minutes = minutes2 }
+
+            _ ->
+                Nothing
 
     else
         Nothing

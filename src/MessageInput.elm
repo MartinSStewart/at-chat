@@ -21,6 +21,7 @@ module MessageInput exposing
 
 import Array
 import CustomEmoji exposing (CustomEmojiData)
+import Date
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -82,6 +83,7 @@ type TimestampData
     | DayOffset Float
     | HourOffset Float
     | MinuteOffset Float
+    | TimeOfDay { hours : Int, minutes : Int }
 
 
 type alias NameSoFarData =
@@ -959,6 +961,7 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
 
 pressedArrowInDropdown :
     Bool
+    -> Time.Zone
     -> Time.Posix
     -> NameSoFar
     -> AnyGuildOrDmId
@@ -967,7 +970,7 @@ pressedArrowInDropdown :
     -> Maybe CachedEmojiData
     -> LocalState
     -> Maybe MentionUserDropdown
-pressedArrowInDropdown isMobile time nameSoFar guildOrDmId index maybePingUser emojiData local =
+pressedArrowInDropdown isMobile timezone time nameSoFar guildOrDmId index maybePingUser emojiData local =
     case maybePingUser of
         Just pingUser ->
             let
@@ -1016,14 +1019,14 @@ pressedArrowInDropdown isMobile time nameSoFar guildOrDmId index maybePingUser e
                             Nothing
 
                 TimestampSoFar _ timestampData ->
-                    timestampDropdownList time timestampData |> List.length |> helper
+                    timestampDropdownList timezone time timestampData |> List.length |> helper
 
         Nothing ->
             Nothing
 
 
-timestampDropdownList : Time.Posix -> TimestampData -> List TimeInMinutes
-timestampDropdownList time timestamp =
+timestampDropdownList : Time.Zone -> Time.Posix -> TimestampData -> List TimeInMinutes
+timestampDropdownList timezone time timestamp =
     let
         helper scale value =
             [ toFloat (Time.posixToMillis time // (60 * 1000)) + scale * value |> round |> TimeInMinutes.fromMinutes
@@ -1042,6 +1045,25 @@ timestampDropdownList time timestamp =
 
         MinuteOffset value ->
             helper 1 value
+
+        TimeOfDay { hours, minutes } ->
+            let
+                offsetMs : Int
+                offsetMs =
+                    (Time.toHour timezone time * 60 * 60 * 100)
+                        + (Time.toMinute timezone time * 60 * 1000)
+                        + (Time.toSecond timezone time * 1000)
+                        + Time.toMillis timezone time
+
+                startOfDayMs : Int
+                startOfDayMs =
+                    (Time.posixToMillis time - offsetMs) // (60 * 1000)
+            in
+            [ startOfDayMs + hours * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDayMs + (hours + 12) * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDayMs + (hours + 24) * 60 + minutes |> TimeInMinutes.fromMinutes
+            , startOfDayMs + (hours + 36) * 60 + minutes |> TimeInMinutes.fromMinutes
+            ]
 
 
 availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
