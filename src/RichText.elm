@@ -33,6 +33,7 @@ module RichText exposing
     , stickers
     , stringToStickersAndCustomEmojis
     , textInputView
+    , timestampToDiscordString
     , toDiscord
     , toString
     , toStringWithGetter
@@ -72,7 +73,7 @@ import Point2d exposing (Point2d)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Set exposing (Set)
+import Set
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Touch exposing (ScreenCoordinate)
@@ -141,6 +142,7 @@ type RichText userId
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
     | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
+    | Timestamp Time.Posix
 
 
 type HasLeadingLineBreak
@@ -329,6 +331,9 @@ spoilerAttachedFile fileId nonempty =
 
                 BulletPoint a items ->
                     BulletPoint a (List.Nonempty.map (mapBulletItem (spoilerAttachedFile fileId)) items)
+
+                Timestamp _ ->
+                    richText
         )
         nonempty
 
@@ -436,6 +441,9 @@ unspoilerAttachedFile fileId nonempty =
                                 , BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items)
                                 )
                                 []
+
+                        Timestamp _ ->
+                            Nonempty ( False, richText ) []
                 )
                 nonempty2
     in
@@ -510,6 +518,9 @@ unspoilerAttachedFile fileId nonempty =
                     Nonempty
                         (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem (unspoilerAttachedFile fileId)) items))
                         []
+
+                Timestamp _ ->
+                    Nonempty richText []
         )
         nonempty
 
@@ -601,6 +612,9 @@ removeAttachedFile shouldRemove list =
                             items
                         )
                         |> Just
+
+                Timestamp _ ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -664,6 +678,9 @@ hyperlinks nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap hyperlinks) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -731,6 +748,9 @@ attachmentsHelper isSpoilered nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap (attachmentsHelper isSpoilered)) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -793,6 +813,9 @@ customEmojiIds nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap customEmojiIds) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -855,6 +878,9 @@ stickers nonempty =
 
                 BulletPoint _ items ->
                     List.concatMap (bulletItemConcatMap stickers) (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -1037,6 +1063,9 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
                                     )
                                 |> String.join "\n"
                            )
+
+                Timestamp time ->
+                    timestampToDiscordString time
         )
         list
         |> String.concat
@@ -1344,6 +1373,44 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                 ]
                                 (List.map (Email.Html.li []) listItems)
                            ]
+                    )
+
+                Timestamp time ->
+                    ( False
+                    , currentList
+                        ++ [ Email.Html.span
+                                (List.filterMap identity
+                                    [ emailAttrIf state.italic (Email.Html.Attributes.fontStyle "italic")
+                                    , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                                    , emailAttrIf state.bold (Email.Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                                    , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+                                    ]
+                                    ++ [ Email.Html.Attributes.backgroundColor codeBackground
+                                       , Email.Html.Attributes.border (codeBorder ++ " solid 1px")
+                                       , Email.Html.Attributes.padding "0 4px 0 4px"
+                                       , Email.Html.Attributes.borderRadius "4px"
+                                       ]
+                                )
+                                [ Email.Html.text (dateAndTimeToString Time.utc time) ]
+                           ]
+                      --++ [ Html.span
+                      --           [ emailAttrIf state.italic (Email.Html.Attributes.style "font-style" "italic")
+                      --           , emailAttrIf state.underline (Email.Html.Attributes.style "text-decoration" "underline")
+                      --           , emailAttrIf state.bold (Email.Html.Attributes.style "font-weight" "700")
+                      --           , emailAttrIf state.strikethrough (Email.Html.Attributes.style "text-decoration" "line-through")
+                      --           , emailAttrIf state.spoiler (Email.Html.Attributes.style "opacity" "0")
+                      --           , -- Subdued like inline code, so a timestamp doesn't compete with the bright blue
+                      --             -- of a user mention
+                      --             Email.Html.Attributes.style "background-color" codeBackground
+                      --           , Email.Html.Attributes.style "padding" "1px 3px"
+                      --           , Email.Html.Attributes.style "border-radius" "3px"
+                      --           , Email.Html.Attributes.style "white-space" "nowrap"
+                      --           , -- Today's timestamps leave the date out, so hovering brings it back
+                      --             Email.Html.Attributes.title (dateAndTimeToString timezone time)
+                      --           ]
+                      --           [ Email.Html.text (timestampToString now timezone time) ]
+                      --   ]
                     )
         )
         ( dropNextLineBreak, [] )
@@ -1815,6 +1882,9 @@ normalize nonempty =
                     List.Nonempty.cons
                         (BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items))
                         nonempty2
+
+                Timestamp time ->
+                    List.Nonempty.cons (Timestamp time) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -1879,6 +1949,9 @@ normalize nonempty =
 
                 BulletPoint hasLeadingLineBreak items ->
                     BulletPoint hasLeadingLineBreak (List.Nonempty.map (mapBulletItem normalize) items)
+
+                Timestamp time ->
+                    Timestamp time
             )
             []
         )
@@ -1918,9 +1991,71 @@ charToEscaped =
     List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
 
 
-discordEscapableChars : Set String
-discordEscapableChars =
-    Set.fromList [ "\\", "*", ">", "`", "~", "@" ]
+{-| Discord takes the backslash off any character that isn't a letter, a digit or a space,
+whether or not that character was going to be formatting: `\\_` reads as `_` even where there
+was no italics to prevent. Reading only a handful of characters back this way left the rest
+of the backslashes on show in at-chat, so a message at-chat had escaped on the way out came
+home wearing them.
+
+Which characters those are isn't documented anywhere Discord publishes; this is the rule the
+markdown library its client is built on uses, and it matches what Discord does with the
+characters at-chat escapes. `scripts/discord-markdown` is there to check it against a real
+client when a new one comes up.
+
+-}
+isDiscordEscapable : String -> Bool
+isDiscordEscapable text =
+    case String.uncons text of
+        Just ( char, "" ) ->
+            not (Char.isAlphaNum char) && not (isWhitespaceChar char)
+
+        _ ->
+            False
+
+
+{-| Text that looked like an address but turned out not to be one is taken in a single piece,
+the same way at-chat's own parser takes it, so that both of them read `http://a.com_http://a.com`
+as one piece of text rather than one parser finding a link in the middle of it. Taking it in
+one piece means the loop never sees the backslashes inside it, so they come off here.
+-}
+unescapeDiscordText : String -> { text : String, consumed : Int }
+unescapeDiscordText text =
+    String.foldl
+        (\char ( afterBackslash, acc ) ->
+            if afterBackslash then
+                if isDiscordEscapable (String.fromChar char) then
+                    ( False, char :: acc )
+
+                else
+                    ( False, char :: '\\' :: acc )
+
+            else if char == '\\' then
+                ( True, acc )
+
+            else
+                ( False, char :: acc )
+        )
+        ( False, [] )
+        text
+        |> (\( afterBackslash, acc ) ->
+                { text = List.reverse acc |> String.fromList
+                , consumed =
+                    -- A backslash at the very end of the run is escaping the character after
+                    -- it, which is outside the run, so it's left where the loop will find it
+                    String.length text
+                        - (if afterBackslash then
+                            1
+
+                           else
+                            0
+                          )
+                }
+           )
+
+
+isWhitespaceChar : Char -> Bool
+isWhitespaceChar char =
+    char == ' ' || char == '\n' || char == '\u{000D}' || char == '\t'
 
 
 {-| Without a special case the parser reads the backslash as escaping the first underscore and
@@ -2284,7 +2419,12 @@ parseLoop source index users modifiers accText revNodes =
                                 parseLoop source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop source (afterBackslash + 1) users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                                -- The backslash isn't escaping anything, so only it is taken and
+                                -- what follows goes back through the loop to be read the way it
+                                -- would have been without it. Taking that character too meant
+                                -- `\http://a.com` never reached the code that spots an address,
+                                -- so a backslash in front of one quietly stopped it being a link.
+                                parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
                         parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
@@ -2933,6 +3073,9 @@ mentionsUserHelper set nonempty =
                         )
                         set2
                         (List.Nonempty.toList items)
+
+                Timestamp _ ->
+                    set2
         )
         set
         nonempty
@@ -3003,6 +3146,7 @@ preview onPressLink config nonempty =
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         , timezone = config.timezone
+        , time = config.time
         , drawings = SeqDict.empty
         , embedDrawings = SeqDict.empty
         , drawingUserColor = always ""
@@ -3025,6 +3169,9 @@ type alias Config a userId =
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     , timezone : Time.Zone
+    , -- Timestamps say how long is left until the moment they point at, so the view needs
+      -- to know what the time is now
+      time : Time.Posix
     , drawings : SeqDict (Id FileId) (Drawing userId)
     , embedDrawings : SeqDict Int (Drawing userId)
     , drawingUserColor : userId -> String
@@ -3040,6 +3187,7 @@ type alias PreviewConfig a userId =
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , timezone : Time.Zone
+    , time : Time.Posix
     }
 
 
@@ -3060,6 +3208,113 @@ normalTextView text state =
         ]
         [ Html.text text ]
     ]
+
+
+{-| A timestamp is a moment in time rather than a piece of text, so everyone reading the
+message sees it in their own timezone. The date is what's worth knowing about something
+days away, but for something happening later today the date says nothing the clock doesn't,
+so how long is left takes its place.
+-}
+timestampView : Time.Posix -> Time.Zone -> RichTextState -> Time.Posix -> Html msg
+timestampView now timezone state time =
+    Html.span
+        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
+        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+        , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+        , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
+        , -- Subdued like inline code, so a timestamp doesn't compete with the bright blue
+          -- of a user mention
+          Html.Attributes.style "background-color" codeBackground
+        , Html.Attributes.style "padding" "1px 3px"
+        , Html.Attributes.style "border-radius" "3px"
+        , Html.Attributes.style "white-space" "nowrap"
+        , -- Today's timestamps leave the date out, so hovering brings it back
+          Html.Attributes.title (dateAndTimeToString timezone time)
+        ]
+        [ Html.text (timestampToString now timezone time) ]
+
+
+timestampToString : Time.Posix -> Time.Zone -> Time.Posix -> String
+timestampToString now timezone time =
+    if isSameDay timezone now time then
+        MyUi.timestamp time timezone ++ " (" ++ timeUntilToString now time ++ ")"
+
+    else
+        dateAndTimeToString timezone time
+
+
+dateAndTimeToString : Time.Zone -> Time.Posix -> String
+dateAndTimeToString timezone time =
+    MyUi.datestamp timezone time ++ " at " ++ MyUi.timestamp time timezone
+
+
+isSameDay : Time.Zone -> Time.Posix -> Time.Posix -> Bool
+isSameDay timezone a b =
+    (Time.toYear timezone a == Time.toYear timezone b)
+        && (Time.toMonth timezone a == Time.toMonth timezone b)
+        && (Time.toDay timezone a == Time.toDay timezone b)
+
+
+{-| Both are on the same day, so this never has to reach for anything longer than hours.
+-}
+timeUntilToString : Time.Posix -> Time.Posix -> String
+timeUntilToString now time =
+    let
+        minutesLeft : Int
+        minutesLeft =
+            (Time.posixToMillis time - Time.posixToMillis now) // 60000
+
+        hours : Int
+        hours =
+            abs minutesLeft // 60
+
+        minutes : Int
+        minutes =
+            modBy 60 (abs minutesLeft)
+
+        amount : String
+        amount =
+            if hours == 0 then
+                pluralize minutes "minute"
+
+            else if minutes == 0 then
+                pluralize hours "hour"
+
+            else
+                pluralize hours "hour" ++ " " ++ pluralize minutes "minute"
+    in
+    if minutesLeft == 0 then
+        "now"
+
+    else if minutesLeft > 0 then
+        "in " ++ amount
+
+    else
+        amount ++ " ago"
+
+
+pluralize : Int -> String -> String
+pluralize amount unit =
+    String.fromInt amount
+        ++ "\u{00A0}"
+        ++ unit
+        ++ (if amount == 1 then
+                ""
+
+            else
+                "s"
+           )
+
+
+{-| Discord's timestamp syntax, which is where timestamps come from
+(<https://discord.com/developers/docs/reference#message-formatting>). The trailing format
+hint is dropped when parsing, since at-chat picks the format it shows the timestamp in, so
+timestamps are written back out with `f`, the hint closest to that.
+-}
+timestampToDiscordString : Time.Posix -> String
+timestampToDiscordString time =
+    "<t:" ++ String.fromInt (Time.posixToMillis time // 1000) ++ ":f>"
 
 
 type alias PressedImageData =
@@ -3737,6 +3992,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                 NoLargeContent ->
                                     List.concatMap (\a -> Html.text " • " :: a) listItems
                            )
+                    )
+
+                Timestamp time ->
+                    ( ( False, spoilerIndex2 )
+                    , embedIndex2
+                    , currentList ++ [ timestampView config.time config.timezone state time ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -4774,6 +5035,16 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                         )
                         ( index2, output2 )
                         (List.indexedMap Tuple.pair (List.Nonempty.toList items))
+
+                Timestamp time ->
+                    let
+                        text : String
+                        text =
+                            timestampToDiscordString time
+                    in
+                    ( index2 + String.length text
+                    , Array.push (formatText selection index2 text) output2
+                    )
         )
         ( index, output )
         list
@@ -5241,11 +5512,13 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                 in
                 case stringAt afterBackslash source of
                     Just nextChar ->
-                        if Set.member nextChar discordEscapableChars then
+                        if isDiscordEscapable nextChar then
                             discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
 
                         else
-                            discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            -- Same as in at-chat's own parser above: the backslash isn't
+                            -- escaping anything, so what follows it still gets read normally
+                            discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
                         discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
@@ -5296,14 +5569,8 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                             ""
                                             (Hyperlink url :: flushText (accText ++ "<") revNodes)
 
-                            Err errText ->
-                                discordParseLoop
-                                    customEmojis
-                                    source
-                                    (index + 1 + String.length errText)
-                                    modifiers
-                                    (accText ++ "<" ++ errText)
-                                    revNodes
+                            Err _ ->
+                                bailOutHelper ()
 
                     Just "a" ->
                         case stringAt (index + 2) source of
@@ -5344,6 +5611,20 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
 
                                     Nothing ->
                                         bailOutHelper ()
+
+                            Nothing ->
+                                bailOutHelper ()
+
+                    Just "t" ->
+                        case tryParseDiscordTimestamp source index of
+                            Just ( time, nextIndex ) ->
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    nextIndex
+                                    modifiers
+                                    ""
+                                    (Timestamp time :: flushText accText revNodes)
 
                             Nothing ->
                                 bailOutHelper ()
@@ -5583,12 +5864,17 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             (Hyperlink url :: flushText accText revNodes)
 
                     Err errText ->
+                        let
+                            unescaped : { text : String, consumed : Int }
+                            unescaped =
+                                unescapeDiscordText errText
+                        in
                         discordParseLoop
                             customEmojis
                             source
-                            (index + String.length errText)
+                            (index + unescaped.consumed)
                             modifiers
-                            (accText ++ errText)
+                            (accText ++ unescaped.text)
                             revNodes
 
             "[" ->
@@ -5625,6 +5911,7 @@ toDiscord :
     -> Result Int String
 toDiscord customEmojis content =
     let
+        text : String
         text =
             toDiscordHelper customEmojis (List.Nonempty.toList content)
     in
@@ -5686,8 +5973,16 @@ toDiscordHelper customEmojis content =
                 Spoiler nonempty ->
                     "||" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "||"
 
-                BlockQuote _ list ->
-                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis list)
+                BlockQuote hasLeadingLineBreak list ->
+                    (case hasLeadingLineBreak of
+                        HasLeadingLineBreak ->
+                            "\n"
+
+                        NoLeadingLineBreak ->
+                            ""
+                    )
+                        ++ "> "
+                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -5758,6 +6053,9 @@ toDiscordHelper customEmojis content =
                                 |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis bulletItem)
                                 |> String.join "\n"
                            )
+
+                Timestamp time ->
+                    timestampToDiscordString time
         )
         content
         |> String.concat
@@ -5773,6 +6071,16 @@ customEmojisFromDiscord text =
             (String.indexes "<a:" text)
 
 
+{-| A character at-chat reads as plain text can still be formatting to Discord, so every one
+of them is hidden behind a backslash on the way out, and `isDiscordEscapable` takes the
+backslashes off again when the message is read back.
+
+This hides more than Discord strictly needs — a lone `_` was never going to be italics — but
+knowing which ones matter means knowing Discord's grammar exactly, and nothing at-chat can
+see says what that grammar is. The extra backslashes don't change how a message reads in
+Discord, so they stay.
+
+-}
 escapeDiscordText : String -> String
 escapeDiscordText text =
     String.replace "\\" "\\\\" text
@@ -5782,6 +6090,7 @@ escapeDiscordText text =
         |> String.replace ">" "\\>"
         |> String.replace "@" "\\@"
         |> String.replace "~" "\\~"
+        |> String.replace "|" "\\|"
 
 
 discordParseInner :
@@ -5862,6 +6171,44 @@ tryParseDiscordMention source index =
                 Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
 
             Nothing ->
+                Nothing
+
+    else
+        Nothing
+
+
+{-| Discord's timestamp syntax: `<t:1786013400>`, or `<t:1786013400:f>` where the trailing
+letter hints at the format Discord should show it in. at-chat picks its own format, so the
+hint is read past and thrown away.
+-}
+tryParseDiscordTimestamp : String -> Int -> Maybe ( Time.Posix, Int )
+tryParseDiscordTimestamp source index =
+    let
+        len : Int
+        len =
+            String.length source
+
+        afterColon : Int
+        afterColon =
+            index + 3
+
+        digitEnd : Int
+        digitEnd =
+            skipDigits source afterColon len
+    in
+    if stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
+        case ( String.toInt (String.slice afterColon digitEnd source), stringAt digitEnd source ) of
+            ( Just seconds, Just ">" ) ->
+                Just ( Time.millisToPosix (seconds * 1000), digitEnd + 1 )
+
+            ( Just seconds, Just ":" ) ->
+                if stringAt (digitEnd + 2) source == Just ">" then
+                    Just ( Time.millisToPosix (seconds * 1000), digitEnd + 3 )
+
+                else
+                    Nothing
+
+            _ ->
                 Nothing
 
     else

@@ -2,7 +2,9 @@ module DiscordMarkdownTests exposing (test)
 
 import CustomEmoji exposing (EmojiName)
 import Discord
+import Effect.Time as Time
 import Expect
+import Fuzz
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
@@ -21,6 +23,8 @@ test =
         "Discord Markdown parser tests"
         [ basicFormattingTests
         , discordSpecificTests
+        , escapingTests
+        , roundTripTests
 
         --, codeTests
         --, edgeCaseTests
@@ -49,6 +53,300 @@ emojiName =
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
     RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
+
+
+{-| What Discord is sent when someone writes `source` in at-chat.
+-}
+toDiscordTest : String -> String -> Test
+toDiscordTest source expected =
+    Test.test
+        (Debug.toString source ++ " is sent to Discord as " ++ Debug.toString expected)
+        (\_ ->
+            case String.Nonempty.fromString source of
+                Just nonempty ->
+                    RichText.fromNonemptyString SeqDict.empty nonempty
+                        |> RichText.toDiscord customEmojis
+                        |> Expect.equal (Ok expected)
+
+                Nothing ->
+                    Expect.fail "Empty source text"
+        )
+
+
+{-| Everything at-chat reads as plain text but Discord could read as formatting is hidden
+behind a backslash. Discord takes the backslashes off again when it renders the message, and
+`roundTripTests` covers at-chat doing the same.
+-}
+escapingTests : Test
+escapingTests =
+    Test.describe
+        "Escaping text sent to Discord"
+        [ toDiscordTest "_" "\\_"
+        , toDiscordTest "a_b" "a\\_b"
+        , toDiscordTest "5 * 3" "5 \\* 3"
+        , toDiscordTest "a ` b" "a \\` b"
+        , toDiscordTest "1 ~ 2" "1 \\~ 2"
+        , toDiscordTest "a@b.com" "a\\@b.com"
+        , toDiscordTest "2 > 1" "2 \\> 1"
+        , -- A backslash needs escaping too, or Discord reads it as escaping what follows
+          toDiscordTest "back\\slash" "back\\\\slash"
+        , -- at-chat writes its own formatting out as Discord's
+          toDiscordTest "*bold*" "**bold**"
+        , toDiscordTest "_italic_" "*italic*"
+        , toDiscordTest "`code`" "`code`"
+        , toDiscordTest "__underline__" "__underline__"
+        ]
+
+
+{-| The bug this is here for: at-chat escaped `_` on the way out but only took the backslash
+off a handful of characters on the way back in, so `_` came home as `\_` and `__` as `\_\_`.
+
+Sending and reading back can't line up exactly, because `_` and `\_` typed into at-chat are
+different pieces of rich text (`NormalText` and `EscapedChar`) that Discord has only one way
+to write. They show the same thing to a reader, so `withoutEscapedChars` treats them as equal.
+
+-}
+roundTripTests : Test
+roundTripTests =
+    Test.describe
+        "A message survives being sent to Discord and read back"
+        [ roundTripTest "_"
+        , roundTripTest "__"
+        , roundTripTest "___"
+        , roundTripTest "\\_"
+        , roundTripTest "a_b"
+        , roundTripTest "5 * 3 and 2 * 2"
+        , roundTripTest "a@b.com"
+        , roundTripTest "2 > 1"
+        , roundTripTest "back\\slash"
+        , roundTripTest "C:\\Users\\me"
+        , roundTripTest "¯\\_(ツ)_/¯"
+        , roundTripTest "*bold* and _italic_ and `code`"
+        , roundTripTest "https://abc.com"
+        , -- A backslash in front of an address isn't escaping anything, so the address is
+          -- still an address and the backslash is text in front of it
+          roundTripTest "\\http://a.com"
+        , -- Text that starts out looking like an address but isn't one stays text, and the
+          -- escaping that carries it to Discord doesn't split it into an address and a piece
+          -- of text on the way back
+          roundTripTest "http://a.comhttp://a.com"
+        , roundTripTest "http://a.com_http://a.com"
+        , roundTripTest "http://a.com@|"
+        , roundTripTest "two\nlines"
+        , roundTripTest "> quoted"
+        , roundTripTest "a\n> quoted"
+        , roundTripTest "# heading"
+        , roundTripTest "* bullet\n* points"
+        , roundTripTest "a link https://abc.com/a_b in the middle"
+        , Test.fuzz
+            sourceTextFuzzer
+            "Text at-chat reads as plain text comes home as the same plain text"
+            (\source ->
+                let
+                    written : Nonempty (RichText (Discord.Id Discord.UserId))
+                    written =
+                        RichText.fromNonemptyString SeqDict.empty source
+                in
+                if List.Nonempty.all isPlainText written then
+                    expectSurvivesDiscord source
+
+                else
+                    -- Text at-chat reads as formatting is left to the cases above. Escaping
+                    -- is what this is here for, and that only ever applies to plain text.
+                    Expect.pass
+            )
+        ]
+
+
+roundTripTest : String -> Test
+roundTripTest source =
+    Test.test
+        (Debug.toString source ++ " survives the trip")
+        (\_ ->
+            case String.Nonempty.fromString source of
+                Just nonempty ->
+                    expectSurvivesDiscord nonempty
+
+                Nothing ->
+                    Expect.fail "Empty source text"
+        )
+
+
+{-| Text someone might type into at-chat, built out of the pieces that decide how it gets
+escaped on the way to Discord.
+
+Addresses are left out. A backslash in front of a link stops at-chat making it a link, and
+Discord has no way of writing that down — it makes a link of any address it sees — so
+`\https://abc.com` can't come home as what it left as, however it's escaped.
+
+-}
+sourceTextFuzzer : Fuzz.Fuzzer NonemptyString
+sourceTextFuzzer =
+    Fuzz.list
+        (Fuzz.oneOfValues
+            [ "_"
+            , "*"
+            , "~"
+            , "`"
+            , "|"
+            , "\\"
+            , ">"
+            , "<"
+            , "@"
+            , "#"
+            , "["
+            , "]"
+            , "__"
+            , "**"
+            , "~~"
+            , "||"
+            , "```"
+            , "a"
+            , "t"
+            , "h"
+            , "http://a.com"
+            , "/"
+            , "1"
+            , " "
+            , "\n"
+            , "\n> "
+            , "@everyone"
+            , "¯\\_(ツ)_/¯"
+            ]
+        )
+        |> Fuzz.map
+            (\list ->
+                -- Discord has no message with nothing but whitespace in it, and trims what
+                -- hangs off either end of the ones it does have, so text that only differs
+                -- there isn't text this has to hold for
+                String.concat list
+                    |> String.trim
+                    |> String.Nonempty.fromString
+                    |> Maybe.withDefault (NonemptyString 'a' "")
+            )
+
+
+{-| Whether at-chat read this as text rather than as formatting. Only text is ever escaped.
+-}
+isPlainText : RichText userId -> Bool
+isPlainText item =
+    case item of
+        NormalText _ _ ->
+            True
+
+        EscapedChar _ ->
+            True
+
+        _ ->
+            False
+
+
+expectSurvivesDiscord : NonemptyString -> Expect.Expectation
+expectSurvivesDiscord source =
+    let
+        written : Nonempty (RichText (Discord.Id Discord.UserId))
+        written =
+            RichText.fromNonemptyString SeqDict.empty source
+    in
+    case RichText.toDiscord customEmojis written of
+        Ok sent ->
+            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                |> List.Nonempty.toList
+                |> withoutEscapedChars
+                |> Expect.equal (withoutEscapedChars (List.Nonempty.toList written))
+                |> Expect.onFail
+                    ("Sent to Discord as "
+                        ++ Debug.toString sent
+                        ++ " which at-chat reads as "
+                        ++ Debug.toString
+                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                                |> List.Nonempty.toList
+                            )
+                        ++ " instead of "
+                        ++ Debug.toString (List.Nonempty.toList written)
+                    )
+
+        Err _ ->
+            Expect.pass
+
+
+{-| A character someone escaped in at-chat and the same character on its own say the same
+thing to a reader, and Discord has one way of writing both, so the two are levelled out
+before comparing. Adjacent pieces of text are joined up for the same reason: whether `a_b`
+arrives as one piece or three isn't something a reader can tell.
+-}
+withoutEscapedChars : List (RichText userId) -> List (RichText userId)
+withoutEscapedChars list =
+    List.map
+        (\item ->
+            case item of
+                EscapedChar char ->
+                    RichText.escapedCharToString char |> plainText
+
+                Bold nonempty ->
+                    Bold (withoutEscapedCharsNonempty nonempty)
+
+                Italic nonempty ->
+                    Italic (withoutEscapedCharsNonempty nonempty)
+
+                Underline nonempty ->
+                    Underline (withoutEscapedCharsNonempty nonempty)
+
+                Strikethrough nonempty ->
+                    Strikethrough (withoutEscapedCharsNonempty nonempty)
+
+                Spoiler nonempty ->
+                    Spoiler (withoutEscapedCharsNonempty nonempty)
+
+                BlockQuote a list2 ->
+                    BlockQuote a (withoutEscapedChars list2)
+
+                Heading level a nonempty ->
+                    Heading level a (withoutEscapedCharsNonempty nonempty)
+
+                BulletPoint a items ->
+                    BulletPoint a (List.Nonempty.map withoutEscapedChars items)
+
+                _ ->
+                    item
+        )
+        list
+        |> joinAdjacentText
+
+
+withoutEscapedCharsNonempty : Nonempty (RichText userId) -> Nonempty (RichText userId)
+withoutEscapedCharsNonempty nonempty =
+    case withoutEscapedChars (List.Nonempty.toList nonempty) |> List.Nonempty.fromList of
+        Just nonempty2 ->
+            nonempty2
+
+        Nothing ->
+            nonempty
+
+
+plainText : String -> RichText userId
+plainText text =
+    case String.Nonempty.fromString text of
+        Just (NonemptyString char rest) ->
+            NormalText char rest
+
+        Nothing ->
+            NormalText ' ' ""
+
+
+joinAdjacentText : List (RichText userId) -> List (RichText userId)
+joinAdjacentText list =
+    List.foldr
+        (\item acc ->
+            case ( item, acc ) of
+                ( NormalText charA restA, (NormalText charB restB) :: rest ) ->
+                    NormalText charA (restA ++ String.cons charB restB) :: rest
+
+                _ ->
+                    item :: acc
+        )
+        []
+        list
 
 
 basicFormattingTests : Test
@@ -299,6 +597,30 @@ discordSpecificTests =
                         , UserMention userId
                         , NormalText ' ' "how are you?"
                         ]
+        , Test.test "timestamp with a format hint" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400:s>"
+                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+        , Test.test "timestamp without a format hint" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400>"
+                    |> Expect.equal [ Timestamp (Time.millisToPosix 1786013400000) ]
+        , Test.test "timestamp with text around it" <|
+            \_ ->
+                fromDiscordHelper "Starts at <t:1786013400:f>, be there"
+                    |> Expect.equal
+                        [ NormalText 'S' "tarts at "
+                        , Timestamp (Time.millisToPosix 1786013400000)
+                        , NormalText ',' " be there"
+                        ]
+        , Test.test "a timestamp missing its closing bracket stays text" <|
+            \_ ->
+                fromDiscordHelper "<t:1786013400:f"
+                    |> Expect.equal [ NormalText '<' "t:1786013400:f" ]
+        , Test.test "a timestamp without a time stays text" <|
+            \_ ->
+                fromDiscordHelper "<t::f>"
+                    |> Expect.equal [ NormalText '<' "t::f>" ]
 
         --, Test.test "custom emoji" <|
         --    \_ ->

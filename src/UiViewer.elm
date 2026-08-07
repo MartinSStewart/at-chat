@@ -92,6 +92,7 @@ main =
                     , customEmojis = SeqDict.empty
                     , animationMode = Sticker.LoopForever
                     , timezone = Time.utc
+                    , time = Time.millisToPosix 0
                     , drawings = SeqDict.empty
                     , embedDrawings = SeqDict.empty
                     , drawingUserColor = \_ -> ""
@@ -196,6 +197,7 @@ stickersSection =
             , customEmojis = SeqDict.empty
             , animationMode = Sticker.LoopForever
             , timezone = Time.utc
+            , time = Time.millisToPosix 0
             , drawings = SeqDict.empty
             , embedDrawings = SeqDict.empty
             , drawingUserColor = \_ -> ""
@@ -336,6 +338,7 @@ notificationEmail =
                 , normal " and an escaped asterisk "
                 , EscapedChar EscapedBold
                 , normal ".\n"
+                , Timestamp (Time.millisToPosix 1000000)
                 , CodeBlock NoLanguage "a code block\nwith two lines"
                 , CodeBlock (Language (NonemptyString 'e' "lm")) "add a b =\n    a + b"
                 , BlockQuote NoLeadingLineBreak [ normal "A block quote" ]
@@ -562,6 +565,7 @@ embedExamples whitelistedDomains =
                 , stickers = SeqDict.empty
                 , animationMode = Sticker.LoopForever
                 , timezone = Time.utc
+                , time = Time.millisToPosix 0
                 , drawings = SeqDict.empty
                 , embedDrawings = SeqDict.empty
                 , drawingUserColor = \_ -> ""

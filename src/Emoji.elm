@@ -1068,18 +1068,19 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                                 _ ->
                                     ( category, items ) |> Just
                         )
-                        (StickerCategory
-                            :: CustomEmojiCategory
-                            :: List.filterMap
-                                (\emojiCategory ->
-                                    case emojiCategory of
-                                        Components ->
-                                            Nothing
+                        (List.filterMap
+                            (\emojiCategory ->
+                                case emojiCategory of
+                                    Components ->
+                                        Nothing
 
-                                        _ ->
-                                            EmojiCategory emojiCategory |> Just
-                                )
-                                allEmojiCategories
+                                    _ ->
+                                        EmojiCategory emojiCategory |> Just
+                            )
+                            allEmojiCategories
+                            ++ [ StickerCategory
+                               , CustomEmojiCategory
+                               ]
                         )
 
                 -- Recently used emojis, most recent first. They aren't a category of their own:
@@ -1254,7 +1255,7 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                     , Ui.contentCenterY
                     , Ui.spacing 8
                     , MyUi.noShrinking
-                    , Ui.paddingXY 8 0
+                    , Ui.paddingWith { left = categoryColumnWidth + 8, top = 0, bottom = 0, right = 8 }
                     ]
                     (case Maybe.map .emoji model.emojiHovered of
                         Just (EmojiOrSticker_UnicodeEmoji emoji) ->

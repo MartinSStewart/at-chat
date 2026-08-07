@@ -248,16 +248,16 @@ timeElapsedView timezone now event =
 
 datestamp : Time.Zone -> Time.Posix -> String
 datestamp timezone time =
-    String.padLeft 2 '0' (String.fromInt (Time.toDay timezone time))
-        ++ "/"
-        ++ String.padLeft 2 '0' (String.fromInt (monthToInt (Time.toMonth timezone time)))
-        ++ "/"
-        ++ String.right 2 (String.fromInt (Time.toYear timezone time))
+    monthToString (Time.toMonth timezone time)
+        ++ " "
+        ++ String.fromInt (Time.toDay timezone time)
+        ++ ", "
+        ++ String.fromInt (Time.toYear timezone time)
 
 
-datestampDate : Date -> String
-datestampDate date =
-    (case Date.month date of
+monthToString : Month -> String
+monthToString month =
+    case month of
         Jan ->
             "January"
 
@@ -293,7 +293,11 @@ datestampDate date =
 
         Dec ->
             "December"
-    )
+
+
+datestampDate : Date -> String
+datestampDate date =
+    monthToString (Date.month date)
         ++ " "
         ++ String.fromInt (Date.day date)
         ++ ", "

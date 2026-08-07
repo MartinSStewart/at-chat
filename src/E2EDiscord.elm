@@ -20,6 +20,7 @@ import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import IdArray
 import Iso8601
+import Json.Decode
 import Json.Encode
 import LinkedAndOtherDiscordUsers
 import List.Extra
@@ -778,7 +779,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ admin.click 100 (Dom.id "guild_openChannel_0")
                         , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
                         , admin.click 100 (Dom.id "emoji_category_Stickers")
-                        , admin.click 100 (Dom.id "guild_emojiSelector_0")
+                        , admin.click 100 (Dom.id "guild_emojiSelector_1906")
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
                         , T.andThen
@@ -2523,6 +2524,59 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , E2EHelper.startTest
+        "A message at-chat sends to Discord comes back reading the same way"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , E2EHelper.writeMessage admin 100 "_"
+                        , T.andThen
+                            400
+                            (\data ->
+                                case discordMessageContentsPosted data of
+                                    content :: _ ->
+                                        [ -- The underscore is hidden from Discord's markdown on
+                                          -- the way out
+                                          T.checkState
+                                            0
+                                            (\_ ->
+                                                if content == "\\_" then
+                                                    Ok ()
+
+                                                else
+                                                    Err ("Discord was sent " ++ Debug.toString content)
+                                            )
+                                        , -- Discord hands that same content back, and the
+                                          -- backslash has to come off again on the way in. It
+                                          -- didn't, which is what this test is here for: the
+                                          -- underscore someone typed came home as `\_`.
+                                          discordGuildMessage connection (jsonEscaped content)
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.has [ Test.Html.Selector.exactText "_" ])
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "\\_" ])
+                                        ]
+
+                                    [] ->
+                                        [ T.checkState 0 (\_ -> Err "at-chat sent nothing to Discord") ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
@@ -2709,6 +2763,42 @@ discordDmMessageFromLinkedUser connection content =
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[]}}")
             ]
         )
+
+
+{-| A string put inside the JSON of a gateway event, where a backslash has to be doubled up
+the way Discord's own JSON does it.
+-}
+jsonEscaped : String -> String
+jsonEscaped text =
+    String.replace "\\" "\\\\" text
+
+
+{-| The `content` of every message the backend has posted to Discord, most recent first,
+which is the text a Discord client would render.
+-}
+discordMessageContentsPosted : T.Data FrontendModel E2EHelper.BackendModel2 -> List String
+discordMessageContentsPosted data =
+    List.filterMap
+        (\request ->
+            case ( request.url, E2EHelper.decodeCustomRequest request ) of
+                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
+                    if customRequest.method == "POST" && String.endsWith "/messages" customRequest.url then
+                        Maybe.andThen
+                            (\body ->
+                                Json.Decode.decodeValue Json.Decode.string body
+                                    |> Result.andThen
+                                        (Json.Decode.decodeString (Json.Decode.field "content" Json.Decode.string))
+                                    |> Result.toMaybe
+                            )
+                            customRequest.body
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+        )
+        data.httpRequests
 
 
 {-| The number of messages the backend has posted to the Discord DM channel that
