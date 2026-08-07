@@ -15,7 +15,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Test.Html.Query
 import Test.Html.Selector
-import TimeInMinutes exposing (TimeInMinutes)
+import TimeInMinutes
 import Unsafe
 import Url exposing (Protocol(..), Url)
 

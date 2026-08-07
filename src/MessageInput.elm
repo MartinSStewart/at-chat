@@ -1307,7 +1307,7 @@ dropdownView isMobile time nameSoFar guildOrDmId skinTone emojiData local dropdo
                 Nothing ->
                     dropdownContainer nameSoFar dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
 
-        TimestampSoFar range timestamp ->
+        TimestampSoFar _ timestamp ->
             let
                 rows : List (Element Msg)
                 rows =
@@ -1365,7 +1365,7 @@ dropdownContainer nameSoFar dropdown contentHeight content =
                     EmojiSoFar _ ->
                         "Add a sticker or emoji"
 
-                    TimestampSoFar range timestampData ->
+                    TimestampSoFar _ _ ->
                         "Add a timestamp"
                 )
             )

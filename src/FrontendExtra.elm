@@ -5912,12 +5912,12 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         timeOffsetSoFar caret text =
             let
                 timeOffsetHelper : String -> String -> (Float -> MessageInput.TimestampData) -> Maybe NameSoFar
-                timeOffsetHelper value unit offsetType =
-                    case String.toFloat value of
-                        Just value2 ->
-                            offsetType value2
+                timeOffsetHelper valueText unit offsetType =
+                    case String.toFloat valueText of
+                        Just value ->
+                            offsetType value
                                 |> TimestampSoFar
-                                    { start = caret - String.length value - 1 - String.length unit
+                                    { start = caret - String.length valueText - 1 - String.length unit
                                     , end = caret
                                     }
                                 |> Just

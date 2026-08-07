@@ -5731,7 +5731,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                         Nothing ->
                                                             False
 
-                                                Just (TimestampSoFar _ timestamp) ->
+                                                Just (TimestampSoFar _ _) ->
                                                     True
 
                                                 Nothing ->

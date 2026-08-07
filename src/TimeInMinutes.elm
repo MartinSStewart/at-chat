@@ -1,8 +1,8 @@
 module TimeInMinutes exposing
-    ( TimeInMinutes
+    ( DateAndTime
+    , TimeInMinutes
     , fromDateAndTime
     , fromMinutes
-    , toDateAndTime
     , toSeconds
     , toTime
     )
