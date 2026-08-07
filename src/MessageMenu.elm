@@ -291,7 +291,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
@@ -307,7 +307,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     richText =
                                         case String.Nonempty.fromString edit.text of
                                             Just nonempty ->
-                                                RichText.fromNonemptyString allUsers nonempty |> Just
+                                                RichText.fromNonemptyString local.localUser.timezone allUsers nonempty |> Just
 
                                             Nothing ->
                                                 Nothing
@@ -442,7 +442,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
 
                             _ ->
                                 False
-                    , text = LocalState.messageToString (LocalState.allUsers local.localUser) message
+                    , text = LocalState.messageToString local.localUser.timezone (LocalState.allUsers local.localUser) message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message
                     , openDm =
                         if isPrivateDm then
@@ -502,6 +502,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
                                 False
                     , text =
                         LocalState.messageToString
+                            local.localUser.timezone
                             (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                             message
                     , messageCustomEmojiIdsList = messageCustomEmojiIds message

@@ -22,7 +22,6 @@ module MessageInput exposing
 import Array
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
-import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
@@ -224,6 +223,7 @@ textarea :
     ->
         { localUser
             | userAgent : UserAgent
+            , timezone : Time.Zone
             , stickers : SeqDict (Id StickerId) StickerData
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
         }
@@ -398,6 +398,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
             (case richText of
                 Just richText2 ->
                     RichText.textInputView
+                        localUser.timezone
                         users
                         attachedFiles
                         localUser.customEmojis
@@ -470,12 +471,13 @@ disabledTextarea placeholderText text attachedFiles local =
                             LocalState.allUsers local.localUser
                     in
                     RichText.textInputView
+                        local.localUser.timezone
                         users
                         attachedFiles
                         local.localUser.customEmojis
                         local.localUser.stickers
                         Nothing
-                        (RichText.fromNonemptyString users nonempty)
+                        (RichText.fromNonemptyString local.localUser.timezone users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -590,6 +592,7 @@ view :
     ->
         { localUser
             | userAgent : UserAgent
+            , timezone : Time.Zone
             , stickers : SeqDict (Id StickerId) StickerData
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
         }
@@ -1137,7 +1140,7 @@ pressedDropdownItem setFocusMsg isMobile time nameSoFar guildOrDmId channelTextI
                 TimestampSoFar range timestampData ->
                     case timestampDropdownList time timestampData |> List.Extra.getAt dropdownIndex of
                         Just timestamp ->
-                            ( range, RichText.timestampToDiscordString timestamp ) |> Just
+                            ( range, RichText.dateAndTimeToString local.localUser.timezone timestamp ) |> Just
 
                         Nothing ->
                             Nothing

@@ -474,7 +474,7 @@ encodeMessage userIdToString userNames maybeThread message =
 
 encodeContent : SeqDict userId String -> Nonempty (RichText userId) -> Json.Encode.Value
 encodeContent userNames content =
-    RichText.toStringWithGetter identity False userNames content |> Json.Encode.string
+    RichText.toStringWithGetter Time.utc identity False userNames content |> Json.Encode.string
 
 
 encodeReactions :

@@ -2323,7 +2323,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            RichText.toStringWithGetter DiscordUserData.username True model.discordUsers a.content
+                            RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers a.content
 
                         UserJoinedMessage _ userId _ _ ->
                             case SeqDict.get userId model.discordUsers of
@@ -3793,6 +3793,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             richText : Nonempty (RichText (Id UserId))
                                             richText =
                                                 RichText.fromNonemptyString
+                                                    Time.utc
                                                     (SeqDict.fromList
                                                         [ ( session.userId, user )
                                                         , ( otherUserId, otherUser )
@@ -6602,6 +6603,7 @@ textToDiscordRichText :
     -> Nonempty (RichText (Discord.Id Discord.UserId))
 textToDiscordRichText text memberIds model =
     RichText.fromNonemptyString
+        Time.utc
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId model.discordUsers of
@@ -7525,6 +7527,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                 richText : Nonempty (RichText (Id UserId))
                 richText =
                     RichText.fromNonemptyString
+                        Time.utc
                         (List.foldl
                             (\memberId dict ->
                                 case NonemptyDict.get memberId model2.users of

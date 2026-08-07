@@ -1205,7 +1205,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     LocalState.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString True users content)
+                            Ports.showNotification (User.toString senderId users) (RichText.toString local.localUser.timezone True users content)
 
                         _ ->
                             Command.none
@@ -1267,7 +1267,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)
-                                (RichText.toString True allUsers content)
+                                (RichText.toString local.localUser.timezone True allUsers content)
 
                         _ ->
                             Command.none
@@ -2505,6 +2505,7 @@ textToRichText text memberIds local =
             LocalState.allUsers local.localUser
     in
     RichText.fromNonemptyString
+        local.localUser.timezone
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId allUsers of
@@ -2532,6 +2533,7 @@ textToDiscordRichText text memberIds local =
             LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers
     in
     RichText.fromNonemptyString
+        local.localUser.timezone
         (List.foldl
             (\memberId dict ->
                 case SeqDict.get memberId allUsers of
@@ -6195,7 +6197,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString False (LocalState.allUsers local.localUser) message.content
+                                                    RichText.toString local.localUser.timezone False (LocalState.allUsers local.localUser) message.content
                                                 , attachedFiles =
                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
@@ -6267,6 +6269,7 @@ handlePressedArrowUpInEmptyInput model guildOrDmId threadRoute =
                                                 { messageIndex = index
                                                 , text =
                                                     RichText.toString
+                                                        local.localUser.timezone
                                                         False
                                                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                                                         message.content

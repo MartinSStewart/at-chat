@@ -1529,6 +1529,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 richText : Nonempty (RichText (Id UserId))
                 richText =
                     RichText.fromNonemptyString
+                        Time.utc
                         (List.foldl
                             (\memberId dict ->
                                 case NonemptyDict.get memberId model.users of
@@ -1755,6 +1756,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
         richText : Nonempty (RichText (Id UserId))
         richText =
             RichText.fromNonemptyString
+                Time.utc
                 (SeqDict.fromList [ ( session.userId, user ), ( otherUserId, otherUser ) ])
                 text
     in

@@ -499,7 +499,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute mes
     let
         plainText : String
         plainText =
-            RichText.toString True (NonemptyDict.toSeqDict model.users) message.content
+            RichText.toString Time.utc True (NonemptyDict.toSeqDict model.users) message.content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -669,7 +669,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                 )
                                 (case message of
                                     UserTextMessage message2 ->
-                                        RichText.toStringWithGetter DiscordUserData.username True model.discordUsers message2.content
+                                        RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers message2.content
 
                                     UserJoinedMessage _ _ _ _ ->
                                         "New user joined!"

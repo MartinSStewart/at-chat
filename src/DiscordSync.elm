@@ -999,7 +999,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                 Nothing ->
                                                     Nothing
                                             )
-                                            (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers richText)
+                                            (RichText.toStringWithGetter Time.utc DiscordUserData.username True model.discordUsers richText)
                                             message
                                             model
 
@@ -1036,6 +1036,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         discordMessage.timestamp
                                                         guildOrDmId
                                                         (RichText.toStringWithGetter
+                                                            Time.utc
                                                             DiscordUserData.username
                                                             False
                                                             model2.discordUsers
@@ -1447,6 +1448,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 discordMessage.timestamp
                                                                 guildOrDmId
                                                                 (RichText.toStringWithGetter
+                                                                    Time.utc
                                                                     DiscordUserData.username
                                                                     False
                                                                     model2.discordUsers

@@ -17,6 +17,7 @@ module RichText exposing
     , bigEmojiFont
     , customEmojiIds
     , customEmojisFromDiscord
+    , dateAndTimeToString
     , discordCharsLeft
     , domainToString
     , emailView
@@ -1523,8 +1524,8 @@ emailFileDownloadView isSpoilered fileData =
         ]
 
 
-fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
-fromNonemptyString users string =
+fromNonemptyString : Time.Zone -> SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
+fromNonemptyString timezone users string =
     let
         source =
             String.Nonempty.toString string
@@ -1532,15 +1533,15 @@ fromNonemptyString users string =
         ( startIndex, startRevNodes ) =
             case extractBlockQuote source 0 of
                 Just ( content, endIndex ) ->
-                    ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent users content) ] )
+                    ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent timezone users content) ] )
 
                 Nothing ->
                     case extractHeading source 0 of
                         Just ( level, content, endIndex ) ->
-                            ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent users content) ] )
+                            ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent timezone users content) ] )
 
                         Nothing ->
-                            case extractBulletPoint starBulletMarker (parseBlockQuoteContent users) source 0 of
+                            case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users) source 0 of
                                 Just bullet ->
                                     ( bullet.endIndex
                                     , bulletRevNodes (BulletPoint NoLeadingLineBreak bullet.items) bullet.trailing []
@@ -1550,7 +1551,7 @@ fromNonemptyString users string =
                                     ( 0, [] )
 
         result =
-            parseLoop source startIndex users [] "" startRevNodes
+            parseLoop timezone source startIndex users [] "" startRevNodes
     in
     case List.Nonempty.fromList result.nodes of
         Just nonempty ->
@@ -1560,9 +1561,9 @@ fromNonemptyString users string =
             Nonempty (normalTextFromNonempty string) []
 
 
-parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> String -> List (RichText userId)
-parseBlockQuoteContent users content =
-    case parseLoop content 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseBlockQuoteContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> String -> List (RichText userId)
+parseBlockQuoteContent timezone users content =
+    case parseLoop timezone content 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty |> List.Nonempty.toList
 
@@ -1570,9 +1571,9 @@ parseBlockQuoteContent users content =
             []
 
 
-parseHeadingContent : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
-parseHeadingContent users content =
-    case parseLoop (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseHeadingContent : Time.Zone -> SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
+parseHeadingContent timezone users content =
+    case parseLoop timezone (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty
 
@@ -2140,9 +2141,9 @@ closeModifier afterSymbol accText revNodes container symbol =
             }
 
 
-parseInner : String -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
-parseInner source index users modifiers =
-    parseLoop source index users modifiers "" []
+parseInner : Time.Zone -> String -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
+parseInner timezone source index users modifiers =
+    parseLoop timezone source index users modifiers "" []
 
 
 stringAt : Int -> String -> Maybe String
@@ -2317,14 +2318,15 @@ stringToStickersAndCustomEmojis text =
 
 
 parseLoop :
-    String
+    Time.Zone
+    -> String
     -> Int
     -> SeqDict userId { a | name : PersonName }
     -> List Modifiers
     -> String
     -> List (RichText userId)
     -> { nodes : List (RichText userId), nextIndex : Int }
-parseLoop source index users modifiers accText revNodes =
+parseLoop timezone source index users modifiers accText revNodes =
     if index >= String.length source then
         finalizeResult modifierToSymbol accText revNodes modifiers index
 
@@ -2333,16 +2335,16 @@ parseLoop source index users modifiers accText revNodes =
             "❓" ->
                 case parseCustomEmojiId (index + 1) source of
                     ( index2, Just customEmojiId ) ->
-                        parseLoop source index2 users modifiers "" (CustomEmoji customEmojiId :: flushText accText revNodes)
+                        parseLoop timezone source index2 users modifiers "" (CustomEmoji customEmojiId :: flushText accText revNodes)
 
                     ( _, Nothing ) ->
-                        parseLoop source (index + 1) users modifiers (accText ++ "❓") revNodes
+                        parseLoop timezone source (index + 1) users modifiers (accText ++ "❓") revNodes
 
             "\n" ->
                 if List.isEmpty modifiers then
                     case extractBlockQuote source (index + 1) of
                         Just ( content, endIndex ) ->
-                            parseLoop
+                            parseLoop timezone
                                 source
                                 endIndex
                                 users
@@ -2350,14 +2352,14 @@ parseLoop source index users modifiers accText revNodes =
                                 ""
                                 (BlockQuote
                                     HasLeadingLineBreak
-                                    (parseBlockQuoteContent users content)
+                                    (parseBlockQuoteContent timezone users content)
                                     :: flushText accText revNodes
                                 )
 
                         Nothing ->
                             case extractHeading source (index + 1) of
                                 Just ( level, content, endIndex ) ->
-                                    parseLoop
+                                    parseLoop timezone
                                         source
                                         endIndex
                                         users
@@ -2366,14 +2368,14 @@ parseLoop source index users modifiers accText revNodes =
                                         (Heading
                                             level
                                             HasLeadingLineBreak
-                                            (parseHeadingContent users content)
+                                            (parseHeadingContent timezone users content)
                                             :: flushText accText revNodes
                                         )
 
                                 Nothing ->
-                                    case extractBulletPoint starBulletMarker (parseBlockQuoteContent users) source (index + 1) of
+                                    case extractBulletPoint starBulletMarker (parseBlockQuoteContent timezone users) source (index + 1) of
                                         Just bullet ->
-                                            parseLoop
+                                            parseLoop timezone
                                                 source
                                                 bullet.endIndex
                                                 users
@@ -2388,10 +2390,10 @@ parseLoop source index users modifiers accText revNodes =
                                         Nothing ->
                                             case parseStickerId (index + 1) source of
                                                 ( index2, Just stickerId ) ->
-                                                    parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                                                    parseLoop timezone source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
                                                 ( _, Nothing ) ->
-                                                    parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+                                                    parseLoop timezone source (index + 1) users modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -2399,7 +2401,7 @@ parseLoop source index users modifiers accText revNodes =
 
             "¯" ->
                 if String.slice index (index + String.length shrugEmoticon) source == shrugEmoticon then
-                    parseLoop
+                    parseLoop timezone
                         source
                         (index + String.length shrugEmoticon)
                         users
@@ -2408,7 +2410,7 @@ parseLoop source index users modifiers accText revNodes =
                         (NormalText '¯' "\\_(ツ)_/¯" :: flushText accText revNodes)
 
                 else
-                    parseLoop source (index + 1) users modifiers (accText ++ "¯") revNodes
+                    parseLoop timezone source (index + 1) users modifiers (accText ++ "¯") revNodes
 
             "\\" ->
                 let
@@ -2419,7 +2421,7 @@ parseLoop source index users modifiers accText revNodes =
                     Just nextChar ->
                         case Dict.get nextChar charToEscaped of
                             Just escaped ->
-                                parseLoop source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                                parseLoop timezone source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
                                 -- The backslash isn't escaping anything, so only it is taken and
@@ -2427,10 +2429,10 @@ parseLoop source index users modifiers accText revNodes =
                                 -- would have been without it. Taking that character too meant
                                 -- `\http://a.com` never reached the code that spots an address,
                                 -- so a backslash in front of one quietly stopped it being a link.
-                                parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
+                                parseLoop timezone source afterBackslash users modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
-                        parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
+                        parseLoop timezone source afterBackslash users modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -2442,10 +2444,10 @@ parseLoop source index users modifiers accText revNodes =
                 in
                 case tryMatchUser users remaining of
                     Just ( userId, matchLen ) ->
-                        parseLoop source (afterAt + matchLen) users modifiers "" (UserMention userId :: flushText accText revNodes)
+                        parseLoop timezone source (afterAt + matchLen) users modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        parseLoop source afterAt users modifiers (accText ++ "@") revNodes
+                        parseLoop timezone source afterAt users modifiers (accText ++ "@") revNodes
 
             "*" ->
                 let
@@ -2464,7 +2466,7 @@ parseLoop source index users modifiers accText revNodes =
                             String.slice afterSymbol (afterSymbol + 1) source
                     in
                     if nextChar == "*" || nextChar == " " then
-                        parseLoop source afterSymbol users modifiers (accText ++ "*") revNodes
+                        parseLoop timezone source afterSymbol users modifiers (accText ++ "*") revNodes
 
                     else
                         let
@@ -2472,16 +2474,16 @@ parseLoop source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol users (IsBold :: modifiers)
+                                parseInner timezone source afterSymbol users (IsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 4) source == "____" then
-                    parseLoop source (index + 4) users modifiers (accText ++ "____") revNodes
+                    parseLoop timezone source (index + 4) users modifiers (accText ++ "____") revNodes
 
                 else if String.slice index (index + 2) source == "__" then
                     let
@@ -2500,12 +2502,12 @@ parseLoop source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol users (IsUnderlined :: modifiers)
+                                parseInner timezone source afterSymbol users (IsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
 
                 else
                     let
@@ -2524,16 +2526,16 @@ parseLoop source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol users (IsItalic :: modifiers)
+                                parseInner timezone source afterSymbol users (IsItalic :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
 
             "~" ->
                 if (List.head modifiers /= Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
-                    parseLoop source (index + 4) users modifiers (accText ++ "~~~~") revNodes
+                    parseLoop timezone source (index + 4) users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -2552,19 +2554,19 @@ parseLoop source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol users (IsStrikethrough :: modifiers)
+                                parseInner timezone source afterSymbol users (IsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) users modifiers (accText ++ "~") revNodes
+                    parseLoop timezone source (index + 1) users modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if (List.head modifiers /= Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
-                    parseLoop source (index + 4) users modifiers (accText ++ "||||") revNodes
+                    parseLoop timezone source (index + 4) users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -2583,15 +2585,15 @@ parseLoop source index users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol users (IsSpoilered :: modifiers)
+                                parseInner timezone source afterSymbol users (IsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
+                        parseLoop timezone source inner.nextIndex users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) users modifiers (accText ++ "|") revNodes
+                    parseLoop timezone source (index + 1) users modifiers (accText ++ "|") revNodes
 
             "`" ->
                 case ( stringAtRange index 3 source, findSubstring source (index + 3) "```" ) of
@@ -2605,10 +2607,10 @@ parseLoop source index users modifiers accText revNodes =
                         in
                         case String.Nonempty.fromString codeContent of
                             Just _ ->
-                                parseLoop source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                parseLoop timezone source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
+                                parseLoop timezone source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
 
                     _ ->
                         case findSingleBacktick source (index + 1) of
@@ -2619,18 +2621,18 @@ parseLoop source index users modifiers accText revNodes =
                                 in
                                 case ( String.Nonempty.fromString content, String.contains "\n" content ) of
                                     ( Just a, False ) ->
-                                        parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                        parseLoop timezone source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                     _ ->
-                                        parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
+                                        parseLoop timezone source (index + 1) users modifiers (accText ++ "`") revNodes
 
                             Nothing ->
-                                parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
+                                parseLoop timezone source (index + 1) users modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False modifierToSymbol modifiers index source of
                     Ok url ->
-                        parseLoop
+                        parseLoop timezone
                             source
                             (index + String.length (Url.toString url))
                             users
@@ -2639,7 +2641,7 @@ parseLoop source index users modifiers accText revNodes =
                             (Hyperlink url :: flushText accText revNodes)
 
                     Err errText ->
-                        parseLoop
+                        parseLoop timezone
                             source
                             (index + String.length errText)
                             users
@@ -2651,35 +2653,162 @@ parseLoop source index users modifiers accText revNodes =
                 if String.slice index (index + 2) source == "[!" then
                     case parseFileId source (index + 2) of
                         Just ( fileId, nextIndex ) ->
-                            parseLoop source nextIndex users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
+                            parseLoop timezone source nextIndex users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
+                            parseLoop timezone source (index + 1) users modifiers (accText ++ "[") revNodes
 
                 else
                     case parseMarkdownLink False source (index + 1) of
                         Just ( alias, url, nextIndex ) ->
-                            parseLoop source nextIndex users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                            parseLoop timezone source nextIndex users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
+                            parseLoop timezone source (index + 1) users modifiers (accText ++ "[") revNodes
 
             "<" ->
                 -- Timestamps are written back out in Discord's syntax by toString, so reading it
                 -- here is what lets a message keep its timestamps when it's edited.
                 case tryParseDiscordTimestamp source index of
                     Just ( time, nextIndex ) ->
-                        parseLoop source nextIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
+                        parseLoop timezone source nextIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
 
                     Nothing ->
-                        parseLoop source (index + 1) users modifiers (accText ++ "<") revNodes
+                        parseLoop timezone source (index + 1) users modifiers (accText ++ "<") revNodes
 
             _ ->
-                let
-                    nextIndex =
-                        skipNormalChars source (index + 1)
-                in
-                parseLoop source nextIndex users modifiers (accText ++ String.slice index nextIndex source) revNodes
+                -- A timestamp starts with a month name rather than a symbol, so unlike
+                -- everything above it there's no single character to match on. skipNormalChars
+                -- stops on the letters the twelve months start with, which is what brings the
+                -- loop back here often enough for this to get a look at them.
+                case tryParseDateAndTime timezone source index of
+                    Just ( time, timeEndIndex ) ->
+                        parseLoop timezone source timeEndIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
+
+                    Nothing ->
+                        let
+                            nextIndex =
+                                skipNormalChars source (index + 1)
+                        in
+                        parseLoop timezone source nextIndex users modifiers (accText ++ String.slice index nextIndex source) revNodes
+
+
+{-| at-chat's own timestamp syntax, which is just how a timestamp reads:
+`August 6, 2026 at 10:50`. Unlike Discord's `<t:1786013400:f>` this is what the message input
+shows while the message is being written, so it has to be text a person would be happy
+looking at.
+
+The date and time are in `timezone`, and timestamps are only kept to the minute, so the
+moment this names is the only one that writes itself back out as this exact string. That
+makes reading it the exact inverse of `dateAndTimeToString`, which is what lets a message be
+turned into text for editing and read back without its timestamps drifting.
+
+A date that doesn't exist (`February 31`) or a time the clocks skipped over is left as text,
+since writing it back out would produce something different from what was read.
+
+-}
+tryParseDateAndTime : Time.Zone -> String -> Int -> Maybe ( TimeInMinutes, Int )
+tryParseDateAndTime timezone source index =
+    let
+        len : Int
+        len =
+            String.length source
+    in
+    case tryParseMonth source index of
+        Just ( month, afterMonth ) ->
+            let
+                dayEnd : Int
+                dayEnd =
+                    skipDigits source afterMonth len
+
+                yearStart : Int
+                yearStart =
+                    dayEnd + 2
+
+                yearEnd : Int
+                yearEnd =
+                    skipDigits source yearStart len
+
+                hourStart : Int
+                hourStart =
+                    yearEnd + 4
+            in
+            if
+                (dayEnd > afterMonth)
+                    && (String.slice dayEnd yearStart source == ", ")
+                    && (yearEnd > yearStart)
+                    && (String.slice yearEnd hourStart source == " at ")
+                    && (stringAt (hourStart + 2) source == Just ":")
+                    && (hourStart + 5 <= len)
+            then
+                case
+                    ( ( String.toInt (String.slice afterMonth dayEnd source)
+                      , String.toInt (String.slice yearStart yearEnd source)
+                      )
+                    , ( String.toInt (String.slice hourStart (hourStart + 2) source)
+                      , String.toInt (String.slice (hourStart + 3) (hourStart + 5) source)
+                      )
+                    )
+                of
+                    ( ( Just day, Just year ), ( Just hour, Just minute ) ) ->
+                        let
+                            endIndex : Int
+                            endIndex =
+                                hourStart + 5
+
+                            time : TimeInMinutes
+                            time =
+                                TimeInMinutes.fromDateAndTime
+                                    timezone
+                                    { year = year, month = month, day = day, hour = hour, minute = minute }
+                        in
+                        -- Writing the result back out and checking it still says the same thing
+                        -- is what makes this the exact inverse of dateAndTimeToString. It's also
+                        -- what rejects February 31, an hour the clocks skipped over, and a `06`
+                        -- where the day is written without a leading zero: all of those name a
+                        -- moment that would come back out as different text, and the message
+                        -- input lines its formatting up with the text it's given, so a timestamp
+                        -- of a different length there would shift everything after it.
+                        if dateAndTimeToString timezone time == String.slice index endIndex source then
+                            Just ( time, endIndex )
+
+                        else
+                            Nothing
+
+                    _ ->
+                        Nothing
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
+{-| The month name at `index`, along with the index just past it. No month name is the start
+of another one, so the first that fits is the only one that can.
+-}
+tryParseMonth : String -> Int -> Maybe ( Time.Month, Int )
+tryParseMonth source index =
+    List.filterMap
+        (\month ->
+            let
+                name : String
+                name =
+                    MyUi.monthToString month
+
+                afterMonth : Int
+                afterMonth =
+                    index + String.length name + 1
+            in
+            if String.slice index afterMonth source == name ++ " " then
+                Just ( month, afterMonth )
+
+            else
+                Nothing
+        )
+        MyUi.allMonths
+        |> List.head
 
 
 tryMatchUser : SeqDict userId { a | name : PersonName } -> String -> Maybe ( userId, Int )
@@ -3006,11 +3135,20 @@ skipNormalChars source index =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "<" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" then
+        if c == "[" || c == "<" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" || c == "¯" || isMonthStart c then
             index
 
         else
             skipNormalChars source (index + 1)
+
+
+{-| The letters the twelve month names start with. A timestamp begins with one of these
+rather than a symbol, so stopping here is what gets the parser back to a position where it
+can check whether a timestamp follows.
+-}
+isMonthStart : String -> Bool
+isMonthStart c =
+    c == "J" || c == "F" || c == "M" || c == "A" || c == "S" || c == "O" || c == "N" || c == "D"
 
 
 mentionsUser : Nonempty (RichText userId) -> SeqSet userId
@@ -4571,15 +4709,17 @@ fileDownloadView maybeHtmlId isSpoilered fileData =
 
 
 textInputView :
-    SeqDict userId { a | name : PersonName }
+    Time.Zone
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe Range
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles customEmojis stickers2 selection nonempty =
+textInputView timezone users attachedFiles customEmojis stickers2 selection nonempty =
     textInputViewHelper
+        timezone
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
@@ -4608,7 +4748,8 @@ type alias RichTextState =
 
 
 textInputViewHelper :
-    RichTextState
+    Time.Zone
+    -> RichTextState
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -4619,7 +4760,7 @@ textInputViewHelper :
     -> Bool
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index selection list inBlockQuote output =
+textInputViewHelper timezone state allUsers attachedFiles customEmojis stickers2 index selection list inBlockQuote output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -4661,7 +4802,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     in
                     if inBlockQuote then
                         -- Each line after the first starts with "\n> " in the text the user typed but
-                        -- parseBlockQuoteContent drops the "> ", so the index has to skip 3 characters
+                        -- parseBlockQuoteContent timezone drops the "> ", so the index has to skip 3 characters
                         -- per line here even though this text only contains the "\n".
                         case String.split "\n" text2 of
                             first :: rest ->
@@ -4690,6 +4831,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
+                                timezone
                                 { state | italic = True }
                                 allUsers
                                 attachedFiles
@@ -4707,6 +4849,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
+                                timezone
                                 { state | underline = True }
                                 allUsers
                                 attachedFiles
@@ -4724,6 +4867,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
+                                timezone
                                 { state | bold = True }
                                 allUsers
                                 attachedFiles
@@ -4741,6 +4885,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
+                                timezone
                                 { state | strikethrough = True }
                                 allUsers
                                 attachedFiles
@@ -4758,6 +4903,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
+                                timezone
                                 { state | spoiler = True }
                                 allUsers
                                 attachedFiles
@@ -4783,6 +4929,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     "> "
                     in
                     textInputViewHelper
+                        timezone
                         state
                         allUsers
                         attachedFiles
@@ -4808,6 +4955,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 ++ headingLevelToMarker level
                     in
                     textInputViewHelper
+                        timezone
                         state
                         allUsers
                         attachedFiles
@@ -5043,6 +5191,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                         "\n* "
                             in
                             textInputViewHelper
+                                timezone
                                 state
                                 allUsers
                                 attachedFiles
@@ -5061,7 +5210,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     let
                         text : String
                         text =
-                            timestampToDiscordString time
+                            dateAndTimeToString timezone time
                     in
                     ( index2 + String.length text
                     , Array.push (formatText selection index2 text) output2

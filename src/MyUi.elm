@@ -2,6 +2,7 @@ module MyUi exposing
     ( Copied(..)
     , LastCopy
     , alertColor
+    , allMonths
     , background1
     , background2
     , background3
@@ -62,6 +63,7 @@ module MyUi exposing
     , mentionColor
     , monospace
     , monthToInt
+    , monthToString
     , noPointerEvents
     , noShrinking
     , notoSans
@@ -253,6 +255,11 @@ datestamp timezone time =
         ++ String.fromInt (Time.toDay timezone time)
         ++ ", "
         ++ String.fromInt (Time.toYear timezone time)
+
+
+allMonths : List Month
+allMonths =
+    [ Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec ]
 
 
 monthToString : Month -> String
