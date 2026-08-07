@@ -32,6 +32,8 @@
 * A message in a Discord thread didn't show a white dot on the guild until after I refreshed the page
 * Two messages get sent and it seems to happen for Discord and normal users. In the latest case, it was in a DM and the
   user saw duplicated messages for both themselves and the other user.
+* On mobile, the channel header can get very cramped. Also DM (perhaps guild too) names can get word wrapped causing
+  layout issues
 
 Requested features:
 
