@@ -123,6 +123,15 @@ roundTripTests =
         , roundTripTest "¯\\_(ツ)_/¯"
         , roundTripTest "*bold* and _italic_ and `code`"
         , roundTripTest "https://abc.com"
+        , -- A backslash in front of an address isn't escaping anything, so the address is
+          -- still an address and the backslash is text in front of it
+          roundTripTest "\\http://a.com"
+        , -- Text that starts out looking like an address but isn't one stays text, and the
+          -- escaping that carries it to Discord doesn't split it into an address and a piece
+          -- of text on the way back
+          roundTripTest "http://a.comhttp://a.com"
+        , roundTripTest "http://a.com_http://a.com"
+        , roundTripTest "http://a.com@|"
         , roundTripTest "two\nlines"
         , roundTripTest "> quoted"
         , roundTripTest "a\n> quoted"

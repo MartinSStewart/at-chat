@@ -74,7 +74,7 @@ config =
     , Docs.ReviewAtDocs.rule |> defaultIgnore
     , NoConfusingPrefixOperator.rule |> defaultIgnore
     , NoDebug.TodoOrToString.rule
-        |> Review.Rule.ignoreErrorsForDirectories [ "tests/", "scripts/discord-markdown/" ]
+        |> Review.Rule.ignoreErrorsForDirectories [ "tests/" ]
         |> Review.Rule.ignoreErrorsForFiles
             [ "tests/E2ETests.elm"
             , "src/E2EHelper.elm"

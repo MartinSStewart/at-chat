@@ -2013,6 +2013,46 @@ isDiscordEscapable text =
             False
 
 
+{-| Text that looked like an address but turned out not to be one is taken in a single piece,
+the same way at-chat's own parser takes it, so that both of them read `http://a.com_http://a.com`
+as one piece of text rather than one parser finding a link in the middle of it. Taking it in
+one piece means the loop never sees the backslashes inside it, so they come off here.
+-}
+unescapeDiscordText : String -> { text : String, consumed : Int }
+unescapeDiscordText text =
+    String.foldl
+        (\char ( afterBackslash, acc ) ->
+            if afterBackslash then
+                if isDiscordEscapable (String.fromChar char) then
+                    ( False, char :: acc )
+
+                else
+                    ( False, char :: '\\' :: acc )
+
+            else if char == '\\' then
+                ( True, acc )
+
+            else
+                ( False, char :: acc )
+        )
+        ( False, [] )
+        text
+        |> (\( afterBackslash, acc ) ->
+                { text = List.reverse acc |> String.fromList
+                , consumed =
+                    -- A backslash at the very end of the run is escaping the character after
+                    -- it, which is outside the run, so it's left where the loop will find it
+                    String.length text
+                        - (if afterBackslash then
+                            1
+
+                           else
+                            0
+                          )
+                }
+           )
+
+
 isWhitespaceChar : Char -> Bool
 isWhitespaceChar char =
     char == ' ' || char == '\n' || char == '\u{000D}' || char == '\t'
@@ -2379,7 +2419,12 @@ parseLoop source index users modifiers accText revNodes =
                                 parseLoop source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop source (afterBackslash + 1) users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                                -- The backslash isn't escaping anything, so only it is taken and
+                                -- what follows goes back through the loop to be read the way it
+                                -- would have been without it. Taking that character too meant
+                                -- `\http://a.com` never reached the code that spots an address,
+                                -- so a backslash in front of one quietly stopped it being a link.
+                                parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
                         parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
@@ -5471,7 +5516,9 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
 
                         else
-                            discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            -- Same as in at-chat's own parser above: the backslash isn't
+                            -- escaping anything, so what follows it still gets read normally
+                            discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
 
                     Nothing ->
                         discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
@@ -5816,11 +5863,19 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             ""
                             (Hyperlink url :: flushText accText revNodes)
 
-                    Err _ ->
-                        -- Only the `h` is taken, so that whatever follows it goes back through
-                        -- the loop. Swallowing the whole run in one go skipped the escapes in
-                        -- it, and a backslash that isn't taken off here is one the reader sees.
-                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "h") revNodes
+                    Err errText ->
+                        let
+                            unescaped : { text : String, consumed : Int }
+                            unescaped =
+                                unescapeDiscordText errText
+                        in
+                        discordParseLoop
+                            customEmojis
+                            source
+                            (index + unescaped.consumed)
+                            modifiers
+                            (accText ++ unescaped.text)
+                            revNodes
 
             "[" ->
                 case parseMarkdownLink True source (index + 1) of

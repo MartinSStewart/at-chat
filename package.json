@@ -8,7 +8,6 @@
     "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
     "end-to-end-tests": "lamdera make tests/EndToEndTestsRunner.elm --output tests/EndToEndTestsRunnerElm.js && node tests/EndToEndTestsRunner.js",
     "backup-downloader": "lamdera make scripts/backup-downloader/src/Backup.elm --output scripts/backup-downloader/BackupElm.js && node scripts/backup-downloader/run.js",
-    "discord-markdown": "lamdera make scripts/discord-markdown/src/DiscordMarkdownHarness.elm --output scripts/discord-markdown/DiscordMarkdownHarnessElm.js && node scripts/discord-markdown/run.js",
     "rust-server": "cd tests && cargo run --manifest-path ../rust-server/Cargo.toml",
     "snapshot-tests": "cd visual-testing && ./run-snapshot-test.sh --view"
   },
