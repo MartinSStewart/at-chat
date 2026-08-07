@@ -1,6 +1,7 @@
 module E2EMisc exposing
     ( channelSearchTest
     , dmThreadsTest
+    , emojiSuggestionTest
     , exportChannelTest
     , exportDmChannelTest
     , friendsSearchTest
@@ -8,6 +9,7 @@ module E2EMisc exposing
     , inactiveThreadsAreHiddenTest
     , inviteUserAndDmChat
     , largePasteBecomesAttachment
+    , mentionSuggestionTest
     , noTimestampSuggestionTest
     , profileImageOpensDm
     , timeOfDaySuggestionTest
@@ -974,6 +976,122 @@ noTimestampSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "Remind me in 5 hours and also buy milk"
                 , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 38, end = 38 }
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                ]
+            )
+        ]
+
+
+{-| How many people the most recent message the backend has stored mentions.
+-}
+lastMessageMentionCount : E2EHelper.BackendModel2 -> Int
+lastMessageMentionCount backend =
+    case E2EHelper.lastGuildChannelMessage backend of
+        Just ( _, _, Message.UserTextMessage data ) ->
+            List.Nonempty.toList data.content
+                |> List.filter
+                    (\part ->
+                        case part of
+                            RichText.UserMention _ ->
+                                True
+
+                            _ ->
+                                False
+                    )
+                |> List.length
+
+        _ ->
+            0
+
+
+{-| Writing an @ suggests the people who can be mentioned, and the one that's picked is a
+mention rather than their name in text by the time the backend has it.
+-}
+mentionSuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+mentionSuggestionTest config =
+    E2EHelper.startTest
+        "Writing an @ suggests people to mention"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+
+                -- Only the people in the guild whose name starts with what's been written so
+                -- far, so the admin's own name isn't among them.
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Mention a user" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Stevie Steve" ])
+
+                -- A name nobody in the guild has leaves nothing to suggest.
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey @Zz"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 7, end = 7 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Mention a user" ])
+
+                -- Picking a suggestion closes the dropdown. The name it writes into the message
+                -- is put there by js, which these tests don't run, so the text it would have
+                -- left behind is typed in its place.
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey @S"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 6, end = 6 }
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Mention a user" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Hey @Stevie Steve"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState
+                    100
+                    (\data ->
+                        if lastMessageMentionCount data.backend == 1 then
+                            Ok ()
+
+                        else
+                            Err
+                                ("Expected the stored message to mention one person but it mentioned "
+                                    ++ String.fromInt (lastMessageMentionCount data.backend)
+                                )
+                    )
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "@Stevie Steve" ])
+                ]
+            )
+        ]
+
+
+{-| Writing a colon and enough of a name to narrow it down suggests emoji to add.
+-}
+emojiSuggestionTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+emojiSuggestionTest config =
+    E2EHelper.startTest
+        "Writing a colon suggests emoji"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+
+                -- Two characters match too much of the emoji list to be worth showing.
+                , admin.input 100 Pages.Guild.channelTextInputId "Party :ta"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 9, end = 9 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party :tada"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 11, end = 11 }
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText ":tada:" ])
+
+                -- Picking a suggestion closes the dropdown. As with a mention, what it writes
+                -- into the message is put there by js, so the emoji it would have left behind
+                -- is typed in its place.
+                , admin.click 100 (Pages.Guild.dropdownButtonId 0)
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a sticker or emoji" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Party 🎉"
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "🎉" ])
                 ]
             )
         ]
