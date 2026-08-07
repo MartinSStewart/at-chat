@@ -4,6 +4,7 @@ import CustomEmoji exposing (EmojiName)
 import Discord
 import Effect.Time as Time
 import Expect
+import Fuzz
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
@@ -23,6 +24,7 @@ test =
         [ basicFormattingTests
         , discordSpecificTests
         , escapingTests
+        , roundTripTests
 
         --, codeTests
         --, edgeCaseTests
@@ -71,35 +73,267 @@ toDiscordTest source expected =
         )
 
 
-{-| Discord leaves the backslash visible when it escapes something that was never going to be
-formatting, so a character is only escaped when Discord would otherwise have acted on it.
+{-| Everything at-chat reads as plain text but Discord could read as formatting is hidden
+behind a backslash. Discord takes the backslashes off again when it renders the message, and
+`roundTripTests` covers at-chat doing the same.
 -}
 escapingTests : Test
 escapingTests =
     Test.describe
         "Escaping text sent to Discord"
-        [ toDiscordTest "_" "_"
-        , toDiscordTest "a_b" "a_b"
-        , toDiscordTest "5 * 3" "5 * 3"
-        , toDiscordTest "a ` b" "a ` b"
-        , toDiscordTest "1 ~ 2" "1 ~ 2"
-        , -- Two of them can pair up into formatting, so now they have to be hidden
-          toDiscordTest "5 * 3 and 2 * 2" "5 \\* 3 and 2 \\* 2"
-        , -- A backslash always needs escaping, or Discord reads it as escaping what follows
+        [ toDiscordTest "_" "\\_"
+        , toDiscordTest "a_b" "a\\_b"
+        , toDiscordTest "5 * 3" "5 \\* 3"
+        , toDiscordTest "a ` b" "a \\` b"
+        , toDiscordTest "1 ~ 2" "1 \\~ 2"
+        , toDiscordTest "a@b.com" "a\\@b.com"
+        , toDiscordTest "2 > 1" "2 \\> 1"
+        , -- A backslash needs escaping too, or Discord reads it as escaping what follows
           toDiscordTest "back\\slash" "back\\\\slash"
-        , -- `@` isn't formatting, so only the two that ping the whole channel are hidden
-          toDiscordTest "a@b.com" "a@b.com"
-        , toDiscordTest "@everyone hi" "\\@everyone hi"
-        , toDiscordTest "@here hi" "\\@here hi"
-        , -- `>` only opens a block quote at the start of a line
-          toDiscordTest "2 > 1" "2 > 1"
         , -- at-chat writes its own formatting out as Discord's
           toDiscordTest "*bold*" "**bold**"
         , toDiscordTest "_italic_" "*italic*"
         , toDiscordTest "`code`" "`code`"
-        , -- A stray backtick next to a code span could open a second one, so it's hidden
-          toDiscordTest "`code` and a ` here" "`code` and a \\` here"
+        , toDiscordTest "__underline__" "__underline__"
         ]
+
+
+{-| The bug this is here for: at-chat escaped `_` on the way out but only took the backslash
+off a handful of characters on the way back in, so `_` came home as `\_` and `__` as `\_\_`.
+
+Sending and reading back can't line up exactly, because `_` and `\_` typed into at-chat are
+different pieces of rich text (`NormalText` and `EscapedChar`) that Discord has only one way
+to write. They show the same thing to a reader, so `withoutEscapedChars` treats them as equal.
+
+-}
+roundTripTests : Test
+roundTripTests =
+    Test.describe
+        "A message survives being sent to Discord and read back"
+        [ roundTripTest "_"
+        , roundTripTest "__"
+        , roundTripTest "___"
+        , roundTripTest "\\_"
+        , roundTripTest "a_b"
+        , roundTripTest "5 * 3 and 2 * 2"
+        , roundTripTest "a@b.com"
+        , roundTripTest "2 > 1"
+        , roundTripTest "back\\slash"
+        , roundTripTest "C:\\Users\\me"
+        , roundTripTest "¯\\_(ツ)_/¯"
+        , roundTripTest "*bold* and _italic_ and `code`"
+        , roundTripTest "https://abc.com"
+        , roundTripTest "two\nlines"
+        , roundTripTest "> quoted"
+        , roundTripTest "a\n> quoted"
+        , roundTripTest "# heading"
+        , roundTripTest "* bullet\n* points"
+        , roundTripTest "a link https://abc.com/a_b in the middle"
+        , Test.fuzz
+            sourceTextFuzzer
+            "Text at-chat reads as plain text comes home as the same plain text"
+            (\source ->
+                let
+                    written : Nonempty (RichText (Discord.Id Discord.UserId))
+                    written =
+                        RichText.fromNonemptyString SeqDict.empty source
+                in
+                if List.Nonempty.all isPlainText written then
+                    expectSurvivesDiscord source
+
+                else
+                    -- Text at-chat reads as formatting is left to the cases above. Escaping
+                    -- is what this is here for, and that only ever applies to plain text.
+                    Expect.pass
+            )
+        ]
+
+
+roundTripTest : String -> Test
+roundTripTest source =
+    Test.test
+        (Debug.toString source ++ " survives the trip")
+        (\_ ->
+            case String.Nonempty.fromString source of
+                Just nonempty ->
+                    expectSurvivesDiscord nonempty
+
+                Nothing ->
+                    Expect.fail "Empty source text"
+        )
+
+
+{-| Text someone might type into at-chat, built out of the pieces that decide how it gets
+escaped on the way to Discord.
+
+Addresses are left out. A backslash in front of a link stops at-chat making it a link, and
+Discord has no way of writing that down — it makes a link of any address it sees — so
+`\https://abc.com` can't come home as what it left as, however it's escaped.
+
+-}
+sourceTextFuzzer : Fuzz.Fuzzer NonemptyString
+sourceTextFuzzer =
+    Fuzz.list
+        (Fuzz.oneOfValues
+            [ "_"
+            , "*"
+            , "~"
+            , "`"
+            , "|"
+            , "\\"
+            , ">"
+            , "@"
+            , "#"
+            , "["
+            , "]"
+            , "__"
+            , "**"
+            , "~~"
+            , "||"
+            , "```"
+            , "a"
+            , "b"
+            , "1"
+            , " "
+            , "\n"
+            , "\n> "
+            , "@everyone"
+            , "¯\\_(ツ)_/¯"
+            ]
+        )
+        |> Fuzz.map
+            (\list ->
+                -- Discord has no message with nothing but whitespace in it, and trims what
+                -- hangs off either end of the ones it does have, so text that only differs
+                -- there isn't text this has to hold for
+                String.concat list
+                    |> String.trim
+                    |> String.Nonempty.fromString
+                    |> Maybe.withDefault (NonemptyString 'a' "")
+            )
+
+
+{-| Whether at-chat read this as text rather than as formatting. Only text is ever escaped.
+-}
+isPlainText : RichText userId -> Bool
+isPlainText item =
+    case item of
+        NormalText _ _ ->
+            True
+
+        EscapedChar _ ->
+            True
+
+        _ ->
+            False
+
+
+expectSurvivesDiscord : NonemptyString -> Expect.Expectation
+expectSurvivesDiscord source =
+    let
+        written : Nonempty (RichText (Discord.Id Discord.UserId))
+        written =
+            RichText.fromNonemptyString SeqDict.empty source
+    in
+    case RichText.toDiscord customEmojis written of
+        Ok sent ->
+            RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                |> List.Nonempty.toList
+                |> withoutEscapedChars
+                |> Expect.equal (withoutEscapedChars (List.Nonempty.toList written))
+                |> Expect.onFail
+                    ("Sent to Discord as "
+                        ++ Debug.toString sent
+                        ++ " which at-chat reads as "
+                        ++ Debug.toString
+                            (RichText.fromDiscord sent SeqDict.empty Discord.Missing customEmojis [] Discord.Missing
+                                |> List.Nonempty.toList
+                            )
+                        ++ " instead of "
+                        ++ Debug.toString (List.Nonempty.toList written)
+                    )
+
+        Err _ ->
+            Expect.pass
+
+
+{-| A character someone escaped in at-chat and the same character on its own say the same
+thing to a reader, and Discord has one way of writing both, so the two are levelled out
+before comparing. Adjacent pieces of text are joined up for the same reason: whether `a_b`
+arrives as one piece or three isn't something a reader can tell.
+-}
+withoutEscapedChars : List (RichText userId) -> List (RichText userId)
+withoutEscapedChars list =
+    List.map
+        (\item ->
+            case item of
+                EscapedChar char ->
+                    RichText.escapedCharToString char |> plainText
+
+                Bold nonempty ->
+                    Bold (withoutEscapedCharsNonempty nonempty)
+
+                Italic nonempty ->
+                    Italic (withoutEscapedCharsNonempty nonempty)
+
+                Underline nonempty ->
+                    Underline (withoutEscapedCharsNonempty nonempty)
+
+                Strikethrough nonempty ->
+                    Strikethrough (withoutEscapedCharsNonempty nonempty)
+
+                Spoiler nonempty ->
+                    Spoiler (withoutEscapedCharsNonempty nonempty)
+
+                BlockQuote a list2 ->
+                    BlockQuote a (withoutEscapedChars list2)
+
+                Heading level a nonempty ->
+                    Heading level a (withoutEscapedCharsNonempty nonempty)
+
+                BulletPoint a items ->
+                    BulletPoint a (List.Nonempty.map withoutEscapedChars items)
+
+                _ ->
+                    item
+        )
+        list
+        |> joinAdjacentText
+
+
+withoutEscapedCharsNonempty : Nonempty (RichText userId) -> Nonempty (RichText userId)
+withoutEscapedCharsNonempty nonempty =
+    case withoutEscapedChars (List.Nonempty.toList nonempty) |> List.Nonempty.fromList of
+        Just nonempty2 ->
+            nonempty2
+
+        Nothing ->
+            nonempty
+
+
+plainText : String -> RichText userId
+plainText text =
+    case String.Nonempty.fromString text of
+        Just (NonemptyString char rest) ->
+            NormalText char rest
+
+        Nothing ->
+            NormalText ' ' ""
+
+
+joinAdjacentText : List (RichText userId) -> List (RichText userId)
+joinAdjacentText list =
+    List.foldr
+        (\item acc ->
+            case ( item, acc ) of
+                ( NormalText charA restA, (NormalText charB restB) :: rest ) ->
+                    NormalText charA (restA ++ String.cons charB restB) :: rest
+
+                _ ->
+                    item :: acc
+        )
+        []
+        list
 
 
 basicFormattingTests : Test

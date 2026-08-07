@@ -2525,7 +2525,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
-        "Text sent to Discord is only escaped where Discord needs it"
+        "A message at-chat sends to Discord comes back reading the same way"
         E2EHelper.startTime
         normalConfig
         [ E2EHelper.linkDiscordAndLogin
@@ -2536,20 +2536,43 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\admin ->
-                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , -- Discord leaves the backslash visible when it escapes something that was
-                  -- never going to be formatting, so a lone `_` has to arrive as a lone `_`
-                  E2EHelper.writeMessage admin 100 "_"
-                , E2EHelper.writeMessage admin 100 "a@b.com pays 2 > 1"
-                , T.checkState
-                    400
-                    (\data ->
-                        case discordMessageContentsPosted data of
-                            [ "a@b.com pays 2 > 1", "_" ] ->
-                                Ok ()
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , E2EHelper.writeMessage admin 100 "_"
+                        , T.andThen
+                            400
+                            (\data ->
+                                case discordMessageContentsPosted data of
+                                    content :: _ ->
+                                        [ -- The underscore is hidden from Discord's markdown on
+                                          -- the way out
+                                          T.checkState
+                                            0
+                                            (\_ ->
+                                                if content == "\\_" then
+                                                    Ok ()
 
-                            contents ->
-                                Err ("Discord was sent " ++ Debug.toString contents)
+                                                else
+                                                    Err ("Discord was sent " ++ Debug.toString content)
+                                            )
+                                        , -- Discord hands that same content back, and the
+                                          -- backslash has to come off again on the way in. It
+                                          -- didn't, which is what this test is here for: the
+                                          -- underscore someone typed came home as `\_`.
+                                          discordGuildMessage connection (jsonEscaped content)
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.has [ Test.Html.Selector.exactText "_" ])
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "\\_" ])
+                                        ]
+
+                                    [] ->
+                                        [ T.checkState 0 (\_ -> Err "at-chat sent nothing to Discord") ]
+                            )
+                        ]
                     )
                 ]
             )
@@ -2740,6 +2763,14 @@ discordDmMessageFromLinkedUser connection content =
                 ("{\"t\":\"MESSAGE_CREATE\",\"s\":" ++ unique ++ ",\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"" ++ Iso8601.fromTime data.time ++ "\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"" ++ unique ++ "\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"" ++ content ++ "\",\"components\":[],\"channel_type\":1,\"channel_id\":\"1472236476401057854\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"discriminator\":\"0\",\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[]}}")
             ]
         )
+
+
+{-| A string put inside the JSON of a gateway event, where a backslash has to be doubled up
+the way Discord's own JSON does it.
+-}
+jsonEscaped : String -> String
+jsonEscaped text =
+    String.replace "\\" "\\\\" text
 
 
 {-| The `content` of every message the backend has posted to Discord, most recent first,

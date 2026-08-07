@@ -73,7 +73,7 @@ import Point2d exposing (Point2d)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Set exposing (Set)
+import Set
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import Touch exposing (ScreenCoordinate)
@@ -1991,9 +1991,31 @@ charToEscaped =
     List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
 
 
-discordEscapableChars : Set String
-discordEscapableChars =
-    Set.fromList [ "\\", "*", ">", "`", "~", "@" ]
+{-| Discord takes the backslash off any character that isn't a letter, a digit or a space,
+whether or not that character was going to be formatting: `\\_` reads as `_` even where there
+was no italics to prevent. Reading only a handful of characters back this way left the rest
+of the backslashes on show in at-chat, so a message at-chat had escaped on the way out came
+home wearing them.
+
+Which characters those are isn't documented anywhere Discord publishes; this is the rule the
+markdown library its client is built on uses, and it matches what Discord does with the
+characters at-chat escapes. `scripts/discord-markdown` is there to check it against a real
+client when a new one comes up.
+
+-}
+isDiscordEscapable : String -> Bool
+isDiscordEscapable text =
+    case String.uncons text of
+        Just ( char, "" ) ->
+            not (Char.isAlphaNum char) && not (isWhitespaceChar char)
+
+        _ ->
+            False
+
+
+isWhitespaceChar : Char -> Bool
+isWhitespaceChar char =
+    char == ' ' || char == '\n' || char == '\u{000D}' || char == '\t'
 
 
 {-| Without a special case the parser reads the backslash as escaping the first underscore and
@@ -5445,7 +5467,7 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                 in
                 case stringAt afterBackslash source of
                     Just nextChar ->
-                        if Set.member nextChar discordEscapableChars then
+                        if isDiscordEscapable nextChar then
                             discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
 
                         else
@@ -5500,14 +5522,8 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                             ""
                                             (Hyperlink url :: flushText (accText ++ "<") revNodes)
 
-                            Err errText ->
-                                discordParseLoop
-                                    customEmojis
-                                    source
-                                    (index + 1 + String.length errText)
-                                    modifiers
-                                    (accText ++ "<" ++ errText)
-                                    revNodes
+                            Err _ ->
+                                bailOutHelper ()
 
                     Just "a" ->
                         case stringAt (index + 2) source of
@@ -5800,14 +5816,11 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             ""
                             (Hyperlink url :: flushText accText revNodes)
 
-                    Err errText ->
-                        discordParseLoop
-                            customEmojis
-                            source
-                            (index + String.length errText)
-                            modifiers
-                            (accText ++ errText)
-                            revNodes
+                    Err _ ->
+                        -- Only the `h` is taken, so that whatever follows it goes back through
+                        -- the loop. Swallowing the whole run in one go skipped the escapes in
+                        -- it, and a backslash that isn't taken off here is one the reader sees.
+                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "h") revNodes
 
             "[" ->
                 case parseMarkdownLink True source (index + 1) of
@@ -5843,36 +5856,9 @@ toDiscord :
     -> Result Int String
 toDiscord customEmojis content =
     let
-        list : List (RichText (Discord.Id Discord.UserId))
-        list =
-            List.Nonempty.toList content
-
-        {- Which characters have to be escaped depends on the whole message, since a `*` only
-           becomes formatting once a second one shows up to close it. Building the message
-           without escaping any of them first is the simplest way to count what's there,
-           formatting this converter writes itself included.
-        -}
-        unescaped : String
-        unescaped =
-            toDiscordHelper Set.empty customEmojis list
-
-        charsToEscape : Set Char
-        charsToEscape =
-            List.filter
-                (\char ->
-                    case char of
-                        '~' ->
-                            List.length (String.indexes "~~" unescaped) > 1
-
-                        _ ->
-                            List.length (String.indexes (String.fromChar char) unescaped) > 1
-                )
-                discordPairedChars
-                |> Set.fromList
-
         text : String
         text =
-            toDiscordHelper charsToEscape customEmojis list
+            toDiscordHelper customEmojis (List.Nonempty.toList content)
     in
     if String.length text > maxLength then
         Err (maxLength - String.length text)
@@ -5904,11 +5890,10 @@ type alias DiscordCustomEmojiIdAndName =
 
 
 toDiscordHelper :
-    Set Char
-    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (RichText (Discord.Id Discord.UserId))
     -> String
-toDiscordHelper charsToEscape customEmojis content =
+toDiscordHelper customEmojis content =
     List.map
         (\item ->
             case item of
@@ -5916,25 +5901,33 @@ toDiscordHelper charsToEscape customEmojis content =
                     "<@!" ++ Discord.idToString discordUserId ++ ">"
 
                 NormalText char string ->
-                    escapeDiscordText charsToEscape (String.cons char string)
+                    escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    "**" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "**"
+                    "**" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    "*" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "*"
+                    "*" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "*"
 
                 Underline nonempty ->
-                    "__" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "__"
+                    "__" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    "~~" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "~~"
+                    "~~" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    "||" ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty) ++ "||"
+                    "||" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "||"
 
-                BlockQuote _ list ->
-                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper charsToEscape customEmojis list)
+                BlockQuote hasLeadingLineBreak list ->
+                    (case hasLeadingLineBreak of
+                        HasLeadingLineBreak ->
+                            "\n"
+
+                        NoLeadingLineBreak ->
+                            ""
+                    )
+                        ++ "> "
+                        ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -5949,7 +5942,7 @@ toDiscordHelper charsToEscape customEmojis content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    prefix ++ toDiscordHelper charsToEscape customEmojis (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Url.toString data
@@ -5976,7 +5969,7 @@ toDiscordHelper charsToEscape customEmojis content =
                     ""
 
                 EscapedChar char ->
-                    escapeDiscordText charsToEscape (escapedCharToString char)
+                    escapeDiscordText (escapedCharToString char)
 
                 Sticker _ ->
                     ""
@@ -6002,7 +5995,7 @@ toDiscordHelper charsToEscape customEmojis content =
                             ""
                     )
                         ++ (List.Nonempty.toList items
-                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper charsToEscape customEmojis bulletItem)
+                                |> List.map (\bulletItem -> "* " ++ toDiscordHelper customEmojis bulletItem)
                                 |> String.join "\n"
                            )
 
@@ -6023,78 +6016,26 @@ customEmojisFromDiscord text =
             (String.indexes "<a:" text)
 
 
-{-| Discord only hides the backslash when it is escaping something it would otherwise have
-read as formatting. Escaping a character that was never going to be formatting leaves a
-backslash the reader can see, so a message holding a single `_` has to be sent as a single
-`_`, not as `\\_`.
+{-| A character at-chat reads as plain text can still be formatting to Discord, so every one
+of them is hidden behind a backslash on the way out, and `isDiscordEscapable` takes the
+backslashes off again when the message is read back.
 
-`charsToEscape` says which of `discordPairedChars` this message actually has to hide, worked
-out once for the whole message by `toDiscord`.
+This hides more than Discord strictly needs — a lone `_` was never going to be italics — but
+knowing which ones matter means knowing Discord's grammar exactly, and nothing at-chat can
+see says what that grammar is. The extra backslashes don't change how a message reads in
+Discord, so they stay.
 
 -}
-escapeDiscordText : Set Char -> String -> String
-escapeDiscordText charsToEscape text =
-    Set.foldl
-        (\char text2 ->
-            let
-                asString : String
-                asString =
-                    String.fromChar char
-            in
-            String.replace asString ("\\" ++ asString) text2
-        )
-        -- The backslash goes first so the ones the other passes add aren't escaped again
-        (String.replace "\\" "\\\\" text)
-        charsToEscape
-        |> escapeBlockQuotes
-        |> escapeMassMentions
-
-
-{-| `>` only opens a block quote at the start of a line, so `2 > 1` is left alone.
--}
-escapeBlockQuotes : String -> String
-escapeBlockQuotes text =
-    case String.split "\n" text of
-        -- Whether the first line starts a line of the message or carries on from formatting
-        -- that came before it isn't knowable from here, and `>` after a bold word is far
-        -- more common than a message that opens with an unquoted `>`
-        firstLine :: rest ->
-            List.map
-                (\line ->
-                    let
-                        withoutIndent : String
-                        withoutIndent =
-                            String.trimLeft line
-                    in
-                    if String.startsWith ">" withoutIndent then
-                        String.dropRight (String.length withoutIndent) line ++ "\\" ++ withoutIndent
-
-                    else
-                        line
-                )
-                rest
-                |> (::) firstLine
-                |> String.join "\n"
-
-        [] ->
-            text
-
-
-{-| `@` isn't formatting, so escaping every one of them would put a backslash in the middle
-of every email address. Only the two that ping the whole channel are worth hiding.
--}
-escapeMassMentions : String -> String
-escapeMassMentions text =
-    String.replace "@everyone" "\\@everyone" text
-        |> String.replace "@here" "\\@here"
-
-
-{-| Discord reads these as formatting only when a second one closes them (`~` needs to come
-in twos to begin with), so a message that holds just one of them can send it as it is.
--}
-discordPairedChars : List Char
-discordPairedChars =
-    [ '`', '*', '_', '~' ]
+escapeDiscordText : String -> String
+escapeDiscordText text =
+    String.replace "\\" "\\\\" text
+        |> String.replace "_" "\\_"
+        |> String.replace "*" "\\*"
+        |> String.replace "`" "\\`"
+        |> String.replace ">" "\\>"
+        |> String.replace "@" "\\@"
+        |> String.replace "~" "\\~"
+        |> String.replace "|" "\\|"
 
 
 discordParseInner :

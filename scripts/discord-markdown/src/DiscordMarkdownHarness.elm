@@ -1,4 +1,4 @@
-port module DiscordMarkdownHarness exposing (Flags, Row, main, rowsFor)
+port module DiscordMarkdownHarness exposing (Flags, Row, main)
 
 {-| Answers "what actually happens to this text on its way to Discord and back?" for a
 list of inputs, so that the escaping rules can be checked against something instead of
@@ -15,8 +15,8 @@ at-chat sends should survive being read back by it:
 Each row below shows both halves of that: what at-chat makes of the text someone typed,
 what it sends to Discord, and what it would make of the message coming back. `run.js`
 renders the sent text with a JavaScript port of Discord's renderer as well, when one is
-installed, which is as close to the real client as this can get without a person looking
-at one.
+installed, though the port is a community reimplementation rather than the real client, so
+what it shows is a hint and not proof.
 
 Run it with `npm run discord-markdown` from the repo root.
 

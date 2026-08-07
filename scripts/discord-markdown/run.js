@@ -12,6 +12,9 @@
 // Without it the column is left out. The port is a community reimplementation rather than
 // the real client, so treat it as a strong hint and not as proof — the cases that matter
 // are worth pasting into a real Discord channel once.
+//
+// The "round trips" column is the one that catches at-chat's own bugs: it says whether
+// at-chat still reads the message the same way after it has been to Discord and back.
 
 const { Elm } = require('./DiscordMarkdownHarnessElm.js');
 const fs = require('node:fs');
