@@ -2444,6 +2444,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (ChangeId 0)
                                 (Local_Discord_SendMessage
                                     E2EHelper.startTime
+                                    Time.utc
                                     (DiscordGuildOrDmId_Dm
                                         { currentUserId = E2EHelper.currentDiscordUserId
                                         , channelId = discordDmChannelId
@@ -2500,6 +2501,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 (ChangeId 1)
                                 (Local_Discord_SendMessage
                                     E2EHelper.startTime
+                                    Time.utc
                                     (DiscordGuildOrDmId_Dm
                                         { currentUserId = E2EHelper.currentDiscordUserId
                                         , channelId = discordDmChannelId

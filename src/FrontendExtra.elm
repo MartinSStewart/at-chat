@@ -97,7 +97,6 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
 import SeqSet exposing (SeqSet)
-import String.Extra
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
@@ -5903,47 +5902,71 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                             Nothing
 
                     _ ->
-                        let
-                            timeOffsetHelper value label offsetType =
-                                case String.toFloat value of
-                                    Just value2 ->
-                                        offsetType value2
-                                            |> TimestampSoFar { start = index - String.length value + 1 + 4, end = index }
-                                            |> Just
+                        helper (index - 1) text
 
-                                    Nothing ->
-                                        helper (index - 1) text
-                        in
-                        case lastTwoWords index text |> List.map String.toLower of
-                            [ value, "weeks" ] ->
-                                timeOffsetHelper value "weeks" MessageInput.WeekOffset
+        -- Unlike a mention or an emoji there's no symbol to look back for, so this reads the
+        -- two words the caret sits at the end of. It's only asked about that one position,
+        -- since the words it reads are the ones the dropdown replaces, and anywhere further
+        -- back is text the caret has already left.
+        timeOffsetSoFar : Int -> String -> Maybe NameSoFar
+        timeOffsetSoFar caret text =
+            let
+                timeOffsetHelper : String -> String -> (Float -> MessageInput.TimestampData) -> Maybe NameSoFar
+                timeOffsetHelper value unit offsetType =
+                    case String.toFloat value of
+                        Just value2 ->
+                            offsetType value2
+                                |> TimestampSoFar
+                                    { start = caret - String.length value - 1 - String.length unit
+                                    , end = caret
+                                    }
+                                |> Just
 
-                            [ value, "week" ] ->
-                                timeOffsetHelper value "week" MessageInput.WeekOffset
+                        Nothing ->
+                            Nothing
+            in
+            case lastTwoWords caret text |> List.map String.toLower of
+                [ value, "weeks" ] ->
+                    timeOffsetHelper value "weeks" MessageInput.WeekOffset
 
-                            [ value, "days" ] ->
-                                timeOffsetHelper value "days" MessageInput.DayOffset
+                [ value, "week" ] ->
+                    timeOffsetHelper value "week" MessageInput.WeekOffset
 
-                            [ value, "day" ] ->
-                                timeOffsetHelper value "day" MessageInput.DayOffset
+                [ value, "days" ] ->
+                    timeOffsetHelper value "days" MessageInput.DayOffset
 
-                            [ value, "hours" ] ->
-                                timeOffsetHelper value "hours" MessageInput.HourOffset
+                [ value, "day" ] ->
+                    timeOffsetHelper value "day" MessageInput.DayOffset
 
-                            [ value, "hour" ] ->
-                                timeOffsetHelper value "hour" MessageInput.HourOffset
+                [ value, "hours" ] ->
+                    timeOffsetHelper value "hours" MessageInput.HourOffset
 
-                            [ value, "minutes" ] ->
-                                timeOffsetHelper value "minutes" MessageInput.MinuteOffset
+                [ value, "hour" ] ->
+                    timeOffsetHelper value "hour" MessageInput.HourOffset
 
-                            [ value, "minute" ] ->
-                                timeOffsetHelper value "minute" MessageInput.MinuteOffset
+                [ value, "minutes" ] ->
+                    timeOffsetHelper value "minutes" MessageInput.MinuteOffset
+
+                [ value, "minute" ] ->
+                    timeOffsetHelper value "minute" MessageInput.MinuteOffset
+
+                _ ->
+                    Nothing
+
+        nameSoFar : Int -> String -> Maybe NameSoFar
+        nameSoFar caret text =
+            case timeOffsetSoFar caret text of
+                Just timeOffset ->
+                    Just timeOffset
+
+                Nothing ->
+                    helper caret text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
-                    helper selection.start (String.Nonempty.toString draft)
+                    nameSoFar selection.start (String.Nonempty.toString draft)
 
                 Nothing ->
                     Nothing
@@ -5951,7 +5974,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         else if htmlId == MessageMenu.editMessageTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                 Just edit ->
-                    helper selection.start edit.text
+                    nameSoFar selection.start edit.text
 
                 Nothing ->
                     Nothing
@@ -5961,6 +5984,55 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
     else
         Nothing
+
+
+{-| The two words that end at `index`, or nothing if there aren't two of them. They have to
+be a single space apart and the second has to end exactly where the caret is, because the
+dropdown replaces the text they cover and works out where that starts from how long they are.
+-}
+lastTwoWords : Int -> String -> List String
+lastTwoWords index text =
+    let
+        secondStart : Int
+        secondStart =
+            wordStart text index
+
+        firstStart : Int
+        firstStart =
+            wordStart text (secondStart - 1)
+    in
+    if
+        (secondStart < index)
+            && (String.slice (secondStart - 1) secondStart text == " ")
+            && (firstStart < secondStart - 1)
+    then
+        [ String.slice firstStart (secondStart - 1) text, String.slice secondStart index text ]
+
+    else
+        []
+
+
+{-| Where the run of characters ending at `end` starts, taking a word to run up to the
+whitespace in front of it.
+-}
+wordStart : String -> Int -> Int
+wordStart text end =
+    if end <= 0 then
+        0
+
+    else
+        case String.slice (end - 1) end text of
+            " " ->
+                end
+
+            "\n" ->
+                end
+
+            "\u{000D}" ->
+                end
+
+            _ ->
+                wordStart text (end - 1)
 
 
 handleUndo : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg_ )
