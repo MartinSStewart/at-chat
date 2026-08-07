@@ -46,13 +46,13 @@ import MyUi
 import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
-import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
+import TimeInMinutes exposing (TimeInMinutes)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1017,14 +1017,18 @@ pressedArrowInDropdown isMobile time nameSoFar guildOrDmId index maybePingUser e
             Nothing
 
 
-timestampDropdownList : Time.Posix -> TimestampData -> List (Quantity Int Seconds)
+timestampDropdownList : Time.Posix -> TimestampData -> List TimeInMinutes
 timestampDropdownList time timestamp =
     case timestamp of
         HourOffset int ->
-            [ Time.posixToMillis time // 1000 - 60 * 60 * int |> Quantity.unsafe ]
+            [ Time.posixToMillis time // (60 * 1000) + 60 * int |> TimeInMinutes.fromMinutes
+            , Time.posixToMillis time // (60 * 1000) - 60 * int |> TimeInMinutes.fromMinutes
+            ]
 
         MinuteOffset int ->
-            [ Time.posixToMillis time // 1000 - 60 * int |> Quantity.unsafe ]
+            [ Time.posixToMillis time // (60 * 1000) + int |> TimeInMinutes.fromMinutes
+            , Time.posixToMillis time // (60 * 1000) - int |> TimeInMinutes.fromMinutes
+            ]
 
 
 availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )

@@ -51,7 +51,6 @@ import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
 import Drawing exposing (Drawing)
-import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Email.Html
@@ -72,13 +71,13 @@ import NonemptyExtra
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Point2d exposing (Point2d)
-import Quantity exposing (Quantity)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
+import TimeInMinutes exposing (TimeInMinutes)
 import Touch exposing (ScreenCoordinate)
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -145,7 +144,7 @@ type RichText userId
     | Sticker (Id StickerId)
     | CustomEmoji (Id CustomEmojiId)
     | BulletPoint HasLeadingLineBreak (Nonempty (List (RichText userId)))
-    | Timestamp (Quantity Int Seconds)
+    | Timestamp TimeInMinutes
 
 
 type HasLeadingLineBreak
@@ -3228,7 +3227,7 @@ message sees it in their own timezone. The date is what's worth knowing about so
 days away, but for something happening later today the date says nothing the clock doesn't,
 so how long is left takes its place.
 -}
-timestampView : Time.Posix -> Time.Zone -> RichTextState -> Quantity Int Seconds -> Html msg
+timestampView : Time.Posix -> Time.Zone -> RichTextState -> TimeInMinutes -> Html msg
 timestampView now timezone state time =
     Html.span
         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
@@ -3248,11 +3247,11 @@ timestampView now timezone state time =
         [ Html.text (timestampToString now timezone time) ]
 
 
-timestampToString : Time.Posix -> Time.Zone -> Quantity Int Seconds -> String
+timestampToString : Time.Posix -> Time.Zone -> TimeInMinutes -> String
 timestampToString now timezone time =
     let
         timeB =
-            Time.millisToPosix (Quantity.unwrap time * 1000)
+            TimeInMinutes.toTime time
     in
     if isSameDay timezone now timeB then
         MyUi.timestamp timeB timezone ++ " (" ++ timeUntilToString now timeB ++ ")"
@@ -3261,11 +3260,11 @@ timestampToString now timezone time =
         dateAndTimeToString timezone time
 
 
-dateAndTimeToString : Time.Zone -> Quantity Int Seconds -> String
+dateAndTimeToString : Time.Zone -> TimeInMinutes -> String
 dateAndTimeToString timezone time =
     let
         time2 =
-            Time.millisToPosix (Quantity.unwrap time * 1000)
+            TimeInMinutes.toTime time
     in
     MyUi.datestamp timezone time2 ++ " at " ++ MyUi.timestamp time2 timezone
 
@@ -3333,9 +3332,9 @@ pluralize amount unit =
 hint is dropped when parsing, since at-chat picks the format it shows the timestamp in, so
 timestamps are written back out with `f`, the hint closest to that.
 -}
-timestampToDiscordString : Quantity Int Seconds -> String
+timestampToDiscordString : TimeInMinutes -> String
 timestampToDiscordString time =
-    "<t:" ++ String.fromInt (Quantity.unwrap time) ++ ":f>"
+    "<t:" ++ String.fromInt (TimeInMinutes.toSeconds time) ++ ":f>"
 
 
 type alias PressedImageData =
@@ -6205,7 +6204,7 @@ hint is read past and thrown away.
 `index` points at the opening `<`.
 
 -}
-tryParseDiscordTimestamp : String -> Int -> Maybe ( Quantity Int Seconds, Int )
+tryParseDiscordTimestamp : String -> Int -> Maybe ( TimeInMinutes, Int )
 tryParseDiscordTimestamp source index =
     let
         len : Int
@@ -6223,11 +6222,11 @@ tryParseDiscordTimestamp source index =
     if stringAt (index + 1) source == Just "t" && stringAt (index + 2) source == Just ":" && digitEnd > afterColon then
         case ( String.toInt (String.slice afterColon digitEnd source), stringAt digitEnd source ) of
             ( Just seconds, Just ">" ) ->
-                Just ( Quantity.unsafe seconds, digitEnd + 1 )
+                Just ( TimeInMinutes.fromMinutes (seconds // 60), digitEnd + 1 )
 
             ( Just seconds, Just ":" ) ->
                 if stringAt (digitEnd + 2) source == Just ">" then
-                    Just ( Quantity.unsafe seconds, digitEnd + 3 )
+                    Just ( TimeInMinutes.fromMinutes (seconds // 60), digitEnd + 3 )
 
                 else
                     Nothing
