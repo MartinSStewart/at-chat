@@ -779,7 +779,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ admin.click 100 (Dom.id "guild_openChannel_0")
                         , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
                         , admin.click 100 (Dom.id "emoji_category_Stickers")
-                        , admin.click 100 (Dom.id "guild_emojiSelector_0")
+                        , admin.click 100 (Dom.id "guild_emojiSelector_1906")
                         , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
                         , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
                         , T.andThen
