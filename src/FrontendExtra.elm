@@ -5955,12 +5955,23 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                         Just valueText ->
                             case parseTimeOfDay valueText of
                                 Just value2 ->
-                                    TimestampSoFar
-                                        { start = caret - String.length valueText
-                                        , end = caret
-                                        }
-                                        (MessageInput.TimeOfDay value2)
-                                        |> Just
+                                    case
+                                        RichText.tryParseTimestamp
+                                            -- Timezone doesn't matter here, we just want to know if it's a timestamp
+                                            Time.utc
+                                            (String.join " " (last4Words caret text))
+                                            0
+                                    of
+                                        Just _ ->
+                                            Nothing
+
+                                        Nothing ->
+                                            TimestampSoFar
+                                                { start = caret - String.length valueText
+                                                , end = caret
+                                                }
+                                                (MessageInput.TimeOfDay value2)
+                                                |> Just
 
                                 Nothing ->
                                     Nothing
@@ -6021,7 +6032,11 @@ parseTimeOfDayHelper hours minutes =
     if String.length hours <= 2 && String.length minutes == 2 then
         case ( String.toInt hours, String.toInt minutes ) of
             ( Just hours2, Just minutes2 ) ->
-                Just { hours = hours2, minutes = minutes2 }
+                if hours2 < 24 && minutes2 < 60 then
+                    Just { hours = hours2, minutes = minutes2 }
+
+                else
+                    Nothing
 
             _ ->
                 Nothing

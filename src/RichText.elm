@@ -39,6 +39,7 @@ module RichText exposing
     , toDiscord
     , toString
     , toStringWithGetter
+    , tryParseTimestamp
     , unspoilerAttachedFile
     , urlToDomain
     , view
@@ -2666,22 +2667,12 @@ parseLoop timezone source index users modifiers accText revNodes =
                         Nothing ->
                             parseLoop timezone source (index + 1) users modifiers (accText ++ "[") revNodes
 
-            "<" ->
-                -- Timestamps are written back out in Discord's syntax by toString, so reading it
-                -- here is what lets a message keep its timestamps when it's edited.
-                case tryParseDiscordTimestamp source index of
-                    Just ( time, nextIndex ) ->
-                        parseLoop timezone source nextIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
-
-                    Nothing ->
-                        parseLoop timezone source (index + 1) users modifiers (accText ++ "<") revNodes
-
             _ ->
                 -- A timestamp starts with a month name rather than a symbol, so unlike
                 -- everything above it there's no single character to match on. skipNormalChars
                 -- stops on the letters the twelve months start with, which is what brings the
                 -- loop back here often enough for this to get a look at them.
-                case tryParseDateAndTime timezone source index of
+                case tryParseTimestamp timezone source index of
                     Just ( time, timeEndIndex ) ->
                         parseLoop timezone source timeEndIndex users modifiers "" (Timestamp time :: flushText accText revNodes)
 
@@ -2707,8 +2698,8 @@ A date that doesn't exist (`February 31`) or a time the clocks skipped over is l
 since writing it back out would produce something different from what was read.
 
 -}
-tryParseDateAndTime : Time.Zone -> String -> Int -> Maybe ( TimeInMinutes, Int )
-tryParseDateAndTime timezone source index =
+tryParseTimestamp : Time.Zone -> String -> Int -> Maybe ( TimeInMinutes, Int )
+tryParseTimestamp timezone source index =
     let
         len : Int
         len =
