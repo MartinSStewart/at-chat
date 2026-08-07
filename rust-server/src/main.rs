@@ -22,6 +22,7 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::HTML;
 mod content_types;
+mod video;
 use rand::RngExt;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -694,8 +695,14 @@ pub struct ExposureTime {
 }
 
 #[derive(Debug, Serialize)]
+pub struct VideoMetadata {
+    pub video_size: (u32, u32),
+}
+
+#[derive(Debug, Serialize)]
 pub struct UploadResponse {
     image_metadata: Option<ImageMetadata>,
+    video_metadata: Option<VideoMetadata>,
     hash: String,
 }
 
@@ -815,6 +822,7 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
                     let path = filepath(&hash);
                     let response: String = serde_json::to_string(&UploadResponse {
                         image_metadata: Some(metadata),
+                        video_metadata: None,
                         hash: hash.clone(),
                     })
                     .unwrap();
@@ -856,33 +864,49 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
                 ),
             }
         }
-        _ => match is_file_upload_allowed(hash.clone(), size, session_id2, (0, 0)).await {
-            Ok(()) => {
-                let path = filepath(&hash);
-                let response: String = serde_json::to_string(&UploadResponse {
-                    image_metadata: None,
-                    hash: hash.clone(),
-                })
-                .unwrap();
+        // Not something the image crate can read. It might still be a video, in
+        // which case the dimensions are in the container header.
+        _ => {
+            let video_size: Option<(u32, u32)> = video::video_dimensions(&bytes);
 
-                match fs::exists(&path) {
-                    Ok(true) => json_response_with_headers(StatusCode::OK, response),
+            match is_file_upload_allowed(
+                hash.clone(),
+                size,
+                session_id2,
+                video_size.unwrap_or((0, 0)),
+            )
+            .await
+            {
+                Ok(()) => {
+                    let path = filepath(&hash);
+                    let response: String = serde_json::to_string(&UploadResponse {
+                        image_metadata: None,
+                        video_metadata: video_size.map(|video_size2| VideoMetadata {
+                            video_size: video_size2,
+                        }),
+                        hash: hash.clone(),
+                    })
+                    .unwrap();
 
-                    _ => match fs::write(path, bytes) {
-                        Ok(()) => json_response_with_headers(StatusCode::OK, response),
-                        Err(_) => response_with_headers(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            String::from("Internal error"),
-                        ),
-                    },
+                    match fs::exists(&path) {
+                        Ok(true) => json_response_with_headers(StatusCode::OK, response),
+
+                        _ => match fs::write(path, bytes) {
+                            Ok(()) => json_response_with_headers(StatusCode::OK, response),
+                            Err(_) => response_with_headers(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                String::from("Internal error"),
+                            ),
+                        },
+                    }
                 }
-            }
 
-            Err(()) => response_with_headers(
-                StatusCode::UNAUTHORIZED,
-                String::from("Invalid permissions"),
-            ),
-        },
+                Err(()) => response_with_headers(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("Invalid permissions"),
+                ),
+            }
+        }
     }
 }
 
