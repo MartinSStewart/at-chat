@@ -887,9 +887,9 @@ stickers nonempty =
         (List.Nonempty.toList nonempty)
 
 
-toStringWithGetter : (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
-toStringWithGetter userToString emojisForStickersAndAttachments users nonempty =
-    toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList nonempty)
+toStringWithGetter : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
+toStringWithGetter timezone userToString emojisForStickersAndAttachments users nonempty =
+    toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList nonempty)
 
 
 blockQuoteToString : HasLeadingLineBreak -> String -> String
@@ -943,9 +943,10 @@ headingToString hasLeadingLineBreak level inner =
         ++ inner
 
 
-toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
-toString emojisForStickersAndAttachments users nonempty =
+toString : Time.Zone -> Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
+toString timezone emojisForStickersAndAttachments users nonempty =
     toStringHelper
+        timezone
         (\user -> PersonName.toString user.name)
         emojisForStickersAndAttachments
         users
@@ -957,8 +958,8 @@ maxLength =
     2000
 
 
-toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String
-toStringHelper userToString emojisForStickersAndAttachments users list =
+toStringHelper : Time.Zone -> (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String
+toStringHelper timezone userToString emojisForStickersAndAttachments users list =
     List.map
         (\richText ->
             case richText of
@@ -975,39 +976,39 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
 
                 Bold a ->
                     "*"
-                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
                         ++ "*"
 
                 Italic a ->
                     "_"
-                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
                         ++ "_"
 
                 Underline a ->
                     "__"
-                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
                         ++ "__"
 
                 Strikethrough a ->
                     "~~"
-                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
                         ++ "~~"
 
                 Spoiler a ->
                     "||"
-                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
                         ++ "||"
 
                 BlockQuote hasLeadingLineBreak a ->
                     blockQuoteToString
                         hasLeadingLineBreak
-                        (toStringHelper userToString emojisForStickersAndAttachments users a)
+                        (toStringHelper timezone userToString emojisForStickersAndAttachments users a)
 
                 Heading level hasLeadingLineBreak a ->
                     headingToString
                         hasLeadingLineBreak
                         level
-                        (toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a))
+                        (toStringHelper timezone userToString emojisForStickersAndAttachments users (List.Nonempty.toList a))
 
                 Hyperlink data ->
                     Url.toString data
@@ -1061,13 +1062,13 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
                         ++ (List.Nonempty.toList items
                                 |> List.map
                                     (\item ->
-                                        "* " ++ toStringHelper userToString emojisForStickersAndAttachments users item
+                                        "* " ++ toStringHelper timezone userToString emojisForStickersAndAttachments users item
                                     )
                                 |> String.join "\n"
                            )
 
                 Timestamp time ->
-                    timestampToDiscordString time
+                    dateAndTimeToString timezone time
         )
         list
         |> String.concat
