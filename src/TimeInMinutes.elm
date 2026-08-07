@@ -1,6 +1,6 @@
 module TimeInMinutes exposing
     ( DateAndTime
-    , TimeInMinutes
+    , TimeInMinutes(..)
     , fromDateAndTime
     , fromMinutes
     , toSeconds
@@ -11,6 +11,8 @@ import Date
 import Effect.Time as Time
 
 
+{-| OpaqueVariants
+-}
 type TimeInMinutes
     = TimeInMinutes Int
 
