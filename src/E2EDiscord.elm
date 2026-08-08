@@ -913,6 +913,60 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord user posts in a guild forum"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\user ->
+                [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ -- A forum holds no messages, so a new post is announced by a thread
+                          -- create event and nothing else. The post's title is the thread's name.
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_CREATE\",\"s\":3,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"newly_created\":true,\"name\":\"Test 2\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\"],\"member_count\":1,\"last_message_id\":null,\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , -- The post's text follows as a message in the new thread, so until it
+                          -- arrives the title is all the forum has.
+                          checkDiscordForumAMessages [ "Test 2" ]
+                        , checkDiscordForumAThreads []
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordForumAMessages [ "Test 2" ]
+                        , checkDiscordForumAThreads [ ( 0, [ "The text of the post" ] ) ]
+                        , -- A reply to the post is written in the same thread as its text
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:55:10.000000+00:00\",\"position\":1,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418913\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"A reply to the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordForumAMessages [ "Test 2" ]
+                        , checkDiscordForumAThreads [ ( 0, [ "The text of the post", "A reply to the post" ] ) ]
+                        , -- Discord sends the same event again when someone is added to a
+                          -- thread, which shouldn't post the title a second time
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_CREATE\",\"s\":6,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":2,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"name\":\"Test 2\",\"message_count\":2,\"member_ids_preview\":[\"161098476632014848\"],\"member_count\":2,\"last_message_id\":\"1535647395881418913\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , checkDiscordForumAMessages [ "Test 2" ]
+                        , checkDiscordForumAThreads [ ( 0, [ "The text of the post", "A reply to the post" ] ) ]
+                        , -- A thread in a normal channel hangs off a message in that channel, so
+                          -- it has nothing to do with the forum
+                          checkDiscordChannelAThreads []
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
         E2EHelper.startTime
         normalConfig
@@ -3016,12 +3070,29 @@ threadsToDebugString threads =
 -}
 checkDiscordChannelAMessages : List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkDiscordChannelAMessages expected =
+    checkDiscordChannelMessages "channel A" E2EHelper.botTestGuild_ChannelA expected
+
+
+{-| Check the messages in the Bot Test guild's forum A. A forum's messages are the titles
+of the posts in it.
+-}
+checkDiscordForumAMessages : List String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkDiscordForumAMessages expected =
+    checkDiscordChannelMessages "forum A" E2EHelper.botTestGuild_ForumA expected
+
+
+checkDiscordChannelMessages :
+    String
+    -> Discord.Id Discord.ChannelId
+    -> List String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkDiscordChannelMessages channelName channelId expected =
     T.checkState
         100
         (\data ->
             case
                 SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
-                    |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
+                    |> Maybe.andThen (\guild -> SeqDict.get channelId guild.channels)
             of
                 Just channel ->
                     let
@@ -3034,14 +3105,16 @@ checkDiscordChannelAMessages expected =
 
                     else
                         Err
-                            ("Expected channel A to contain "
+                            ("Expected "
+                                ++ channelName
+                                ++ " to contain "
                                 ++ messagesToDebugString expected
                                 ++ " but it contains "
                                 ++ messagesToDebugString actual
                             )
 
                 Nothing ->
-                    Err "The Bot Test guild's channel A is missing from the backend"
+                    Err ("The Bot Test guild's " ++ channelName ++ " is missing from the backend")
         )
 
 
@@ -3050,12 +3123,30 @@ each of them hangs off of and the messages written in them.
 -}
 checkDiscordChannelAThreads : List ( Int, List String ) -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
 checkDiscordChannelAThreads expected =
+    checkDiscordChannelThreads "channel A" E2EHelper.botTestGuild_ChannelA expected
+
+
+{-| Check the posts in the Bot Test guild's forum A against the index of the title each of
+them hangs off of and the messages written in them. A post's text is the first of those
+messages and the replies to it are the rest.
+-}
+checkDiscordForumAThreads : List ( Int, List String ) -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkDiscordForumAThreads expected =
+    checkDiscordChannelThreads "forum A" E2EHelper.botTestGuild_ForumA expected
+
+
+checkDiscordChannelThreads :
+    String
+    -> Discord.Id Discord.ChannelId
+    -> List ( Int, List String )
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkDiscordChannelThreads channelName channelId expected =
     T.checkState
         100
         (\data ->
             case
                 SeqDict.get E2EHelper.botTestGuild (E2EHelper.unwrapBackend data.backend).discordGuilds
-                    |> Maybe.andThen (\guild -> SeqDict.get E2EHelper.botTestGuild_ChannelA guild.channels)
+                    |> Maybe.andThen (\guild -> SeqDict.get channelId guild.channels)
             of
                 Just channel ->
                     let
@@ -3075,14 +3166,16 @@ checkDiscordChannelAThreads expected =
 
                     else
                         Err
-                            ("Expected channel A to have "
+                            ("Expected "
+                                ++ channelName
+                                ++ " to have "
                                 ++ threadsToDebugString expected
                                 ++ " but it has "
                                 ++ threadsToDebugString actual
                             )
 
                 Nothing ->
-                    Err "The Bot Test guild's channel A is missing from the backend"
+                    Err ("The Bot Test guild's " ++ channelName ++ " is missing from the backend")
         )
 
 
