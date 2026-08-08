@@ -1,6 +1,10 @@
 ## Before starting
 
-Install node modules
+Install node modules.
+
+On Claude Code on the web this is automatic: `.claude/hooks/session-start.sh` runs
+`npm install` and populates the Elm cache before the session starts, so the section
+below should never come up there. It's still worth reading if a compile fails anyway.
 
 ### If compilation fails to download dependencies (sandboxed environments)
 
@@ -21,12 +25,17 @@ python3 scripts/populate-elm-cache.py
 
 Then `npx lamdera make ...` works offline. The script is safe to re-run (it skips
 packages already present) and skips `lamdera/*` packages, which ship with the
-compiler.
+compiler. With no arguments it covers both `elm.json` and `review/elm.json`, so
+`elm-review` works offline too.
 
 ## While coding
 
 Run `npx lamdera make src/Frontend.elm src/Backend.elm` to check that the code compiles
 Run `npx elm-format src/ --yes` to format the code
+Run `npx elm-review --compiler "$(realpath node_modules/.bin/lamdera)"` and fix what it
+reports before you're done. Compiling, formatting and passing tests isn't enough on its
+own — elm-review catches unused code, redundant patterns and style rules that would
+otherwise need a cleanup commit afterwards. `--fix-all` applies the mechanical fixes.
 
 The following will run tests
 
