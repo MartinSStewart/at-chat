@@ -19,18 +19,28 @@ use serde::Serialize;
 pub struct VideoMetadata {
     /// The size the video is displayed at, with any rotation already applied.
     pub video_size: (u32, u32),
-    pub duration_ms: Option<u64>,
+    /// How many frames the video holds. `MP4` files say so in their sample
+    /// table; Matroska files have to be counted through.
+    pub frames: Option<u64>,
     /// When the file says it was recorded, as milliseconds since the Unix epoch.
     pub created_at_ms: Option<i64>,
-    /// A quarter turn or half turn the video is displayed with, in degrees. Only
-    /// `MP4` stores this; it is already applied to `video_size`.
-    pub rotation: Option<u16>,
+    /// The turn or flip the video is displayed with, numbered the way EXIF does
+    /// it so that images and videos are read the same way. Already applied to
+    /// `video_size`. `1` means shown as recorded, which is also what a container
+    /// that cannot express a transform reports.
+    pub orientation: u8,
     pub frame_rate: Option<f32>,
     /// How the container names the video codec. `MP4` files use the RFC 6381
     /// spelling such as `avc1.42E01E`, Matroska files their own such as `V_VP9`.
     pub codec: Option<String>,
     pub title: Option<String>,
+    /// Where the recording was made, which only `MP4` has somewhere standard to
+    /// put.
+    pub gps_location: Option<crate::Location>,
 }
+
+/// Shown as recorded, the EXIF numbering for no transform at all.
+const NO_TRANSFORM: u8 = 1;
 
 /// Reads the metadata of a video, or `None` if the bytes aren't a video
 /// container we understand or hold no video track.
@@ -76,30 +86,10 @@ fn mp4_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         return None;
     }
 
-    // The track matrix is {a, b, u, c, d, v, x, y, w}, where a and d scale and b
-    // and c rotate. A quarter turn zeroes the scale entries and fills in the
-    // rotation entries, which is exactly when the width and the height are
-    // swapped on screen. A half turn negates the scale entries instead, which
-    // turns the picture over without changing its shape.
     let matrix = &track.trak(&mp4).tkhd.matrix;
-    let is_quarter_turn: bool = matrix.a == 0 && matrix.d == 0 && matrix.b != 0 && matrix.c != 0;
-    let is_half_turn: bool = matrix.a < 0 && matrix.d < 0;
-
-    let rotation: Option<u16> = if is_quarter_turn {
-        // b positive is a turn to the right, b negative one to the left.
-        Some(if matrix.b > 0 { 90 } else { 270 })
-    } else if is_half_turn {
-        Some(180)
-    } else {
-        None
-    };
+    let orientation = orientation_from_matrix(matrix.a, matrix.b, matrix.c, matrix.d);
 
     let movie = &mp4.moov.mvhd;
-
-    let duration_ms: Option<u64> = match (movie.duration, u64::from(movie.timescale)) {
-        (0, _) | (_, 0) => None,
-        (duration, timescale) => Some(duration.saturating_mul(1000) / timescale),
-    };
 
     let created_at_ms: Option<i64> = i64::try_from(movie.creation_time)
         .ok()
@@ -107,35 +97,78 @@ fn mp4_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         .and_then(|milliseconds| milliseconds.checked_sub(MP4_EPOCH_OFFSET_MS))
         .and_then(plausible_timestamp);
 
-    // The sample count over the length of the track, which is the average rate
+    // One entry per frame in the sample table, which is what the file is built
+    // around, so this is a count rather than an estimate. Fragmented files keep
+    // their samples in the fragments instead and leave this empty.
+    let frames: Option<u64> = match track.samples.len() as u64 {
+        0 => None,
+        frames2 => Some(frames2),
+    };
+
+    // The frame count over the length of the track, which is the average rate
     // rather than a declared one. Variable frame rate video has no single answer
     // and this is the closest to it.
-    let frame_rate: Option<f32> = match (track.duration, track.timescale) {
-        (0, _) | (_, 0) => None,
-        (duration, timescale) => {
+    let frame_rate: Option<f32> = match (frames, track.duration, track.timescale) {
+        (Some(frames2), duration, timescale) if duration > 0 && timescale > 0 => {
             let seconds = duration as f64 / timescale as f64;
-            Some((track.samples.len() as f64 / seconds) as f32)
+            Some((frames2 as f64 / seconds) as f32)
         }
+        _ => None,
     };
 
     Some(VideoMetadata {
-        video_size: if is_quarter_turn {
+        video_size: if turns_a_quarter(orientation) {
             (height, width)
         } else {
             (width, height)
         },
-        duration_ms,
+        frames,
         created_at_ms,
-        rotation,
+        orientation,
         frame_rate,
         codec: track.codec_string(&mp4),
         title: None,
+        gps_location: mp4_gps_location(bytes),
     })
+}
+
+/// Turns an `MP4` display matrix into the EXIF orientation number.
+///
+/// The matrix is {a, b, u, c, d, v, x, y, w}, and a point is placed at
+/// `(a * x + c * y, b * x + d * y)` plus a translation. Only the four entries
+/// that scale and rotate matter for naming the transform, and only their signs
+/// within those: a and d alone is a flip about one axis or the other, b and c
+/// alone swaps the axes over.
+///
+/// EXIF numbers the eight results by where the first row and the first column of
+/// the stored picture end up, which is the same thing said differently, so the
+/// two notations line up one to one.
+fn orientation_from_matrix(a: i32, b: i32, c: i32, d: i32) -> u8 {
+    match (a.signum(), b.signum(), c.signum(), d.signum()) {
+        (1, 0, 0, 1) => 1,   // as recorded
+        (-1, 0, 0, 1) => 2,  // mirrored left to right
+        (-1, 0, 0, -1) => 3, // turned upside down
+        (1, 0, 0, -1) => 4,  // mirrored top to bottom
+        (0, 1, 1, 0) => 5,   // mirrored across the leading diagonal
+        (0, 1, -1, 0) => 6,  // a quarter turn clockwise, how a phone holds portrait
+        (0, -1, -1, 0) => 7, // mirrored across the other diagonal
+        (0, -1, 1, 0) => 8,  // a quarter turn anticlockwise
+        // A scale, a skew, or an empty matrix. None of those have a name here,
+        // and guessing at one would be worse than saying the picture stands as
+        // it was recorded.
+        _ => NO_TRANSFORM,
+    }
+}
+
+/// Whether an orientation swaps the width and the height over, which is the four
+/// that put the first row of the picture down one of its sides.
+fn turns_a_quarter(orientation: u8) -> bool {
+    matches!(orientation, 5..=8)
 }
 
 /// Reads the metadata of the first video track of a `WebM` or Matroska file.
 fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
-    let matroska = matroska_demuxer::MatroskaFile::open(std::io::Cursor::new(bytes)).ok()?;
+    let mut matroska = matroska_demuxer::MatroskaFile::open(std::io::Cursor::new(bytes)).ok()?;
 
     let track = matroska
         .tracks()
@@ -162,25 +195,7 @@ fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         None => (video.pixel_width().get(), video.pixel_height().get()),
     };
 
-    let info = matroska.info();
-
-    // Durations are counted in ticks whose length the file gets to choose, given
-    // in nanoseconds.
-    let duration_ms: Option<u64> = info.duration().and_then(|ticks| {
-        let nanoseconds = ticks * info.timestamp_scale().get() as f64;
-        let milliseconds = nanoseconds / 1_000_000.0;
-
-        if milliseconds.is_finite() && milliseconds >= 0.0 {
-            Some(milliseconds as u64)
-        } else {
-            None
-        }
-    });
-
-    let created_at_ms: Option<i64> = info
-        .date_utc()
-        .map(|nanoseconds| nanoseconds / 1_000_000 + MATROSKA_EPOCH_OFFSET_MS)
-        .and_then(plausible_timestamp);
+    let track_number: u64 = track.track_number().get();
 
     // Unlike MP4 this is a declared frame duration rather than a measured one,
     // and it is only present on constant frame rate files.
@@ -188,15 +203,193 @@ fn matroska_metadata(bytes: &[u8]) -> Option<VideoMetadata> {
         .default_duration()
         .map(|nanoseconds| (1_000_000_000.0 / nanoseconds.get() as f64) as f32);
 
+    let info = matroska.info();
+
+    let created_at_ms: Option<i64> = info
+        .date_utc()
+        .map(|nanoseconds| nanoseconds / 1_000_000 + MATROSKA_EPOCH_OFFSET_MS)
+        .and_then(plausible_timestamp);
+
+    let video_size: (u32, u32) = (u32::try_from(width).ok()?, u32::try_from(height).ok()?);
+    let codec: String = track.codec_id().to_owned();
+    let title: Option<String> = info.title().map(str::to_owned);
+
     Some(VideoMetadata {
-        video_size: (u32::try_from(width).ok()?, u32::try_from(height).ok()?),
-        duration_ms,
+        video_size,
+        frames: matroska_frames(&mut matroska, track_number),
         created_at_ms,
-        rotation: None,
+        // Matroska has no field for this. A file can be flagged as a projection
+        // for 360 degree video, but that is a different thing to a photograph
+        // taken sideways, and nothing here writes one.
+        orientation: NO_TRANSFORM,
         frame_rate,
-        codec: Some(track.codec_id().to_owned()),
-        title: info.title().map(str::to_owned),
+        codec: Some(codec),
+        title,
+        // Matroska has no standard element for a location either.
+        gps_location: None,
     })
+}
+
+/// Counts the frames on a track by reading through them.
+///
+/// Matroska keeps no count anywhere. Frames are laid out in blocks spread over
+/// the whole file, so the only way to know how many there are is to walk them,
+/// which costs a few milliseconds for a file of the size uploads are capped at.
+///
+/// A block whose timestamp is the smallest number that fits in its field makes
+/// `matroska-demuxer` 0.8.1 negate that number, which does not fit, so reading
+/// through the frames of a damaged file can panic where opening it cannot. The
+/// count is worth having and a panic here costs us nothing but the count, so it
+/// is caught and the file simply goes without one.
+fn matroska_frames(
+    matroska: &mut matroska_demuxer::MatroskaFile<std::io::Cursor<&[u8]>>,
+    track_number: u64,
+) -> Option<u64> {
+    let counted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut frame = matroska_demuxer::Frame::default();
+        let mut frames: u64 = 0;
+
+        // The same buffer is handed back in on every call, so this reuses one
+        // allocation the size of the largest frame rather than one per frame.
+        while matroska.next_frame(&mut frame).ok()? {
+            if frame.track == track_number {
+                frames += 1;
+            }
+        }
+
+        Some(frames)
+    }));
+
+    match counted {
+        Ok(Some(frames)) if frames > 0 => Some(frames),
+        _ => None,
+    }
+}
+
+/// Reads where an `MP4` says it was recorded.
+///
+/// `re_mp4` keeps the boxes it knows how to interpret and drops the rest, and
+/// the location is one it drops, so this goes and finds it. It is stored under
+/// `moov/udta` in a box named with a copyright sign, holding an ISO 6709 string.
+fn mp4_gps_location(bytes: &[u8]) -> Option<crate::Location> {
+    let user_data = find_box(find_box(bytes, b"moov")?, b"udta")?;
+    let location = find_box(user_data, &[0xA9, b'x', b'y', b'z'])?;
+
+    // A length, a language code, and then the string itself. The length has been
+    // known to disagree with the box, so it is a hint rather than the authority.
+    let length = usize::from(u16::from_be_bytes(location.get(0..2)?.try_into().ok()?));
+    let text = location
+        .get(4..4 + length)
+        .or_else(|| location.get(4..))
+        .and_then(|slice| std::str::from_utf8(slice).ok())?;
+
+    parse_iso6709(text)
+}
+
+/// Hands back the contents of the first box of the given type, out of a run of
+/// `MP4` boxes.
+///
+/// Sizes are checked against what is actually there before being used, so a box
+/// claiming to be larger than the file ends the search rather than being
+/// believed.
+fn find_box<'a>(data: &'a [u8], box_type: &[u8; 4]) -> Option<&'a [u8]> {
+    let mut offset: usize = 0;
+
+    while offset + 8 <= data.len() {
+        let declared = u32::from_be_bytes(data.get(offset..offset + 4)?.try_into().ok()?);
+        let is_wanted: bool = data.get(offset + 4..offset + 8)? == box_type;
+
+        let (header, size): (usize, usize) = match declared {
+            // A size of one means the real size is the 64 bit value that follows.
+            1 => {
+                let large = u64::from_be_bytes(data.get(offset + 8..offset + 16)?.try_into().ok()?);
+                (16, usize::try_from(large).ok()?)
+            }
+            // A size of zero means the box runs to the end of the file.
+            0 => (8, data.len() - offset),
+            _ => (8, declared as usize),
+        };
+
+        if size < header {
+            return None;
+        }
+
+        let end: usize = offset
+            .checked_add(size)
+            .filter(|end2| *end2 <= data.len())?;
+
+        if is_wanted {
+            return data.get(offset + header..end);
+        }
+
+        offset = end;
+    }
+
+    None
+}
+
+/// Reads a latitude and longitude out of an ISO 6709 string such as
+/// `+37.7749-122.4194+010.000/`, which is how `MP4` writes down where a
+/// recording was made. Altitude, when there is one, is ignored.
+fn parse_iso6709(text: &str) -> Option<crate::Location> {
+    let trimmed: &str = text.trim().trim_end_matches('/');
+
+    // Every part carries its own sign, so a sign is where the next part starts.
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start: usize = 0;
+
+    for (index, character) in trimmed.char_indices() {
+        if index > start && (character == '+' || character == '-') {
+            parts.push(trimmed.get(start..index)?);
+            start = index;
+        }
+    }
+
+    parts.push(trimmed.get(start..)?);
+
+    let lat: f64 = signed_degrees(parts.first()?, 2)?;
+    let lon: f64 = signed_degrees(parts.get(1)?, 3)?;
+
+    if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) {
+        Some(crate::Location { lat, lon })
+    } else {
+        None
+    }
+}
+
+/// Reads one signed part of an ISO 6709 string.
+///
+/// Degrees are written with a fixed number of digits, and any whole digits past
+/// that are minutes and then seconds. So the width of the whole number is what
+/// tells `+37.7749`, `+3746.494` and `+374629.6` apart, all three of which are
+/// the same latitude.
+fn signed_degrees(part: &str, degree_digits: usize) -> Option<f64> {
+    let sign: f64 = if part.starts_with('-') { -1.0 } else { 1.0 };
+
+    if !part.starts_with('-') && !part.starts_with('+') {
+        return None;
+    }
+
+    let digits: &str = part.get(1..)?;
+    let whole: &str = match digits.find('.') {
+        Some(point) => digits.get(..point)?,
+        None => digits,
+    };
+
+    let degrees: f64 = whole.get(..degree_digits)?.parse().ok()?;
+
+    let smaller: f64 = match whole.len().checked_sub(degree_digits)? {
+        0 => digits.get(degree_digits..)?.parse::<f64>().unwrap_or(0.0),
+        2 => digits.get(degree_digits..)?.parse::<f64>().ok()? / 60.0,
+        4 => {
+            let minutes: f64 = digits.get(degree_digits..degree_digits + 2)?.parse().ok()?;
+            let seconds: f64 = digits.get(degree_digits + 2..)?.parse().ok()?;
+            minutes / 60.0 + seconds / 3600.0
+        }
+        _ => return None,
+    };
+
+    Some(sign * (degrees + smaller))
 }
 
 #[cfg(test)]
@@ -222,9 +415,13 @@ mod tests {
         let mp4 = metadata("landscape.mp4");
 
         assert_eq!(mp4.video_size, (640, 360), "size from the track header");
-        assert_eq!(mp4.duration_ms, Some(10_000), "the sample is ten seconds");
+        assert_eq!(
+            mp4.frames,
+            Some(300),
+            "ten seconds at thirty frames a second"
+        );
         assert_eq!(mp4.codec.as_deref(), Some("avc1.64001F"), "h.264 track");
-        assert_eq!(mp4.rotation, None, "the sample is not rotated");
+        assert_eq!(mp4.orientation, 1, "the sample stands as recorded");
         assert_eq!(
             mp4.frame_rate.map(f32::round),
             Some(30.0),
@@ -242,7 +439,7 @@ mod tests {
         let webm = metadata("landscape.webm");
 
         assert_eq!(webm.video_size, (640, 360), "size from the video track");
-        assert_eq!(webm.duration_ms, Some(10_000), "the sample is ten seconds");
+        assert_eq!(webm.frames, Some(300), "counted through the clusters");
         assert_eq!(webm.codec.as_deref(), Some("V_VP9"), "vp9 track");
         assert_eq!(
             webm.frame_rate.map(f32::round),
@@ -275,7 +472,10 @@ mod tests {
             (360, 640),
             "a quarter turn should swap the width and the height"
         );
-        assert_eq!(rotated.rotation, Some(90), "and be reported alongside it");
+        assert_eq!(
+            rotated.orientation, 6,
+            "and be named the way EXIF names a quarter turn clockwise"
+        );
     }
 
     #[test]
@@ -334,9 +534,112 @@ mod tests {
     fn serialises_to_the_shape_clients_read() {
         assert_eq!(
             serde_json::to_string(&metadata("landscape.mp4")).unwrap(),
-            r#"{"video_size":[640,360],"duration_ms":10000,"created_at_ms":1710505845000,"rotation":null,"frame_rate":30.0,"codec":"avc1.64001F","title":null}"#,
+            r#"{"video_size":[640,360],"frames":300,"created_at_ms":1710505845000,"orientation":1,"frame_rate":30.0,"codec":"avc1.64001F","title":null,"gps_location":{"lat":59.3293,"lon":18.0686}}"#,
             "changing this breaks whoever is decoding it"
         );
+    }
+
+    #[test]
+    fn reads_where_an_mp4_was_recorded() {
+        let location = metadata("landscape.mp4")
+            .gps_location
+            .expect("the sample has a location box");
+
+        assert_eq!((location.lat, location.lon), (59.3293, 18.0686));
+    }
+
+    /// Every transform an `MP4` matrix can name, against the EXIF number for the
+    /// same thing. The entries are whole numbers here; real files write them as
+    /// fixed point, which does not change any of the signs.
+    #[test]
+    fn names_every_orientation_a_matrix_can_hold() {
+        use super::orientation_from_matrix;
+
+        assert_eq!(orientation_from_matrix(1, 0, 0, 1), 1, "as recorded");
+        assert_eq!(orientation_from_matrix(-1, 0, 0, 1), 2, "mirrored sideways");
+        assert_eq!(orientation_from_matrix(-1, 0, 0, -1), 3, "upside down");
+        assert_eq!(
+            orientation_from_matrix(1, 0, 0, -1),
+            4,
+            "mirrored top to toe"
+        );
+        assert_eq!(
+            orientation_from_matrix(0, 1, 1, 0),
+            5,
+            "across one diagonal"
+        );
+        assert_eq!(
+            orientation_from_matrix(0, 1, -1, 0),
+            6,
+            "a quarter turn right"
+        );
+        assert_eq!(orientation_from_matrix(0, -1, -1, 0), 7, "across the other");
+        assert_eq!(
+            orientation_from_matrix(0, -1, 1, 0),
+            8,
+            "a quarter turn left"
+        );
+
+        assert_eq!(
+            orientation_from_matrix(0, 0, 0, 0),
+            1,
+            "an empty matrix names no transform, so the picture stands as it is"
+        );
+        assert_eq!(
+            orientation_from_matrix(1, 1, 1, 1),
+            1,
+            "nor does a skew, which is not one of the eight"
+        );
+    }
+
+    /// The same spot in Stockholm written the three ways ISO 6709 allows, since
+    /// how many digits come before the decimal point is the only thing saying
+    /// which of the three a string is.
+    #[test]
+    fn reads_the_three_ways_a_location_can_be_written() {
+        use super::parse_iso6709;
+
+        for (label, text) in [
+            ("degrees", "+59.3293+018.0686/"),
+            ("degrees and minutes", "+5919.758+01804.116/"),
+            ("degrees, minutes and seconds", "+591945.5+0180406.9/"),
+        ] {
+            let location = parse_iso6709(text).unwrap_or_else(|| panic!("{label} should parse"));
+
+            assert!(
+                (location.lat - 59.3293).abs() < 0.001 && (location.lon - 18.0686).abs() < 0.001,
+                "{label} gave {location:?}, which is not where Stockholm is"
+            );
+        }
+
+        assert!(
+            parse_iso6709("+59.3293+018.0686+010.500/").is_some(),
+            "an altitude on the end is allowed, and ignored"
+        );
+        assert!(
+            parse_iso6709("-33.8688+151.2093/").is_some(),
+            "the southern hemisphere is not an error"
+        );
+    }
+
+    #[test]
+    fn refuses_locations_that_are_not_locations() {
+        use super::parse_iso6709;
+
+        for text in [
+            "",
+            "/",
+            "+59.3293/",             // a latitude on its own
+            "59.3293+018.0686/",     // no sign, so no telling where it starts
+            "+99.9999+018.0686/",    // no such latitude
+            "+59.3293+999.9999/",    // no such longitude
+            "+not.a.number+018.06/", // not a number at all
+        ] {
+            assert!(
+                parse_iso6709(text).is_none(),
+                "{text:?} should not be read as a location"
+            );
+        }
     }
 
     /// A creation time of zero means nothing ever set one, and a file written
@@ -369,6 +672,39 @@ mod tests {
                 "a creation time that is {label} should be dropped"
             );
         }
+    }
+
+    /// `matroska-demuxer` 0.8.1 negates a block timestamp to take its size,
+    /// which overflows on the smallest number that field can hold. Reading
+    /// through the frames of a file carrying one must cost us the count and
+    /// nothing else.
+    #[test]
+    fn survives_the_smallest_block_timestamp() {
+        let mut bytes = sample("landscape.webm");
+
+        // Every block in the sample is a simple block header, a length, a track
+        // number, and then a two byte timestamp. The search starts at the
+        // cluster so that a stray pair of bytes earlier on cannot pass for one.
+        let cluster = bytes
+            .windows(4)
+            .position(|window| window == [0x1F, 0x43, 0xB6, 0x75])
+            .expect("the sample has a cluster");
+        let block = cluster
+            + bytes
+                .get(cluster..)
+                .and_then(|rest| rest.windows(2).position(|window| window == [0xA3, 0x01]))
+                .expect("the cluster is built out of simple blocks");
+        let timestamp = block + 2 + 7 + 1;
+
+        bytes[timestamp..timestamp + 2].copy_from_slice(&i16::MIN.to_be_bytes());
+
+        assert_eq!(
+            video_metadata(&bytes)
+                .expect("the file is still a video")
+                .frames,
+            None,
+            "the count is what gets given up, not the request"
+        );
     }
 
     /// Uploads are untrusted, so a corrupt or hostile file has to come back as
