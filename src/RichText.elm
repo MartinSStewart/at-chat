@@ -4087,7 +4087,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ [ CustomEmoji.view "1.4em " "0.2em" id config.customEmojis config.animationMode ]
+                    , currentList
+                        ++ [ case showLargeContent of
+                                ShowLargeContent _ ->
+                                    CustomEmoji.viewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
+
+                                NoLargeContent ->
+                                    CustomEmoji.view "1.4em" "0.2em" id config.customEmojis config.animationMode
+                           ]
                     )
 
                 BulletPoint _ items ->

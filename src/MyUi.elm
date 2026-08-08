@@ -1185,6 +1185,17 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+.custom-emoji-tooltip {
+  opacity: 0;
+  transition: opacity 0.05s ease 0s;
+}
+.custom-emoji-tooltip-container:hover .custom-emoji-tooltip {
+  animation: custom-emoji-tooltip-fade-in 0.2s ease 0.5s forwards;
+}
+@keyframes custom-emoji-tooltip-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 """
             )
         ]
