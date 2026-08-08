@@ -137,7 +137,7 @@ homePageLoggedInView :
 homePageLoggedInView maybeOtherUserId model loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             if MyUi.isMobile model then
@@ -1362,7 +1362,7 @@ guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalSt
 guildView model guildId channelRoute loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case SeqDict.get guildId local.guilds of
@@ -1533,7 +1533,7 @@ discordGuildView :
 discordGuildView model routeData loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case

@@ -56,7 +56,7 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Duration exposing (Seconds)
+import Duration exposing (Duration, Seconds)
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
@@ -65,6 +65,8 @@ import Effect.Task exposing (Task)
 import Effect.Time as Time
 import Env
 import FileName exposing (FileName)
+import Html
+import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
@@ -671,8 +673,8 @@ domain =
         "http://localhost:3000"
 
 
-imageInfoView : msg -> FileDataWithImage -> Element msg
-imageInfoView onPressClose fileData =
+imageInfoView : Time.Zone -> msg -> FileDataWithImage -> Element msg
+imageInfoView timezone onPressClose fileData =
     Ui.el
         [ Ui.inFront
             (MyUi.elButton
@@ -688,14 +690,7 @@ imageInfoView onPressClose fileData =
         ]
         (case fileData.metadata of
             FileMetadata_Image metadata ->
-                Ui.column
-                    [ Ui.height Ui.fill
-                    , Ui.scrollable
-                    , Ui.heightMin 0
-                    , Ui.background MyUi.background1
-                    , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
-                    , Ui.spacing 16
-                    ]
+                infoPanel
                     [ Ui.column
                         [ Ui.spacing 2
                         , Ui.alignBottom
@@ -727,9 +722,98 @@ imageInfoView onPressClose fileData =
                         }
                     ]
 
-            FileMetadata_Video _ ->
-                Debug.todo ""
+            FileMetadata_Video metadata ->
+                infoPanel
+                    [ Ui.column
+                        [ Ui.spacing 2
+                        , Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        ]
+                        (imageLabel
+                            "Video size"
+                            (String.fromInt (Coord.xRaw metadata.videoSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.videoSize))
+                            :: List.filterMap
+                                identity
+                                [ Maybe.map (imageLabel "Title") metadata.title
+                                , Maybe.map (\duration -> imageLabel "Duration" (durationToString duration)) (videoDuration metadata)
+                                , Maybe.map (\frames -> imageLabel "Frames" (String.fromInt (Quantity.unwrap frames))) metadata.frames
+                                , Maybe.map (\frameRate -> imageLabel "Frame rate" (frameRateToString frameRate)) metadata.frameRate
+
+                                -- Every video has an orientation, and almost every
+                                -- one of them is the uninteresting answer.
+                                , if metadata.orientation == NoChange then
+                                    Nothing
+
+                                  else
+                                    Just (imageLabel "Orientation" (orientationToString metadata.orientation))
+                                , Maybe.map (imageLabel "Codec") metadata.codec
+                                , Maybe.map (\time -> imageLabel "Recorded" (MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone)) metadata.createdAt
+                                , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                                ]
+                        )
+                    , Ui.el
+                        [ Ui.widthMax (Coord.xRaw metadata.videoSize), Ui.centerX ]
+                        (Ui.html
+                            (Html.video
+                                [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                , Html.Attributes.controls True
+                                , Html.Attributes.style "display" "block"
+                                , Html.Attributes.style "width" "100%"
+                                ]
+                                []
+                            )
+                        )
+                    ]
         )
+
+
+{-| The scrolling panel both kinds of file info are laid out inside.
+-}
+infoPanel : List (Element msg) -> Element msg
+infoPanel contents =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.background MyUi.background1
+        , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
+        , Ui.spacing 16
+        ]
+        contents
+
+
+{-| Neither container writes down how long the video runs, so this works it out
+from the two things they do write down.
+-}
+videoDuration : VideoMetadata -> Maybe Duration
+videoDuration metadata =
+    Maybe.map2
+        (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
+        metadata.frames
+        metadata.frameRate
+
+
+durationToString : Duration -> String
+durationToString duration =
+    let
+        total : Int
+        total =
+            round (Duration.inSeconds duration)
+
+        pad : Int -> String
+        pad value =
+            String.padLeft 2 '0' (String.fromInt value)
+    in
+    if total >= 3600 then
+        String.fromInt (total // 3600) ++ ":" ++ pad (modBy 60 (total // 60)) ++ ":" ++ pad (modBy 60 total)
+
+    else
+        String.fromInt (total // 60) ++ ":" ++ pad (modBy 60 total)
+
+
+frameRateToString : Quantity Float (Rate VideoFrames Seconds) -> String
+frameRateToString frameRate =
+    StringExtra.removeTrailing0s 2 (Quantity.unwrap frameRate) ++ " fps"
 
 
 imageLabel : String -> String -> Element msg
