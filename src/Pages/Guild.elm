@@ -38,7 +38,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
-import FileStatus exposing (FileHash, FileId, FileStatus)
+import FileStatus exposing (FileHash, FileId, FileMetadata(..), FileStatus)
 import GuildColumn
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName exposing (GuildName)
@@ -137,7 +137,7 @@ homePageLoggedInView :
 homePageLoggedInView maybeOtherUserId model loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             if MyUi.isMobile model then
@@ -1362,7 +1362,7 @@ guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalSt
 guildView model guildId channelRoute loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case SeqDict.get guildId local.guilds of
@@ -1533,7 +1533,7 @@ discordGuildView :
 discordGuildView model routeData loggedIn local =
     case loggedIn.showFileToUploadInfo of
         Just fileData ->
-            FileStatus.imageInfoView PressedCloseImageInfo fileData
+            FileStatus.imageInfoView model.timezone PressedCloseImageInfo fileData
 
         Nothing ->
             case
@@ -10170,35 +10170,17 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                         |> Ui.inFront
                     , case fileStatus of
                         FileStatus.FileUploaded fileData ->
-                            case fileData.imageMetadata of
-                                Just metadata ->
-                                    if FileStatus.imageHasMetadata metadata then
-                                        MyUi.elButton
-                                            (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
-                                            (onPressInfo fileStatusId)
-                                            [ Ui.width (Ui.px 42)
-                                            , Ui.height (Ui.px 42)
-                                            , Ui.rounded 16
-                                            , Ui.move { x = -3, y = 77, z = 0 }
-                                            , MyUi.hoverText "Image info"
-                                            ]
-                                            (Ui.el
-                                                [ Ui.width (Ui.px 34)
-                                                , Ui.height (Ui.px 34)
-                                                , Ui.rounded 16
-                                                , Ui.contentCenterX
-                                                , Ui.contentCenterY
-                                                , Ui.background MyUi.buttonBackground
-                                                ]
-                                                (case metadata.gpsLocation of
-                                                    Just _ ->
-                                                        Ui.html Icons.map
+                            case fileData.metadata of
+                                Just (FileMetadata_Image imageMetadata) ->
+                                    if FileStatus.imageHasMetadata imageMetadata then
+                                        fileUploadInfoButton onPressInfo fileStatusId imageMetadata
 
-                                                    Nothing ->
-                                                        Ui.html Icons.info
-                                                )
-                                            )
-                                            |> Ui.inFront
+                                    else
+                                        Ui.noAttr
+
+                                Just (FileMetadata_Video videoMetadata) ->
+                                    if FileStatus.videoHasMetadata videoMetadata then
+                                        fileUploadInfoButton onPressInfo fileStatusId videoMetadata
 
                                     else
                                         Ui.noAttr
@@ -10254,9 +10236,12 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                 FileStatus.Image ->
                                     Html.img
                                         [ Html.Attributes.src
-                                            (case fileData.imageMetadata of
-                                                Just metadata ->
+                                            (case fileData.metadata of
+                                                Just (FileMetadata_Image metadata) ->
                                                     FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
+
+                                                Just (FileMetadata_Video _) ->
+                                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
 
                                                 Nothing ->
                                                     FileStatus.fileUrl fileData.contentType fileData.fileHash
@@ -10321,3 +10306,33 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
             )
             (NonemptyDict.toList filesToUpload2)
         )
+
+
+fileUploadInfoButton : (Id FileId -> msg) -> Id FileId -> { b | gpsLocation : Maybe FileStatus.Location } -> Ui.Attribute msg
+fileUploadInfoButton onPressInfo fileStatusId metadata =
+    MyUi.elButton
+        (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+        (onPressInfo fileStatusId)
+        [ Ui.width (Ui.px 42)
+        , Ui.height (Ui.px 42)
+        , Ui.rounded 16
+        , Ui.move { x = -3, y = 77, z = 0 }
+        , MyUi.hoverText "Image info"
+        ]
+        (Ui.el
+            [ Ui.width (Ui.px 34)
+            , Ui.height (Ui.px 34)
+            , Ui.rounded 16
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            , Ui.background MyUi.buttonBackground
+            ]
+            (case metadata.gpsLocation of
+                Just _ ->
+                    Ui.html Icons.map
+
+                Nothing ->
+                    Ui.html Icons.info
+            )
+        )
+        |> Ui.inFront

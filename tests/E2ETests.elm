@@ -127,7 +127,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     0
                                     FileStatus.uploadResponseCodec
                                     { fileHash = FileStatus.fileHash "123123123"
-                                    , imageSize =
+                                    , videoMetadata = Nothing
+                                    , imageMetadata =
                                         Maybe.map
                                             (\size ->
                                                 { imageSize = size
@@ -165,7 +166,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         0
                                                         FileStatus.uploadResponseCodec
                                                         { fileHash = FileStatus.fileHash request.url
-                                                        , imageSize =
+                                                        , videoMetadata = Nothing
+                                                        , imageMetadata =
                                                             { imageSize = Coord.xy 128 128
                                                             , orientation = Nothing
                                                             , gpsLocation = Nothing

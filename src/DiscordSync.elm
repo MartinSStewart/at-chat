@@ -40,7 +40,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileHash, FileId, FileMetadata)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -871,7 +871,7 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
                 Ok ( attachmentUrl, uploadResponse ) ->
                     SeqDict.insert
                         attachmentUrl
-                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                        { fileHash = uploadResponse.fileHash, metadata = FileStatus.uploadResponseMetadata uploadResponse }
                         dict2
 
                 Err _ ->
@@ -2828,8 +2828,8 @@ messageToFileData message discordAttachments =
     List.filterMap
         (\attachment ->
             case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
-                Just { fileHash, imageMetadata } ->
-                    { fileData = attachmentsToFileData attachment fileHash imageMetadata
+                Just { fileHash, metadata } ->
+                    { fileData = attachmentsToFileData attachment fileHash metadata
                     , isSpoilered =
                         case attachment.flags of
                             Included flag ->
@@ -2848,18 +2848,18 @@ messageToFileData message discordAttachments =
         |> SeqDict.fromList
 
 
-attachmentsToFileData : Discord.Attachment -> FileHash -> Maybe FileStatus.ImageMetadata -> FileData
-attachmentsToFileData attachment fileHash imageSize =
+attachmentsToFileData : Discord.Attachment -> FileHash -> Maybe FileMetadata -> FileData
+attachmentsToFileData attachment fileHash metadata =
     { fileName = FileName.fromString attachment.filename
     , fileSize = attachment.size
-    , imageMetadata = imageSize
+    , metadata = metadata
     , contentType =
         case attachment.contentType of
             Included contentType ->
                 FileStatus.contentType contentType
 
             Missing ->
-                case imageSize of
+                case metadata of
                     Just _ ->
                         FileStatus.webpContent
 

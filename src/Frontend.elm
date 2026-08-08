@@ -6114,11 +6114,11 @@ viewImageInfo guildOrDmId fileId model =
                         Just nonemptyDict ->
                             case NonemptyDict.get fileId nonemptyDict of
                                 Just (FileStatus.FileUploaded fileData) ->
-                                    case fileData.imageMetadata of
+                                    case fileData.metadata of
                                         Just metadata ->
                                             { fileName = fileData.fileName
                                             , fileSize = fileData.fileSize
-                                            , imageMetadata = metadata
+                                            , metadata = metadata
                                             , contentType = fileData.contentType
                                             , fileHash = fileData.fileHash
                                             }

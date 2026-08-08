@@ -6,12 +6,15 @@ module FileStatus exposing
     , FileDataWithImage
     , FileHash(..)
     , FileId
+    , FileMetadata(..)
     , FileStatus(..)
     , ImageMetadata
     , Location
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
+    , VideoFrames
+    , VideoMetadata
     , addFileHash
     , contentType
     , contentTypeType
@@ -38,10 +41,12 @@ module FileStatus exposing
     , uploadBytes
     , uploadFile
     , uploadResponseCodec
+    , uploadResponseMetadata
     , uploadString
     , uploadTrackerId
     , uploadUrl
     , uploadUrlCodec
+    , videoHasMetadata
     , webpContent
     )
 
@@ -51,19 +56,23 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Duration
+import Duration exposing (Duration, Seconds)
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Task exposing (Task)
+import Effect.Time as Time
 import Env
 import FileName exposing (FileName)
+import Html
+import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
+import Quantity exposing (Quantity, Rate)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -74,16 +83,21 @@ import Ui exposing (Element)
 type alias FileData =
     { fileName : FileName
     , fileSize : Int
-    , imageMetadata : Maybe ImageMetadata
+    , metadata : Maybe FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
 
 
+type FileMetadata
+    = FileMetadata_Image ImageMetadata
+    | FileMetadata_Video VideoMetadata
+
+
 type alias FileDataWithImage =
     { fileName : FileName
     , fileSize : Int
-    , imageMetadata : ImageMetadata
+    , metadata : FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
@@ -238,7 +252,8 @@ unknownContentType =
 
 type alias UploadResponse =
     { fileHash : FileHash
-    , imageSize : Maybe ImageMetadata
+    , imageMetadata : Maybe ImageMetadata
+    , videoMetadata : Maybe VideoMetadata
     }
 
 
@@ -246,7 +261,8 @@ uploadResponseCodec : Codec UploadResponse
 uploadResponseCodec =
     Codec.object UploadResponse
         |> Codec.field "hash" .fileHash fileHashCodec
-        |> Codec.field "image_metadata" .imageSize (Codec.nullable imageMetadataCodec)
+        |> Codec.field "image_metadata" .imageMetadata (Codec.nullable imageMetadataCodec)
+        |> Codec.field "video_metadata" .videoMetadata (Codec.nullable videoMetadataCodec)
         |> Codec.buildObject
 
 
@@ -303,6 +319,55 @@ type alias ImageMetadata =
     , software : Maybe String
     , userComment : Maybe String
     }
+
+
+type VideoFrames
+    = VideoFrames Never
+
+
+type alias VideoMetadata =
+    { -- The size the video is displayed at, with any rotation already applied.
+      videoSize : Coord CssPixels
+    , frames : Maybe (Quantity Int VideoFrames)
+    , createdAt : Maybe Time.Posix
+    , orientation : Orientation
+    , frameRate : Maybe (Quantity Float (Rate VideoFrames Seconds))
+    , codec : Maybe String
+    , title : Maybe String
+    , gpsLocation : Maybe Location
+    }
+
+
+videoMetadataCodec : Codec VideoMetadata
+videoMetadataCodec =
+    Codec.object VideoMetadata
+        |> Codec.field "video_size" .videoSize (Codec.tuple CodecExtra.quantityInt CodecExtra.quantityInt)
+        |> Codec.field "frames" .frames (Codec.nullable CodecExtra.quantityInt)
+        |> Codec.field "created_at_ms" .createdAt (Codec.nullable CodecExtra.time)
+        |> Codec.field "orientation" .orientation orientationCodec
+        |> Codec.field "frame_rate" .frameRate (Codec.nullable CodecExtra.quantityFloat)
+        |> Codec.field "codec" .codec (Codec.nullable Codec.string)
+        |> Codec.field "title" .title (Codec.nullable Codec.string)
+        |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
+        |> Codec.buildObject
+
+
+
+--pub struct VideoMetadata {
+--    /// The size the video is displayed at, with any rotation already applied.
+--    pub video_size: (u32, u32),
+--    pub duration_ms: Option<u64>,
+--    /// When the file says it was recorded, as milliseconds since the Unix epoch.
+--    pub created_at_ms: Option<i64>,
+--    /// A quarter turn or half turn the video is displayed with, in degrees. Only
+--    /// `MP4` stores this; it is already applied to `video_size`.
+--    pub rotation: Option<u16>,
+--    pub frame_rate: Option<f32>,
+--    /// How the container names the video codec. `MP4` files use the RFC 6381
+--    /// spelling such as `avc1.42E01E`, Matroska files their own such as `V_VP9`.
+--    pub codec: Option<String>,
+--    pub title: Option<String>,
+--}
 
 
 type Orientation
@@ -608,13 +673,8 @@ domain =
         "http://localhost:3000"
 
 
-imageInfoView : msg -> FileDataWithImage -> Element msg
-imageInfoView onPressClose fileData =
-    let
-        metadata : ImageMetadata
-        metadata =
-            fileData.imageMetadata
-    in
+imageInfoView : Time.Zone -> msg -> FileDataWithImage -> Element msg
+imageInfoView timezone onPressClose fileData =
     Ui.el
         [ Ui.inFront
             (MyUi.elButton
@@ -628,45 +688,132 @@ imageInfoView onPressClose fileData =
                 (Ui.html Icons.x)
             )
         ]
-        (Ui.column
-            [ Ui.height Ui.fill
-            , Ui.scrollable
-            , Ui.heightMin 0
-            , Ui.background MyUi.background1
-            , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
-            , Ui.spacing 16
-            ]
-            [ Ui.column
-                [ Ui.spacing 2
-                , Ui.alignBottom
-                , Ui.paddingXY 8 0
-                ]
-                (imageLabel
-                    "Image size"
-                    (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
-                    :: List.filterMap
-                        identity
-                        [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
-                        , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
-                        , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
-                        , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
-                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
-                        , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
-                        , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
-                        , Maybe.map (imageLabel "Make") metadata.make
-                        , Maybe.map (imageLabel "Model") metadata.model
-                        , Maybe.map (imageLabel "Software") metadata.software
-                        , Maybe.map (imageLabel "Comment") metadata.userComment
+        (case fileData.metadata of
+            FileMetadata_Image metadata ->
+                infoPanel
+                    [ Ui.column
+                        [ Ui.spacing 2
+                        , Ui.alignBottom
+                        , Ui.paddingXY 8 0
                         ]
-                )
-            , Ui.image
-                [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
-                { source = fileUrl fileData.contentType fileData.fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
-            ]
+                        (imageLabel
+                            "Image size"
+                            (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
+                            :: List.filterMap
+                                identity
+                                [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
+                                , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                                , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
+                                , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
+                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
+                                , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                                , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
+                                , Maybe.map (imageLabel "Make") metadata.make
+                                , Maybe.map (imageLabel "Model") metadata.model
+                                , Maybe.map (imageLabel "Software") metadata.software
+                                , Maybe.map (imageLabel "Comment") metadata.userComment
+                                ]
+                        )
+                    , Ui.image
+                        [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
+                        { source = fileUrl fileData.contentType fileData.fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+                    ]
+
+            FileMetadata_Video metadata ->
+                infoPanel
+                    [ Ui.column
+                        [ Ui.spacing 2
+                        , Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        ]
+                        (imageLabel
+                            "Video size"
+                            (String.fromInt (Coord.xRaw metadata.videoSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.videoSize))
+                            :: List.filterMap
+                                identity
+                                [ Maybe.map (imageLabel "Title") metadata.title
+                                , Maybe.map (\duration -> imageLabel "Duration" (durationToString duration)) (videoDuration metadata)
+                                , Maybe.map (\frames -> imageLabel "Frames" (String.fromInt (Quantity.unwrap frames))) metadata.frames
+                                , Maybe.map (\frameRate -> imageLabel "Frame rate" (frameRateToString frameRate)) metadata.frameRate
+
+                                -- Every video has an orientation, and almost every
+                                -- one of them is the uninteresting answer.
+                                , if metadata.orientation == NoChange then
+                                    Nothing
+
+                                  else
+                                    Just (imageLabel "Orientation" (orientationToString metadata.orientation))
+                                , Maybe.map (imageLabel "Codec") metadata.codec
+                                , Maybe.map (\time -> imageLabel "Recorded" (MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone)) metadata.createdAt
+                                , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                                ]
+                        )
+                    , Ui.el
+                        [ Ui.widthMax (Coord.xRaw metadata.videoSize), Ui.centerX ]
+                        (Ui.html
+                            (Html.video
+                                [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                , Html.Attributes.controls True
+                                , Html.Attributes.style "display" "block"
+                                , Html.Attributes.style "width" "100%"
+                                ]
+                                []
+                            )
+                        )
+                    ]
         )
+
+
+{-| The scrolling panel both kinds of file info are laid out inside.
+-}
+infoPanel : List (Element msg) -> Element msg
+infoPanel contents =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , Ui.background MyUi.background1
+        , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
+        , Ui.spacing 16
+        ]
+        contents
+
+
+{-| Neither container writes down how long the video runs, so this works it out
+from the two things they do write down.
+-}
+videoDuration : VideoMetadata -> Maybe Duration
+videoDuration metadata =
+    Maybe.map2
+        (\frames frameRate -> Quantity.at_ frameRate (Quantity.toFloatQuantity frames))
+        metadata.frames
+        metadata.frameRate
+
+
+durationToString : Duration -> String
+durationToString duration =
+    let
+        total : Int
+        total =
+            round (Duration.inSeconds duration)
+
+        pad : Int -> String
+        pad value =
+            String.padLeft 2 '0' (String.fromInt value)
+    in
+    if total >= 3600 then
+        String.fromInt (total // 3600) ++ ":" ++ pad (modBy 60 (total // 60)) ++ ":" ++ pad (modBy 60 total)
+
+    else
+        String.fromInt (total // 60) ++ ":" ++ pad (modBy 60 total)
+
+
+frameRateToString : Quantity Float (Rate VideoFrames Seconds) -> String
+frameRateToString frameRate =
+    StringExtra.removeTrailing0s 2 (Quantity.unwrap frameRate) ++ " fps"
 
 
 imageLabel : String -> String -> Element msg
@@ -735,6 +882,15 @@ imageHasMetadata metadata =
         || (metadata.userComment /= Nothing)
 
 
+videoHasMetadata : VideoMetadata -> Bool
+videoHasMetadata metadata =
+    (metadata.frames /= Nothing)
+        || (metadata.createdAt /= Nothing)
+        || (metadata.orientation /= NoChange)
+        || (metadata.codec /= Nothing)
+        || (metadata.title /= Nothing)
+
+
 addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
@@ -744,7 +900,7 @@ addFileHash result fileStatus =
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , imageMetadata = data.imageSize
+                        , metadata = uploadResponseMetadata data
                         , contentType = contentType2
                         , fileHash = data.fileHash
                         }
@@ -757,6 +913,19 @@ addFileHash result fileStatus =
 
         FileError _ _ _ _ ->
             fileStatus
+
+
+uploadResponseMetadata : UploadResponse -> Maybe FileMetadata
+uploadResponseMetadata data =
+    case ( data.imageMetadata, data.videoMetadata ) of
+        ( Just imageMetadata, Nothing ) ->
+            FileMetadata_Image imageMetadata |> Just
+
+        ( _, Just videoMetadata ) ->
+            FileMetadata_Video videoMetadata |> Just
+
+        ( Nothing, Nothing ) ->
+            Nothing
 
 
 onlyUploadedFiles : SeqDict (Id FileId) FileStatus -> SeqDict (Id FileId) FileData

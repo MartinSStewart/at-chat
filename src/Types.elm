@@ -417,7 +417,7 @@ type alias BackendModel =
 
 
 type alias DiscordAttachmentData =
-    { fileHash : FileHash, imageMetadata : Maybe FileStatus.ImageMetadata }
+    { fileHash : FileHash, metadata : Maybe FileStatus.FileMetadata }
 
 
 type alias BackendFileData =
