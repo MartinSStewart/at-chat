@@ -59,7 +59,7 @@ import Email.Html
 import Email.Html.Attributes
 import Embed exposing (Embed(..), EmbedData)
 import FileName
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (FileData, FileId, FileMetadata(..), VideoMetadata)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -1300,8 +1300,8 @@ emailViewHelper config dropNextLineBreak state nonempty =
                         Just fileData ->
                             ( True
                             , currentList
-                                ++ [ case fileData.imageMetadata of
-                                        Just { imageSize } ->
+                                ++ [ case fileData.metadata of
+                                        Just (FileMetadata_Image { imageSize }) ->
                                             let
                                                 ( width, height ) =
                                                     actualImageSize FileStatus.imageMaxHeight emailContainerWidth imageSize
@@ -1330,7 +1330,10 @@ emailViewHelper config dropNextLineBreak state nonempty =
                                                     ]
                                                     []
 
-                                        _ ->
+                                        Just (FileMetadata_Video _) ->
+                                            emailFileDownloadView state.spoiler fileData
+
+                                        Nothing ->
                                             emailFileDownloadView state.spoiler fileData
                                    ]
                             )
@@ -3939,119 +3942,39 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                             , embedIndex2
                             , case SeqDict.get fileId config.attachedFiles of
                                 Just fileData ->
+                                    let
+                                        maybeHtmlId : Maybe String
+                                        maybeHtmlId =
+                                            case maybePressedSpoiler of
+                                                Just ( htmlIdPrefix, _ ) ->
+                                                    Dom.idToString htmlIdPrefix
+                                                        ++ "_file_"
+                                                        ++ Id.toString fileId
+                                                        |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
                                     currentList
-                                        ++ [ case fileData.imageMetadata of
-                                                Just { imageSize } ->
-                                                    let
-                                                        ( width, height ) =
-                                                            actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
-                                                    in
-                                                    if state.spoiler then
-                                                        Html.div
-                                                            [ Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
-                                                            , Html.Attributes.style "height" (String.fromInt (round height) ++ "px")
-                                                            , Html.Attributes.style "display" "block"
-                                                            , Html.Attributes.style "background-color" spoilerBackground
-                                                            ]
-                                                            []
+                                        ++ [ case fileData.metadata of
+                                                Just (FileMetadata_Image { imageSize }) ->
+                                                    imageView
+                                                        maybePressedSpoiler
+                                                        maybeOnPressImage
+                                                        containerWidth2
+                                                        config
+                                                        imageSize
+                                                        fileId
+                                                        fileData
+                                                        state
 
-                                                    else
-                                                        let
-                                                            fileUrl =
-                                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                                Just (FileMetadata_Video videoMetadata) ->
+                                                    videoView maybeHtmlId (Just videoMetadata) state.spoiler containerWidth2 fileData
 
-                                                            thumbnailUrl =
-                                                                FileStatus.thumbnailUrl
-                                                                    imageSize
-                                                                    fileData.contentType
-                                                                    fileData.fileHash
-
-                                                            imageElement : List (Html.Attribute msg) -> Html msg
-                                                            imageElement extraAttributes =
-                                                                Html.img
-                                                                    (Html.Attributes.src thumbnailUrl
-                                                                        :: Html.Attributes.style "display" "block"
-                                                                        :: MyUi.imagePlaceholderStyle
-                                                                        :: Html.Attributes.width (round width)
-                                                                        :: Html.Attributes.height (round height)
-                                                                        -- Exposes the full-size image url so that a right-click (contextmenu)
-                                                                        -- on the image can offer "Copy image"/"Copy image link" options.
-                                                                        :: Html.Attributes.attribute "data-image-url" fileUrl
-                                                                        :: extraAttributes
-                                                                    )
-                                                                    []
-                                                        in
-                                                        case maybeOnPressImage of
-                                                            Just onPressImage ->
-                                                                Html.div
-                                                                    []
-                                                                    [ Html.div
-                                                                        [ Html.Attributes.style "position" "relative" ]
-                                                                        (case SeqDict.get fileId config.drawings of
-                                                                            Just drawing ->
-                                                                                Drawing.imageAttachmentOverlays
-                                                                                    (width / toFloat (max 1 (Coord.xRaw imageSize)))
-                                                                                    config.drawingUserColor
-                                                                                    drawing
-
-                                                                            Nothing ->
-                                                                                []
-                                                                        )
-                                                                    , imageElement
-                                                                        [ Html.Attributes.style "cursor" "pointer"
-                                                                        , Html.Attributes.id
-                                                                            (case maybePressedSpoiler of
-                                                                                Just ( htmlIdPrefix, _ ) ->
-                                                                                    Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
-
-                                                                                Nothing ->
-                                                                                    "image_" ++ Id.toString fileId
-                                                                            )
-                                                                        , Html.Events.on
-                                                                            "click"
-                                                                            (Json.Decode.map
-                                                                                (\position ->
-                                                                                    onPressImage
-                                                                                        { imageId = PressedAttachedFileImage fileId
-                                                                                        , fileUrl = fileUrl
-                                                                                        , imageSize = imageSize
-                                                                                        , displayWidth = width
-                                                                                        , position = position
-                                                                                        }
-                                                                                )
-                                                                                Drawing.decodeWithTargetScreenPosition
-                                                                            )
-                                                                        , htmlAttrIf config.isSelectingAnchor Drawing.anchorHighlightHtmlClass
-                                                                        ]
-                                                                    ]
-
-                                                            Nothing ->
-                                                                Html.a
-                                                                    [ Html.Attributes.href fileUrl
-                                                                    , Html.Attributes.target "_blank"
-                                                                    , Html.Attributes.rel "noreferrer"
-                                                                    , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
-                                                                    , Html.Attributes.style "display" "block"
-                                                                    ]
-                                                                    [ imageElement [] ]
-
-                                                _ ->
-                                                    let
-                                                        maybeHtmlId : Maybe String
-                                                        maybeHtmlId =
-                                                            case maybePressedSpoiler of
-                                                                Just ( htmlIdPrefix, _ ) ->
-                                                                    Dom.idToString htmlIdPrefix
-                                                                        ++ "_file_"
-                                                                        ++ Id.toString fileId
-                                                                        |> Just
-
-                                                                Nothing ->
-                                                                    Nothing
-                                                    in
+                                                Nothing ->
                                                     case FileStatus.contentTypeType fileData.contentType of
                                                         FileStatus.Video ->
-                                                            videoView maybeHtmlId state.spoiler containerWidth2 fileData
+                                                            videoView maybeHtmlId Nothing state.spoiler containerWidth2 fileData
 
                                                         FileStatus.Audio ->
                                                             audioView maybeHtmlId state.spoiler containerWidth2 fileData
@@ -4156,6 +4079,111 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+imageView :
+    Maybe ( HtmlId, Int -> msg )
+    -> Maybe (PressedImageData -> msg)
+    -> Int
+    -> Config b userId
+    -> Coord CssPixels
+    -> Id FileId
+    -> FileData
+    -> RichTextState
+    -> Html msg
+imageView maybePressedSpoiler maybeOnPressImage containerWidth2 config imageSize fileId fileData state =
+    let
+        ( width, height ) =
+            actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
+    in
+    if state.spoiler then
+        Html.div
+            [ Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
+            , Html.Attributes.style "height" (String.fromInt (round height) ++ "px")
+            , Html.Attributes.style "display" "block"
+            , Html.Attributes.style "background-color" spoilerBackground
+            ]
+            []
+
+    else
+        let
+            fileUrl =
+                FileStatus.fileUrl fileData.contentType fileData.fileHash
+
+            thumbnailUrl =
+                FileStatus.thumbnailUrl
+                    imageSize
+                    fileData.contentType
+                    fileData.fileHash
+
+            imageElement : List (Html.Attribute msg) -> Html msg
+            imageElement extraAttributes =
+                Html.img
+                    (Html.Attributes.src thumbnailUrl
+                        :: Html.Attributes.style "display" "block"
+                        :: MyUi.imagePlaceholderStyle
+                        :: Html.Attributes.width (round width)
+                        :: Html.Attributes.height (round height)
+                        -- Exposes the full-size image url so that a right-click (contextmenu)
+                        -- on the image can offer "Copy image"/"Copy image link" options.
+                        :: Html.Attributes.attribute "data-image-url" fileUrl
+                        :: extraAttributes
+                    )
+                    []
+        in
+        case maybeOnPressImage of
+            Just onPressImage ->
+                Html.div
+                    []
+                    [ Html.div
+                        [ Html.Attributes.style "position" "relative" ]
+                        (case SeqDict.get fileId config.drawings of
+                            Just drawing ->
+                                Drawing.imageAttachmentOverlays
+                                    (width / toFloat (max 1 (Coord.xRaw imageSize)))
+                                    config.drawingUserColor
+                                    drawing
+
+                            Nothing ->
+                                []
+                        )
+                    , imageElement
+                        [ Html.Attributes.style "cursor" "pointer"
+                        , Html.Attributes.id
+                            (case maybePressedSpoiler of
+                                Just ( htmlIdPrefix, _ ) ->
+                                    Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
+
+                                Nothing ->
+                                    "image_" ++ Id.toString fileId
+                            )
+                        , Html.Events.on
+                            "click"
+                            (Json.Decode.map
+                                (\position ->
+                                    onPressImage
+                                        { imageId = PressedAttachedFileImage fileId
+                                        , fileUrl = fileUrl
+                                        , imageSize = imageSize
+                                        , displayWidth = width
+                                        , position = position
+                                        }
+                                )
+                                Drawing.decodeWithTargetScreenPosition
+                            )
+                        , htmlAttrIf config.isSelectingAnchor Drawing.anchorHighlightHtmlClass
+                        ]
+                    ]
+
+            Nothing ->
+                Html.a
+                    [ Html.Attributes.href fileUrl
+                    , Html.Attributes.target "_blank"
+                    , Html.Attributes.rel "noreferrer"
+                    , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
+                    , Html.Attributes.style "display" "block"
+                    ]
+                    [ imageElement [] ]
 
 
 bulletPointLeftPadding : number
@@ -4576,8 +4604,8 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
-videoView : Maybe String -> Bool -> Int -> FileData -> Html msg
-videoView maybeHtmlId isSpoilered containerWidth fileData =
+videoView : Maybe String -> Maybe VideoMetadata -> Bool -> Int -> FileData -> Html msg
+videoView maybeHtmlId maybeMetadata isSpoilered containerWidth fileData =
     let
         idAttribute : Html.Attribute msg
         idAttribute =
@@ -4587,28 +4615,43 @@ videoView maybeHtmlId isSpoilered containerWidth fileData =
 
                 Nothing ->
                     Html.Attributes.class ""
+
+        sizeAttrs : List (Html.Attribute msg)
+        sizeAttrs =
+            case maybeMetadata of
+                Just metadata ->
+                    let
+                        ( width, height ) =
+                            actualImageSize FileStatus.imageMaxHeight containerWidth metadata.videoSize
+                    in
+                    [ Html.Attributes.style "width" (String.fromFloat width ++ "px")
+                    , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+                    ]
+
+                Nothing ->
+                    [ Html.Attributes.style "height" "300px" ]
     in
     if isSpoilered then
         Html.div
-            [ idAttribute
-            , Html.Attributes.style "width" (String.fromInt (min containerWidth 320) ++ "px")
-            , Html.Attributes.style "height" "180px"
-            , Html.Attributes.style "display" "block"
-            , Html.Attributes.style "border-radius" "4px"
-            , Html.Attributes.style "background-color" spoilerBackground
-            ]
+            (sizeAttrs
+                ++ [ idAttribute
+                   , Html.Attributes.style "display" "block"
+                   , Html.Attributes.style "border-radius" "4px"
+                   , Html.Attributes.style "background-color" spoilerBackground
+                   ]
+            )
             []
 
     else
         Html.video
-            [ idAttribute
-            , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
-            , Html.Attributes.controls True
-            , Html.Attributes.style "display" "block"
-            , Html.Attributes.style "max-width" (String.fromInt containerWidth ++ "px")
-            , Html.Attributes.style "max-height" "300px"
-            , Html.Attributes.style "border-radius" "4px"
-            ]
+            (sizeAttrs
+                ++ [ idAttribute
+                   , Html.Attributes.src (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+                   , Html.Attributes.controls True
+                   , Html.Attributes.style "display" "block"
+                   , Html.Attributes.style "border-radius" "4px"
+                   ]
+            )
             []
 
 

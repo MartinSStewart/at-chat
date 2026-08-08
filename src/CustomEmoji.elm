@@ -58,7 +58,7 @@ addUrl : FileStatus.UploadResponse -> CustomEmojiData -> Result () CustomEmojiDa
 addUrl uploadResponse customEmoji =
     case customEmoji.url of
         CustomEmojiLoading ->
-            { customEmoji | url = CustomEmojiInternal uploadResponse.fileHash (Maybe.map .imageSize uploadResponse.imageSize) }
+            { customEmoji | url = CustomEmojiInternal uploadResponse.fileHash (Maybe.map .imageSize uploadResponse.imageMetadata) }
                 |> Ok
 
         CustomEmojiInternal _ _ ->

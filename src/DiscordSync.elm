@@ -40,7 +40,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileHash, FileId, FileMetadata(..))
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
@@ -871,7 +871,7 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
                 Ok ( attachmentUrl, uploadResponse ) ->
                     SeqDict.insert
                         attachmentUrl
-                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageMetadata }
                         dict2
 
                 Err _ ->
@@ -2849,17 +2849,23 @@ messageToFileData message discordAttachments =
 
 
 attachmentsToFileData : Discord.Attachment -> FileHash -> Maybe FileStatus.ImageMetadata -> FileData
-attachmentsToFileData attachment fileHash imageSize =
+attachmentsToFileData attachment fileHash imageMetadata =
     { fileName = FileName.fromString attachment.filename
     , fileSize = attachment.size
-    , imageMetadata = imageSize
+    , metadata =
+        case imageMetadata of
+            Just imageMetadata2 ->
+                Just (FileMetadata_Image imageMetadata2)
+
+            Nothing ->
+                Nothing
     , contentType =
         case attachment.contentType of
             Included contentType ->
                 FileStatus.contentType contentType
 
             Missing ->
-                case imageSize of
+                case imageMetadata of
                     Just _ ->
                         FileStatus.webpContent
 

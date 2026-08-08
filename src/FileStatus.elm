@@ -6,12 +6,14 @@ module FileStatus exposing
     , FileDataWithImage
     , FileHash(..)
     , FileId
+    , FileMetadata(..)
     , FileStatus(..)
     , ImageMetadata
     , Location
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
+    , VideoMetadata
     , addFileHash
     , contentType
     , contentTypeType
@@ -42,6 +44,7 @@ module FileStatus exposing
     , uploadTrackerId
     , uploadUrl
     , uploadUrlCodec
+    , videoHasMetadata
     , webpContent
     )
 
@@ -76,16 +79,21 @@ import Ui exposing (Element)
 type alias FileData =
     { fileName : FileName
     , fileSize : Int
-    , imageMetadata : Maybe ImageMetadata
+    , metadata : Maybe FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
 
 
+type FileMetadata
+    = FileMetadata_Image ImageMetadata
+    | FileMetadata_Video VideoMetadata
+
+
 type alias FileDataWithImage =
     { fileName : FileName
     , fileSize : Int
-    , imageMetadata : ImageMetadata
+    , metadata : FileMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
@@ -240,7 +248,7 @@ unknownContentType =
 
 type alias UploadResponse =
     { fileHash : FileHash
-    , imageSize : Maybe ImageMetadata
+    , imageMetadata : Maybe ImageMetadata
     , videoMetadata : Maybe VideoMetadata
     }
 
@@ -249,7 +257,7 @@ uploadResponseCodec : Codec UploadResponse
 uploadResponseCodec =
     Codec.object UploadResponse
         |> Codec.field "hash" .fileHash fileHashCodec
-        |> Codec.field "image_metadata" .imageSize (Codec.nullable imageMetadataCodec)
+        |> Codec.field "image_metadata" .imageMetadata (Codec.nullable imageMetadataCodec)
         |> Codec.field "video_metadata" .videoMetadata (Codec.nullable videoMetadataCodec)
         |> Codec.buildObject
 
@@ -322,6 +330,7 @@ type alias VideoMetadata =
     , frameRate : Maybe (Quantity Float (Rate VideoFrames Seconds))
     , codec : Maybe String
     , title : Maybe String
+    , gpsLocation : Maybe Location
     }
 
 
@@ -335,6 +344,7 @@ videoMetadataCodec =
         |> Codec.field "frame_rate" .frameRate (Codec.nullable CodecExtra.quantityFloat)
         |> Codec.field "codec" .codec (Codec.nullable Codec.string)
         |> Codec.field "title" .title (Codec.nullable Codec.string)
+        |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
         |> Codec.buildObject
 
 
@@ -661,11 +671,6 @@ domain =
 
 imageInfoView : msg -> FileDataWithImage -> Element msg
 imageInfoView onPressClose fileData =
-    let
-        metadata : ImageMetadata
-        metadata =
-            fileData.imageMetadata
-    in
     Ui.el
         [ Ui.inFront
             (MyUi.elButton
@@ -679,44 +684,49 @@ imageInfoView onPressClose fileData =
                 (Ui.html Icons.x)
             )
         ]
-        (Ui.column
-            [ Ui.height Ui.fill
-            , Ui.scrollable
-            , Ui.heightMin 0
-            , Ui.background MyUi.background1
-            , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
-            , Ui.spacing 16
-            ]
-            [ Ui.column
-                [ Ui.spacing 2
-                , Ui.alignBottom
-                , Ui.paddingXY 8 0
-                ]
-                (imageLabel
-                    "Image size"
-                    (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
-                    :: List.filterMap
-                        identity
-                        [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
-                        , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
-                        , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
-                        , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
-                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
-                        , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
-                        , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
-                        , Maybe.map (imageLabel "Make") metadata.make
-                        , Maybe.map (imageLabel "Model") metadata.model
-                        , Maybe.map (imageLabel "Software") metadata.software
-                        , Maybe.map (imageLabel "Comment") metadata.userComment
+        (case fileData.metadata of
+            FileMetadata_Image metadata ->
+                Ui.column
+                    [ Ui.height Ui.fill
+                    , Ui.scrollable
+                    , Ui.heightMin 0
+                    , Ui.background MyUi.background1
+                    , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
+                    , Ui.spacing 16
+                    ]
+                    [ Ui.column
+                        [ Ui.spacing 2
+                        , Ui.alignBottom
+                        , Ui.paddingXY 8 0
                         ]
-                )
-            , Ui.image
-                [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
-                { source = fileUrl fileData.contentType fileData.fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
-            ]
+                        (imageLabel
+                            "Image size"
+                            (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
+                            :: List.filterMap
+                                identity
+                                [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
+                                , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                                , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
+                                , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
+                                , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
+                                , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                                , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
+                                , Maybe.map (imageLabel "Make") metadata.make
+                                , Maybe.map (imageLabel "Model") metadata.model
+                                , Maybe.map (imageLabel "Software") metadata.software
+                                , Maybe.map (imageLabel "Comment") metadata.userComment
+                                ]
+                        )
+                    , Ui.image
+                        [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
+                        { source = fileUrl fileData.contentType fileData.fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+                    ]
+
+            FileMetadata_Video videoMetadata ->
+                Debug.todo ""
         )
 
 
@@ -786,6 +796,15 @@ imageHasMetadata metadata =
         || (metadata.userComment /= Nothing)
 
 
+videoHasMetadata : VideoMetadata -> Bool
+videoHasMetadata metadata =
+    (metadata.frames /= Nothing)
+        || (metadata.createdAt /= Nothing)
+        || (metadata.orientation /= NoChange)
+        || (metadata.codec /= Nothing)
+        || (metadata.title /= Nothing)
+
+
 addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
@@ -795,7 +814,16 @@ addFileHash result fileStatus =
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , imageMetadata = data.imageSize
+                        , metadata =
+                            case ( data.imageMetadata, data.videoMetadata ) of
+                                ( Just imageMetadata, Nothing ) ->
+                                    FileMetadata_Image imageMetadata |> Just
+
+                                ( _, Just videoMetadata ) ->
+                                    FileMetadata_Video videoMetadata |> Just
+
+                                ( Nothing, Nothing ) ->
+                                    Nothing
                         , contentType = contentType2
                         , fileHash = data.fileHash
                         }

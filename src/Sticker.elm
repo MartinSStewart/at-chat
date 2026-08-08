@@ -45,7 +45,7 @@ addUrl : FileStatus.UploadResponse -> StickerData -> Result () StickerData
 addUrl uploadResponse sticker =
     case sticker.url of
         StickerLoading ->
-            { sticker | url = StickerInternal uploadResponse.fileHash (Maybe.map .imageSize uploadResponse.imageSize) }
+            { sticker | url = StickerInternal uploadResponse.fileHash (Maybe.map .imageSize uploadResponse.imageMetadata) }
                 |> Ok
 
         StickerInternal _ _ ->
