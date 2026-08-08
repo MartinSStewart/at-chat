@@ -2113,10 +2113,10 @@ attachmentsUploadedHelper model message results =
                     SeqDict.size fileDataDict + 1 |> Id.fromInt
             in
             case SeqDict.get attachmentId model.discordAttachments of
-                Just { fileHash, imageMetadata } ->
+                Just { fileHash, metadata } ->
                     ( SeqDict.insert
                         fileId
-                        { fileData = DiscordSync.attachmentsToFileData attachment fileHash imageMetadata
+                        { fileData = DiscordSync.attachmentsToFileData attachment fileHash metadata
                         , isSpoilered =
                             case attachment.flags of
                                 Included flags ->
@@ -2138,7 +2138,7 @@ attachmentsUploadedHelper model message results =
                                     DiscordSync.attachmentsToFileData
                                         attachment
                                         uploadResponse.fileHash
-                                        uploadResponse.imageMetadata
+                                        (FileStatus.uploadResponseMetadata uploadResponse)
                                 , isSpoilered =
                                     case attachment.flags of
                                         Included flags ->
@@ -2150,7 +2150,9 @@ attachmentsUploadedHelper model message results =
                                 fileDataDict
                             , SeqDict.insert
                                 attachmentId
-                                { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageMetadata }
+                                { fileHash = uploadResponse.fileHash
+                                , metadata = FileStatus.uploadResponseMetadata uploadResponse
+                                }
                                 discordAttachments
                             )
 

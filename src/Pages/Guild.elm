@@ -10240,7 +10240,7 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
                                                 Just (FileMetadata_Image metadata) ->
                                                     FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
 
-                                                Just (FileMetadata_Video metadata) ->
+                                                Just (FileMetadata_Video _) ->
                                                     FileStatus.fileUrl fileData.contentType fileData.fileHash
 
                                                 Nothing ->

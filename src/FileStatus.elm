@@ -13,6 +13,7 @@ module FileStatus exposing
     , Orientation(..)
     , UploadResponse
     , UploadUrlRequest
+    , VideoFrames
     , VideoMetadata
     , addFileHash
     , contentType
@@ -40,6 +41,7 @@ module FileStatus exposing
     , uploadBytes
     , uploadFile
     , uploadResponseCodec
+    , uploadResponseMetadata
     , uploadString
     , uploadTrackerId
     , uploadUrl
@@ -54,7 +56,7 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Duration exposing (Duration, Seconds)
+import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
@@ -725,7 +727,7 @@ imageInfoView onPressClose fileData =
                         }
                     ]
 
-            FileMetadata_Video videoMetadata ->
+            FileMetadata_Video _ ->
                 Debug.todo ""
         )
 
@@ -814,16 +816,7 @@ addFileHash result fileStatus =
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , metadata =
-                            case ( data.imageMetadata, data.videoMetadata ) of
-                                ( Just imageMetadata, Nothing ) ->
-                                    FileMetadata_Image imageMetadata |> Just
-
-                                ( _, Just videoMetadata ) ->
-                                    FileMetadata_Video videoMetadata |> Just
-
-                                ( Nothing, Nothing ) ->
-                                    Nothing
+                        , metadata = uploadResponseMetadata data
                         , contentType = contentType2
                         , fileHash = data.fileHash
                         }
@@ -836,6 +829,19 @@ addFileHash result fileStatus =
 
         FileError _ _ _ _ ->
             fileStatus
+
+
+uploadResponseMetadata : UploadResponse -> Maybe FileMetadata
+uploadResponseMetadata data =
+    case ( data.imageMetadata, data.videoMetadata ) of
+        ( Just imageMetadata, Nothing ) ->
+            FileMetadata_Image imageMetadata |> Just
+
+        ( _, Just videoMetadata ) ->
+            FileMetadata_Video videoMetadata |> Just
+
+        ( Nothing, Nothing ) ->
+            Nothing
 
 
 onlyUploadedFiles : SeqDict (Id FileId) FileStatus -> SeqDict (Id FileId) FileData
