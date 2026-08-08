@@ -380,24 +380,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
             ]
             []
         , Html.div
-            ([ Html.Attributes.style "pointer-events" "none"
-             , Html.Attributes.style "padding" "0 9px 0 9px"
-             , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
-             , Html.Attributes.style "overflow-wrap" "anywhere"
-             , Html.Attributes.style "height" "fit-content"
-             , Html.Attributes.style "min-height" "100%"
-             ]
-                ++ (if text == "" then
-                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
-                        , Html.Attributes.style "white-space" "nowrap"
-                        , Html.Attributes.style "text-overflow" "ellipsis"
-                        , Html.Attributes.style "overflow" "hidden"
-                        ]
-
-                    else
-                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white), Html.Attributes.style "white-space" "pre-wrap" ]
-                   )
-            )
+            (textareaOverlayAttributes text)
             (case richText of
                 Just richText2 ->
                     RichText.textInputView
@@ -451,21 +434,7 @@ disabledTextarea placeholderText text attachedFiles local =
             ]
             []
         , Html.div
-            [ Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.style "padding" "0 9px 0 9px"
-            , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
-            , Html.Attributes.style "white-space" "pre-wrap"
-            , Html.Attributes.style "overflow-wrap" "anywhere"
-            , Html.Attributes.style "height" "fit-content"
-            , Html.Attributes.style "min-height" "100%"
-            , Html.Attributes.style "color"
-                (if text == "" then
-                    MyUi.colorToStyle MyUi.dimFont
-
-                 else
-                    MyUi.colorToStyle MyUi.white
-                )
-            ]
+            (textareaOverlayAttributes text)
             (case String.Nonempty.fromString text of
                 Just nonempty ->
                     let
@@ -485,13 +454,35 @@ disabledTextarea placeholderText text attachedFiles local =
 
                 Nothing ->
                     [ if placeholderText == "" then
-                        Html.text " "
+                        -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
+                        Html.text "\u{00A0}"
 
                       else
                         Html.text placeholderText
                     ]
             )
         ]
+
+
+textareaOverlayAttributes : String -> List (Html.Attribute msg)
+textareaOverlayAttributes text =
+    [ Html.Attributes.style "pointer-events" "none"
+    , Html.Attributes.style "padding" "0 9px 0 9px"
+    , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
+    , Html.Attributes.style "overflow-wrap" "anywhere"
+    , Html.Attributes.style "height" "fit-content"
+    , Html.Attributes.style "min-height" "100%"
+    ]
+        ++ (if text == "" then
+                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.dimFont)
+                , Html.Attributes.style "white-space" "nowrap"
+                , Html.Attributes.style "text-overflow" "ellipsis"
+                , Html.Attributes.style "overflow" "hidden"
+                ]
+
+            else
+                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.white), Html.Attributes.style "white-space" "pre-wrap" ]
+           )
 
 
 editView :

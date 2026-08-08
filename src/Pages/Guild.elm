@@ -1324,6 +1324,7 @@ discordDmChannelView routeData loggedIn local model =
                     |> String.join ", "
                 )
                 { messages = dmChannel.messages
+                , isForum = False
                 , visibleMessages = dmChannel.visibleMessages
                 , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
@@ -4794,6 +4795,7 @@ discordConversationView :
     ->
         { a
             | messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
+            , isForum : Bool
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -4924,8 +4926,8 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             ]
             [ newMessagesView model loggedIn
             , replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
-            , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
-                Ok () ->
+            , case ( LocalState.canSendDiscordMessage local guildOrDmIdNoThread, channel.isForum ) of
+                ( Ok (), False ) ->
                     MessageInput.view
                         (Dom.id "messageMenu_channelInput")
                         (replyTo == Nothing)
@@ -4959,10 +4961,30 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (LinkedAndOtherDiscordUsers.allDiscordUsers local.localUser.discordUsers)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
-                Err error ->
+                ( Err error, _ ) ->
                     MessageInput.disabledView
                         (replyTo == Nothing)
                         error
+                        (case SeqDict.get guildOrDmId loggedIn.drafts of
+                            Just text ->
+                                String.Nonempty.toString text
+
+                            Nothing ->
+                                ""
+                        )
+                        (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                            Just attachedFiles ->
+                                NonemptyDict.toSeqDict attachedFiles
+
+                            Nothing ->
+                                SeqDict.empty
+                        )
+                        local
+
+                ( _, True ) ->
+                    MessageInput.disabledView
+                        (replyTo == Nothing)
+                        "Forum channel posting is unsupported"
                         (case SeqDict.get guildOrDmId loggedIn.drafts of
                             Just text ->
                                 String.Nonempty.toString text
