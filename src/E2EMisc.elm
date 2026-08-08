@@ -1,5 +1,6 @@
 module E2EMisc exposing
     ( channelSearchTest
+    , codeBlockInputTest
     , dmThreadsTest
     , emojiSuggestionTest
     , exportChannelTest
@@ -1121,6 +1122,87 @@ emojiSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "Party 🎉"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "🎉" ])
+                ]
+            )
+        ]
+
+
+{-| Checks what's been written into the channel message input so far.
+-}
+checkDraft : Maybe String -> FrontendModel -> Result String ()
+checkDraft expected model =
+    let
+        draft : Maybe String
+        draft =
+            case Audio.userModel model of
+                Types.Loaded loaded ->
+                    case loaded.loginStatus of
+                        Types.LoggedIn loggedIn ->
+                            SeqDict.values loggedIn.drafts
+                                |> List.head
+                                |> Maybe.map String.Nonempty.toString
+
+                        Types.NotLoggedIn _ ->
+                            Nothing
+
+                Types.Loading _ ->
+                    Nothing
+    in
+    if draft == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected the message input to contain "
+                ++ Maybe.withDefault "nothing" expected
+                ++ " but it contained "
+                ++ Maybe.withDefault "nothing" draft
+            )
+
+
+{-| While the cursor is inside a \`\`\` code block, enter writes a line break instead of sending the
+message and tab writes two spaces instead of moving the focus.
+-}
+codeBlockInputTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+codeBlockInputTest config =
+    E2EHelper.startTest
+        "Enter and tab behave differently inside a code block"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+
+                -- The code block hasn't been closed yet so enter is left to the textarea to
+                -- handle (which writes a line break) rather than sending the message.
+                , admin.input 100 Pages.Guild.channelTextInputId "```"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 3, end = 3 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkModel 100 (checkDraft (Just "```"))
+
+                -- Tab writes two spaces. Normally js is what puts them in the text input but
+                -- these tests don't run js, so only the model is checked here.
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
+                , admin.checkModel 100 (checkDraft (Just "```  "))
+
+                -- Once the code block is closed, the cursor is outside of it again and enter
+                -- sends the message.
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nlet x = 1\n```"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 17, end = 17 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkModel 100 (checkDraft Nothing)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "let x = 1" ])
+
+                -- Tab is only special inside a code block. Everywhere else it's left alone so
+                -- that it still moves the focus.
+                , admin.input 100 Pages.Guild.channelTextInputId "no code block"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
+                , admin.checkModel 100 (checkDraft (Just "no code block"))
                 ]
             )
         ]

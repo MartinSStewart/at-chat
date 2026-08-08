@@ -3572,6 +3572,30 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
+                MessageInput.TypedTabInCodeBlock range ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | editMessage =
+                                    SeqDict.update
+                                        ( guildOrDmId, threadRoute )
+                                        (Maybe.map
+                                            (\edit -> { edit | text = MessageInput.insertTab range edit.text })
+                                        )
+                                        loggedIn.editMessage
+                                , typedTextCounter = loggedIn.typedTextCounter + 1
+                              }
+                            , Ports.execCommand
+                                { htmlId = MessageMenu.editMessageTextInputId
+                                , commands = [ Ports.InsertText MessageInput.tabText range ]
+                                }
+                            )
+                        )
+                        model
+
+                MessageInput.IgnoredKeyPress ->
+                    ( model, Command.none )
+
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -3878,6 +3902,34 @@ updateLoaded msg model =
 
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
+
+                MessageInput.TypedTabInCodeBlock range ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | drafts =
+                                    SeqDict.update
+                                        ( guildOrDmId, threadRoute )
+                                        (Maybe.map
+                                            (\draft ->
+                                                MessageInput.insertTab range (String.Nonempty.toString draft)
+                                                    |> String.Nonempty.fromString
+                                                    |> Maybe.withDefault draft
+                                            )
+                                        )
+                                        loggedIn.drafts
+                                , typedTextCounter = loggedIn.typedTextCounter + 1
+                              }
+                            , Ports.execCommand
+                                { htmlId = Pages.Guild.channelTextInputId
+                                , commands = [ Ports.InsertText MessageInput.tabText range ]
+                                }
+                            )
+                        )
+                        model
+
+                MessageInput.IgnoredKeyPress ->
+                    ( model, Command.none )
 
         GotEmojiData result ->
             case result of

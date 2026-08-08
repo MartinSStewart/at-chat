@@ -11,10 +11,12 @@ module MessageInput exposing
     , dropdownView
     , editView
     , emojiDropdownList
+    , insertTab
     , isPress
     , largePastedText
     , pressedArrowInDropdown
     , pressedDropdownItem
+    , tabText
     , userDropdownList
     , view
     )
@@ -102,6 +104,10 @@ type Msg
     | OnPasteFiles (Nonempty File)
     | TypedPageUp
     | TypedPageDown
+    | TypedTabInCodeBlock Range
+      -- A key press that the textarea gets to handle in its normal way. It only exists because
+      -- Html.Events.preventDefaultOn needs a msg to hand back.
+    | IgnoredKeyPress
 
 
 counterThreshold : number
@@ -214,6 +220,44 @@ isPress msg =
         TypedPageDown ->
             False
 
+        TypedTabInCodeBlock _ ->
+            False
+
+        IgnoredKeyPress ->
+            False
+
+
+{-| The two spaces that get inserted when tab is pressed inside a code block.
+-}
+tabText : String
+tabText =
+    "  "
+
+
+{-| Replaces the selected text (or inserts, if nothing is selected) with `tabText`.
+-}
+insertTab : Range -> String -> String
+insertTab range text =
+    String.left range.start text ++ tabText ++ String.dropLeft range.end text
+
+
+{-| The selection, but only if the cursor is inside a code block. This is an ad hoc check rather
+than a full parse: an odd number of triple backticks before the cursor means the most recent one
+opened a code block that hasn't been closed yet.
+-}
+selectionInsideCodeBlock : String -> Maybe Range -> Maybe Range
+selectionInsideCodeBlock text maybeSelection =
+    case maybeSelection of
+        Just selection ->
+            if modBy 2 (String.left selection.start text |> String.indexes "```" |> List.length) == 1 then
+                Just selection
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
 
 textarea :
     Bool
@@ -248,7 +292,25 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                                 Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
-                                Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
+                                case codeBlockSelection of
+                                    Just _ ->
+                                        -- The user is writing a code block so the textarea gets to
+                                        -- insert a line break instead of the message being sent.
+                                        Json.Decode.succeed ( IgnoredKeyPress, False )
+
+                                    Nothing ->
+                                        Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
+
+                            else if key == "Tab" && not shiftHeld then
+                                -- Shift+tab is left out so there's still a way to move the focus
+                                -- out of the message input with the keyboard.
+                                case codeBlockSelection of
+                                    Just range ->
+                                        Json.Decode.succeed ( TypedTabInCodeBlock range, True )
+
+                                    Nothing ->
+                                        -- Outside of a code block, tab moves the focus like usual.
+                                        Json.Decode.succeed ( IgnoredKeyPress, False )
 
                             else if key == "PageUp" then
                                 Json.Decode.succeed ( TypedPageUp, True )
@@ -275,6 +337,10 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
 
                 Nothing ->
                     Nothing
+
+        codeBlockSelection : Maybe Range
+        codeBlockSelection =
+            selectionInsideCodeBlock text selection
     in
     Html.div
         [ Html.Attributes.style "display" "flex"
