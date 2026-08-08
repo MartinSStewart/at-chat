@@ -84,15 +84,15 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
 
 {-| Same as `view` but hovering over the emoji reveals a popup containing a large
 version of the emoji and its name. This is the same idea as the popup shown when
-hovering over a reaction emoji. The hover itself is handled by the
-`custom-emoji-tooltip` rules in `MyUi.css`.
+hovering over a reaction emoji, and shares the `emoji-popup` rules in `MyUi.css`
+that do the hovering.
 -}
 viewWithTooltip : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
 viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
             Html.span
-                [ Html.Attributes.class "custom-emoji-tooltip-container"
+                [ Html.Attributes.class "emoji-popup-container"
                 , Html.Attributes.style "position" "relative"
                 , Html.Attributes.style "display" "inline-block"
                 ]
@@ -114,7 +114,7 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
 tooltipView : CustomEmojiData -> Sticker.AnimationMode -> Html msg
 tooltipView customEmoji animationMode =
     Html.div
-        [ Html.Attributes.class "custom-emoji-tooltip"
+        [ Html.Attributes.class "emoji-popup"
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "bottom" "calc(100% + 8px)"
         , Html.Attributes.style "left" "50%"

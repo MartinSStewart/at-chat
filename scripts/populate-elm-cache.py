@@ -38,6 +38,11 @@ ELM_HOME = os.environ.get("ELM_HOME") or os.path.expanduser("~/.elm")
 PACKAGES = os.path.join(ELM_HOME, "0.19.1", "packages")
 ELM_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "elm.json")
 
+# elm-test-rs compiles the test suite against its own runner package, which isn't a
+# dependency in elm.json. Without it, `elm-test-rs --offline` fails with
+# "there is no version of mpizenberg/elm-test-runner in 6.0.0".
+EXTRA_PACKAGES = {"mpizenberg/elm-test-runner": "6.0.0"}
+
 
 def all_deps():
     d = json.load(open(ELM_JSON))
@@ -45,6 +50,7 @@ def all_deps():
     for section in ("dependencies", "test-dependencies"):
         for kind in ("direct", "indirect"):
             deps.update(d.get(section, {}).get(kind, {}))
+    deps.update(EXTRA_PACKAGES)
     return deps
 
 
