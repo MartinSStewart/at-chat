@@ -4471,7 +4471,7 @@ changeUpdate localMsg local =
                             { localUser | discordUsers = LinkedAndOtherDiscordUsers.unlinkUser userId localUser.discordUsers }
                     }
 
-                Server_DiscordChannelCreated guildId channelId channelName topic permissionOverwrites ->
+                Server_DiscordChannelCreated guildId channelId isForum channelName topic permissionOverwrites ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -4490,6 +4490,7 @@ changeUpdate localMsg local =
                                                                     LocalState.discordTopicToDescription
                                                                         topic
                                                                         ChannelDescription.empty
+                                                                , isForum = isForum
                                                                 , permissionOverwrites = permissionOverwrites
                                                             }
                                                                 |> Just
@@ -4500,6 +4501,7 @@ changeUpdate localMsg local =
                                                                 LocalState.discordTopicToDescription
                                                                     topic
                                                                     ChannelDescription.empty
+                                                            , isForum = isForum
                                                             , messages = MessageArray.empty
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
