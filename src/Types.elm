@@ -900,6 +900,7 @@ type ServerChange
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
+    | Server_DiscordForumPostDeleted (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Id ChannelMessageId)
     | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) (Maybe FileHash)

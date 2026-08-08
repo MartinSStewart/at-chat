@@ -2777,6 +2777,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordDeleteGuildMessage _ _ _ ->
                             True
 
+                        Types.Server_DiscordForumPostDeleted _ _ _ ->
+                            True
+
                         Types.Server_DiscordDeleteDmMessage _ _ ->
                             True
 

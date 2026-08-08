@@ -1662,6 +1662,73 @@ addForumPost authentication post guild channel model =
             ( model, Command.none )
 
 
+{-| A deleted forum post arrives as a thread delete event. Deleting a post deletes
+everything written in it too, so the post's title and the thread hanging off it both go,
+unlike deleting the message a thread in a normal channel hangs off of.
+
+Discord sends this for threads in normal channels as well, where the thread outlives the
+message it hangs off of and there's nothing for us to do.
+
+-}
+handleForumPostDeleted : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostDeleted thread model =
+    case ( thread.guildId, thread.parentId ) of
+        ( Included guildId, Included (Just forumId) ) ->
+            case LocalState.getDiscordGuildAndChannel guildId forumId model of
+                Just ( guild, channel ) ->
+                    case
+                        OneToOne.second
+                            (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
+                            channel.linkedMessageIds
+                    of
+                        Just messageId ->
+                            let
+                                channel2 : DiscordBackendChannel
+                                channel2 =
+                                    case IdArray.get messageId channel.messages of
+                                        Just (UserTextMessage message) ->
+                                            { channel
+                                                | messages =
+                                                    IdArray.set
+                                                        messageId
+                                                        (DeletedMessage message.createdAt)
+                                                        channel.messages
+                                                , threads = SeqDict.remove messageId channel.threads
+                                            }
+
+                                        _ ->
+                                            { channel | threads = SeqDict.remove messageId channel.threads }
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | discordGuilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild | channels = SeqDict.insert forumId channel2 guild.channels }
+                                                model.discordGuilds
+                                    }
+                            in
+                            ( model2
+                            , Broadcast.toDiscordGuildChannel
+                                guildId
+                                forumId
+                                (Server_DiscordForumPostDeleted guildId forumId messageId |> ServerChange)
+                                model2
+                            )
+
+                        Nothing ->
+                            -- A thread in a normal channel, or a post older than the ones we
+                            -- loaded, so there's no title of ours for it to have come from
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
 forumPostSender : Discord.Id Discord.UserId -> BackendModel -> DiscordFrontendUser
 forumPostSender userId model =
     case SeqDict.get userId model.discordUsers of
@@ -1991,6 +2058,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 ( model3, cmd2 ) =
                                     handleForumPostCreated userData.auth thread model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_ThreadDeleted thread ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleForumPostDeleted thread model2
                             in
                             ( model3, cmd2 :: cmds )
 

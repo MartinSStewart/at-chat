@@ -967,6 +967,59 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             )
         ]
     , E2EHelper.startTest
+        "Discord user deletes a post in a guild forum"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\user ->
+                [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , user.click 100 (Dom.id "guild_openChannel_1535645724761653309")
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_CREATE\",\"s\":3,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"newly_created\":true,\"name\":\"Test 2\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\"],\"member_count\":1,\"last_message_id\":null,\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordForumAMessages [ "Test 2" ]
+                        , checkDiscordForumAThreads [ ( 0, [ "The text of the post" ] ) ]
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Test 2" ])
+                        , -- Deleting the post deletes its title and everything written in it
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_DELETE\",\"s\":5,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1535645724761653309\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordForumAMessages [ "<deleted message>" ]
+                        , checkDiscordForumAThreads []
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Test 2" ])
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText LocalState.messageDeleted ])
+                        , -- A thread in a normal channel outlives the message it hangs off of, so
+                          -- deleting one is none of the forum's business
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_DELETE\",\"s\":6,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1072828564317159465\",\"id\":\"1533095101817950311\",\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordForumAMessages [ "<deleted message>" ]
+                        , checkDiscordForumAThreads []
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
         "Unlinked Discord user starts thread from message"
         E2EHelper.startTime
         normalConfig

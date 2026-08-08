@@ -4311,6 +4311,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
+                Server_DiscordForumPostDeleted guildId forumId messageId ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.deleteForumPostFrontend forumId messageId)
+                                local.discordGuilds
+                    }
+
                 Server_DiscordDeleteDmMessage channelId messageId ->
                     { local
                         | discordDmChannels =
