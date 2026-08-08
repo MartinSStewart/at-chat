@@ -897,13 +897,6 @@ timeOfDaySuggestionTest config =
                 -- that picking them writes into the message.
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 06:00" ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 18:00" ])
-
-                -- The timezone this browser is in puts its clocks forward for the summer of 2026,
-                -- so noon in July is an hour earlier than noon in December. Reading both as
-                -- whatever offset happens to be in effect right now would put the summer one
-                -- an hour out, which is what the dropdown would do if the zone the browser
-                -- reports only carried a single offset.
-                , E2EHelper.timezoneEvent admin 100
                 , admin.input 100 Pages.Guild.channelTextInputId "Meet at July 15, 2026 at 12:00"
 
                 -- Enter picks a suggestion while the dropdown is open, so it has to be shut

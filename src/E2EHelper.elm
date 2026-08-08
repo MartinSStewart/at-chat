@@ -93,7 +93,6 @@ module E2EHelper exposing
     , startupDataJsonWithInset
     , tallDesktopWindow
     , tallSnapshot
-    , timezoneEvent
     , unwrapBackend
     , uploadImageAttachment
     , userEmail
@@ -199,22 +198,8 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "notificationPermission", Json.Encode.string "denied" )
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
         , ( "devicePixelRatio", Json.Encode.float 2 )
+        , ( "timezone", testTimezone )
         ]
-
-
-{-| Tells the frontend what the browser's timezone does, the way js does once it has worked
-the offset changes out.
-
-Ports asked for during `init` are answered before the client exists as far as the test runner
-is concerned, so the reply is dropped, which is why the startup data is injected by hand too.
-
--}
-timezoneEvent :
-    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-    -> DelayInMs
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel2
-timezoneEvent user delayInMs =
-    user.portEvent delayInMs "got_timezone_from_js" testTimezone
 
 
 {-| The timezone tests run in. It sits on UTC and puts its clocks forward an hour for the

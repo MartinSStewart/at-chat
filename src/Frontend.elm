@@ -230,7 +230,6 @@ subscriptions _ model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
-        , Ports.gotTimezone GotTimezone
         , Ports.gotDevicePixelRatio GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
@@ -374,7 +373,6 @@ init url key =
         , route = route
         , windowSize = Coord.xy 1920 1080
         , time = Nothing
-        , timezone = Time.utc
         , loginStatus = LoadingData
         , loginType = LoginWithEmail
         , startupData = Nothing
@@ -398,11 +396,6 @@ init url key =
 
             _ ->
                 Command.none
-        , -- Time.here only knows the offset in effect right now, so this is what the timezone
-          -- is until js works out when it changes and sends a zone that can answer for a date
-          -- far enough away to be the other side of one.
-          Task.perform GotTimezone Time.here
-        , Ports.getTimezone
         , Ports.loadStartupData
         ]
     , Audio.loadAudio LoadedPopSound "/pop.mp3"
@@ -421,8 +414,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper loading.timezone startupData.userAgent startupData.devicePixelRatio loginData loading
-                        |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper startupData loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -443,7 +435,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , clientId = clientId
             , route = loading.route
             , time = time
-            , timezone = loading.timezone
+            , timezone = startupData.timezone
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
             , loginStatus = loginStatus
@@ -485,17 +477,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 
 
 loadedInitHelper :
-    Time.Zone
-    -> UserAgent
-    -> Float
+    Ports.StartupData
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
+loadedInitHelper startupData loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState userAgent timezone devicePixelRatio loginData
+            loginDataToLocalState startupData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -591,8 +581,8 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
     )
 
 
-loginDataToLocalState : UserAgent -> Time.Zone -> Float -> LoginData -> LocalState
-loginDataToLocalState userAgent timezone devicePixelRatio loginData =
+loginDataToLocalState : Ports.StartupData -> LoginData -> LocalState
+loginDataToLocalState startupData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -614,9 +604,9 @@ loginDataToLocalState userAgent timezone devicePixelRatio loginData =
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , discordUsers = loginData.discordUsers
-        , timezone = timezone
-        , userAgent = userAgent
-        , devicePixelRatio = devicePixelRatio
+        , timezone = startupData.timezone
+        , userAgent = startupData.userAgent
+        , devicePixelRatio = startupData.devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         }
@@ -660,9 +650,6 @@ update _ msg model =
             case msg of
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = Coord.xy width height }, Command.none, Audio.cmdNone )
-
-                GotTimezone timezone ->
-                    ( Loading { loading | timezone = timezone }, Command.none, Audio.cmdNone )
 
                 GotStartupData startupData ->
                     tryInitLoadedFrontend
@@ -779,12 +766,6 @@ updateLoaded msg model =
                     )
                 )
                 { model | windowSize = Coord.xy width height }
-
-        GotTimezone timezone ->
-            -- js has to work out when the timezone changes offset before it can send one, which
-            -- can take longer than the rest of loading, so this can arrive once we're already
-            -- underway.
-            ( setTimezone timezone model, Command.none )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -6753,12 +6734,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper
-                                        model.timezone
-                                        model.startupData.userAgent
-                                        model.startupData.devicePixelRatio
-                                        loginData
-                                        model
+                                    loadedInitHelper model.startupData loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -7492,13 +7468,7 @@ updateLoadedFromBackend msg model =
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState =
-                                    loginDataToLocalState
-                                        model.startupData.userAgent
-                                        model.timezone
-                                        model.startupData.devicePixelRatio
-                                        loginData
-                                        |> Local.init
+                                | localState = loginDataToLocalState model.startupData loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none

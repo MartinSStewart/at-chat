@@ -20,9 +20,7 @@ port module Ports exposing
     , execCommand
     , fixCursorPosition
     , focusChanged
-    , getTimezone
     , gotDevicePixelRatio
-    , gotTimezone
     , hapticFeedback
     , loadServiceWorkerData
     , loadStartupData
@@ -53,6 +51,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
+import Json.Decode.Extra
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
@@ -93,12 +92,6 @@ port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 
 
 port haptic_feedback : Json.Encode.Value -> Cmd msg
-
-
-port get_timezone_to_js : Json.Encode.Value -> Cmd msg
-
-
-port got_timezone_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port load_startup_data_to_js : Json.Encode.Value -> Cmd msg
@@ -271,30 +264,8 @@ type alias StartupData =
     , -- How many device pixels one CSS pixel is drawn with (2 or 3 on high DPI screens, and any
       -- fractional value when the page is zoomed).
       devicePixelRatio : Float
+    , timezone : Time.Zone
     }
-
-
-{-| Asks js what the browser's timezone does over the years around now.
-
-`Time.here` only answers with the offset in effect right now, so a timestamp far enough away
-to be the other side of a daylight saving change would be read an hour out. js works the
-transitions out from `Intl` instead and sends them over, which is what makes the zone this
-builds able to answer for a date months away.
-
--}
-getTimezone : Command FrontendOnly toMsg msg
-getTimezone =
-    Command.sendToJs "get_timezone_to_js" get_timezone_to_js Json.Encode.null
-
-
-gotTimezone : (Time.Zone -> value) -> Subscription FrontendOnly value
-gotTimezone msg =
-    Subscription.fromJs
-        "got_timezone_from_js"
-        got_timezone_from_js
-        (\json ->
-            Json.Decode.decodeValue decodeTimezone json |> Result.withDefault Time.utc |> msg
-        )
 
 
 {-| `Time.customZone` takes the eras newest first and reads `start` as whole minutes since the
@@ -338,6 +309,7 @@ startupDataSub msg =
                     , notificationPermission = NotAsked
                     , safeAreaInsetTop = 0
                     , devicePixelRatio = 1
+                    , timezone = Time.utc
                     }
                 |> msg
         )
@@ -345,23 +317,30 @@ startupDataSub msg =
 
 decodeStartupData : Json.Decode.Decoder StartupData
 decodeStartupData =
-    Json.Decode.map8 StartupData
-        (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
-        (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
-        (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
-        (Json.Decode.field "scrollbarWidth" Json.Decode.int)
-        (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
-        (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
-        (Json.Decode.oneOf
-            [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
-            , Json.Decode.succeed 0
-            ]
-        )
-        (Json.Decode.oneOf
-            [ Json.Decode.field "devicePixelRatio" Json.Decode.float
-            , Json.Decode.succeed 1
-            ]
-        )
+    Json.Decode.succeed StartupData
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
+        |> Json.Decode.Extra.andMap (Json.Decode.field "scrollbarWidth" Json.Decode.int)
+        |> Json.Decode.Extra.andMap (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.oneOf
+                [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
+                , Json.Decode.succeed 0
+                ]
+            )
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.oneOf
+                [ Json.Decode.field "devicePixelRatio" Json.Decode.float
+                , Json.Decode.succeed 1
+                ]
+            )
+        |> Json.Decode.Extra.andMap decodeTimezone
 
 
 pwaStatusFromBool : Bool -> PwaStatus

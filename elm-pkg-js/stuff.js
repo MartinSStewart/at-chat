@@ -521,6 +521,20 @@ exports.init = async function init(app)
         const safeAreaInsetTop = insetProbe.getBoundingClientRect().height;
         insetProbe.parentNode.removeChild(insetProbe);
 
+        let zone;
+        try {
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const now = Date.now();
+            const year = 365.2425 * 24 * 60 * 60 * 1000;
+            zone = zoneEras(
+                timeZone,
+                now - timezoneYearsEitherSide * year,
+                now + timezoneYearsEitherSide * year
+            );
+        } catch (e) {
+            zone = { defaultOffset: -new Date().getTimezoneOffset(), eras: [] };
+        }
+
         app.ports.load_startup_data_from_js.send({
             // Event timeStamps are milliseconds since timeOrigin (the monotonic performance clock),
             // not since the unix epoch. We convert them to a wall-clock Time.Posix by adding
@@ -537,9 +551,8 @@ exports.init = async function init(app)
             isPwa: isPwa,
             notificationPermission: ("Notification" in window) ? Notification.permission : "unsupported",
             safeAreaInsetTop: safeAreaInsetTop,
-            // How many device pixels one CSS pixel is drawn with. It changes when the page is
-            // zoomed or moved to a different screen, which the re-sends below pick up.
-            devicePixelRatio: window.devicePixelRatio || 1
+            devicePixelRatio: window.devicePixelRatio || 1,
+            timezone: zone
         });
     }
 
@@ -592,25 +605,6 @@ exports.init = async function init(app)
     }
 
     const timezoneYearsEitherSide = 10;
-
-    app.ports.get_timezone_to_js.subscribe(() => {
-        let zone;
-        try {
-            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            const now = Date.now();
-            const year = 365.2425 * 24 * 60 * 60 * 1000;
-            zone = zoneEras(
-                timeZone,
-                now - timezoneYearsEitherSide * year,
-                now + timezoneYearsEitherSide * year
-            );
-        } catch (e) {
-            // Without Intl there's no way to know when the offset changes, so the one in effect
-            // now is all there is to go on.
-            zone = { defaultOffset: -new Date().getTimezoneOffset(), eras: [] };
-        }
-        app.ports.got_timezone_from_js.send(zone);
-    });
 
     app.ports.load_startup_data_to_js.subscribe((a) => {
         sendStartupData();
