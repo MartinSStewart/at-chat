@@ -5352,7 +5352,10 @@ decodeDispatchUserEvent eventName =
             JD.succeed DispatchUser_ThreadMembersUpdate
 
         "THREAD_UPDATE" ->
-            JD.succeed DispatchUser_ThreadUpdate
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ThreadUpdate
+
+        "THREAD_DELETE" ->
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ThreadDelete
 
         "CALL_CREATE" ->
             JD.succeed DispatchUser_CallCreate
@@ -5705,7 +5708,8 @@ type OpDispatchUserEvent
     | DispatchUser_GenericPushNotificationSent
     | DispatchUser_ReactionNotificationSent
     | DispatchUser_ThreadMembersUpdate
-    | DispatchUser_ThreadUpdate
+    | DispatchUser_ThreadUpdate Channel
+    | DispatchUser_ThreadDelete Channel
     | DispatchUser_CallCreate
     | DispatchUser_CallUpdate
     | DispatchUser_CallDelete
@@ -6418,6 +6422,8 @@ type UserOutMsg connection
     | UserOutMsg_UserEditedMessage UserMessageUpdate
     | UserOutMsg_FailedToParseWebsocketMessage JD.Error
     | UserOutMsg_ThreadCreatedOrUserAddedToThread Channel
+    | UserOutMsg_ThreadUpdated Channel
+    | UserOutMsg_ThreadDeleted Channel
     | UserOutMsg_UserAddedReaction ReactionAdd
     | UserOutMsg_UserRemovedReaction ReactionRemove
     | UserOutMsg_AllReactionsRemoved ReactionRemoveAll
@@ -6754,6 +6760,9 @@ handleUserGateway authToken intents response model =
                         DispatchUser_ThreadCreatedOrUserAddedToThreadEvent channel ->
                             ( model, [ UserOutMsg_ThreadCreatedOrUserAddedToThread channel ] )
 
+                        DispatchUser_ThreadDelete channel ->
+                            ( model, [ UserOutMsg_ThreadDeleted channel ] )
+
                         DispatchUser_MessageReactionAdd reactionAdd ->
                             ( model, [ UserOutMsg_UserAddedReaction reactionAdd ] )
 
@@ -6826,8 +6835,8 @@ handleUserGateway authToken intents response model =
                         DispatchUser_ThreadMembersUpdate ->
                             ( model, [] )
 
-                        DispatchUser_ThreadUpdate ->
-                            ( model, [] )
+                        DispatchUser_ThreadUpdate channel ->
+                            ( model, [ UserOutMsg_ThreadUpdated channel ] )
 
                         DispatchUser_CallCreate ->
                             ( model, [] )

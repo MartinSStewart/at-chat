@@ -14,6 +14,7 @@ module E2EHelper exposing
     , backendApp
     , botTestGuild
     , botTestGuild_ChannelA
+    , botTestGuild_ForumA
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
@@ -2803,6 +2804,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordDeleteGuildMessage _ _ _ ->
                             True
 
+                        Types.Server_DiscordForumPostDeleted _ _ _ ->
+                            True
+
                         Types.Server_DiscordDeleteDmMessage _ _ ->
                             True
 
@@ -2845,7 +2849,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_UnlinkDiscordUser _ ->
                             True
 
-                        Types.Server_DiscordChannelCreated _ _ _ _ _ ->
+                        Types.Server_DiscordChannelCreated _ _ _ _ _ _ ->
                             True
 
                         Types.Server_DiscordDmChannelCreated _ _ ->
@@ -3410,6 +3414,16 @@ botTestGuild_ChannelA =
 botTestGuild_ChannelAString : String
 botTestGuild_ChannelAString =
     "1072828564317159465"
+
+
+botTestGuild_ForumA : Discord.Id Discord.ChannelId
+botTestGuild_ForumA =
+    Unsafe.uint64 botTestGuild_ForumAString |> Discord.idFromUInt64
+
+
+botTestGuild_ForumAString : String
+botTestGuild_ForumAString =
+    "1535645724761653309"
 
 
 checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel

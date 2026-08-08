@@ -62,6 +62,7 @@ module LocalState exposing
     , createThreadMessageFrontend
     , deleteChannel
     , deleteChannelFrontend
+    , deleteForumPostFrontend
     , deleteMessageBackend
     , deleteMessageBackendHelper
     , deleteMessageBackendHelperNoThread
@@ -338,6 +339,7 @@ type alias BackendChannel =
 type alias DiscordBackendChannel =
     { name : ChannelName
     , description : ChannelDescription
+    , isForum : Bool
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -366,6 +368,7 @@ type alias FrontendChannel =
 type alias DiscordFrontendChannel =
     { name : ChannelName
     , description : ChannelDescription
+    , isForum : Bool
     , messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -558,6 +561,7 @@ discordChannelToFrontend guildId guild linkedDiscordUsers threadRoute channel =
             in
             { name = channel.name
             , description = channel.description
+            , isForum = channel.isForum
             , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
             , lastTypedAt = channel.lastTypedAt
@@ -2284,6 +2288,57 @@ deleteMessageFrontendHelper threadRoute channel =
 
         NoThreadWithMessage messageId ->
             deleteMessageFrontendNoThread messageId channel
+
+
+{-| Deleting a post in a guild forum deletes the post's title along with everything written
+in it. Deleting the message a thread in a normal channel hangs off of leaves the thread
+alone instead, which is why this isn't the same as deleting the title on its own.
+-}
+deleteForumPostFrontend :
+    channelId
+    -> Id ChannelMessageId
+    ->
+        { a
+            | channels :
+                SeqDict
+                    channelId
+                    { c
+                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+                    }
+        }
+    ->
+        { a
+            | channels :
+                SeqDict
+                    channelId
+                    { c
+                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+                    }
+        }
+deleteForumPostFrontend channelId messageId guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            let
+                channel2 :
+                    { c
+                        | messages : MessageArray ChannelMessageId (Message ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+                    }
+                channel2 =
+                    deleteMessageFrontendNoThread messageId channel
+            in
+            { guild
+                | channels =
+                    SeqDict.insert
+                        channelId
+                        { channel2 | threads = SeqDict.remove messageId channel2.threads }
+                        guild.channels
+            }
+
+        Nothing ->
+            guild
 
 
 deleteMessageFrontendNoThread :

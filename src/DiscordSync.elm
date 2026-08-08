@@ -4,10 +4,12 @@ module DiscordSync exposing
     , attachmentsToFileData
     , backendSessionIdHash
     , discordUserWebsocketMsg
+    , getForumChannelReload
     , getManyMessages
     , getThreadsForMessages
     , handleCreateMessage
     , handleEditMessage
+    , handleForumPostRenamed
     , http
     , messagesAndLinks
     , reloadChannelMaxMessages
@@ -64,6 +66,7 @@ import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
+import UInt64
 import User
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
@@ -703,7 +706,7 @@ addDiscordChannel discordChannel =
                     False
 
                 Discord.GuildForum ->
-                    False
+                    True
 
                 Discord.GuildMedia ->
                     False
@@ -717,6 +720,7 @@ addDiscordChannel discordChannel =
                 Missing ->
                     ChannelName.fromStringLossy "Missing"
         , description = LocalState.discordTopicToDescription discordChannel.topic ChannelDescription.empty
+        , isForum = discordChannel.type_ == Discord.GuildForum
         , messages = IdArray.empty
         , status = ChannelActive
         , lastTypedAt = SeqDict.empty
@@ -1161,8 +1165,26 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                         linkedMessageId : Discord.Id Discord.MessageId
                         linkedMessageId =
                             messageLinkId discordMessage
+
+                        alreadyHaveMessage : Bool
+                        alreadyHaveMessage =
+                            case threadRoute of
+                                -- The text of a forum post has the same id as the thread it's
+                                -- written in, which is the id its title is linked under, so
+                                -- looking in the channel would mistake it for a message we
+                                -- already have
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    case SeqDict.get threadId channel.threads of
+                                        Just thread ->
+                                            OneToOne.memberFirst linkedMessageId thread.linkedMessageIds
+
+                                        Nothing ->
+                                            False
+
+                                NoThreadWithMaybeMessage _ ->
+                                    OneToOne.memberFirst linkedMessageId channel.linkedMessageIds
                     in
-                    if OneToOne.memberFirst linkedMessageId channel.linkedMessageIds then
+                    if alreadyHaveMessage then
                         ( model, Command.none )
 
                     else
@@ -1511,6 +1533,321 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
             ( model, Command.none )
 
 
+{-| A new post in a guild forum arrives as a thread create event and nothing else. A post
+in a normal channel would have arrived as a message in that channel, so this event is the
+only chance we get to add the post to the forum it was posted in.
+
+The post's text follows right after this as a message in the new thread. The text hangs off
+the post's title the same way it does when a forum is reloaded, so the title has to be
+added now or the text has nowhere to go.
+
+Discord sends this event for threads the user is added to as well as for threads that were
+just created, so a post we already have is left alone.
+
+-}
+handleForumPostCreated : Discord.UserAuth -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostCreated authentication thread model =
+    case ( thread.guildId, thread.parentId, thread.name ) of
+        ( Included guildId, Included (Just forumId), Included name ) ->
+            case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
+                ( Included ownerId, Just ( guild, channel ) ) ->
+                    if channel.isForum then
+                        addForumPost
+                            authentication
+                            { guildId = guildId, forumId = forumId, threadId = thread.id, name = name, ownerId = ownerId }
+                            guild
+                            channel
+                            model
+
+                    else
+                        -- A thread in a normal channel is announced by a message in that
+                        -- channel instead, which is what the thread hangs off of there
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+addForumPost :
+    Discord.UserAuth
+    ->
+        { guildId : Discord.Id Discord.GuildId
+        , forumId : Discord.Id Discord.ChannelId
+        , threadId : Discord.Id Discord.ChannelId
+        , name : String
+        , ownerId : Discord.Id Discord.UserId
+        }
+    -> DiscordBackendGuild
+    -> DiscordBackendChannel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addForumPost authentication post guild channel model =
+    let
+        createdAt : Time.Posix
+        createdAt =
+            discordIdCreatedAt post.threadId
+
+        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText =
+            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+
+        message : Message ChannelMessageId (Discord.Id Discord.UserId)
+        message =
+            Message.userTextMessageNoEmbeds createdAt post.ownerId richText Nothing SeqDict.empty
+    in
+    -- A forum post's thread has the same id as the message the post hangs off of, the same
+    -- as every other thread
+    case
+        LocalState.createDiscordChannelMessageBackend
+            (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
+            message
+            channel
+    of
+        Ok ( _, channel2 ) ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                post.guildId
+                                { guild | channels = SeqDict.insert post.forumId channel2 guild.channels }
+                                model.discordGuilds
+                    }
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.discordGuildMessageNotification
+                        SeqSet.empty
+                        createdAt
+                        post.ownerId
+                        post.guildId
+                        post.forumId
+                        NoThread
+                        message
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                        model2
+            in
+            ( { model2 | sessions = sessions }
+            , Command.batch
+                [ Broadcast.toDiscordGuildChannel
+                    post.guildId
+                    post.forumId
+                    (Server_Discord_SendMessage
+                        createdAt
+                        (DiscordGuildOrDmId_Guild post.ownerId post.guildId post.forumId)
+                        (forumPostSender post.ownerId model2)
+                        richText
+                        (NoThreadWithMaybeMessage Nothing)
+                        SeqDict.empty
+                        SeqDict.empty
+                        |> ServerChange
+                    )
+                    model2
+
+                -- The post's text and the replies to it are written in the thread, and we
+                -- only get told about messages in a thread we're a member of
+                , joinThread
+                    model2.serverSecret
+                    authentication
+                    post.guildId
+                    (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
+                , Command.batch notificationCmds
+                ]
+            )
+
+        Err DiscordMessageAlreadyExists ->
+            -- We were added to a post we already have rather than told about a new one
+            ( model, Command.none )
+
+
+{-| A renamed forum post arrives as a thread update event. The post's title is a message
+here, so renaming the post edits that message.
+
+Discord sends this event for everything else that can change about a thread too, such as
+being archived or having its tags changed, and for threads in normal channels, where the
+name isn't a message of ours. Editing a message to the content it already has does nothing,
+so all of those leave the forum alone without having to be told apart.
+
+-}
+handleForumPostRenamed :
+    Discord.Channel
+    -> Time.Posix
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostRenamed thread time model =
+    case ( thread.guildId, thread.parentId, thread.name ) of
+        ( Included guildId, Included (Just forumId), Included name ) ->
+            case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
+                ( Included ownerId, Just ( _, channel ) ) ->
+                    case
+                        -- A thread in a normal channel has the same id as the message it hangs
+                        -- off of, so without this the message would be mistaken for a title and
+                        -- rewritten to the thread's name
+                        if channel.isForum then
+                            OneToOne.second
+                                (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
+                                channel.linkedMessageIds
+
+                        else
+                            Nothing
+                    of
+                        Just messageId ->
+                            let
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText =
+                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+                            in
+                            case
+                                LocalState.editMessageHelper
+                                    time
+                                    ownerId
+                                    richText
+                                    DoNotChangeAttachments
+                                    (NoThreadWithMessage messageId)
+                                    channel
+                            of
+                                Ok channel2 ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | discordGuilds =
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (\_ -> channel2) forumId)
+                                                        model.discordGuilds
+                                            }
+                                    in
+                                    ( model2
+                                    , Broadcast.toDiscordGuildChannel
+                                        guildId
+                                        forumId
+                                        (Server_DiscordSendEditGuildMessage
+                                            time
+                                            ownerId
+                                            guildId
+                                            forumId
+                                            (NoThreadWithMessage messageId)
+                                            richText
+                                            |> ServerChange
+                                        )
+                                        model2
+                                    )
+
+                                Err () ->
+                                    -- The title is already what the post is called
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+{-| A deleted forum post arrives as a thread delete event. Deleting a post deletes
+everything written in it too, so the post's title and the thread hanging off it both go,
+unlike deleting the message a thread in a normal channel hangs off of.
+
+Discord sends this for threads in normal channels as well, where the thread outlives the
+message it hangs off of and there's nothing for us to do.
+
+-}
+handleForumPostDeleted : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostDeleted thread model =
+    case ( thread.guildId, thread.parentId ) of
+        ( Included guildId, Included (Just forumId) ) ->
+            case LocalState.getDiscordGuildAndChannel guildId forumId model of
+                Just ( guild, channel ) ->
+                    case
+                        -- A thread in a normal channel has the same id as the message it hangs
+                        -- off of, and that message outlives the thread, so without this it
+                        -- would be deleted along with it
+                        if channel.isForum then
+                            OneToOne.second
+                                (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
+                                channel.linkedMessageIds
+
+                        else
+                            Nothing
+                    of
+                        Just messageId ->
+                            let
+                                channel2 : DiscordBackendChannel
+                                channel2 =
+                                    case IdArray.get messageId channel.messages of
+                                        Just (UserTextMessage message) ->
+                                            { channel
+                                                | messages =
+                                                    IdArray.set
+                                                        messageId
+                                                        (DeletedMessage message.createdAt)
+                                                        channel.messages
+                                                , threads = SeqDict.remove messageId channel.threads
+                                            }
+
+                                        _ ->
+                                            { channel | threads = SeqDict.remove messageId channel.threads }
+
+                                model2 : BackendModel
+                                model2 =
+                                    { model
+                                        | discordGuilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild | channels = SeqDict.insert forumId channel2 guild.channels }
+                                                model.discordGuilds
+                                    }
+                            in
+                            ( model2
+                            , Broadcast.toDiscordGuildChannel
+                                guildId
+                                forumId
+                                (Server_DiscordForumPostDeleted guildId forumId messageId |> ServerChange)
+                                model2
+                            )
+
+                        Nothing ->
+                            -- A post older than the ones we loaded, so there's no title of ours
+                            -- for it to have come from
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+forumPostSender : Discord.Id Discord.UserId -> BackendModel -> DiscordFrontendUser
+forumPostSender userId model =
+    case SeqDict.get userId model.discordUsers of
+        Just discordUser ->
+            User.discordUserDataToFrontendUser discordUser
+
+        Nothing ->
+            { name = PersonName.fromStringLossy "Missing", icon = Nothing }
+
+
+{-| When a snowflake id was created. The top bits of the id hold the number of milliseconds
+that had passed since the start of 2015 when Discord handed the id out.
+-}
+discordIdCreatedAt : Discord.Id idType -> Time.Posix
+discordIdCreatedAt id =
+    Discord.idToUInt64 id
+        |> UInt64.shiftRightZfBy 22
+        |> UInt64.toFloat
+        |> round
+        |> (+) 1420070400000
+        |> Time.millisToPosix
+
+
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
 websocketCreateHandle debugName msg url =
     let
@@ -1813,8 +2150,26 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
-                            ( model2, cmds )
+                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread thread ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleForumPostCreated userData.auth thread model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_ThreadUpdated thread ->
+                            -- The event says nothing about when the thread was changed, and
+                            -- renaming a post edits the message its title is
+                            ( model2
+                            , Task.perform (GotTimeForDiscordForumPostRenamed thread) Time.now :: cmds
+                            )
+
+                        Discord.UserOutMsg_ThreadDeleted thread ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleForumPostDeleted thread model2
+                            in
+                            ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserAddedReaction reaction ->
                             let
@@ -2603,6 +2958,10 @@ handleChannelCreated channel model =
                         Included permissions ->
                             permissions
 
+                isForum : Bool
+                isForum =
+                    channel.type_ == Discord.GuildForum
+
                 model2 : BackendModel
                 model2 =
                     { model
@@ -2624,24 +2983,12 @@ handleChannelCreated channel model =
                                                                         LocalState.discordTopicToDescription
                                                                             channel.topic
                                                                             existingChannel.description
+                                                                    , isForum = isForum
                                                                     , permissionOverwrites = overwrites
                                                                 }
 
                                                         Nothing ->
-                                                            { name = name
-                                                            , description =
-                                                                LocalState.discordTopicToDescription
-                                                                    channel.topic
-                                                                    ChannelDescription.empty
-                                                            , messages = IdArray.empty
-                                                            , status = ChannelActive
-                                                            , lastTypedAt = SeqDict.empty
-                                                            , linkedMessageIds = OneToOne.empty
-                                                            , threads = SeqDict.empty
-                                                            , dateDividerDrawings = SeqDict.empty
-                                                            , permissionOverwrites = overwrites
-                                                            }
-                                                                |> Just
+                                                            addDiscordChannel channel
                                                 )
                                                 guild.channels
                                     }
@@ -2655,7 +3002,7 @@ handleChannelCreated channel model =
             , Broadcast.toDiscordGuildChannel
                 guildId
                 channel.id
-                (Server_DiscordChannelCreated guildId channel.id name channel.topic overwrites |> ServerChange)
+                (Server_DiscordChannelCreated guildId channel.id isForum name channel.topic overwrites |> ServerChange)
                 model2
             )
 
@@ -3201,6 +3548,217 @@ getThreadsForMessages secretKey authentication messages =
         |> Task.sequence
 
 
+{-| Loads everything in a guild forum channel.
+
+A forum holds no messages of its own, so asking it for messages always comes back empty.
+Every post in a forum is a thread instead, and the post's text is the first message inside
+that thread rather than a message in the forum, so the only way to find out which posts
+exist is to ask the forum for its threads.
+
+Discord announces a thread that was started without a message by posting a `ThreadCreated`
+message named after the thread into the channel, and that message is what the thread hangs
+off of here. Forum posts get the same treatment: each post becomes a `ThreadCreated`
+message carrying the post's title, and the post's text and replies become the messages of
+the thread hanging off of it.
+
+A post we can't load the messages of is left out, the same as a thread we can't load when
+a normal channel is reloaded.
+
+-}
+getForumChannelReload :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly Discord.HttpError LocalState.DiscordChannelReload
+getForumChannelReload secretKey authentication forumId =
+    getForumPosts secretKey authentication forumId
+        |> Task.andThen
+            (\posts ->
+                List.map
+                    (\post ->
+                        getManyMessages
+                            secretKey
+                            authentication
+                            { channelId = post.threadId, limit = reloadThreadMaxMessages }
+                            |> Task.map
+                                (\messages ->
+                                    -- Messages come back newest first, so the post's text is the last one
+                                    case List.Extra.last messages of
+                                        Just firstMessage ->
+                                            Just { post = post, firstMessage = firstMessage, messages = messages }
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                            |> Task.onError (\_ -> Task.succeed Nothing)
+                    )
+                    posts
+                    |> Task.sequence
+            )
+        |> Task.map
+            (\loadedPosts ->
+                let
+                    -- Newest post first, to match the order Discord returns messages in
+                    loadedPosts2 : List { post : ForumPost, firstMessage : Discord.Message, messages : List Discord.Message }
+                    loadedPosts2 =
+                        List.filterMap identity loadedPosts
+                            |> List.sortBy
+                                (\loadedPost -> -(Time.posixToMillis loadedPost.firstMessage.timestamp))
+                in
+                { messages =
+                    List.map
+                        (\loadedPost -> forumPostTitleMessage loadedPost.post loadedPost.firstMessage)
+                        loadedPosts2
+                , threads =
+                    List.map
+                        (\loadedPost ->
+                            { threadId = loadedPost.post.threadId, messages = loadedPost.messages }
+                        )
+                        loadedPosts2
+                }
+            )
+
+
+type alias ForumPost =
+    { threadId : Discord.Id Discord.ChannelId, name : String }
+
+
+{-| The `ThreadCreated` message that stands in for a forum post. Discord doesn't send one
+for forum posts, so we make it out of the post's first message, which is the message that
+carries the author and the time the post was created.
+
+The title is all this message shows. The post's text stays in the thread, so the
+attachments, embeds, stickers and mentions that belong to it are dropped here to avoid
+showing them twice.
+
+-}
+forumPostTitleMessage : ForumPost -> Discord.Message -> Discord.Message
+forumPostTitleMessage post firstMessage =
+    { firstMessage
+        | id = Discord.idToUInt64 post.threadId |> Discord.idFromUInt64
+        , content = post.name
+        , type_ = Discord.ThreadCreated
+        , messageReference =
+            Included { messageId = Missing, channelId = Included post.threadId, guildId = Missing }
+
+        -- The flags aren't ours to make up. Nothing needs them, since the thread this
+        -- announces is loaded by getForumChannelReload rather than found via the
+        -- has-thread flag the way a normal channel's threads are.
+        , flags = Missing
+        , editedTimestamp = Nothing
+        , pinned = False
+        , mentionEveryone = False
+        , mentionRoles = []
+        , attachments = []
+        , embeds = Included []
+        , reactions = Included []
+        , referencedMessage = Discord.NoReference
+        , stickerItems = Included []
+        , stickers = Included []
+        , messageSnapshots = Included []
+    }
+
+
+{-| The posts of a guild forum, newest first.
+
+Searching a forum's threads is the only way to list its posts with a user token. Listing a
+guild's active threads is bot-only, and the archived thread endpoints leave out the posts
+that haven't been archived yet. Forum posts are archived after a few days of inactivity by
+default, so most of the posts in a busy forum are archived and both have to be asked for.
+
+-}
+getForumPosts :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly Discord.HttpError (List ForumPost)
+getForumPosts secretKey authentication forumId =
+    Task.map2
+        (\activePosts archivedPosts ->
+            activePosts
+                ++ archivedPosts
+                |> List.Extra.uniqueBy (\post -> Discord.idToString post.threadId)
+                |> List.take reloadForumMaxPosts
+        )
+        (getForumPostsHelper secretKey authentication forumId { archived = False } 0 [])
+        (getForumPostsHelper secretKey authentication forumId { archived = True } 0 [])
+
+
+getForumPostsHelper :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> { archived : Bool }
+    -> Int
+    -> List ForumPost
+    -> Task BackendOnly Discord.HttpError (List ForumPost)
+getForumPostsHelper secretKey authentication forumId { archived } offset postsSoFar =
+    Discord.searchThreadsPayload
+        authentication
+        { channelId = forumId
+        , name = Nothing
+        , slop = Nothing
+        , tag = Nothing
+        , tagSetting = Nothing
+        , archived = Just archived
+        , sortBy = Just Discord.CreationTime
+        , sortOrder = Just Discord.Descending
+        , limit = Just forumPostsPerRequest
+        , offset = Just offset
+        , maxId = Nothing
+        , minId = Nothing
+        }
+        |> http secretKey
+        |> retryWhenRateLimited
+        |> Task.andThen
+            (\result ->
+                let
+                    postsSoFar2 : List ForumPost
+                    postsSoFar2 =
+                        postsSoFar
+                            ++ List.filterMap
+                                (\thread ->
+                                    case thread.name of
+                                        Included name ->
+                                            Just { threadId = thread.id, name = name }
+
+                                        Missing ->
+                                            Nothing
+                                )
+                                result.threads
+                in
+                if
+                    result.hasMore
+                        && not (List.isEmpty result.threads)
+                        && (List.length postsSoFar2 < reloadForumMaxPosts)
+                then
+                    getForumPostsHelper
+                        secretKey
+                        authentication
+                        forumId
+                        { archived = archived }
+                        (offset + forumPostsPerRequest)
+                        postsSoFar2
+
+                else
+                    Task.succeed (List.take reloadForumMaxPosts postsSoFar2)
+            )
+
+
+retryWhenRateLimited : Task BackendOnly Discord.HttpError a -> Task BackendOnly Discord.HttpError a
+retryWhenRateLimited task =
+    Task.onError
+        (\error ->
+            case error of
+                Discord.TooManyRequests429 rateLimit ->
+                    Process.sleep rateLimit.retryAfter |> Task.andThen (\() -> task)
+
+                _ ->
+                    Task.fail error
+        )
+        task
+
+
 getManyMessages :
     SecretId ServerSecret
     -> Discord.Authentication
@@ -3689,3 +4247,19 @@ messages, so this is much lower than reloadChannelMaxMessages.
 reloadThreadMaxMessages : Int
 reloadThreadMaxMessages =
     1000
+
+
+{-| How many posts to load when a guild forum is reloaded. Every post is a thread that
+costs at least one request of its own, so a forum is much more expensive to reload than a
+channel of the same size.
+-}
+reloadForumMaxPosts : Int
+reloadForumMaxPosts =
+    200
+
+
+{-| How many threads searching a forum's threads returns at most.
+-}
+forumPostsPerRequest : Int
+forumPostsPerRequest =
+    25
