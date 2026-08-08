@@ -187,7 +187,6 @@ import Quantity
 import Result
 import SeqDict
 import SeqSet
-import String.Nonempty
 
 
 frontendModel : Evergreen.V346.Types.FrontendModel -> ModelMigration Evergreen.V347.Types.FrontendModel Evergreen.V347.Types.FrontendMsg
