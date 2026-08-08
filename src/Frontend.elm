@@ -129,6 +129,36 @@ app_ =
         }
 
 
+{-| The timezone is kept on the local user as well, the same way the device pixel ratio is,
+so that a message can be drawn without passing it in separately.
+-}
+setTimezone : Time.Zone -> LoadedFrontend -> LoadedFrontend
+setTimezone timezone model =
+    { model
+        | timezone = timezone
+        , loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn
+                        { loggedIn
+                            | localState =
+                                Local.mapModel
+                                    (\local ->
+                                        let
+                                            localUser : User.LocalUser
+                                            localUser =
+                                                local.localUser
+                                        in
+                                        { local | localUser = { localUser | timezone = timezone } }
+                                    )
+                                    loggedIn.localState
+                        }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
 {-| LocalUser keeps a copy of the device pixel ratio so that ascii art can pick a font size
 that lands on whole device pixels without messageView needing another parameter. That copy
 has to be kept in step with the real value, which changes when the page is zoomed or moved
@@ -200,6 +230,7 @@ subscriptions _ model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.startupDataSub GotStartupData
+        , Ports.gotTimezone GotTimezone
         , Ports.gotDevicePixelRatio GotDevicePixelRatio
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
@@ -367,7 +398,11 @@ init url key =
 
             _ ->
                 Command.none
-        , Task.perform GotTimezone Time.here
+        , -- Time.here only knows the offset in effect right now, so this is what the timezone
+          -- is until js works out when it changes and sends a zone that can answer for a date
+          -- far enough away to be the other side of one.
+          Task.perform GotTimezone Time.here
+        , Ports.getTimezone
         , Ports.loadStartupData
         ]
     , Audio.loadAudio LoadedPopSound "/pop.mp3"
@@ -745,9 +780,11 @@ updateLoaded msg model =
                 )
                 { model | windowSize = Coord.xy width height }
 
-        GotTimezone _ ->
-            -- We should only get the timezone while loading
-            ( model, Command.none )
+        GotTimezone timezone ->
+            -- js has to work out when the timezone changes offset before it can send one, which
+            -- can take longer than the rest of loading, so this can arrive once we're already
+            -- underway.
+            ( setTimezone timezone model, Command.none )
 
         PressedShowLogin ->
             case model.loginStatus of

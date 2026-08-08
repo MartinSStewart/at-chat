@@ -20,7 +20,9 @@ port module Ports exposing
     , execCommand
     , fixCursorPosition
     , focusChanged
+    , getTimezone
     , gotDevicePixelRatio
+    , gotTimezone
     , hapticFeedback
     , loadServiceWorkerData
     , loadStartupData
@@ -91,6 +93,12 @@ port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 
 
 port haptic_feedback : Json.Encode.Value -> Cmd msg
+
+
+port get_timezone_to_js : Json.Encode.Value -> Cmd msg
+
+
+port got_timezone_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port load_startup_data_to_js : Json.Encode.Value -> Cmd msg
@@ -264,6 +272,49 @@ type alias StartupData =
       -- fractional value when the page is zoomed).
       devicePixelRatio : Float
     }
+
+
+{-| Asks js what the browser's timezone does over the years around now.
+
+`Time.here` only answers with the offset in effect right now, so a timestamp far enough away
+to be the other side of a daylight saving change would be read an hour out. js works the
+transitions out from `Intl` instead and sends them over, which is what makes the zone this
+builds able to answer for a date months away.
+
+-}
+getTimezone : Command FrontendOnly toMsg msg
+getTimezone =
+    Command.sendToJs "get_timezone_to_js" get_timezone_to_js Json.Encode.null
+
+
+gotTimezone : (Time.Zone -> value) -> Subscription FrontendOnly value
+gotTimezone msg =
+    Subscription.fromJs
+        "got_timezone_from_js"
+        got_timezone_from_js
+        (\json ->
+            Json.Decode.decodeValue decodeTimezone json |> Result.withDefault Time.utc |> msg
+        )
+
+
+{-| `Time.customZone` takes the eras newest first and reads `start` as whole minutes since the
+epoch, taking an era when `start` is strictly less than the minute being looked up. js sends
+them in that shape, so the last minute of the old offset is what each `start` names.
+-}
+decodeTimezone : Json.Decode.Decoder Time.Zone
+decodeTimezone =
+    Json.Decode.map2
+        Time.customZone
+        (Json.Decode.field "defaultOffset" Json.Decode.int)
+        (Json.Decode.field "eras"
+            (Json.Decode.list
+                (Json.Decode.map2
+                    (\start offset -> { start = start, offset = offset })
+                    (Json.Decode.field "start" Json.Decode.int)
+                    (Json.Decode.field "offset" Json.Decode.int)
+                )
+            )
+        )
 
 
 loadStartupData : Command FrontendOnly toMsg msg

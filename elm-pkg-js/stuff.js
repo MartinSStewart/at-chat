@@ -543,6 +543,75 @@ exports.init = async function init(app)
         });
     }
 
+    // How many minutes ahead of UTC `timeZone` is at the instant `ms`. Intl will format a
+    // moment into a named zone but won't say what the offset was, so the formatted parts are
+    // read back as if they were UTC and the difference is the offset.
+    function offsetMinutesAt(timeZone, ms) {
+        const dtf = new Intl.DateTimeFormat('en-US', {
+            timeZone, hourCycle: 'h23',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+        const p = {};
+        for (const { type, value } of dtf.formatToParts(ms)) p[type] = value;
+        const local = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+        return Math.round((local - Math.floor(ms / 60000) * 60000) / 60000);
+    }
+
+    // Every offset change `timeZone` makes between `fromMs` and `toMs`, in the shape
+    // Time.customZone wants: `start` in whole minutes since the epoch, newest era first, and
+    // each `start` naming the last minute of the offset before it (the lookup takes an era
+    // when its start is strictly less than the minute being asked about).
+    //
+    // There's no api that lists the transitions, so this samples across the range and bisects
+    // wherever two samples disagree. A fortnight between samples is short enough that no zone
+    // changes twice within one.
+    function zoneEras(timeZone, fromMs, toMs) {
+        const step = 14 * 24 * 60 * 60 * 1000;
+        const defaultOffset = offsetMinutesAt(timeZone, fromMs);
+        let previous = defaultOffset;
+        const eras = [];
+
+        for (let sample = fromMs + step; sample < toMs + step; sample += step) {
+            const end = Math.min(sample, toMs);
+            const offset = offsetMinutesAt(timeZone, end);
+            if (offset !== previous) {
+                let lastOld = end - step;
+                let firstNew = end;
+                while (firstNew - lastOld > 60000) {
+                    const middle = lastOld + Math.floor((firstNew - lastOld) / 120000) * 60000;
+                    if (middle === lastOld) break;
+                    if (offsetMinutesAt(timeZone, middle) === previous) lastOld = middle;
+                    else firstNew = middle;
+                }
+                eras.push({ start: Math.floor(lastOld / 60000), offset: offset });
+                previous = offset;
+            }
+        }
+        return { defaultOffset: defaultOffset, eras: eras.reverse() };
+    }
+
+    const timezoneYearsEitherSide = 10;
+
+    app.ports.get_timezone_to_js.subscribe(() => {
+        let zone;
+        try {
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const now = Date.now();
+            const year = 365.2425 * 24 * 60 * 60 * 1000;
+            zone = zoneEras(
+                timeZone,
+                now - timezoneYearsEitherSide * year,
+                now + timezoneYearsEitherSide * year
+            );
+        } catch (e) {
+            // Without Intl there's no way to know when the offset changes, so the one in effect
+            // now is all there is to go on.
+            zone = { defaultOffset: -new Date().getTimezoneOffset(), eras: [] };
+        }
+        app.ports.got_timezone_from_js.send(zone);
+    });
+
     app.ports.load_startup_data_to_js.subscribe((a) => {
         sendStartupData();
     });

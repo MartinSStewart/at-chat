@@ -857,6 +857,22 @@ expectLastMessageTimestamps expected data =
             )
 
 
+{-| Noon on the 15th of July 2026, read in `E2EHelper.testTimezone`, in minutes since the
+epoch. The clocks are forward an hour by then, so it's 11:00 UTC.
+-}
+summerNoon : Int
+summerNoon =
+    29735220
+
+
+{-| Noon on the 15th of December 2026, read in `E2EHelper.testTimezone`. The clocks have gone
+back by then, so it's 12:00 UTC and an hour later in the day than `summerNoon` would suggest.
+-}
+winterNoon : Int
+winterNoon =
+    29955600
+
+
 {-| Writing a time of day offers the times a clock shows it at, and the one that's picked is
 still a timestamp by the time the backend has it.
 -}
@@ -881,6 +897,26 @@ timeOfDaySuggestionTest config =
                 -- that picking them writes into the message.
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 06:00" ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 18:00" ])
+
+                -- The timezone this browser is in puts its clocks forward for the summer of 2026,
+                -- so noon in July is an hour earlier than noon in December. Reading both as
+                -- whatever offset happens to be in effect right now would put the summer one
+                -- an hour out, which is what the dropdown would do if the zone the browser
+                -- reports only carried a single offset.
+                , E2EHelper.timezoneEvent admin 100
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at July 15, 2026 at 12:00"
+
+                -- Enter picks a suggestion while the dropdown is open, so it has to be shut
+                -- before the message can be sent. Writing out a whole timestamp shuts it,
+                -- since the time of day on the end of one is already part of a timestamp.
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 30, end = 30 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ summerNoon ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at December 15, 2026 at 12:00"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 34, end = 34 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ winterNoon ])
                 ]
             )
         ]
