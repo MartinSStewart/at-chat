@@ -236,7 +236,7 @@ container less its border and padding. One drawn pixel per device pixel is the f
 too wide for that overflows rather than turning blurry.
 -}
 asciiFontSize : Int -> Float -> String -> String
-asciiFontSize containerWidth devicePixelRatio text =
+asciiFontSize containerWidth dpi text =
     let
         columns : Int
         columns =
@@ -251,16 +251,13 @@ asciiFontSize containerWidth devicePixelRatio text =
 
         roomInDevicePixels : Int
         roomInDevicePixels =
-            (containerWidth - 2 * (codeBorderWidth + codePaddingX))
-                |> toFloat
-                |> (*) devicePixelRatio
-                |> floor
+            (containerWidth - 2 * (codeBorderWidth + codePaddingX)) |> toFloat |> (*) dpi |> floor
 
         scale : Int
         scale =
-            min (400 // (18 * rows)) (roomInDevicePixels // (10 * columns)) |> clamp 1 3
+            min (400 // (18 * rows)) (roomInDevicePixels // (10 * columns)) |> clamp 1 (round (2 * dpi))
     in
-    String.fromFloat (18 * toFloat scale / devicePixelRatio) ++ "px"
+    String.fromFloat (18 * toFloat scale / dpi) ++ "px"
 
 
 normalTextFromNonempty : NonemptyString -> RichText userId
@@ -4087,7 +4084,14 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ [ CustomEmoji.view "1.4em " "0.2em" id config.customEmojis config.animationMode ]
+                    , currentList
+                        ++ [ case showLargeContent of
+                                ShowLargeContent _ ->
+                                    CustomEmoji.viewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
+
+                                NoLargeContent ->
+                                    CustomEmoji.view "1.4em" "0.2em" id config.customEmojis config.animationMode
+                           ]
                     )
 
                 BulletPoint _ items ->

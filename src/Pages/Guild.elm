@@ -477,7 +477,7 @@ unreadOverviewNotMobile local loggedIn model =
                         min
                             (round (dpi * toFloat containerWidth) // Coord.xRaw art.size)
                             (round (dpi * toFloat (Coord.yRaw model.windowSize - MyUi.channelHeaderHeight - 80)) // Coord.yRaw art.size)
-                            |> clamp 1 3
+                            |> clamp 1 (round (2 * dpi))
                 in
                 Ui.column
                     [ Ui.height Ui.fill
@@ -5678,7 +5678,7 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode re
                         , Ui.spacing 2
                         , Ui.background MyUi.background1
                         , Ui.paddingXY 4 0
-                        , Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-button")
+                        , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
                         , Ui.borderColor
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
@@ -5812,7 +5812,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                 )
     in
     Ui.row
-        [ Ui.htmlAttribute (Html.Attributes.class "reaction-emoji-popup")
+        [ Ui.htmlAttribute (Html.Attributes.class "emoji-popup")
         , Ui.width Ui.shrink
         , MyUi.htmlStyle "width" "max-content"
         , MyUi.htmlStyle "max-width" "400px"

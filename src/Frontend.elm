@@ -86,7 +86,7 @@ import Ui.Lazy
 import Untrusted
 import Url exposing (Url)
 import User exposing (FrontendUser)
-import UserAgent exposing (UserAgent)
+import UserAgent
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
@@ -343,7 +343,6 @@ init url key =
         , route = route
         , windowSize = Coord.xy 1920 1080
         , time = Nothing
-        , timezone = Time.utc
         , loginStatus = LoadingData
         , loginType = LoginWithEmail
         , startupData = Nothing
@@ -367,7 +366,6 @@ init url key =
 
             _ ->
                 Command.none
-        , Task.perform GotTimezone Time.here
         , Ports.loadStartupData
         ]
     , Audio.loadAudio LoadedPopSound "/pop.mp3"
@@ -386,8 +384,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper loading.timezone startupData.userAgent startupData.devicePixelRatio loginData loading
-                        |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper startupData loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -408,7 +405,7 @@ initLoadedFrontend loading clientId time startupData loginResult =
             , clientId = clientId
             , route = loading.route
             , time = time
-            , timezone = loading.timezone
+            , timezone = startupData.timezone
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
             , loginStatus = loginStatus
@@ -450,17 +447,15 @@ initLoadedFrontend loading clientId time startupData loginResult =
 
 
 loadedInitHelper :
-    Time.Zone
-    -> UserAgent
-    -> Float
+    Ports.StartupData
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
-loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
+loadedInitHelper startupData loginData loading =
     let
         local : LocalState
         local =
-            loginDataToLocalState userAgent timezone devicePixelRatio loginData
+            loginDataToLocalState startupData loginData
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -556,8 +551,8 @@ loadedInitHelper timezone userAgent devicePixelRatio loginData loading =
     )
 
 
-loginDataToLocalState : UserAgent -> Time.Zone -> Float -> LoginData -> LocalState
-loginDataToLocalState userAgent timezone devicePixelRatio loginData =
+loginDataToLocalState : Ports.StartupData -> LoginData -> LocalState
+loginDataToLocalState startupData loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -579,9 +574,9 @@ loginDataToLocalState userAgent timezone devicePixelRatio loginData =
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , discordUsers = loginData.discordUsers
-        , timezone = timezone
-        , userAgent = userAgent
-        , devicePixelRatio = devicePixelRatio
+        , timezone = startupData.timezone
+        , userAgent = startupData.userAgent
+        , devicePixelRatio = startupData.devicePixelRatio
         , stickers = loginData.stickers
         , customEmojis = loginData.customEmojis
         }
@@ -626,12 +621,16 @@ update _ msg model =
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = Coord.xy width height }, Command.none, Audio.cmdNone )
 
-                GotTimezone timezone ->
-                    ( Loading { loading | timezone = timezone }, Command.none, Audio.cmdNone )
-
-                GotStartupData startupData ->
+                GotStartupData (Ok startupData) ->
                     tryInitLoadedFrontend
                         { loading | startupData = Just startupData, time = Just startupData.loadStartupDataTime }
+
+                GotStartupData (Err error) ->
+                    let
+                        _ =
+                            Debug.log "GotStartupData failed!" error
+                    in
+                    ( model, Command.none, Audio.cmdNone )
 
                 LoadedPopSound result ->
                     ( Loading { loading | popSound = result }, Command.none, Audio.cmdNone )
@@ -744,10 +743,6 @@ updateLoaded msg model =
                     )
                 )
                 { model | windowSize = Coord.xy width height }
-
-        GotTimezone _ ->
-            -- We should only get the timezone while loading
-            ( model, Command.none )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -2929,9 +2924,18 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( setDevicePixelRatio startupData.devicePixelRatio { model | startupData = startupData }
-            , checkAppVersion False
-            )
+            case startupData of
+                Ok startupData2 ->
+                    ( setDevicePixelRatio startupData2.devicePixelRatio { model | startupData = startupData2 }
+                    , checkAppVersion False
+                    )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotStartupData failed! (after loading)" error
+                    in
+                    ( model, Command.none )
 
         GotDevicePixelRatio devicePixelRatio ->
             ( setDevicePixelRatio devicePixelRatio model, Command.none )
@@ -3568,6 +3572,30 @@ updateLoaded msg model =
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
 
+                MessageInput.TypedTabInCodeBlock range ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | editMessage =
+                                    SeqDict.update
+                                        ( guildOrDmId, threadRoute )
+                                        (Maybe.map
+                                            (\edit -> { edit | text = MessageInput.insertTab range edit.text })
+                                        )
+                                        loggedIn.editMessage
+                                , typedTextCounter = loggedIn.typedTextCounter + 1
+                              }
+                            , Ports.execCommand
+                                { htmlId = MessageMenu.editMessageTextInputId
+                                , commands = [ Ports.InsertText MessageInput.tabText range ]
+                                }
+                            )
+                        )
+                        model
+
+                MessageInput.IgnoredKeyPress ->
+                    ( model, Command.none )
+
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
@@ -3874,6 +3902,34 @@ updateLoaded msg model =
 
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
+
+                MessageInput.TypedTabInCodeBlock range ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | drafts =
+                                    SeqDict.update
+                                        ( guildOrDmId, threadRoute )
+                                        (Maybe.map
+                                            (\draft ->
+                                                MessageInput.insertTab range (String.Nonempty.toString draft)
+                                                    |> String.Nonempty.fromString
+                                                    |> Maybe.withDefault draft
+                                            )
+                                        )
+                                        loggedIn.drafts
+                                , typedTextCounter = loggedIn.typedTextCounter + 1
+                              }
+                            , Ports.execCommand
+                                { htmlId = Pages.Guild.channelTextInputId
+                                , commands = [ Ports.InsertText MessageInput.tabText range ]
+                                }
+                            )
+                        )
+                        model
+
+                MessageInput.IgnoredKeyPress ->
+                    ( model, Command.none )
 
         GotEmojiData result ->
             case result of
@@ -6716,12 +6772,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper
-                                        model.timezone
-                                        model.startupData.userAgent
-                                        model.startupData.devicePixelRatio
-                                        loginData
-                                        model
+                                    loadedInitHelper model.startupData loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -7455,13 +7506,7 @@ updateLoadedFromBackend msg model =
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState =
-                                    loginDataToLocalState
-                                        model.startupData.userAgent
-                                        model.timezone
-                                        model.startupData.devicePixelRatio
-                                        loginData
-                                        |> Local.init
+                                | localState = loginDataToLocalState model.startupData loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none

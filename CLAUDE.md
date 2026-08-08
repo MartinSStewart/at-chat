@@ -48,6 +48,21 @@ pass the binary path directly:
 npx --yes elm-test --compiler="$(realpath node_modules/.bin/lamdera)"
 ```
 
+In the sandboxed environments described above, that `elm-test` fallback doesn't work
+either: it can't see the vendored packages and fails with
+`Because there is no version of lamdera/codecs in 1.0.0 ...`. Run `elm-test-rs` against
+the populated cache instead:
+
+```
+python3 scripts/populate-elm-cache.py
+npx elm-test-rs --offline --compiler "$(realpath node_modules/.bin/lamdera)"
+```
+
+`--offline` stops elm-test-rs from contacting package.elm-lang.org, so everything it
+compiles has to already be in the cache. That includes `mpizenberg/elm-test-runner`,
+which isn't a dependency in elm.json — `populate-elm-cache.py` fetches it anyway (see
+`EXTRA_PACKAGES` in the script) so `--offline` works right after running it.
+
 ## Code style
 
 ### Prefer duplication over parameters when sharing code

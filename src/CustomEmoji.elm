@@ -8,6 +8,7 @@ module CustomEmoji exposing
     , idToString
     , view
     , viewHelper
+    , viewWithTooltip
     )
 
 import Coord exposing (Coord)
@@ -16,6 +17,7 @@ import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes
 import Id exposing (CustomEmojiId, Id)
+import MyUi
 import SeqDict exposing (SeqDict)
 import Sticker
 
@@ -78,6 +80,82 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                 ]
                 []
+
+
+{-| Same as `view` but hovering over the emoji reveals a popup containing a large
+version of the emoji and its name. This is the same idea as the popup shown when
+hovering over a reaction emoji, and shares the `emoji-popup` rules in `MyUi.css`
+that do the hovering.
+-}
+viewWithTooltip : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
+viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
+    case SeqDict.get customEmojiId customEmojis2 of
+        Just customEmoji ->
+            Html.span
+                [ Html.Attributes.class "emoji-popup-container"
+                , Html.Attributes.style "position" "relative"
+                , Html.Attributes.style "display" "inline-block"
+                ]
+                [ viewHelper emojiSize yOffset customEmoji animationMode
+                , tooltipView customEmoji animationMode
+                ]
+
+        Nothing ->
+            Html.div
+                [ Html.Attributes.style "width" emojiSize
+                , Html.Attributes.style "height" emojiSize
+                , Html.Attributes.style "display" "inline-block"
+                , Html.Attributes.style "background-color" "gray"
+                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
+                ]
+                []
+
+
+tooltipView : CustomEmojiData -> Sticker.AnimationMode -> Html msg
+tooltipView customEmoji animationMode =
+    Html.div
+        [ Html.Attributes.class "emoji-popup"
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "bottom" "calc(100% + 8px)"
+        , Html.Attributes.style "left" "50%"
+        , Html.Attributes.style "transform" "translateX(-50%)"
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "align-items" "center"
+        , Html.Attributes.style "gap" "8px"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "border-radius" "8px"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.border1)
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+        , Html.Attributes.style "box-shadow" "0 2px 8px rgba(0,0,0,0.3)"
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font1)
+        , Html.Attributes.style "font-size" "14px"
+        , Html.Attributes.style "font-weight" "700"
+        , Html.Attributes.style "line-height" "normal"
+        , Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "pointer-events" "none"
+
+        -- Same z-index elm-ui gives to `Ui.above`, which is what the reaction emoji popup uses
+        , Html.Attributes.style "z-index" "20"
+        ]
+        [ viewHelper "40px" "0" customEmoji animationMode
+        , Html.text (":" ++ emojiNameToString customEmoji.name ++ ":")
+        , tooltipArrow
+        ]
+
+
+tooltipArrow : Html msg
+tooltipArrow =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "top" "calc(100% - 1px)"
+        , Html.Attributes.style "left" "calc(50% - 8px)"
+        , Html.Attributes.style "width" "0"
+        , Html.Attributes.style "height" "0"
+        , Html.Attributes.style "border-left" "8px solid transparent"
+        , Html.Attributes.style "border-right" "8px solid transparent"
+        , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
+        ]
+        []
 
 
 viewHelper : String -> String -> { a | url : CustomEmojiUrl, isAnimated : Bool } -> Sticker.AnimationMode -> Html msg

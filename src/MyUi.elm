@@ -1174,14 +1174,16 @@ body {
   outline-color: rgb(96,165,250);
   background-color: rgba(96,165,250,0.3);
 }
-.reaction-emoji-popup {
+/* Hovering an .emoji-popup-container fades in the .emoji-popup inside it after a
+   short delay. Used by the reaction emoji popup and by the custom emoji tooltip. */
+.emoji-popup {
   opacity: 0;
   transition: opacity 0.05s ease 0s;
 }
-.reaction-emoji-button:hover .reaction-emoji-popup {
-  animation: reaction-emoji-popup-fade-in 0.2s ease 0.5s forwards;
+.emoji-popup-container:hover .emoji-popup {
+  animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
-@keyframes reaction-emoji-popup-fade-in {
+@keyframes emoji-popup-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }

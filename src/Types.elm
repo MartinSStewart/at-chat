@@ -149,7 +149,6 @@ type alias LoadingFrontend =
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
     , loginType : LoginType
-    , timezone : Time.Zone
     , startupData : Maybe Ports.StartupData
     , publicGoMatch : PublicGoMatch
     , popSound : Result Audio.LoadError Audio.Source
@@ -461,7 +460,6 @@ type FrontendMsg_
     | UrlChanged Url
     | GotTime Time.Posix
     | GotWindowSize Int Int
-    | GotTimezone Time.Zone
     | LoginFormMsg LoginForm.Msg
     | RecoveryLoginMsg RecoveryLogin.Msg
     | PressedShowLogin
@@ -552,7 +550,7 @@ type FrontendMsg_
     | SelectedEmailNotifications EmailNotifications
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
-    | GotStartupData Ports.StartupData
+    | GotStartupData (Result String Ports.StartupData)
     | GotDevicePixelRatio Float
     | PressedCloseImageInfo
     | PressedMemberListBack

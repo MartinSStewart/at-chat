@@ -52,6 +52,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Shadow
 
 
 {-| OpaqueVariants
@@ -206,7 +207,18 @@ categoryToEmojiString skinTone category =
             Ui.text "S"
 
         CustomEmojiCategory ->
-            Ui.text "C"
+            Ui.el
+                [ Ui.el
+                    [ Ui.move { x = 10, y = 4, z = 0 }
+                    , Ui.Font.color MyUi.white
+                    , Ui.Font.bold
+                    , Ui.Shadow.font { offset = ( 0, 0 ), blur = 2, color = MyUi.black }
+                    ]
+                    (Ui.text "+")
+                    |> Ui.inFront
+                , Ui.centerX
+                ]
+                (Ui.text "🙂")
 
 
 allEmojiCategories : List EmojiCategory
@@ -457,6 +469,11 @@ emojiWidth =
     40
 
 
+stickerWidth : number
+stickerWidth =
+    emojiWidth * 2
+
+
 emojiHeight : number
 emojiHeight =
     40
@@ -488,7 +505,7 @@ selectorHeight =
 -}
 scrollViewportHeight : number
 scrollViewportHeight =
-    selectorHeight - searchInputHeight - previewHeight
+    selectorHeight - searchInputHeight
 
 
 heart : UnicodeEmoji
@@ -957,6 +974,7 @@ emojiCategoryContainer title content =
             , Ui.height (Ui.px categoryTitleHeight)
             , Ui.contentCenterY
             , Ui.Font.color MyUi.font3
+            , Ui.paddingXY 8 0
             ]
             (Ui.text title)
         , Ui.row [ Ui.wrap ] content
@@ -1238,9 +1256,8 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                     [ categoryColumn userData.skinTone selectedCategory offsets
                     , Ui.column
-                        [ Ui.width (Ui.px (columns * emojiWidth)) ]
-                        (List.map Tuple.second emojis)
-                        |> Ui.el
+                        [ Ui.height Ui.fill, emojiHoverPreview stickersData customEmojisData userData emojiData2 model |> Ui.inFront ]
+                        [ Ui.el
                             [ Ui.background MyUi.background3
                             , Ui.scrollable
                             , Ui.clipX
@@ -1249,60 +1266,90 @@ selector scrollbarWidth width model userData emojiData availableCustomEmojis cus
                             , Ui.id (Dom.idToString scrollContainerId)
                             , Ui.htmlAttribute (Html.Events.on "scroll" (decodeScroll model.category offsets))
                             ]
+                            (Ui.column
+                                [ Ui.width (Ui.px (columns * emojiWidth))
+                                , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = stickerWidth }
+                                ]
+                                (List.map Tuple.second emojis)
+                            )
+                        ]
                     ]
-                , Ui.row
-                    [ Ui.height (Ui.px previewHeight)
-                    , Ui.contentCenterY
-                    , Ui.spacing 8
-                    , MyUi.noShrinking
-                    , Ui.paddingWith { left = categoryColumnWidth + 8, top = 0, bottom = 0, right = 8 }
-                    ]
-                    (case Maybe.map .emoji model.emojiHovered of
-                        Just (EmojiOrSticker_UnicodeEmoji emoji) ->
-                            Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
-                                :: (case SeqDict.get emoji emojiData2.emojis of
-                                        Just emoji2 ->
-                                            List.map
-                                                (\name ->
-                                                    Ui.el
-                                                        [ Ui.Font.size 16, Ui.width Ui.shrink ]
-                                                        (Ui.text (":" ++ name ++ ":"))
-                                                )
-                                                emoji2.shortNames
-
-                                        Nothing ->
-                                            []
-                                   )
-
-                        Just (EmojiOrSticker_Sticker stickerId) ->
-                            case SeqDict.get stickerId stickersData of
-                                Just sticker ->
-                                    [ Ui.el
-                                        [ Ui.Font.size 16, Ui.width Ui.shrink ]
-                                        (Ui.text (":" ++ sticker.name ++ ":"))
-                                    ]
-
-                                Nothing ->
-                                    []
-
-                        Just (EmojiOrSticker_CustomEmoji customEmojiId) ->
-                            case SeqDict.get customEmojiId customEmojisData of
-                                Just sticker ->
-                                    [ Ui.el
-                                        [ Ui.Font.size 16, Ui.width Ui.shrink ]
-                                        (Ui.text (":" ++ CustomEmoji.emojiNameToString sticker.name ++ ":"))
-                                    ]
-
-                                Nothing ->
-                                    []
-
-                        Nothing ->
-                            []
-                    )
                 ]
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"
+
+
+emojiHoverPreview :
+    SeqDict (Id StickerId) StickerData
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> EmojiConfig
+    -> CachedEmojiData
+    -> Model
+    -> Element msg
+emojiHoverPreview stickersData customEmojisData userData emojiData2 model =
+    Ui.row
+        [ Ui.contentCenterY
+        , Ui.spacing 8
+        , Ui.alignBottom
+        , Ui.background MyUi.background2
+        , Ui.paddingXY 4 0
+        ]
+        (case Maybe.map .emoji model.emojiHovered of
+            Just (EmojiOrSticker_UnicodeEmoji emoji) ->
+                Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
+                    :: (case SeqDict.get emoji emojiData2.emojis of
+                            Just emoji2 ->
+                                List.map
+                                    (\name ->
+                                        Ui.el
+                                            [ Ui.Font.size 16, Ui.width Ui.shrink ]
+                                            (Ui.text (":" ++ name ++ ":"))
+                                    )
+                                    emoji2.shortNames
+
+                            Nothing ->
+                                []
+                       )
+
+            Just (EmojiOrSticker_Sticker stickerId) ->
+                case SeqDict.get stickerId stickersData of
+                    Just sticker ->
+                        [ Sticker.view
+                            (String.fromInt stickerWidth ++ "px")
+                            stickerId
+                            stickersData
+                            Sticker.LoopForever
+                            |> Ui.html
+                        , Ui.el
+                            [ Ui.Font.size 16, Ui.width Ui.shrink ]
+                            (Ui.text (":" ++ sticker.name ++ ":"))
+                        ]
+
+                    Nothing ->
+                        []
+
+            Just (EmojiOrSticker_CustomEmoji customEmojiId) ->
+                case SeqDict.get customEmojiId customEmojisData of
+                    Just sticker ->
+                        [ CustomEmoji.view
+                            (String.fromInt emojiWidth ++ "px")
+                            "0"
+                            customEmojiId
+                            customEmojisData
+                            Sticker.LoopForever
+                            |> Ui.html
+                        , Ui.el
+                            [ Ui.Font.size 16, Ui.width Ui.shrink ]
+                            (Ui.text (":" ++ CustomEmoji.emojiNameToString sticker.name ++ ":"))
+                        ]
+
+                    Nothing ->
+                        []
+
+            Nothing ->
+                []
+        )
 
 
 emojiWithSkinTone : Maybe SkinTone -> UnicodeEmoji -> CachedEmojiData -> String

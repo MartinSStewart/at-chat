@@ -1,5 +1,6 @@
 module E2EMisc exposing
     ( channelSearchTest
+    , codeBlockInputTest
     , dmThreadsTest
     , emojiSuggestionTest
     , exportChannelTest
@@ -857,6 +858,22 @@ expectLastMessageTimestamps expected data =
             )
 
 
+{-| Noon on the 15th of July 2026, read in `E2EHelper.testTimezone`, in minutes since the
+epoch. The clocks are forward an hour by then, so it's 11:00 UTC.
+-}
+summerNoon : Int
+summerNoon =
+    29735220
+
+
+{-| Noon on the 15th of December 2026, read in `E2EHelper.testTimezone`. The clocks have gone
+back by then, so it's 12:00 UTC and an hour later in the day than `summerNoon` would suggest.
+-}
+winterNoon : Int
+winterNoon =
+    29955600
+
+
 {-| Writing a time of day offers the times a clock shows it at, and the one that's picked is
 still a timestamp by the time the backend has it.
 -}
@@ -881,6 +898,19 @@ timeOfDaySuggestionTest config =
                 -- that picking them writes into the message.
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 06:00" ])
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "January 2, 1970 at 18:00" ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at July 15, 2026 at 12:00"
+
+                -- Enter picks a suggestion while the dropdown is open, so it has to be shut
+                -- before the message can be sent. Writing out a whole timestamp shuts it,
+                -- since the time of day on the end of one is already part of a timestamp.
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 30, end = 30 }
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Add a timestamp" ])
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ summerNoon ])
+                , admin.input 100 Pages.Guild.channelTextInputId "Meet at December 15, 2026 at 12:00"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 34, end = 34 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , T.checkState 100 (expectLastMessageTimestamps [ winterNoon ])
                 ]
             )
         ]
@@ -1092,6 +1122,87 @@ emojiSuggestionTest config =
                 , admin.input 100 Pages.Guild.channelTextInputId "Party 🎉"
                 , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "🎉" ])
+                ]
+            )
+        ]
+
+
+{-| Checks what's been written into the channel message input so far.
+-}
+checkDraft : Maybe String -> FrontendModel -> Result String ()
+checkDraft expected model =
+    let
+        draft : Maybe String
+        draft =
+            case Audio.userModel model of
+                Types.Loaded loaded ->
+                    case loaded.loginStatus of
+                        Types.LoggedIn loggedIn ->
+                            SeqDict.values loggedIn.drafts
+                                |> List.head
+                                |> Maybe.map String.Nonempty.toString
+
+                        Types.NotLoggedIn _ ->
+                            Nothing
+
+                Types.Loading _ ->
+                    Nothing
+    in
+    if draft == expected then
+        Ok ()
+
+    else
+        Err
+            ("Expected the message input to contain "
+                ++ Maybe.withDefault "nothing" expected
+                ++ " but it contained "
+                ++ Maybe.withDefault "nothing" draft
+            )
+
+
+{-| While the cursor is inside a \`\`\` code block, enter writes a line break instead of sending the
+message and tab writes two spaces instead of moving the focus.
+-}
+codeBlockInputTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+codeBlockInputTest config =
+    E2EHelper.startTest
+        "Enter and tab behave differently inside a code block"
+        E2EHelper.startTime
+        config
+        [ E2EHelper.connectTwoUsersAndJoinNewGuild
+            E2EHelper.desktopWindow
+            (\admin _ ->
+                [ E2EHelper.focusEvent admin 1000 (Just Pages.Guild.channelTextInputId) (Just { start = 0, end = 0 })
+                , admin.click 100 Pages.Guild.channelTextInputId
+
+                -- The code block hasn't been closed yet so enter is left to the textarea to
+                -- handle (which writes a line break) rather than sending the message.
+                , admin.input 100 Pages.Guild.channelTextInputId "```"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 3, end = 3 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkModel 100 (checkDraft (Just "```"))
+
+                -- Tab writes two spaces. Normally js is what puts them in the text input but
+                -- these tests don't run js, so only the model is checked here.
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
+                , admin.checkModel 100 (checkDraft (Just "```  "))
+
+                -- Once the code block is closed, the cursor is outside of it again and enter
+                -- sends the message.
+                , admin.input 100 Pages.Guild.channelTextInputId "```\nlet x = 1\n```"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 17, end = 17 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                , admin.checkModel 100 (checkDraft Nothing)
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "let x = 1" ])
+
+                -- Tab is only special inside a code block. Everywhere else it's left alone so
+                -- that it still moves the focus.
+                , admin.input 100 Pages.Guild.channelTextInputId "no code block"
+                , E2EHelper.selectionEvent admin 100 Pages.Guild.channelTextInputId { start = 13, end = 13 }
+                , admin.keyDown 100 Pages.Guild.channelTextInputId "Tab" []
+                , admin.checkModel 100 (checkDraft (Just "no code block"))
                 ]
             )
         ]

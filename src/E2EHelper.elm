@@ -198,6 +198,33 @@ startupDataJsonWithInset time userAgent safeAreaInsetTop isPwa =
         , ( "notificationPermission", Json.Encode.string "denied" )
         , ( "safeAreaInsetTop", Json.Encode.int safeAreaInsetTop )
         , ( "devicePixelRatio", Json.Encode.float 2 )
+        , ( "timezone", testTimezone )
+        ]
+
+
+{-| The timezone tests run in. It sits on UTC and puts its clocks forward an hour for the
+summer of 2026, the way the UK does, so a timestamp either side of one of those changes lands
+on a different moment even though a clock reads the same time on both.
+
+Tests that don't care about any of this run at the start of 1970, which is before the first of
+these changes, so what they see is plain UTC.
+
+-}
+testTimezone : Json.Encode.Value
+testTimezone =
+    Json.Encode.object
+        [ ( "defaultOffset", Json.Encode.int 0 )
+        , ( "eras"
+          , Json.Encode.list
+                (\( start, offset ) ->
+                    Json.Encode.object
+                        [ ( "start", Json.Encode.int start ), ( "offset", Json.Encode.int offset ) ]
+                )
+                -- Newest first, which is the order Time.customZone reads them in.
+                [ ( 29881500, 0 ) -- 2026-10-25 01:00 UTC, clocks go back
+                , ( 29579100, 60 ) -- 2026-03-29 01:00 UTC, clocks go forward
+                ]
+          )
         ]
 
 

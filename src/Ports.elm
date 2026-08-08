@@ -51,6 +51,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
+import Json.Decode.Extra
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
@@ -263,7 +264,28 @@ type alias StartupData =
     , -- How many device pixels one CSS pixel is drawn with (2 or 3 on high DPI screens, and any
       -- fractional value when the page is zoomed).
       devicePixelRatio : Float
+    , timezone : Time.Zone
     }
+
+
+{-| `Time.customZone` takes the eras newest first and reads `start` as whole minutes since the
+epoch, taking an era when `start` is strictly less than the minute being looked up. js sends
+them in that shape, so the last minute of the old offset is what each `start` names.
+-}
+decodeTimezone : Json.Decode.Decoder Time.Zone
+decodeTimezone =
+    Json.Decode.map2
+        Time.customZone
+        (Json.Decode.field "defaultOffset" Json.Decode.int)
+        (Json.Decode.field "eras"
+            (Json.Decode.list
+                (Json.Decode.map2
+                    (\start offset -> { start = start, offset = offset })
+                    (Json.Decode.field "start" Json.Decode.int)
+                    (Json.Decode.field "offset" Json.Decode.int)
+                )
+            )
+        )
 
 
 loadStartupData : Command FrontendOnly toMsg msg
@@ -271,46 +293,40 @@ loadStartupData =
     Command.sendToJs "load_startup_data_to_js" load_startup_data_to_js Json.Encode.null
 
 
-startupDataSub : (StartupData -> value) -> Subscription FrontendOnly value
+startupDataSub : (Result String StartupData -> value) -> Subscription FrontendOnly value
 startupDataSub msg =
     Subscription.fromJs
         "load_startup_data_from_js"
         load_startup_data_from_js
-        (\json ->
-            Json.Decode.decodeValue decodeStartupData json
-                |> Result.withDefault
-                    { timeOrigin = Time.millisToPosix 0
-                    , loadStartupDataTime = Time.millisToPosix 0
-                    , userAgent = UserAgent.init
-                    , scrollbarWidth = 0
-                    , pwaStatus = BrowserView
-                    , notificationPermission = NotAsked
-                    , safeAreaInsetTop = 0
-                    , devicePixelRatio = 1
-                    }
-                |> msg
-        )
+        (\json -> Json.Decode.decodeValue decodeStartupData json |> Result.mapError Json.Decode.errorToString |> msg)
 
 
 decodeStartupData : Json.Decode.Decoder StartupData
 decodeStartupData =
-    Json.Decode.map8 StartupData
-        (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
-        (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
-        (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
-        (Json.Decode.field "scrollbarWidth" Json.Decode.int)
-        (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
-        (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
-        (Json.Decode.oneOf
-            [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
-            , Json.Decode.succeed 0
-            ]
-        )
-        (Json.Decode.oneOf
-            [ Json.Decode.field "devicePixelRatio" Json.Decode.float
-            , Json.Decode.succeed 1
-            ]
-        )
+    Json.Decode.succeed StartupData
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "timeOrigin" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "loadStartupDataTime" (Json.Decode.map (\ms -> Time.millisToPosix (round ms)) Json.Decode.float))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "userAgent" (Json.Decode.map UserAgent.parseUserAgent Json.Decode.string))
+        |> Json.Decode.Extra.andMap (Json.Decode.field "scrollbarWidth" Json.Decode.int)
+        |> Json.Decode.Extra.andMap (Json.Decode.field "isPwa" (Json.Decode.map pwaStatusFromBool Json.Decode.bool))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.field "notificationPermission" (Json.Decode.map notificationPermissionFromString Json.Decode.string))
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.oneOf
+                [ Json.Decode.field "safeAreaInsetTop" (Json.Decode.map round Json.Decode.float)
+                , Json.Decode.succeed 0
+                ]
+            )
+        |> Json.Decode.Extra.andMap
+            (Json.Decode.oneOf
+                [ Json.Decode.field "devicePixelRatio" Json.Decode.float
+                , Json.Decode.succeed 1
+                ]
+            )
+        |> Json.Decode.Extra.andMap (Json.Decode.field "timezone" decodeTimezone)
 
 
 pwaStatusFromBool : Bool -> PwaStatus

@@ -2211,9 +2211,6 @@ isPressMsg msg =
         EditMessage_GotFileHashName _ _ _ _ ->
             False
 
-        GotTimezone _ ->
-            False
-
         FileUploadProgress _ _ _ ->
             False
 
