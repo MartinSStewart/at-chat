@@ -51,12 +51,13 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Duration
+import Duration exposing (Duration, Seconds)
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Task exposing (Task)
+import Effect.Time as Time
 import Env
 import FileName exposing (FileName)
 import Icons
@@ -64,6 +65,7 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
+import Quantity exposing (Quantity, Rate)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -239,6 +241,7 @@ unknownContentType =
 type alias UploadResponse =
     { fileHash : FileHash
     , imageSize : Maybe ImageMetadata
+    , videoMetadata : Maybe VideoMetadata
     }
 
 
@@ -247,6 +250,7 @@ uploadResponseCodec =
     Codec.object UploadResponse
         |> Codec.field "hash" .fileHash fileHashCodec
         |> Codec.field "image_metadata" .imageSize (Codec.nullable imageMetadataCodec)
+        |> Codec.field "video_metadata" .videoMetadata (Codec.nullable videoMetadataCodec)
         |> Codec.buildObject
 
 
@@ -303,6 +307,53 @@ type alias ImageMetadata =
     , software : Maybe String
     , userComment : Maybe String
     }
+
+
+type VideoFrames
+    = VideoFrames Never
+
+
+type alias VideoMetadata =
+    { -- The size the video is displayed at, with any rotation already applied.
+      videoSize : Coord CssPixels
+    , frames : Maybe (Quantity Int VideoFrames)
+    , createdAt : Maybe Time.Posix
+    , orientation : Orientation
+    , frameRate : Maybe (Quantity Float (Rate VideoFrames Seconds))
+    , codec : Maybe String
+    , title : Maybe String
+    }
+
+
+videoMetadataCodec : Codec VideoMetadata
+videoMetadataCodec =
+    Codec.object VideoMetadata
+        |> Codec.field "video_size" .videoSize (Codec.tuple CodecExtra.quantityInt CodecExtra.quantityInt)
+        |> Codec.field "frames" .frames (Codec.nullable CodecExtra.quantityInt)
+        |> Codec.field "created_at_ms" .createdAt (Codec.nullable CodecExtra.time)
+        |> Codec.field "orientation" .orientation orientationCodec
+        |> Codec.field "frame_rate" .frameRate (Codec.nullable CodecExtra.quantityFloat)
+        |> Codec.field "codec" .codec (Codec.nullable Codec.string)
+        |> Codec.field "title" .title (Codec.nullable Codec.string)
+        |> Codec.buildObject
+
+
+
+--pub struct VideoMetadata {
+--    /// The size the video is displayed at, with any rotation already applied.
+--    pub video_size: (u32, u32),
+--    pub duration_ms: Option<u64>,
+--    /// When the file says it was recorded, as milliseconds since the Unix epoch.
+--    pub created_at_ms: Option<i64>,
+--    /// A quarter turn or half turn the video is displayed with, in degrees. Only
+--    /// `MP4` stores this; it is already applied to `video_size`.
+--    pub rotation: Option<u16>,
+--    pub frame_rate: Option<f32>,
+--    /// How the container names the video codec. `MP4` files use the RFC 6381
+--    /// spelling such as `avc1.42E01E`, Matroska files their own such as `V_VP9`.
+--    pub codec: Option<String>,
+--    pub title: Option<String>,
+--}
 
 
 type Orientation

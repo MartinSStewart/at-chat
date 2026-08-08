@@ -1,7 +1,8 @@
-module CodecExtra exposing (htmlId, quantityInt, url)
+module CodecExtra exposing (htmlId, quantityFloat, quantityInt, time, url)
 
 import Codec exposing (Codec)
 import Effect.Browser.Dom as Dom
+import Effect.Time as Time
 import Quantity exposing (Quantity)
 import Url exposing (Url)
 
@@ -9,6 +10,11 @@ import Url exposing (Url)
 quantityInt : Codec (Quantity Int units)
 quantityInt =
     Codec.map Quantity.unsafe Quantity.unwrap Codec.int
+
+
+quantityFloat : Codec (Quantity Float units)
+quantityFloat =
+    Codec.map Quantity.unsafe Quantity.unwrap Codec.float
 
 
 htmlId : Codec Dom.HtmlId
@@ -29,3 +35,8 @@ url =
         )
         Url.toString
         Codec.string
+
+
+time : Codec Time.Posix
+time =
+    Codec.map Time.millisToPosix Time.posixToMillis Codec.int
