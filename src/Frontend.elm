@@ -86,7 +86,7 @@ import Ui.Lazy
 import Untrusted
 import Url exposing (Url)
 import User exposing (FrontendUser)
-import UserAgent exposing (UserAgent)
+import UserAgent
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
@@ -127,36 +127,6 @@ app_ =
         , audio = FrontendExtra.audio
         , audioPort = { toJS = Ports.audioPortToJS, fromJS = Ports.audioPortFromJS }
         }
-
-
-{-| The timezone is kept on the local user as well, the same way the device pixel ratio is,
-so that a message can be drawn without passing it in separately.
--}
-setTimezone : Time.Zone -> LoadedFrontend -> LoadedFrontend
-setTimezone timezone model =
-    { model
-        | timezone = timezone
-        , loginStatus =
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    LoggedIn
-                        { loggedIn
-                            | localState =
-                                Local.mapModel
-                                    (\local ->
-                                        let
-                                            localUser : User.LocalUser
-                                            localUser =
-                                                local.localUser
-                                        in
-                                        { local | localUser = { localUser | timezone = timezone } }
-                                    )
-                                    loggedIn.localState
-                        }
-
-                NotLoggedIn _ ->
-                    model.loginStatus
-    }
 
 
 {-| LocalUser keeps a copy of the device pixel ratio so that ascii art can pick a font size
@@ -651,9 +621,16 @@ update _ msg model =
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = Coord.xy width height }, Command.none, Audio.cmdNone )
 
-                GotStartupData startupData ->
+                GotStartupData (Ok startupData) ->
                     tryInitLoadedFrontend
                         { loading | startupData = Just startupData, time = Just startupData.loadStartupDataTime }
+
+                GotStartupData (Err error) ->
+                    let
+                        _ =
+                            Debug.log "GotStartupData failed!" error
+                    in
+                    ( model, Command.none, Audio.cmdNone )
 
                 LoadedPopSound result ->
                     ( Loading { loading | popSound = result }, Command.none, Audio.cmdNone )
@@ -2947,9 +2924,18 @@ updateLoaded msg model =
                 model
 
         GotStartupData startupData ->
-            ( setDevicePixelRatio startupData.devicePixelRatio { model | startupData = startupData }
-            , checkAppVersion False
-            )
+            case startupData of
+                Ok startupData2 ->
+                    ( setDevicePixelRatio startupData2.devicePixelRatio { model | startupData = startupData2 }
+                    , checkAppVersion False
+                    )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotStartupData failed! (after loading)" error
+                    in
+                    ( model, Command.none )
 
         GotDevicePixelRatio devicePixelRatio ->
             ( setDevicePixelRatio devicePixelRatio model, Command.none )

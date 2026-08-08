@@ -293,26 +293,12 @@ loadStartupData =
     Command.sendToJs "load_startup_data_to_js" load_startup_data_to_js Json.Encode.null
 
 
-startupDataSub : (StartupData -> value) -> Subscription FrontendOnly value
+startupDataSub : (Result String StartupData -> value) -> Subscription FrontendOnly value
 startupDataSub msg =
     Subscription.fromJs
         "load_startup_data_from_js"
         load_startup_data_from_js
-        (\json ->
-            Json.Decode.decodeValue decodeStartupData json
-                |> Result.withDefault
-                    { timeOrigin = Time.millisToPosix 0
-                    , loadStartupDataTime = Time.millisToPosix 0
-                    , userAgent = UserAgent.init
-                    , scrollbarWidth = 0
-                    , pwaStatus = BrowserView
-                    , notificationPermission = NotAsked
-                    , safeAreaInsetTop = 0
-                    , devicePixelRatio = 1
-                    , timezone = Time.utc
-                    }
-                |> msg
-        )
+        (\json -> Json.Decode.decodeValue decodeStartupData json |> Result.mapError Json.Decode.errorToString |> msg)
 
 
 decodeStartupData : Json.Decode.Decoder StartupData
@@ -340,7 +326,7 @@ decodeStartupData =
                 , Json.Decode.succeed 1
                 ]
             )
-        |> Json.Decode.Extra.andMap decodeTimezone
+        |> Json.Decode.Extra.andMap (Json.Decode.field "timezone" decodeTimezone)
 
 
 pwaStatusFromBool : Bool -> PwaStatus

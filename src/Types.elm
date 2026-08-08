@@ -550,7 +550,7 @@ type FrontendMsg_
     | SelectedEmailNotifications EmailNotifications
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
-    | GotStartupData Ports.StartupData
+    | GotStartupData (Result String Ports.StartupData)
     | GotDevicePixelRatio Float
     | PressedCloseImageInfo
     | PressedMemberListBack
