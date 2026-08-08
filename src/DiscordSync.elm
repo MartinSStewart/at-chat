@@ -4,6 +4,7 @@ module DiscordSync exposing
     , attachmentsToFileData
     , backendSessionIdHash
     , discordUserWebsocketMsg
+    , getForumChannelReload
     , getManyMessages
     , getThreadsForMessages
     , handleCreateMessage
@@ -3194,6 +3195,217 @@ getThreadsForMessages secretKey authentication messages =
         |> Task.sequence
 
 
+{-| Loads everything in a guild forum channel.
+
+A forum holds no messages of its own, so asking it for messages always comes back empty.
+Every post in a forum is a thread instead, and the post's text is the first message inside
+that thread rather than a message in the forum, so the only way to find out which posts
+exist is to ask the forum for its threads.
+
+Discord announces a thread that was started without a message by posting a `ThreadCreated`
+message named after the thread into the channel, and that message is what the thread hangs
+off of here. Forum posts get the same treatment: each post becomes a `ThreadCreated`
+message carrying the post's title, and the post's text and replies become the messages of
+the thread hanging off of it.
+
+A post we can't load the messages of is left out, the same as a thread we can't load when
+a normal channel is reloaded.
+
+-}
+getForumChannelReload :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly Discord.HttpError LocalState.DiscordChannelReload
+getForumChannelReload secretKey authentication forumId =
+    getForumPosts secretKey authentication forumId
+        |> Task.andThen
+            (\posts ->
+                List.map
+                    (\post ->
+                        getManyMessages
+                            secretKey
+                            authentication
+                            { channelId = post.threadId, limit = reloadThreadMaxMessages }
+                            |> Task.map
+                                (\messages ->
+                                    -- Messages come back newest first, so the post's text is the last one
+                                    case List.Extra.last messages of
+                                        Just firstMessage ->
+                                            Just { post = post, firstMessage = firstMessage, messages = messages }
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                            |> Task.onError (\_ -> Task.succeed Nothing)
+                    )
+                    posts
+                    |> Task.sequence
+            )
+        |> Task.map
+            (\loadedPosts ->
+                let
+                    -- Newest post first, to match the order Discord returns messages in
+                    loadedPosts2 : List { post : ForumPost, firstMessage : Discord.Message, messages : List Discord.Message }
+                    loadedPosts2 =
+                        List.filterMap identity loadedPosts
+                            |> List.sortBy
+                                (\loadedPost -> -(Time.posixToMillis loadedPost.firstMessage.timestamp))
+                in
+                { messages =
+                    List.map
+                        (\loadedPost -> forumPostTitleMessage loadedPost.post loadedPost.firstMessage)
+                        loadedPosts2
+                , threads =
+                    List.map
+                        (\loadedPost ->
+                            { threadId = loadedPost.post.threadId, messages = loadedPost.messages }
+                        )
+                        loadedPosts2
+                }
+            )
+
+
+type alias ForumPost =
+    { threadId : Discord.Id Discord.ChannelId, name : String }
+
+
+{-| The `ThreadCreated` message that stands in for a forum post. Discord doesn't send one
+for forum posts, so we make it out of the post's first message, which is the message that
+carries the author and the time the post was created.
+
+The title is all this message shows. The post's text stays in the thread, so the
+attachments, embeds, stickers and mentions that belong to it are dropped here to avoid
+showing them twice.
+
+-}
+forumPostTitleMessage : ForumPost -> Discord.Message -> Discord.Message
+forumPostTitleMessage post firstMessage =
+    { firstMessage
+        | id = Discord.idToUInt64 post.threadId |> Discord.idFromUInt64
+        , content = post.name
+        , type_ = Discord.ThreadCreated
+        , messageReference =
+            Included { messageId = Missing, channelId = Included post.threadId, guildId = Missing }
+
+        -- The flags aren't ours to make up. Nothing needs them, since the thread this
+        -- announces is loaded by getForumChannelReload rather than found via the
+        -- has-thread flag the way a normal channel's threads are.
+        , flags = Missing
+        , editedTimestamp = Nothing
+        , pinned = False
+        , mentionEveryone = False
+        , mentionRoles = []
+        , attachments = []
+        , embeds = Included []
+        , reactions = Included []
+        , referencedMessage = Discord.NoReference
+        , stickerItems = Included []
+        , stickers = Included []
+        , messageSnapshots = Included []
+    }
+
+
+{-| The posts of a guild forum, newest first.
+
+Searching a forum's threads is the only way to list its posts with a user token. Listing a
+guild's active threads is bot-only, and the archived thread endpoints leave out the posts
+that haven't been archived yet. Forum posts are archived after a few days of inactivity by
+default, so most of the posts in a busy forum are archived and both have to be asked for.
+
+-}
+getForumPosts :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> Task BackendOnly Discord.HttpError (List ForumPost)
+getForumPosts secretKey authentication forumId =
+    Task.map2
+        (\activePosts archivedPosts ->
+            activePosts
+                ++ archivedPosts
+                |> List.Extra.uniqueBy (\post -> Discord.idToString post.threadId)
+                |> List.take reloadForumMaxPosts
+        )
+        (getForumPostsHelper secretKey authentication forumId { archived = False } 0 [])
+        (getForumPostsHelper secretKey authentication forumId { archived = True } 0 [])
+
+
+getForumPostsHelper :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> Discord.Id Discord.ChannelId
+    -> { archived : Bool }
+    -> Int
+    -> List ForumPost
+    -> Task BackendOnly Discord.HttpError (List ForumPost)
+getForumPostsHelper secretKey authentication forumId { archived } offset postsSoFar =
+    Discord.searchThreadsPayload
+        authentication
+        { channelId = forumId
+        , name = Nothing
+        , slop = Nothing
+        , tag = Nothing
+        , tagSetting = Nothing
+        , archived = Just archived
+        , sortBy = Just Discord.CreationTime
+        , sortOrder = Just Discord.Descending
+        , limit = Just forumPostsPerRequest
+        , offset = Just offset
+        , maxId = Nothing
+        , minId = Nothing
+        }
+        |> http secretKey
+        |> retryWhenRateLimited
+        |> Task.andThen
+            (\result ->
+                let
+                    postsSoFar2 : List ForumPost
+                    postsSoFar2 =
+                        postsSoFar
+                            ++ List.filterMap
+                                (\thread ->
+                                    case thread.name of
+                                        Included name ->
+                                            Just { threadId = thread.id, name = name }
+
+                                        Missing ->
+                                            Nothing
+                                )
+                                result.threads
+                in
+                if
+                    result.hasMore
+                        && not (List.isEmpty result.threads)
+                        && (List.length postsSoFar2 < reloadForumMaxPosts)
+                then
+                    getForumPostsHelper
+                        secretKey
+                        authentication
+                        forumId
+                        { archived = archived }
+                        (offset + forumPostsPerRequest)
+                        postsSoFar2
+
+                else
+                    Task.succeed (List.take reloadForumMaxPosts postsSoFar2)
+            )
+
+
+retryWhenRateLimited : Task BackendOnly Discord.HttpError a -> Task BackendOnly Discord.HttpError a
+retryWhenRateLimited task =
+    Task.onError
+        (\error ->
+            case error of
+                Discord.TooManyRequests429 rateLimit ->
+                    Process.sleep rateLimit.retryAfter |> Task.andThen (\() -> task)
+
+                _ ->
+                    Task.fail error
+        )
+        task
+
+
 getManyMessages :
     SecretId ServerSecret
     -> Discord.Authentication
@@ -3682,3 +3894,19 @@ messages, so this is much lower than reloadChannelMaxMessages.
 reloadThreadMaxMessages : Int
 reloadThreadMaxMessages =
     1000
+
+
+{-| How many posts to load when a guild forum is reloaded. Every post is a thread that
+costs at least one request of its own, so a forum is much more expensive to reload than a
+channel of the same size.
+-}
+reloadForumMaxPosts : Int
+reloadForumMaxPosts =
+    200
+
+
+{-| How many threads searching a forum's threads returns at most.
+-}
+forumPostsPerRequest : Int
+forumPostsPerRequest =
+    25

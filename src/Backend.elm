@@ -8057,13 +8057,31 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             case
                 ( SeqDict.get userIdToLoadWith model.discordUsers
                 , LocalState.isDiscordGuildChannelReloading channelId model.loadingDiscordChannels
-                , LocalState.userIsLoadingDiscordChannel userIdToLoadWith model.loadingDiscordChannels
+                , ( LocalState.userIsLoadingDiscordChannel userIdToLoadWith model.loadingDiscordChannels
+                  , LocalState.getDiscordGuildAndChannel guildId channelId model
+                  )
                 )
             of
-                ( Just (FullData discordUser), Nothing, False ) ->
+                ( Just (FullData discordUser), Nothing, ( False, Just ( _, channel ) ) ) ->
                     let
                         auth =
                             Discord.userToken discordUser.auth
+
+                        reload : Task BackendOnly Discord.HttpError DiscordChannelReload
+                        reload =
+                            if channel.isForum then
+                                DiscordSync.getForumChannelReload model.serverSecret auth channelId
+
+                            else
+                                DiscordSync.getManyMessages
+                                    model.serverSecret
+                                    auth
+                                    { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
+                                    |> Task.andThen
+                                        (\messages ->
+                                            DiscordSync.getThreadsForMessages model.serverSecret auth messages
+                                                |> Task.map (\threads -> { messages = messages, threads = threads })
+                                        )
                     in
                     ( { model
                         | loadingDiscordChannels =
@@ -8078,16 +8096,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
-                        , DiscordSync.getManyMessages
-                            model.serverSecret
-                            auth
-                            { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
-                            |> Task.andThen
-                                (\messages ->
-                                    DiscordSync.getThreadsForMessages model.serverSecret auth messages
-                                        |> Task.map (\threads -> { messages = messages, threads = threads })
-                                )
-                            |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
+                        , Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId) reload
                         ]
                     )
 
