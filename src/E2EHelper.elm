@@ -14,6 +14,7 @@ module E2EHelper exposing
     , backendApp
     , botTestGuild
     , botTestGuild_ChannelA
+    , botTestGuild_ForumA
     , checkNoErrorLogs
     , checkNoNotification
     , checkNotification
@@ -3410,6 +3411,16 @@ botTestGuild_ChannelA =
 botTestGuild_ChannelAString : String
 botTestGuild_ChannelAString =
     "1072828564317159465"
+
+
+botTestGuild_ForumA : Discord.Id Discord.ChannelId
+botTestGuild_ForumA =
+    Unsafe.uint64 botTestGuild_ForumAString |> Discord.idFromUInt64
+
+
+botTestGuild_ForumAString : String
+botTestGuild_ForumAString =
+    "1535645724761653309"
 
 
 checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel

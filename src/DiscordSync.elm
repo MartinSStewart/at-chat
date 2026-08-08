@@ -65,6 +65,7 @@ import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
+import UInt64
 import User
 import UserSession exposing (DiscordFrontendUser, UserSession)
 
@@ -1163,8 +1164,26 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                         linkedMessageId : Discord.Id Discord.MessageId
                         linkedMessageId =
                             messageLinkId discordMessage
+
+                        alreadyHaveMessage : Bool
+                        alreadyHaveMessage =
+                            case threadRoute of
+                                -- The text of a forum post has the same id as the thread it's
+                                -- written in, which is the id its title is linked under, so
+                                -- looking in the channel would mistake it for a message we
+                                -- already have
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    case SeqDict.get threadId channel.threads of
+                                        Just thread ->
+                                            OneToOne.memberFirst linkedMessageId thread.linkedMessageIds
+
+                                        Nothing ->
+                                            False
+
+                                NoThreadWithMaybeMessage _ ->
+                                    OneToOne.memberFirst linkedMessageId channel.linkedMessageIds
                     in
-                    if OneToOne.memberFirst linkedMessageId channel.linkedMessageIds then
+                    if alreadyHaveMessage then
                         ( model, Command.none )
 
                     else
@@ -1513,6 +1532,159 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
             ( model, Command.none )
 
 
+{-| A new post in a guild forum arrives as a thread create event and nothing else. A post
+in a normal channel would have arrived as a message in that channel, so this event is the
+only chance we get to add the post to the forum it was posted in.
+
+The post's text follows right after this as a message in the new thread. The text hangs off
+the post's title the same way it does when a forum is reloaded, so the title has to be
+added now or the text has nowhere to go.
+
+Discord sends this event for threads the user is added to as well as for threads that were
+just created, so a post we already have is left alone.
+
+-}
+handleForumPostCreated : Discord.UserAuth -> Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostCreated authentication thread model =
+    case ( thread.guildId, thread.parentId, thread.name ) of
+        ( Included guildId, Included (Just forumId), Included name ) ->
+            case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
+                ( Included ownerId, Just ( guild, channel ) ) ->
+                    if channel.isForum then
+                        addForumPost
+                            authentication
+                            { guildId = guildId, forumId = forumId, threadId = thread.id, name = name, ownerId = ownerId }
+                            guild
+                            channel
+                            model
+
+                    else
+                        -- A thread in a normal channel is announced by a message in that
+                        -- channel instead, which is what the thread hangs off of there
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
+addForumPost :
+    Discord.UserAuth
+    ->
+        { guildId : Discord.Id Discord.GuildId
+        , forumId : Discord.Id Discord.ChannelId
+        , threadId : Discord.Id Discord.ChannelId
+        , name : String
+        , ownerId : Discord.Id Discord.UserId
+        }
+    -> DiscordBackendGuild
+    -> DiscordBackendChannel
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addForumPost authentication post guild channel model =
+    let
+        createdAt : Time.Posix
+        createdAt =
+            discordIdCreatedAt post.threadId
+
+        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+        richText =
+            RichText.fromDiscord post.name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+
+        message : Message ChannelMessageId (Discord.Id Discord.UserId)
+        message =
+            Message.userTextMessageNoEmbeds createdAt post.ownerId richText Nothing SeqDict.empty
+    in
+    -- A forum post's thread has the same id as the message the post hangs off of, the same
+    -- as every other thread
+    case
+        LocalState.createDiscordChannelMessageBackend
+            (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
+            message
+            channel
+    of
+        Ok ( _, channel2 ) ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                post.guildId
+                                { guild | channels = SeqDict.insert post.forumId channel2 guild.channels }
+                                model.discordGuilds
+                    }
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.discordGuildMessageNotification
+                        SeqSet.empty
+                        createdAt
+                        post.ownerId
+                        post.guildId
+                        post.forumId
+                        NoThread
+                        message
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                        model2
+            in
+            ( { model2 | sessions = sessions }
+            , Command.batch
+                [ Broadcast.toDiscordGuildChannel
+                    post.guildId
+                    post.forumId
+                    (Server_Discord_SendMessage
+                        createdAt
+                        (DiscordGuildOrDmId_Guild post.ownerId post.guildId post.forumId)
+                        (forumPostSender post.ownerId model2)
+                        richText
+                        (NoThreadWithMaybeMessage Nothing)
+                        SeqDict.empty
+                        SeqDict.empty
+                        |> ServerChange
+                    )
+                    model2
+
+                -- The post's text and the replies to it are written in the thread, and we
+                -- only get told about messages in a thread we're a member of
+                , joinThread
+                    model2.serverSecret
+                    authentication
+                    post.guildId
+                    (Discord.idToUInt64 post.threadId |> Discord.idFromUInt64)
+                , Command.batch notificationCmds
+                ]
+            )
+
+        Err DiscordMessageAlreadyExists ->
+            -- We were added to a post we already have rather than told about a new one
+            ( model, Command.none )
+
+
+forumPostSender : Discord.Id Discord.UserId -> BackendModel -> DiscordFrontendUser
+forumPostSender userId model =
+    case SeqDict.get userId model.discordUsers of
+        Just discordUser ->
+            User.discordUserDataToFrontendUser discordUser
+
+        Nothing ->
+            { name = PersonName.fromStringLossy "Missing", icon = Nothing }
+
+
+{-| When a snowflake id was created. The top bits of the id hold the number of milliseconds
+that had passed since the start of 2015 when Discord handed the id out.
+-}
+discordIdCreatedAt : Discord.Id idType -> Time.Posix
+discordIdCreatedAt id =
+    Discord.idToUInt64 id
+        |> UInt64.shiftRightZfBy 22
+        |> UInt64.toFloat
+        |> round
+        |> (+) 1420070400000
+        |> Time.millisToPosix
+
+
 websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
 websocketCreateHandle debugName msg url =
     let
@@ -1815,8 +1987,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
-                            ( model2, cmds )
+                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread thread ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleForumPostCreated userData.auth thread model2
+                            in
+                            ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserAddedReaction reaction ->
                             let

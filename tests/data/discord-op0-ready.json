@@ -3253,6 +3253,18 @@
             "last_message_id": "1482032121324372184",
             "id": "1072828591382999151",
             "flags": 0
+          },
+          {
+            "type": 15,
+            "topic": null,
+            "rate_limit_per_user": 0,
+            "position": 4,
+            "permission_overwrites": [],
+            "parent_id": "705745250815311945",
+            "name": "forum-a",
+            "last_message_id": null,
+            "id": "1535645724761653309",
+            "flags": 0
           }
         ],
         "application_command_counts": {}
