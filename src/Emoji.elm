@@ -489,13 +489,6 @@ categoryColumnWidth =
     40
 
 
-{-| Height of the bar at the bottom that names whatever emoji is hovered.
--}
-previewHeight : number
-previewHeight =
-    50
-
-
 selectorHeight : number
 selectorHeight =
     500
