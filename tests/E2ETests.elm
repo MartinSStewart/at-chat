@@ -340,6 +340,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , E2EMisc.timeOfDaySuggestionTest normalConfig
     , E2EMisc.timeOffsetSuggestionTest normalConfig
     , E2EMisc.noTimestampSuggestionTest normalConfig
+    , E2EMisc.mentionSuggestionTest normalConfig
+    , E2EMisc.emojiSuggestionTest normalConfig
     , E2EMedia.imageViewerTests imageUploadConfig
     , E2EHelper.startTest
         "Admin can open admin page"
