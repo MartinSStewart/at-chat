@@ -940,7 +940,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordForumAMessages [ "Test 2" ]
                         , checkDiscordForumAThreads [ ( 0, [ "The text of the post" ] ) ]
                         , -- A reply to the post is written in the same thread as its text
@@ -982,27 +982,58 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 , user.click 100 (Dom.id "guild_openChannel_1535645724761653309")
                 , E2EHelper.andThenWebsocket
                     (\connection _ ->
-                        [ T.websocketSendString
+                        [ -- A message in a normal channel with a thread started from it. The
+                          -- thread has the same id as the message, so a thread event that
+                          -- confuses the two would rewrite or delete this message.
+                          T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"THREAD_CREATE\",\"s\":3,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"newly_created\":true,\"name\":\"Test 2\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\"],\"member_count\":1,\"last_message_id\":null,\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":3,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-01T12:52:35.803000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1533095101817950311\",\"flags\":32,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"A message with a thread\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , checkDiscordChannelAMessages [ "A message with a thread" ]
                         , T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                            "{\"t\":\"THREAD_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"newly_created\":true,\"name\":\"Test 2\",\"message_count\":0,\"member_ids_preview\":[\"161098476632014848\"],\"member_count\":1,\"last_message_id\":null,\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-08-08T13:54:30.500000+00:00\",\"position\":0,\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"id\":\"1535647395881418912\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"The text of the post\",\"components\":[],\"channel_type\":11,\"channel_id\":\"1535647395881418912\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordForumAMessages [ "Test 2" ]
                         , checkDiscordForumAThreads [ ( 0, [ "The text of the post" ] ) ]
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Test 2" ])
+                        , -- Renaming the post edits the message its title is
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_UPDATE\",\"s\":5,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":1,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-08T13:54:30.127000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"name\":\"Test 2 renamed\",\"message_count\":1,\"member_count\":1,\"last_message_id\":\"1535647395881418912\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , checkDiscordForumAMessages [ "Test 2 renamed" ]
+                        , checkDiscordForumAThreads [ ( 0, [ "The text of the post" ] ) ]
+                        , user.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Test 2 renamed" ])
+                        , -- Archiving the post leaves its name alone, so nothing changes here
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_UPDATE\",\"s\":6,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":1,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-08T13:54:30.127000+00:00\",\"auto_archive_duration\":4320,\"archived\":true,\"archive_timestamp\":\"2026-08-08T14:10:00.000000+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1535645724761653309\",\"owner_id\":\"161098476632014848\",\"name\":\"Test 2 renamed\",\"message_count\":1,\"member_count\":1,\"last_message_id\":\"1535647395881418912\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , checkDiscordForumAMessages [ "Test 2 renamed" ]
+                        , -- Renaming a thread in a normal channel isn't a message of ours
+                          T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_UPDATE\",\"s\":7,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-08-01T12:54:50.821532+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-08-01T12:54:50.821532+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1072828564317159465\",\"owner_id\":\"161098476632014848\",\"name\":\"A renamed normal thread\",\"message_count\":0,\"member_count\":1,\"last_message_id\":null,\"id\":\"1533095101817950311\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , checkDiscordForumAMessages [ "Test 2 renamed" ]
+                        , checkDiscordChannelAMessages [ "A message with a thread" ]
                         , -- Deleting the post deletes its title and everything written in it
                           T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"THREAD_DELETE\",\"s\":5,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1535645724761653309\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\"}}"
+                            "{\"t\":\"THREAD_DELETE\",\"s\":8,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1535645724761653309\",\"id\":\"1535647395881418912\",\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordForumAMessages [ "<deleted message>" ]
                         , checkDiscordForumAThreads []
                         , user.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Test 2" ])
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Test 2 renamed" ])
                         , user.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText LocalState.messageDeleted ])
@@ -1011,7 +1042,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                           T.websocketSendString
                             100
                             connection
-                            "{\"t\":\"THREAD_DELETE\",\"s\":6,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1072828564317159465\",\"id\":\"1533095101817950311\",\"guild_id\":\"705745250815311942\"}}"
+                            "{\"t\":\"THREAD_DELETE\",\"s\":9,\"op\":0,\"d\":{\"type\":11,\"parent_id\":\"1072828564317159465\",\"id\":\"1533095101817950311\",\"guild_id\":\"705745250815311942\"}}"
                         , checkDiscordForumAMessages [ "<deleted message>" ]
                         , checkDiscordForumAThreads []
                         ]

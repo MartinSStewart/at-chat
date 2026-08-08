@@ -9,6 +9,7 @@ module DiscordSync exposing
     , getThreadsForMessages
     , handleCreateMessage
     , handleEditMessage
+    , handleForumPostRenamed
     , http
     , messagesAndLinks
     , reloadChannelMaxMessages
@@ -1662,6 +1663,94 @@ addForumPost authentication post guild channel model =
             ( model, Command.none )
 
 
+{-| A renamed forum post arrives as a thread update event. The post's title is a message
+here, so renaming the post edits that message.
+
+Discord sends this event for everything else that can change about a thread too, such as
+being archived or having its tags changed, and for threads in normal channels, where the
+name isn't a message of ours. Editing a message to the content it already has does nothing,
+so all of those leave the forum alone without having to be told apart.
+
+-}
+handleForumPostRenamed :
+    Discord.Channel
+    -> Time.Posix
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleForumPostRenamed thread time model =
+    case ( thread.guildId, thread.parentId, thread.name ) of
+        ( Included guildId, Included (Just forumId), Included name ) ->
+            case ( thread.ownerId, LocalState.getDiscordGuildAndChannel guildId forumId model ) of
+                ( Included ownerId, Just ( _, channel ) ) ->
+                    case
+                        -- A thread in a normal channel has the same id as the message it hangs
+                        -- off of, so without this the message would be mistaken for a title and
+                        -- rewritten to the thread's name
+                        if channel.isForum then
+                            OneToOne.second
+                                (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
+                                channel.linkedMessageIds
+
+                        else
+                            Nothing
+                    of
+                        Just messageId ->
+                            let
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText =
+                                    RichText.fromDiscord name SeqDict.empty Missing model.discordCustomEmojis [] Missing
+                            in
+                            case
+                                LocalState.editMessageHelper
+                                    time
+                                    ownerId
+                                    richText
+                                    DoNotChangeAttachments
+                                    (NoThreadWithMessage messageId)
+                                    channel
+                            of
+                                Ok channel2 ->
+                                    let
+                                        model2 : BackendModel
+                                        model2 =
+                                            { model
+                                                | discordGuilds =
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (\_ -> channel2) forumId)
+                                                        model.discordGuilds
+                                            }
+                                    in
+                                    ( model2
+                                    , Broadcast.toDiscordGuildChannel
+                                        guildId
+                                        forumId
+                                        (Server_DiscordSendEditGuildMessage
+                                            time
+                                            ownerId
+                                            guildId
+                                            forumId
+                                            (NoThreadWithMessage messageId)
+                                            richText
+                                            |> ServerChange
+                                        )
+                                        model2
+                                    )
+
+                                Err () ->
+                                    -- The title is already what the post is called
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        _ ->
+            ( model, Command.none )
+
+
 {-| A deleted forum post arrives as a thread delete event. Deleting a post deletes
 everything written in it too, so the post's title and the thread hanging off it both go,
 unlike deleting the message a thread in a normal channel hangs off of.
@@ -1677,9 +1766,16 @@ handleForumPostDeleted thread model =
             case LocalState.getDiscordGuildAndChannel guildId forumId model of
                 Just ( guild, channel ) ->
                     case
-                        OneToOne.second
-                            (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
-                            channel.linkedMessageIds
+                        -- A thread in a normal channel has the same id as the message it hangs
+                        -- off of, and that message outlives the thread, so without this it
+                        -- would be deleted along with it
+                        if channel.isForum then
+                            OneToOne.second
+                                (Discord.idToUInt64 thread.id |> Discord.idFromUInt64)
+                                channel.linkedMessageIds
+
+                        else
+                            Nothing
                     of
                         Just messageId ->
                             let
@@ -1718,8 +1814,8 @@ handleForumPostDeleted thread model =
                             )
 
                         Nothing ->
-                            -- A thread in a normal channel, or a post older than the ones we
-                            -- loaded, so there's no title of ours for it to have come from
+                            -- A post older than the ones we loaded, so there's no title of ours
+                            -- for it to have come from
                             ( model, Command.none )
 
                 Nothing ->
@@ -2060,6 +2156,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleForumPostCreated userData.auth thread model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_ThreadUpdated thread ->
+                            -- The event says nothing about when the thread was changed, and
+                            -- renaming a post edits the message its title is
+                            ( model2
+                            , Task.perform (GotTimeForDiscordForumPostRenamed thread) Time.now :: cmds
+                            )
 
                         Discord.UserOutMsg_ThreadDeleted thread ->
                             let

@@ -1333,6 +1333,9 @@ update msg model =
         GotTimeForFailedToParseDiscordWebsocket name jsonError time ->
             BackendExtra.addLog time (Log.FailedToParseDiscordWebsocket name jsonError) model
 
+        GotTimeForDiscordForumPostRenamed thread time ->
+            DiscordSync.handleForumPostRenamed thread time model
+
         GotGuildMessageEmbed guildId channelId threadRouteWithMessage result ->
             case SeqDict.get guildId model.guilds of
                 Just guild ->
