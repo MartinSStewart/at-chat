@@ -338,6 +338,7 @@ type alias BackendChannel =
 type alias DiscordBackendChannel =
     { name : ChannelName
     , description : ChannelDescription
+    , isForum : Bool
     , messages : IdArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -366,6 +367,7 @@ type alias FrontendChannel =
 type alias DiscordFrontendChannel =
     { name : ChannelName
     , description : ChannelDescription
+    , isForum : Bool
     , messages : MessageArray ChannelMessageId (Message ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -558,6 +560,7 @@ discordChannelToFrontend guildId guild linkedDiscordUsers threadRoute channel =
             in
             { name = channel.name
             , description = channel.description
+            , isForum = channel.isForum
             , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
             , visibleMessages = VisibleMessages.init preloadMessages (IdArray.length channel.messages)
             , lastTypedAt = channel.lastTypedAt

@@ -703,7 +703,7 @@ addDiscordChannel discordChannel =
                     False
 
                 Discord.GuildForum ->
-                    False
+                    True
 
                 Discord.GuildMedia ->
                     False
@@ -717,6 +717,7 @@ addDiscordChannel discordChannel =
                 Missing ->
                     ChannelName.fromStringLossy "Missing"
         , description = LocalState.discordTopicToDescription discordChannel.topic ChannelDescription.empty
+        , isForum = discordChannel.type_ == Discord.GuildForum
         , messages = IdArray.empty
         , status = ChannelActive
         , lastTypedAt = SeqDict.empty
@@ -2603,6 +2604,10 @@ handleChannelCreated channel model =
                         Included permissions ->
                             permissions
 
+                isForum : Bool
+                isForum =
+                    channel.type_ == Discord.GuildForum
+
                 model2 : BackendModel
                 model2 =
                     { model
@@ -2624,24 +2629,12 @@ handleChannelCreated channel model =
                                                                         LocalState.discordTopicToDescription
                                                                             channel.topic
                                                                             existingChannel.description
+                                                                    , isForum = isForum
                                                                     , permissionOverwrites = overwrites
                                                                 }
 
                                                         Nothing ->
-                                                            { name = name
-                                                            , description =
-                                                                LocalState.discordTopicToDescription
-                                                                    channel.topic
-                                                                    ChannelDescription.empty
-                                                            , messages = IdArray.empty
-                                                            , status = ChannelActive
-                                                            , lastTypedAt = SeqDict.empty
-                                                            , linkedMessageIds = OneToOne.empty
-                                                            , threads = SeqDict.empty
-                                                            , dateDividerDrawings = SeqDict.empty
-                                                            , permissionOverwrites = overwrites
-                                                            }
-                                                                |> Just
+                                                            addDiscordChannel channel
                                                 )
                                                 guild.channels
                                     }
@@ -2655,7 +2648,7 @@ handleChannelCreated channel model =
             , Broadcast.toDiscordGuildChannel
                 guildId
                 channel.id
-                (Server_DiscordChannelCreated guildId channel.id name channel.topic overwrites |> ServerChange)
+                (Server_DiscordChannelCreated guildId channel.id isForum name channel.topic overwrites |> ServerChange)
                 model2
             )
 
