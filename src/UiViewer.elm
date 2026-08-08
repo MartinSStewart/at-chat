@@ -17,7 +17,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
 import Env
 import FileName
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (FileData, FileId, FileMetadata(..))
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
@@ -232,7 +232,7 @@ attachments =
         [ ( Id.fromInt 1
           , { fileName = FileName.fromString "file.json"
             , fileSize = 10000
-            , imageMetadata = Nothing
+            , metadata = Nothing
             , contentType = FileStatus.jsonContent
             , fileHash = FileStatus.fileHash "123"
             }
@@ -240,8 +240,8 @@ attachments =
         , ( Id.fromInt 2
           , { fileName = FileName.fromString "file.json"
             , fileSize = 1000000
-            , imageMetadata =
-                Just
+            , metadata =
+                FileMetadata_Image
                     { imageSize = Coord.xy 200 300
                     , orientation = Nothing
                     , gpsLocation = Nothing
@@ -255,6 +255,7 @@ attachments =
                     , software = Nothing
                     , userComment = Nothing
                     }
+                    |> Just
             , contentType = FileStatus.pngContent
             , fileHash = FileStatus.fileHash "123"
             }
@@ -359,7 +360,7 @@ notificationEmail =
                 , normal " custom emoji "
                 , CustomEmoji (Id.fromInt 3)
                 , CodeBlock (Language (NonemptyString 'a' "scii")) """════════════════════════════
-_,  ____ ____  ,-
+ _,  ____ ____  ,-
 ¢ºº < Yo.│ No.> ··?\\
 /¥\\  ¯¯¯¯ ¯¯¯¯  /V\\
 /¯|    ___      ´╥`
