@@ -1,67 +1,42 @@
 ## Before starting
 
-Install node modules
-
-### If compilation fails to download dependencies (sandboxed environments)
-
-In some sandboxed environments the egress policy only allows this one repo and
-blocks all other github.com traffic. `lamdera make` downloads each dependency's
-source from GitHub zipball URLs, so the first compile fails with errors like
-`400 Bad Request "Request path could not be canonicalized."` or
-`403 "GitHub access to this repository is not enabled ..."` for packages such as
-`elm/core`. (The registry at package.elm-lang.org is reachable; only the github
-source zipballs are blocked.)
-
-Fix it once per environment by populating the Elm cache from jsDelivr (a GitHub
-mirror that isn't blocked):
-
-```
-python3 scripts/populate-elm-cache.py
-```
-
-Then `npx lamdera make ...` works offline. The script is safe to re-run (it skips
-packages already present) and skips `lamdera/*` packages, which ship with the
-compiler.
+Nothing — `.claude/hooks/session-start.sh` has already installed node modules and
+filled the Elm package cache. If a compile ever fails saying it can't download a
+package, run `python3 scripts/populate-elm-cache.py`; the comment at the top of that
+script explains what it works around.
 
 ## While coding
 
-Run `npx lamdera make src/Frontend.elm src/Backend.elm` to check that the code compiles
-Run `npx elm-format src/ --yes` to format the code
+`lamdera` is not on `PATH`, so anything taking a `--compiler` flag needs the path
+spelled out. ``which lamdera`` returns nothing and silently breaks those commands.
 
-The following will run tests
-
-```
-npx elm-test-rs --compiler `which lamdera`
-```
-
-If `elm-test-rs` fails with "failed to fetch ... package.elm-lang.org" (happens in some sandboxed environments due to
-TLS interception), fall back to:
+Check that the code compiles:
 
 ```
-npx --yes elm-test --compiler=`which lamdera`
+npx lamdera make src/Frontend.elm src/Backend.elm
 ```
 
-If `which lamdera` is empty (lamdera isn't on `PATH`, only available via `npx`),
-pass the binary path directly:
+Format the code:
 
 ```
-npx --yes elm-test --compiler="$(realpath node_modules/.bin/lamdera)"
+npx elm-format src/ --yes
 ```
 
-In the sandboxed environments described above, that `elm-test` fallback doesn't work
-either: it can't see the vendored packages and fails with
-`Because there is no version of lamdera/codecs in 1.0.0 ...`. Run `elm-test-rs` against
-the populated cache instead:
+Run the tests:
 
 ```
-python3 scripts/populate-elm-cache.py
-npx elm-test-rs --offline --compiler "$(realpath node_modules/.bin/lamdera)"
+npx elm-test-rs --compiler "$(realpath node_modules/.bin/lamdera)"
 ```
 
-`--offline` stops elm-test-rs from contacting package.elm-lang.org, so everything it
-compiles has to already be in the cache. That includes `mpizenberg/elm-test-runner`,
-which isn't a dependency in elm.json — `populate-elm-cache.py` fetches it anyway (see
-`EXTRA_PACKAGES` in the script) so `--offline` works right after running it.
+Run elm-review and fix what it reports before you're done:
+
+```
+npx elm-review --compiler "$(realpath node_modules/.bin/lamdera)"
+```
+
+Compiling, formatting and passing tests isn't enough on its own — elm-review catches
+unused code, redundant patterns and style rules that would otherwise need a cleanup
+commit afterwards. `--fix-all` applies the mechanical fixes.
 
 ## Code style
 

@@ -10,3 +10,7 @@ tests/var/lib/atchat/storage/
 tests/var/lib/atchat/backups/
 index.html
 at-chat-backups/
+
+# Written by Claude Code when a permission is granted interactively. Shared
+# settings belong in .claude/settings.json instead.
+.claude/settings.local.json
