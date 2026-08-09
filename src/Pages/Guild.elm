@@ -3247,6 +3247,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             RichText.maxLength - String.length edit.text
                                     in
                                     messageEditingView
+                                        containerWidth
                                         model.time
                                         isMobile
                                         guildOrDmId
@@ -3543,6 +3544,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     Nothing
                                     in
                                     messageEditingView
+                                        containerWidth
                                         model.time
                                         isMobile
                                         guildOrDmId
@@ -3859,6 +3861,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                                     Nothing
                                     in
                                     threadMessageEditingView
+                                        containerWidth
                                         model.time
                                         isMobile
                                         guildOrDmId
@@ -4070,6 +4073,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                                     Nothing
                                     in
                                     threadMessageEditingView
+                                        containerWidth
                                         model.time
                                         isMobile
                                         guildOrDmId
@@ -5464,6 +5468,10 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
             revealedChannelSpoilers (GuildOrDmId normalGuildOrDmIdNoThread) loggedIn
+
+        containerWidth : Int
+        containerWidth =
+            conversationWidth model
     in
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
@@ -5488,6 +5496,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                                 RichText.maxLength - String.length edit.text
                         in
                         messageEditingView
+                            containerWidth
                             model.time
                             isMobile
                             guildOrDmId
@@ -5581,6 +5590,10 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
             revealedChannelSpoilers guildOrDmIdNoThread loggedIn
+
+        containerWidth : Int
+        containerWidth =
+            conversationWidth model
     in
     case MessageArray.get threadMessageIndex channel.messages of
         Just message ->
@@ -5601,6 +5614,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                                         Nothing
                         in
                         messageEditingView
+                            containerWidth
                             model.time
                             isMobile
                             guildOrDmId
@@ -5662,104 +5676,267 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
+{-| Reaction buttons are a fixed width so that the popup above one can work out where
+in the conversation its button sits, and from that which way it should open. A count
+that has reached two digits gets a wider button.
+-}
+reactionButtonWidth : NonemptySet userId -> Int
+reactionButtonWidth users =
+    if NonemptySet.size users < 10 then
+        52
+
+    else
+        60
+
+
+reactionSpacing : number
+reactionSpacing =
+    4
+
+
+{-| The reaction row runs the full width of a message rather than being indented under
+the message text the way `containerWidth` is, so it has the profile image's column to
+itself as well.
+-}
+reactionRowWidth : Int -> Int
+reactionRowWidth containerWidth =
+    containerWidth + User.profileImageSize + profileImagePaddingRight
+
+
+{-| Where each reaction button ends up, as an offset from the left of the reaction row,
+once the row has wrapped. Buttons are laid out left to right and wrap onto a new line
+when the next one no longer fits, which is what `Ui.wrap` does to them.
+-}
+reactionButtonOffsets : Int -> List Int -> List Int
+reactionButtonOffsets rowWidth widths =
+    List.foldl
+        (\width ( nextOffset, offsets ) ->
+            if nextOffset > 0 && nextOffset + width > rowWidth then
+                ( width + reactionSpacing, 0 :: offsets )
+
+            else
+                ( nextOffset + width + reactionSpacing, nextOffset :: offsets )
+        )
+        ( 0, [] )
+        widths
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| A reaction popup is much wider than the button it hangs off, so one near the edge of
+the conversation used to hang off the side of it and give the conversation a horizontal
+scrollbar. It opens away from whichever edge its button sits closest to instead, and is
+capped at the room it has on that side so it can't reach past the edge either way.
+-}
+type ReactionPopupPlacement
+    = -- Left edge lined up with the button's left edge
+      PopupOpensRight { maxWidth : Int }
+    | -- Right edge lined up with the button's right edge, so the arrow has to be
+      -- measured from that edge instead to stay under the button's emoji
+      PopupOpensLeft { maxWidth : Int, arrowFromRight : Int }
+
+
+reactionPopupPlacement : Int -> Int -> Int -> ReactionPopupPlacement
+reactionPopupPlacement rowWidth buttonWidth buttonOffset =
+    let
+        roomOnRight : Int
+        roomOnRight =
+            rowWidth - buttonOffset
+
+        roomOnLeft : Int
+        roomOnLeft =
+            buttonOffset + buttonWidth
+    in
+    if roomOnRight >= roomOnLeft then
+        PopupOpensRight { maxWidth = min reactionPopupMaxWidth roomOnRight }
+
+    else
+        PopupOpensLeft
+            { maxWidth = min reactionPopupMaxWidth roomOnLeft
+            , arrowFromRight =
+                -- Mirrors the other arrow's offset across the button. Both are measured
+                -- from the popup's padding box, which the button's border and the
+                -- popup's own border inset by a pixel at each end.
+                buttonWidth - 4 - reactionPopupArrowOffset - reactionPopupArrowWidth
+            }
+
+
+reactionPopupMaxWidth : number
+reactionPopupMaxWidth =
+    400
+
+
+{-| How far the arrow sits from whichever edge of the popup is lined up with the
+button, so that it lands under that button's emoji.
+-}
+reactionPopupArrowOffset : number
+reactionPopupArrowOffset =
+    11
+
+
+reactionPopupArrowWidth : number
+reactionPopupArrowWidth =
+    16
+
+
 reactionEmojiView :
     IsHovered
     -> userId
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> AnimationMode
+    -> Int
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Element MessageViewMsg)
-reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode reactions =
+reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode containerWidth reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
     else
+        let
+            entries : List ( EmojiOrCustomEmoji, NonemptySet userId )
+            entries =
+                SeqDict.toList reactions
+
+            widths : List Int
+            widths =
+                List.map (\( _, users ) -> reactionButtonWidth users) entries
+
+            rowWidth : Int
+            rowWidth =
+                reactionRowWidth containerWidth
+
+            placements : List ReactionPopupPlacement
+            placements =
+                List.map2
+                    (reactionPopupPlacement rowWidth)
+                    widths
+                    (reactionButtonOffsets rowWidth widths)
+        in
         Ui.row
             [ Ui.wrap
-            , Ui.spacing 4
+            , Ui.spacing reactionSpacing
             ]
-            (List.indexedMap
-                (\index ( emoji, users ) ->
-                    let
-                        hasReactedTo : Bool
-                        hasReactedTo =
-                            NonemptySet.member currentUserId users
-                    in
-                    (if hasReactedTo then
-                        MyUi.rowButton
-                            (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
-                            (MessageView_PressedReactionEmoji_Remove emoji)
+            (List.map2 Tuple.pair entries placements
+                |> List.indexedMap
+                    (\index ( ( emoji, users ), placement ) ->
+                        let
+                            hasReactedTo : Bool
+                            hasReactedTo =
+                                NonemptySet.member currentUserId users
+                        in
+                        (if hasReactedTo then
+                            MyUi.rowButton
+                                (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
+                                (MessageView_PressedReactionEmoji_Remove emoji)
 
-                     else
-                        MyUi.rowButton
-                            (Dom.id "guild_addReactionEmoji")
-                            (MessageView_PressedReactionEmoji_Add emoji)
+                         else
+                            MyUi.rowButton
+                                (Dom.id "guild_addReactionEmoji")
+                                (MessageView_PressedReactionEmoji_Add emoji)
+                        )
+                            [ Ui.rounded 8
+                            , Ui.spacing 2
+                            , Ui.background MyUi.background1
+                            , Ui.paddingXY 4 0
+                            , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                            , Ui.borderColor
+                                (if hasReactedTo then
+                                    MyUi.highlightedBorder
+
+                                 else
+                                    MyUi.border1
+                                )
+                            , Ui.Font.color
+                                (if hasReactedTo then
+                                    MyUi.highlightedBorder
+
+                                 else
+                                    MyUi.font2
+                                )
+                            , Ui.border 1
+                            , Ui.width (Ui.px (reactionButtonWidth users))
+                            , Ui.contentCenterX
+                            , Ui.Font.weight 500
+                            , case isHovered of
+                                IsHovered ->
+                                    reactionPopup customEmojis allUsers placement emoji users |> Ui.above
+
+                                IsNotHovered ->
+                                    Ui.noAttr
+
+                                IsHoveredButNoMenu ->
+                                    Ui.noAttr
+
+                                IsHoveredWhileSelectingAnchor ->
+                                    Ui.noAttr
+                            ]
+                            [ case emoji of
+                                EmojiOrCustomEmoji_Emoji emoji2 ->
+                                    Emoji.view emoji2
+
+                                EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                                    Ui.el
+                                        [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
+                                            |> Ui.html
+                                            |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
+                                            |> Ui.inFront
+                                        , Ui.Font.color (Ui.rgba 0 0 0 0)
+                                        , Ui.Font.size 20
+                                        ]
+                                        (Ui.text "❓")
+                            , reactionCountView users
+                            ]
                     )
-                        [ Ui.rounded 8
-                        , Ui.spacing 2
-                        , Ui.background MyUi.background1
-                        , Ui.paddingXY 4 0
-                        , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-                        , Ui.borderColor
-                            (if hasReactedTo then
-                                MyUi.highlightedBorder
-
-                             else
-                                MyUi.border1
-                            )
-                        , Ui.Font.color
-                            (if hasReactedTo then
-                                MyUi.highlightedBorder
-
-                             else
-                                MyUi.font2
-                            )
-                        , Ui.border 1
-                        , Ui.width Ui.shrink
-                        , Ui.Font.weight 500
-                        , case isHovered of
-                            IsHovered ->
-                                reactionPopup customEmojis allUsers emoji users |> Ui.above
-
-                            IsNotHovered ->
-                                Ui.noAttr
-
-                            IsHoveredButNoMenu ->
-                                Ui.noAttr
-
-                            IsHoveredWhileSelectingAnchor ->
-                                Ui.noAttr
-                        ]
-                        [ case emoji of
-                            EmojiOrCustomEmoji_Emoji emoji2 ->
-                                Emoji.view emoji2
-
-                            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                                Ui.el
-                                    [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
-                                        |> Ui.html
-                                        |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
-                                        |> Ui.inFront
-                                    , Ui.Font.color (Ui.rgba 0 0 0 0)
-                                    , Ui.Font.size 20
-                                    ]
-                                    (Ui.text "❓")
-                        , Ui.text (String.fromInt (NonemptySet.size users))
-                        ]
-                )
-                (SeqDict.toList reactions)
             )
             |> Just
 
 
-reactionPopupArrow : Element msg
-reactionPopupArrow =
+{-| Past 99 there isn't room for the count in a reaction button, so it becomes an
+infinity sign.
+-}
+reactionCountView : NonemptySet userId -> Element msg
+reactionCountView users =
+    if NonemptySet.size users > 99 then
+        Ui.el
+            [ Ui.width Ui.shrink, MyUi.noShrinking, Ui.centerY ]
+            (Ui.html (Icons.infinity 16))
+
+    else
+        Ui.text (String.fromInt (NonemptySet.size users))
+
+
+{-| Points down at the reaction's emoji from a popup whose left edge is lined up with
+the reaction button.
+-}
+reactionPopupArrowFromLeft : Element msg
+reactionPopupArrowFromLeft =
     Ui.html
         (Html.div
             [ Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "top" "calc(100% - 1px)"
-            , Html.Attributes.style "left" "11px"
+            , Html.Attributes.style "left" (String.fromInt reactionPopupArrowOffset ++ "px")
+            , Html.Attributes.style "width" "0"
+            , Html.Attributes.style "height" "0"
+            , Html.Attributes.style "border-left" "8px solid transparent"
+            , Html.Attributes.style "border-right" "8px solid transparent"
+            , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
+            , Html.Attributes.style "pointer-events" "none"
+            ]
+            []
+        )
+
+
+{-| The same arrow for a popup lined up with the button's right edge instead. It is
+measured from that edge so that it still lands under the reaction's emoji.
+-}
+reactionPopupArrowFromRight : Int -> Element msg
+reactionPopupArrowFromRight arrowFromRight =
+    Ui.html
+        (Html.div
+            [ Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "top" "calc(100% - 1px)"
+            , Html.Attributes.style "right" (String.fromInt arrowFromRight ++ "px")
             , Html.Attributes.style "width" "0"
             , Html.Attributes.style "height" "0"
             , Html.Attributes.style "border-left" "8px solid transparent"
@@ -5774,10 +5951,11 @@ reactionPopupArrow =
 reactionPopup :
     SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
+    -> ReactionPopupPlacement
     -> EmojiOrCustomEmoji
     -> NonemptySet userId
     -> Element MessageViewMsg
-reactionPopup customEmojis allUsers emoji users =
+reactionPopup customEmojis allUsers placement emoji users =
     let
         names : Nonempty (Element msg)
         names =
@@ -5833,23 +6011,39 @@ reactionPopup customEmojis allUsers emoji users =
                 )
     in
     Ui.row
-        [ Ui.htmlAttribute (Html.Attributes.class "emoji-popup")
-        , Ui.width Ui.shrink
-        , MyUi.htmlStyle "width" "max-content"
-        , MyUi.htmlStyle "max-width" "400px"
-        , Ui.background MyUi.background1
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.rounded 8
-        , Ui.padding 8
-        , Ui.spacing 8
-        , Ui.move { x = 0, y = -8, z = 0 }
-        , Ui.Font.color MyUi.font3
-        , MyUi.noPointerEvents
-        , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
-        , Ui.contentCenterY
-        , Ui.inFront reactionPopupArrow
-        ]
+        ([ Ui.htmlAttribute (Html.Attributes.class "emoji-popup")
+         , Ui.width Ui.shrink
+         , MyUi.htmlStyle "width" "max-content"
+         , -- `Ui.above` puts the popup's wrapper flush against the top of the reaction
+           -- button, so positioning it in there is what leaves the gap for the arrow
+           -- and lines the popup up with one edge of the button or the other
+           MyUi.htmlStyle "position" "absolute"
+         , MyUi.htmlStyle "bottom" "8px"
+         , Ui.background MyUi.background1
+         , Ui.borderColor MyUi.border1
+         , Ui.border 1
+         , Ui.rounded 8
+         , Ui.padding 8
+         , Ui.spacing 8
+         , Ui.Font.color MyUi.font3
+         , MyUi.noPointerEvents
+         , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
+         , Ui.contentCenterY
+         ]
+            ++ (case placement of
+                    PopupOpensRight { maxWidth } ->
+                        [ MyUi.htmlStyle "left" "0"
+                        , MyUi.htmlStyle "max-width" (String.fromInt maxWidth ++ "px")
+                        , Ui.inFront reactionPopupArrowFromLeft
+                        ]
+
+                    PopupOpensLeft { maxWidth, arrowFromRight } ->
+                        [ MyUi.htmlStyle "right" "0"
+                        , MyUi.htmlStyle "max-width" (String.fromInt maxWidth ++ "px")
+                        , Ui.inFront (reactionPopupArrowFromRight arrowFromRight)
+                        ]
+               )
+        )
         [ case emoji of
             EmojiOrCustomEmoji_Emoji emoji2 ->
                 Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
@@ -5870,7 +6064,8 @@ reactionPopup customEmojis allUsers emoji users =
 
 
 messageEditingView :
-    Time.Posix
+    Int
+    -> Time.Posix
     -> Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> ThreadRouteWithMessage
@@ -5886,13 +6081,13 @@ messageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-messageEditingView time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+messageEditingView containerWidth time isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
+                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -6017,7 +6212,8 @@ messageEditingView time isMobile guildOrDmId threadRouteWithMessage message mayb
 
 
 threadMessageEditingView :
-    Time.Posix
+    Int
+    -> Time.Posix
     -> Bool
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id ChannelMessageId
@@ -6033,12 +6229,12 @@ threadMessageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg_
-threadMessageEditingView time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
+threadMessageEditingView containerWidth time isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText loggedIn currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad data.reactions
+                    reactionEmojiView IsHovered currentUserId local.localUser.customEmojis allUsers LoopAFewTimesOnLoad containerWidth data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -6374,6 +6570,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
     case message of
         UserTextMessage data ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6414,6 +6611,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6443,6 +6641,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         DeletedMessage createdAt ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6466,6 +6665,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         CallStarted callStartedData ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6503,6 +6703,7 @@ messageView time isMobile containerWidth isThreadStarter revealedSpoilers highli
 
         GameStarted gameStarted ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6558,6 +6759,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
     case message of
         UserTextMessage data ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6597,6 +6799,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6626,6 +6829,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         DeletedMessage createdAt ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6649,6 +6853,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         CallStarted callStartedData ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6686,6 +6891,7 @@ discordMessageView time isMobile containerWidth isThreadStarter revealedSpoilers
 
         GameStarted gameStarted ->
             messageContainer
+                containerWidth
                 isThreadStarter
                 localUser.timezone
                 time
@@ -6740,6 +6946,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
+                containerWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
@@ -6776,6 +6983,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6800,6 +7008,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         DeletedMessage createdAt ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6819,6 +7028,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         CallStarted callStartedData ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6851,6 +7061,7 @@ threadMessageView time isMobile containerWidth revealedSpoilers highlight isHove
 
         GameStarted gameStarted ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6899,6 +7110,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
+                containerWidth
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
@@ -6934,6 +7146,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         UserJoinedMessage joinedAt userId reactions drawings ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6958,6 +7171,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         DeletedMessage createdAt ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -6977,6 +7191,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         CallStarted callStartedData ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -7009,6 +7224,7 @@ discordThreadMessageView time isMobile containerWidth revealedSpoilers highlight
 
         GameStarted gameStarted ->
             threadMessageContainer
+                containerWidth
                 highlight
                 messageId
                 False
@@ -7777,7 +7993,8 @@ orElseMaybe first second =
 
 
 messageContainer :
-    Bool
+    Int
+    -> Bool
     -> Time.Zone
     -> Time.Posix
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
@@ -7792,11 +8009,11 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone currentTime customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer containerWidth isThreadStarter timezone currentTime customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
+            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -7899,7 +8116,8 @@ messageContainer isThreadStarter timezone currentTime customEmojis allUsers high
 
 
 threadMessageContainer :
-    HighlightMessage
+    Int
+    -> HighlightMessage
     -> Id ThreadMessageId
     -> Bool
     -> userId
@@ -7910,11 +8128,11 @@ threadMessageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions customEmojis allUsers isHovered messageContent =
+threadMessageContainer containerWidth highlight messageIndex canEdit currentUserId currentUser reactions customEmojis allUsers isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) reactions
+            reactionEmojiView isHovered currentUserId customEmojis allUsers (isHoveredToAnimationMode isHovered) containerWidth reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
