@@ -434,7 +434,7 @@ privateChatWithYourself isMobile route currentTab local =
 privateChatWith : Bool -> Route -> Maybe ChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg_
 privateChatWith isMobile route currentTab otherUserId local name =
     Ui.row
-        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.clipWithEllipsis, Ui.height Ui.fill ]
         [ channelHeaderTab
             isMobile
             (Dom.id "guild_openDescription")

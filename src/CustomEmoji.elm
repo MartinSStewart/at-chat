@@ -97,7 +97,7 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 , Html.Attributes.style "display" "inline-block"
                 ]
                 [ viewHelper emojiSize yOffset customEmoji animationMode
-                , tooltipView customEmoji animationMode
+                , tooltipView customEmoji
                 ]
 
         Nothing ->
@@ -111,8 +111,8 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 []
 
 
-tooltipView : CustomEmojiData -> Sticker.AnimationMode -> Html msg
-tooltipView customEmoji animationMode =
+tooltipView : CustomEmojiData -> Html msg
+tooltipView customEmoji =
     Html.div
         [ Html.Attributes.class "emoji-popup"
         , Html.Attributes.style "position" "absolute"
@@ -137,7 +137,7 @@ tooltipView customEmoji animationMode =
         -- Same z-index elm-ui gives to `Ui.above`, which is what the reaction emoji popup uses
         , Html.Attributes.style "z-index" "20"
         ]
-        [ viewHelper "40px" "0" customEmoji animationMode
+        [ viewHelper "40px" "0" customEmoji Sticker.LoopForever
         , Html.text (":" ++ emojiNameToString customEmoji.name ++ ":")
         , tooltipArrow
         ]

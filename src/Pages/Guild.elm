@@ -5720,7 +5720,7 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode re
                         , Ui.Font.weight 500
                         , case isHovered of
                             IsHovered ->
-                                reactionPopup customEmojis allUsers animationMode emoji users |> Ui.above
+                                reactionPopup customEmojis allUsers emoji users |> Ui.above
 
                             IsNotHovered ->
                                 Ui.noAttr
@@ -5774,11 +5774,10 @@ reactionPopupArrow =
 reactionPopup :
     SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
-    -> AnimationMode
     -> EmojiOrCustomEmoji
     -> NonemptySet userId
     -> Element MessageViewMsg
-reactionPopup customEmojis allUsers animationMode emoji users =
+reactionPopup customEmojis allUsers emoji users =
     let
         names : Nonempty (Element msg)
         names =
@@ -5856,7 +5855,7 @@ reactionPopup customEmojis allUsers animationMode emoji users =
                 Ui.el [ Ui.Font.size 40, Ui.width Ui.shrink, MyUi.noShrinking ] (Ui.text (Emoji.toString emoji2))
 
             EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
-                CustomEmoji.view "40px" "0em" customEmojiId customEmojis animationMode |> Ui.html
+                CustomEmoji.view "40px" "0em" customEmojiId customEmojis LoopForever |> Ui.html
         , case maybeEmojiName of
             Just emojiName ->
                 Ui.column
