@@ -3295,6 +3295,7 @@ preview onPressLink config nonempty =
         , isSelectingAnchor = False
         , -- Previews replace code blocks with a placeholder, so no ascii art is drawn here
           devicePixelRatio = 1
+        , isHovered = False
         }
         Array.empty
         0
@@ -3319,6 +3320,7 @@ type alias Config a userId =
     , drawingUserColor : userId -> String
     , isSelectingAnchor : Bool
     , devicePixelRatio : Float
+    , isHovered : Bool
     }
 
 
@@ -4008,11 +4010,11 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList
-                        ++ [ case showLargeContent of
-                                ShowLargeContent _ ->
+                        ++ [ case ( showLargeContent, config.isHovered ) of
+                                ( ShowLargeContent _, True ) ->
                                     CustomEmoji.viewWithTooltip "1.4em" "0.2em" id config.customEmojis config.animationMode
 
-                                NoLargeContent ->
+                                _ ->
                                     CustomEmoji.view "1.4em" "0.2em" id config.customEmojis config.animationMode
                            ]
                     )

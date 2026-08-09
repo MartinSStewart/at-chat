@@ -333,6 +333,11 @@ exports.init = async function init(app)
         if (!src) return;
 
         this._canvas.style.display = 'block';
+        // A canvas defaults to 300x150, so it has to be sized before it goes into the
+        // document. Waiting until the image loads leaves a canvas far wider than the
+        // emoji it stands in for, which shows up as horizontal scroll until then.
+        this._canvas.style.width = '100%';
+        this._canvas.style.height = '100%';
         this._img.style.display = 'none';
         this._img.style.width = '100%';
         this._img.style.height = '100%';
@@ -347,8 +352,6 @@ exports.init = async function init(app)
           this._canvas.height = tempImg.naturalHeight;
           const ctx = this._canvas.getContext('2d');
           ctx.drawImage(tempImg, 0, 0);
-          this._canvas.style.width = '100%';
-          this._canvas.style.height = '100%';
           this._loaded = true;
 
           this._play(this.getAttribute('start-playing') === '2');
