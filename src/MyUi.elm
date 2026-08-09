@@ -1175,12 +1175,18 @@ body {
   background-color: rgba(96,165,250,0.3);
 }
 /* Hovering an .emoji-popup-container fades in the .emoji-popup inside it after a
-   short delay. Used by the reaction emoji popup and by the custom emoji tooltip. */
+   short delay. Used by the reaction emoji popup and by the custom emoji tooltip.
+   The popup is display:none rather than merely transparent because an absolutely
+   positioned box still counts towards the scrollable overflow of the conversation
+   view even at opacity 0. A popup is much wider than the emoji it hangs off, so a
+   message with custom emojis in it gave the conversation a horizontal scrollbar
+   for popups nobody could see. */
 .emoji-popup {
+  display: none;
   opacity: 0;
-  transition: opacity 0.05s ease 0s;
 }
 .emoji-popup-container:hover .emoji-popup {
+  display: flex;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
 @keyframes emoji-popup-fade-in {

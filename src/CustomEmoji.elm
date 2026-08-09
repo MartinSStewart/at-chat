@@ -117,7 +117,9 @@ tooltipView customEmoji =
         , Html.Attributes.style "bottom" "calc(100% + 8px)"
         , Html.Attributes.style "left" "50%"
         , Html.Attributes.style "transform" "translateX(-50%)"
-        , Html.Attributes.style "display" "flex"
+
+        -- `display` is left to the `emoji-popup` rules in MyUi.css. An inline style
+        -- would beat the stylesheet and keep the hidden popup taking up space.
         , Html.Attributes.style "align-items" "center"
         , Html.Attributes.style "gap" "8px"
         , Html.Attributes.style "padding" "8px"
