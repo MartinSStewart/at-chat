@@ -103,23 +103,22 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 ]
                 [ viewHelper emojiSize yOffset customEmoji animationMode
                 , tooltipView customEmoji
+                , tooltipArrow
                 ]
 
         Nothing ->
             placeholder emojiSize yOffset
 
 
+{-| Where the tooltip sits, and whether it is shown at all, is left to the
+`emoji-popup` and `custom-emoji-popup` rules in `MyUi.css`. Placement has to live
+there because an inline style would beat the stylesheet, and the stylesheet is what
+slides the tooltip back on screen when the emoji is near the edge of the window.
+-}
 tooltipView : CustomEmojiData -> Html msg
 tooltipView customEmoji =
     Html.div
-        [ Html.Attributes.class "emoji-popup"
-        , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "bottom" "calc(100% + 8px)"
-        , Html.Attributes.style "left" "50%"
-        , Html.Attributes.style "transform" "translateX(-50%)"
-
-        -- `display` is left to the `emoji-popup` rules in MyUi.css. An inline style
-        -- would beat the stylesheet and keep the hidden popup taking up space.
+        [ Html.Attributes.class "emoji-popup custom-emoji-popup"
         , Html.Attributes.style "align-items" "center"
         , Html.Attributes.style "gap" "8px"
         , Html.Attributes.style "padding" "8px"
@@ -139,21 +138,23 @@ tooltipView customEmoji =
         ]
         [ viewHelper "40px" "0" customEmoji Sticker.LoopForever
         , Html.text (":" ++ emojiNameToString customEmoji.name ++ ":")
-        , tooltipArrow
         ]
 
 
+{-| A sibling of the tooltip rather than a child of it, so that it stays pointing at
+the emoji when the tooltip slides sideways to stay on screen. It sits one pixel into
+the tooltip to cover the piece of border it points at.
+-}
 tooltipArrow : Html msg
 tooltipArrow =
     Html.div
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "top" "calc(100% - 1px)"
-        , Html.Attributes.style "left" "calc(50% - 8px)"
-        , Html.Attributes.style "width" "0"
-        , Html.Attributes.style "height" "0"
+        [ Html.Attributes.class "custom-emoji-popup-arrow"
         , Html.Attributes.style "border-left" "8px solid transparent"
         , Html.Attributes.style "border-right" "8px solid transparent"
         , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
+        , -- One above the tooltip's own z-index, so it covers that border rather than
+          -- being painted under it
+          Html.Attributes.style "z-index" "21"
         ]
         []
 

@@ -1181,7 +1181,8 @@ body {
    view even at opacity 0. A popup is much wider than the emoji it hangs off, so a
    message with custom emojis in it gave the conversation a horizontal scrollbar
    for popups nobody could see. */
-.emoji-popup {
+.emoji-popup,
+.custom-emoji-popup-arrow {
   display: none;
   opacity: 0;
 }
@@ -1189,9 +1190,58 @@ body {
   display: flex;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
+.emoji-popup-container:hover .custom-emoji-popup-arrow {
+  display: block;
+  animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
+}
 @keyframes emoji-popup-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+/* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a
+   sibling of the tooltip rather than a child of it so that it keeps pointing at
+   the emoji when the tooltip below slides sideways. */
+.custom-emoji-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.custom-emoji-popup-arrow {
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: calc(50% - 8px);
+  width: 0;
+  height: 0;
+}
+/* Centred is fine until the emoji is near the edge of the window, where half a
+   tooltip hangs off the side of the conversation and gives it a horizontal
+   scrollbar. Browsers with anchor positioning slide the tooltip back on screen
+   instead of overflowing: position-area centres it on the emoji, and the
+   fallbacks line its right edge up with the emoji at the right of the screen, or
+   its left edge at the left. position: fixed is what takes it out of the
+   conversation's scrollable area, so nothing it does can scroll the conversation.
+   Browsers without anchor positioning keep the centred rules above. */
+@supports (anchor-scope: --a) and (position-area: top span-all) {
+  .emoji-popup-container {
+    anchor-name: --custom-emoji;
+    /* Without a scope, every tooltip on the page anchors itself to the last emoji
+       in the document rather than to the emoji it belongs to */
+    anchor-scope: --custom-emoji;
+  }
+  .custom-emoji-popup {
+    position: fixed;
+    position-anchor: --custom-emoji;
+    position-area: top span-all;
+    justify-self: anchor-center;
+    position-try-fallbacks: top span-left, top span-right;
+    /* A fixed tooltip is no longer clipped by the conversation, so it has to hide
+       itself when its emoji scrolls out of view */
+    position-visibility: anchors-visible;
+    inset: auto;
+    transform: none;
+    margin-bottom: 8px;
+  }
 }
 """
             )
