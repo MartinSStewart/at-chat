@@ -5696,41 +5696,48 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode re
                             (Dom.id "guild_addReactionEmoji")
                             (MessageView_PressedReactionEmoji_Add emoji)
                     )
-                        [ Ui.rounded 8
-                        , Ui.spacing 2
-                        , Ui.background MyUi.background1
-                        , Ui.paddingXY 4 0
-                        , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
-                        , Ui.borderColor
+                        ([ Ui.rounded 8
+                         , Ui.spacing 2
+                         , Ui.background MyUi.background1
+                         , Ui.paddingXY 4 0
+                         , Ui.htmlAttribute (Html.Attributes.class "emoji-popup-container")
+                         , Ui.borderColor
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
 
                              else
                                 MyUi.border1
                             )
-                        , Ui.Font.color
+                         , Ui.Font.color
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
 
                              else
                                 MyUi.font2
                             )
-                        , Ui.border 1
-                        , Ui.width Ui.shrink
-                        , Ui.Font.weight 500
-                        , case isHovered of
-                            IsHovered ->
-                                reactionPopup customEmojis allUsers emoji users |> Ui.above
+                         , Ui.border 1
+                         , Ui.width Ui.shrink
+                         , Ui.Font.weight 500
+                         ]
+                            ++ (case isHovered of
+                                    IsHovered ->
+                                        -- The arrow hangs off the button rather than off the popup so
+                                        -- that it keeps pointing at this emoji when the popup slides
+                                        -- sideways to stay on screen
+                                        [ reactionPopup customEmojis allUsers emoji users |> Ui.above
+                                        , Ui.inFront reactionPopupArrow
+                                        ]
 
-                            IsNotHovered ->
-                                Ui.noAttr
+                                    IsNotHovered ->
+                                        []
 
-                            IsHoveredButNoMenu ->
-                                Ui.noAttr
+                                    IsHoveredButNoMenu ->
+                                        []
 
-                            IsHoveredWhileSelectingAnchor ->
-                                Ui.noAttr
-                        ]
+                                    IsHoveredWhileSelectingAnchor ->
+                                        []
+                               )
+                        )
                         [ case emoji of
                             EmojiOrCustomEmoji_Emoji emoji2 ->
                                 Emoji.view emoji2
@@ -5753,19 +5760,22 @@ reactionEmojiView isHovered currentUserId customEmojis allUsers animationMode re
             |> Just
 
 
+{-| Sits in the gap between the reaction button and the popup above it, pointing down
+at the button's emoji. Where it sits is left to the `emoji-popup-arrow` rules in
+`MyUi.css`, the same as the custom emoji tooltip's arrow.
+-}
 reactionPopupArrow : Element msg
 reactionPopupArrow =
     Ui.html
         (Html.div
-            [ Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "top" "calc(100% - 1px)"
-            , Html.Attributes.style "left" "11px"
-            , Html.Attributes.style "width" "0"
-            , Html.Attributes.style "height" "0"
+            [ Html.Attributes.class "emoji-popup-arrow reaction-popup-arrow"
             , Html.Attributes.style "border-left" "8px solid transparent"
             , Html.Attributes.style "border-right" "8px solid transparent"
             , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
             , Html.Attributes.style "pointer-events" "none"
+            , -- One above the z-index elm-ui gives `Ui.above`, so the arrow covers the
+              -- popup's border rather than being painted under it
+              Html.Attributes.style "z-index" "21"
             ]
             []
         )
@@ -5833,7 +5843,12 @@ reactionPopup customEmojis allUsers emoji users =
                 )
     in
     Ui.row
-        [ Ui.htmlAttribute (Html.Attributes.class "emoji-popup")
+        [ -- Where the popup sits, and the gap it leaves for the arrow, is left to the
+          -- `emoji-popup` and `reaction-popup` rules in `MyUi.css`. Placement has to
+          -- live there because an inline style would beat the stylesheet, and the
+          -- stylesheet is what slides the popup back on screen when the reaction is
+          -- near the edge of the window.
+          Ui.htmlAttribute (Html.Attributes.class "emoji-popup reaction-popup")
         , Ui.width Ui.shrink
         , MyUi.htmlStyle "width" "max-content"
         , MyUi.htmlStyle "max-width" "400px"
@@ -5843,12 +5858,10 @@ reactionPopup customEmojis allUsers emoji users =
         , Ui.rounded 8
         , Ui.padding 8
         , Ui.spacing 8
-        , Ui.move { x = 0, y = -8, z = 0 }
         , Ui.Font.color MyUi.font3
         , MyUi.noPointerEvents
         , Ui.Shadow.shadows [ { x = 0, y = 2, size = 0, blur = 8, color = Ui.rgba 0 0 0 0.3 } ]
         , Ui.contentCenterY
-        , Ui.inFront reactionPopupArrow
         ]
         [ case emoji of
             EmojiOrCustomEmoji_Emoji emoji2 ->

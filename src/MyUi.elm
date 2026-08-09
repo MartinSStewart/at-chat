@@ -1182,7 +1182,7 @@ body {
    message with custom emojis in it gave the conversation a horizontal scrollbar
    for popups nobody could see. */
 .emoji-popup,
-.custom-emoji-popup-arrow {
+.emoji-popup-arrow {
   display: none;
   opacity: 0;
 }
@@ -1190,7 +1190,7 @@ body {
   display: flex;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
-.emoji-popup-container:hover .custom-emoji-popup-arrow {
+.emoji-popup-container:hover .emoji-popup-arrow {
   display: block;
   animation: emoji-popup-fade-in 0.2s ease 0.5s forwards;
 }
@@ -1198,9 +1198,15 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* The custom emoji tooltip hangs above its emoji, centred on it. The arrow is a
-   sibling of the tooltip rather than a child of it so that it keeps pointing at
-   the emoji when the tooltip below slides sideways. */
+/* Each arrow hangs off the emoji it points at rather than off the popup it belongs
+   to, so that it stays pointing at that emoji when the popup slides sideways. */
+.emoji-popup-arrow {
+  position: absolute;
+  bottom: calc(100% + 1px);
+  width: 0;
+  height: 0;
+}
+/* The custom emoji tooltip is centred on its emoji, */
 .custom-emoji-popup {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1208,39 +1214,58 @@ body {
   transform: translateX(-50%);
 }
 .custom-emoji-popup-arrow {
-  position: absolute;
-  bottom: calc(100% + 1px);
   left: calc(50% - 8px);
-  width: 0;
-  height: 0;
 }
-/* Centred is fine until the emoji is near the edge of the window, where half a
-   tooltip hangs off the side of the conversation and gives it a horizontal
-   scrollbar. Browsers with anchor positioning slide the tooltip back on screen
-   instead of overflowing: position-area centres it on the emoji, and the
-   fallbacks line its right edge up with the emoji at the right of the screen, or
-   its left edge at the left. position: fixed is what takes it out of the
-   conversation's scrollable area, so nothing it does can scroll the conversation.
-   Browsers without anchor positioning keep the centred rules above. */
+/* while the reaction popup lines its left edge up with the reaction button. That
+   button's emoji is 11px in from its left edge, which is where its arrow points.
+   The popup itself is placed by elm-ui's `Ui.above`, so all it needs here is the
+   gap to leave for the arrow. */
+.reaction-popup {
+  margin-bottom: 8px;
+}
+.reaction-popup-arrow {
+  left: 3px;
+}
+/* Both are fine until the emoji is near the edge of the window, where the popup
+   hangs off the side of the conversation and gives it a horizontal scrollbar.
+   Browsers with anchor positioning slide the popup back on screen instead of
+   overflowing, by lining its far edge up with the emoji rather than letting it
+   overhang. position: fixed is what takes the popup out of the conversation's
+   scrollable area, so no placement it ends up in can scroll the conversation.
+   Browsers without anchor positioning keep the rules above. */
 @supports (anchor-scope: --a) and (position-area: top span-all) {
   .emoji-popup-container {
-    anchor-name: --custom-emoji;
-    /* Without a scope, every tooltip on the page anchors itself to the last emoji
-       in the document rather than to the emoji it belongs to */
-    anchor-scope: --custom-emoji;
+    anchor-name: --emoji-popup;
+    /* Without a scope, every popup on the page anchors itself to the last emoji in
+       the document rather than to the emoji it belongs to */
+    anchor-scope: --emoji-popup;
   }
-  .custom-emoji-popup {
+  .emoji-popup {
     position: fixed;
-    position-anchor: --custom-emoji;
-    position-area: top span-all;
-    justify-self: anchor-center;
-    position-try-fallbacks: top span-left, top span-right;
-    /* A fixed tooltip is no longer clipped by the conversation, so it has to hide
+    position-anchor: --emoji-popup;
+    /* A fixed popup is no longer clipped by the conversation, so it has to hide
        itself when its emoji scrolls out of view */
     position-visibility: anchors-visible;
     inset: auto;
+  }
+  .custom-emoji-popup {
+    position-area: top span-all;
+    justify-self: anchor-center;
+    position-try-fallbacks: top span-left, top span-right;
     transform: none;
     margin-bottom: 8px;
+  }
+  .reaction-popup {
+    position-area: top span-right;
+    justify-self: start;
+    position-try-fallbacks: --reaction-popup-flipped;
+  }
+  /* The fallback has to spell out `justify-self` as well as the area. A bare
+     `top span-left` fallback would keep `justify-self: start` above and pin the
+     popup to the left edge of the screen instead of to the reaction button. */
+  @position-try --reaction-popup-flipped {
+    position-area: top span-left;
+    justify-self: end;
   }
 }
 """
