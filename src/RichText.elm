@@ -772,7 +772,7 @@ customEmojis nonempty =
                 UserMention _ ->
                     []
 
-                NormalText char rest ->
+                NormalText _ _ ->
                     []
 
                 Bold nonempty2 ->
