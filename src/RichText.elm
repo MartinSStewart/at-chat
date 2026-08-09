@@ -831,8 +831,8 @@ emojisAndCustomEmojis emojiData nonempty =
                 Hyperlink _ ->
                     []
 
-                MarkdownLink _ _ ->
-                    []
+                MarkdownLink text _ ->
+                    Emoji.emojisInText emojiData (String.Nonempty.toString text) |> List.map EmojiOrCustomEmoji_Emoji
 
                 UserMention _ ->
                     []
@@ -866,8 +866,8 @@ emojisAndCustomEmojis emojiData nonempty =
                     Emoji.emojisInText emojiData (String.fromChar char ++ rest)
                         |> List.map EmojiOrCustomEmoji_Emoji
 
-                CodeBlock _ _ ->
-                    []
+                CodeBlock _ code ->
+                    Emoji.emojisInText emojiData code |> List.map EmojiOrCustomEmoji_Emoji
 
                 AttachedFile _ ->
                     []
