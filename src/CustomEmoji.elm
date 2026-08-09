@@ -148,7 +148,7 @@ the tooltip to cover the piece of border it points at.
 tooltipArrow : Html msg
 tooltipArrow =
     Html.div
-        [ Html.Attributes.class "emoji-popup-arrow custom-emoji-popup-arrow"
+        [ Html.Attributes.class "custom-emoji-popup-arrow"
         , Html.Attributes.style "border-left" "8px solid transparent"
         , Html.Attributes.style "border-right" "8px solid transparent"
         , Html.Attributes.style "border-top" ("8px solid " ++ MyUi.colorToStyle MyUi.background1)
