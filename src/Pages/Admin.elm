@@ -18,6 +18,7 @@ module Pages.Admin exposing
     , UserTable
     , UserTableId(..)
     , UsersChangeError(..)
+    , WebTransportTestStatus(..)
     , applyChangesToBackendUsers
     , disconnectClient
     , discordChannelReloadUser
@@ -101,6 +102,7 @@ import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser, EmailNotifications(..), LocalUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
+import WebTransport
 
 
 type Msg
@@ -165,6 +167,8 @@ type Msg
     | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
     | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
     | PressedLoadCloudflareEgress
+    | PressedTestWebTransport
+    | GotWebTransportResponse WebTransport.Response
 
 
 type ToBackend
@@ -220,6 +224,7 @@ type alias Model =
     , websocketCloseEventsPage : Int
     , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
     , cloudflareEgress : CloudflareEgressStatus
+    , webTransportTest : WebTransportTestStatus
     }
 
 
@@ -368,6 +373,7 @@ initForUser =
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
     , cloudflareEgress = EgressNotRequested
+    , webTransportTest = WebTransportNotTested
     }
 
 
@@ -399,6 +405,7 @@ initForAdmin { highlightLog } =
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
     , cloudflareEgress = EgressNotRequested
+    , webTransportTest = WebTransportNotTested
     }
 
 
@@ -1409,6 +1416,26 @@ update navigationKey time adminData localState msg model =
                     , NoOutMsg
                     )
 
+        PressedTestWebTransport ->
+            ( { model | webTransportTest = WebTransportTesting }
+            , WebTransport.sendHelloWorld
+            , NoOutMsg
+            )
+
+        GotWebTransportResponse response ->
+            ( { model
+                | webTransportTest =
+                    case response of
+                        WebTransport.Echoed message ->
+                            WebTransportEchoed message
+
+                        WebTransport.Failed error ->
+                            WebTransportFailed error
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
 
 {-| OpaqueVariants
 -}
@@ -1423,6 +1450,15 @@ type CloudflareEgressStatus
     | LoadingEgress
     | LoadedEgress Int
     | FailedToLoadEgress Http.Error
+
+
+{-| OpaqueVariants
+-}
+type WebTransportTestStatus
+    = WebTransportNotTested
+    | WebTransportTesting
+    | WebTransportEchoed String
+    | WebTransportFailed String
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -2523,6 +2559,32 @@ voiceChatSection isMobile adminData model user =
 
                 FailedToLoadEgress error ->
                     Ui.text (Log.httpErrorToString error)
+            ]
+        , Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.spacing 8 ]
+                [ Ui.text "WebTransport"
+                , Ui.el
+                    [ Ui.alignRight ]
+                    (MyUi.secondaryButton
+                        (Dom.id "admin_testWebTransport")
+                        PressedTestWebTransport
+                        "Send \"Hello world!\""
+                    )
+                ]
+            , case model.webTransportTest of
+                WebTransportNotTested ->
+                    Ui.none
+
+                WebTransportTesting ->
+                    Ui.text "Connecting..."
+
+                WebTransportEchoed message ->
+                    Ui.text ("Server echoed \"" ++ message ++ "\"")
+
+                WebTransportFailed error ->
+                    Ui.text error
             ]
         ]
 

@@ -90,6 +90,7 @@ import UserAgent
 import UserOptions
 import UserSession exposing (ChannelHeaderTab(..), NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import WebTransport
 import WordSpellingGame
 
 
@@ -208,6 +209,7 @@ subscriptions _ model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
+        , WebTransport.fromJs (\response -> AdminPageMsg (Pages.Admin.GotWebTransportResponse response))
         , case model of
             Loading _ ->
                 Subscription.none

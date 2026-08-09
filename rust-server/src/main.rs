@@ -23,6 +23,7 @@ use web_push::SubscriptionInfo;
 use webpage::HTML;
 mod content_types;
 mod video;
+mod webtransport;
 use rand::RngExt;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -34,8 +35,13 @@ async fn main() {
     // secret.txt should match Env.secretKey
     match fs::read_to_string(SERVER_SECRET_PATH.to_string()) {
         Ok(secret_key) => {
+            let webtransport_identity = webtransport::self_signed_identity();
+
             let state = Arc::new(Mutex::new(AppState {
                 secret_key: secret_key.trim().as_bytes().to_vec(),
+                webtransport_certificate_hash: webtransport_identity
+                    .as_ref()
+                    .map(|identity| *webtransport::certificate_hash(identity).as_ref()),
             }));
 
             let app = Router::new()
@@ -72,6 +78,10 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
+                .route(
+                    "/file/webtransport-info",
+                    get(webtransport_info_endpoint).options(options_endpoint),
+                )
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
@@ -84,6 +94,10 @@ async fn main() {
 
             match tokio::net::TcpListener::bind("0.0.0.0:3000").await {
                 Ok(listener) => {
+                    if let Some(identity) = webtransport_identity {
+                        tokio::spawn(webtransport::serve(identity));
+                    }
+
                     let _ = axum::serve(listener, app).await;
                 }
                 Err(error) => {
@@ -102,6 +116,9 @@ const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 #[derive(Clone)]
 struct AppState {
     secret_key: Vec<u8>,
+    /// SHA-256 of the self-signed certificate the WebTransport server presents. `None` if
+    /// generating the certificate failed, in which case the WebTransport server isn't running.
+    webtransport_certificate_hash: Option<[u8; 32]>,
 }
 
 async fn require_internal_secret(
@@ -329,6 +346,27 @@ async fn vapid_endpoint(_request: Request) -> Response<String> {
         Err(_) => response_with_headers(
             StatusCode::BAD_REQUEST,
             String::from("Failed to generate keys"),
+        ),
+    }
+}
+
+/// Tells the frontend where the WebTransport server is and which certificate to pin. See
+/// the module docs in webtransport.rs for why the browser needs the certificate hash.
+async fn webtransport_info_endpoint(State(state): State<Arc<Mutex<AppState>>>) -> Response<String> {
+    let certificate_hash = state.lock().unwrap().webtransport_certificate_hash;
+
+    match certificate_hash {
+        Some(certificate_hash) => json_response_with_headers(
+            StatusCode::OK,
+            serde_json::json!({
+                "port": webtransport::PORT,
+                "certificateHash": certificate_hash.to_vec(),
+            })
+            .to_string(),
+        ),
+        None => response_with_headers(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("WebTransport certificate failed to generate"),
         ),
     }
 }
