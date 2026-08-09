@@ -7176,6 +7176,19 @@ userTextMessageContent time spoilerHtmlId containerWidth isBeingEdited isMobile 
                     , drawingUserColor = Drawing.userColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
+                    , isHovered =
+                        case isHovered of
+                            IsNotHovered ->
+                                False
+
+                            IsHovered ->
+                                True
+
+                            IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredWhileSelectingAnchor ->
+                                False
                     }
                     message2.embeds
                     message2.content
@@ -7313,6 +7326,19 @@ discordUserTextMessageContent time spoilerHtmlId containerWidth isMobile maybeRe
                     , drawingUserColor = Drawing.discordUserColor
                     , isSelectingAnchor = isHovered == IsHoveredWhileSelectingAnchor
                     , devicePixelRatio = localUser.devicePixelRatio
+                    , isHovered =
+                        case isHovered of
+                            IsNotHovered ->
+                                False
+
+                            IsHovered ->
+                                True
+
+                            IsHoveredButNoMenu ->
+                                True
+
+                            IsHoveredWhileSelectingAnchor ->
+                                False
                     }
                     message2.embeds
                     message2.content

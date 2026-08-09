@@ -99,6 +99,7 @@ main =
                     , drawingUserColor = \_ -> ""
                     , isSelectingAnchor = False
                     , devicePixelRatio = 1
+                    , isHovered = True
                     }
                     Array.empty
                     (Nonempty
@@ -204,6 +205,7 @@ stickersSection =
             , drawingUserColor = \_ -> ""
             , isSelectingAnchor = False
             , devicePixelRatio = 1
+            , isHovered = True
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -573,6 +575,7 @@ embedExamples whitelistedDomains =
                 , drawingUserColor = \_ -> ""
                 , isSelectingAnchor = False
                 , devicePixelRatio = 1
+                , isHovered = True
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString Time.utc SeqDict.empty text)

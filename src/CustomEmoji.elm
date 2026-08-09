@@ -72,14 +72,19 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
             viewHelper emojiSize yOffset customEmoji animationMode
 
         Nothing ->
-            Html.div
-                [ Html.Attributes.style "width" emojiSize
-                , Html.Attributes.style "height" emojiSize
-                , Html.Attributes.style "display" "inline-block"
-                , Html.Attributes.style "background-color" "gray"
-                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
-                ]
-                []
+            placeholder emojiSize yOffset
+
+
+placeholder : String -> String -> Html msg
+placeholder emojiSize yOffset =
+    Html.div
+        [ Html.Attributes.style "width" emojiSize
+        , Html.Attributes.style "height" emojiSize
+        , Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "background-color" "gray"
+        , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
+        ]
+        []
 
 
 {-| Same as `view` but hovering over the emoji reveals a popup containing a large
@@ -101,14 +106,7 @@ viewWithTooltip emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 ]
 
         Nothing ->
-            Html.div
-                [ Html.Attributes.style "width" emojiSize
-                , Html.Attributes.style "height" emojiSize
-                , Html.Attributes.style "display" "inline-block"
-                , Html.Attributes.style "background-color" "gray"
-                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
-                ]
-                []
+            placeholder emojiSize yOffset
 
 
 tooltipView : CustomEmojiData -> Html msg
