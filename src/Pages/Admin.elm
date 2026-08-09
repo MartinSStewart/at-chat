@@ -28,6 +28,7 @@ module Pages.Admin exposing
     , logSectionId
     , pendingChangesText
     , rolesToDict
+    , subscriptions
     , update
     , updateAdmin
     , updateFromBackend
@@ -53,11 +54,13 @@ import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId)
+import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Effect.Websocket exposing (CloseEventCode(..))
 import EmailAddress
 import Env
+import FileStatus
 import GuildName
 import Html.Attributes
 import Html.Events
@@ -169,6 +172,7 @@ type Msg
     | PressedLoadCloudflareEgress
     | PressedTestWebTransport
     | GotWebTransportResponse WebTransport.Response
+    | CheckWebTransport Time.Posix
 
 
 type ToBackend
@@ -407,6 +411,22 @@ initForAdmin { highlightLog } =
     , cloudflareEgress = EgressNotRequested
     , webTransportTest = WebTransportNotTested
     }
+
+
+subscriptions : Model -> Subscription FrontendOnly Msg
+subscriptions model =
+    case model.webTransportTest of
+        WebTransportTesting ->
+            Time.every Duration.second CheckWebTransport
+
+        WebTransportNotTested ->
+            Subscription.none
+
+        WebTransportEchoed string ->
+            Subscription.none
+
+        WebTransportFailed string ->
+            Subscription.none
 
 
 updateAdmin : Id UserId -> AdminChange -> AdminData -> LocalState -> LocalState
@@ -1418,7 +1438,7 @@ update navigationKey time adminData localState msg model =
 
         PressedTestWebTransport ->
             ( { model | webTransportTest = WebTransportTesting }
-            , WebTransport.sendHelloWorld
+            , WebTransport.toJs (WebTransport.SendHelloWorld FileStatus.domain)
             , NoOutMsg
             )
 
@@ -1426,7 +1446,7 @@ update navigationKey time adminData localState msg model =
             ( { model
                 | webTransportTest =
                     case response of
-                        WebTransport.Echoed message ->
+                        WebTransport.GotServerData message ->
                             WebTransportEchoed message
 
                         WebTransport.Failed error ->
@@ -1435,6 +1455,9 @@ update navigationKey time adminData localState msg model =
             , Command.none
             , NoOutMsg
             )
+
+        CheckWebTransport _ ->
+            ( model, WebTransport.toJs WebTransport.GetServerData, NoOutMsg )
 
 
 {-| OpaqueVariants

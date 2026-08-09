@@ -226,7 +226,8 @@ subscriptions _ model =
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
                             Subscription.batch
-                                [ SeqDict.foldl
+                                [ Pages.Admin.subscriptions loggedIn.admin |> Subscription.map AdminPageMsg
+                                , SeqDict.foldl
                                     (\guildOrDmId filesToUpload list ->
                                         NonemptyDict.foldl
                                             (\fileId fileStatus list2 ->
