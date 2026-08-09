@@ -31,6 +31,7 @@ import Message
 import MessageArray
 import MessageInput
 import NonemptyDict
+import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import PersonName
@@ -115,6 +116,67 @@ checkGuildVisibleMessageCountGuildId =
 checkGuildVisibleMessageCountChannelId : Discord.Id Discord.ChannelId
 checkGuildVisibleMessageCountChannelId =
     Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+
+
+{-| A Discord MESSAGE\_REACTION\_ADD adding the `reactemoji` custom emoji to the message
+the reaction test creates, from whichever user id it's given.
+-}
+reactEmojiReactionAdd : String -> String
+reactEmojiReactionAdd userId =
+    "{\"t\":\"MESSAGE_REACTION_ADD\",\"s\":5,\"op\":0,\"d\":{\"user_id\":\""
+        ++ userId
+        ++ "\",\"message_id\":\"1500000000000000001\",\"emoji\":{\"id\":\"888159336168300600\",\"name\":\"reactemoji\"},\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"burst\":false}}"
+
+
+{-| Discord user ids for the stand-in users that pile reactions onto that message. A
+reaction only records the id of whoever reacted, so nobody has to exist for this.
+-}
+reactingUserId : Int -> String
+reactingUserId index =
+    "90000000000000" ++ String.padLeft 4 '0' (String.fromInt index)
+
+
+{-| Checks how many people the frontend thinks have reacted to that message, so that a
+snapshot of the count can't quietly end up being a snapshot of the wrong number.
+-}
+checkReactingUserCount :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> Int
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+checkReactingUserCount admin expected =
+    T.checkState
+        100
+        (\data ->
+            withAdminLocalState admin
+                data
+                (\local ->
+                    case LocalState.getDiscordGuildAndChannel checkGuildVisibleMessageCountGuildId checkGuildVisibleMessageCountChannelId local of
+                        Just ( _, channel ) ->
+                            case MessageArray.last channel.messages of
+                                Just message ->
+                                    case Message.reactionEmojis message |> SeqDict.values of
+                                        [ users ] ->
+                                            if NonemptySet.size users == expected then
+                                                Ok ()
+
+                                            else
+                                                Err
+                                                    ("Expected "
+                                                        ++ String.fromInt expected
+                                                        ++ " people to have reacted but the frontend has "
+                                                        ++ String.fromInt (NonemptySet.size users)
+                                                    )
+
+                                        _ ->
+                                            Err "Expected exactly one reaction on the frontend's message"
+
+                                Nothing ->
+                                    Err "The frontend's copy of the message is missing"
+
+                        Nothing ->
+                            Err "The Discord guild channel is missing from the frontend"
+                )
+        )
 
 
 {-| Reads the number of currently visible messages in the bot test guild's channel
@@ -361,10 +423,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 else
                                     Err "Backend already has the reaction's custom emoji loaded before the reaction was added"
                             )
-                        , T.websocketSendString
-                            100
-                            connection
-                            "{\"t\":\"MESSAGE_REACTION_ADD\",\"s\":5,\"op\":0,\"d\":{\"user_id\":\"161098476632014848\",\"message_id\":\"1500000000000000001\",\"emoji\":{\"id\":\"888159336168300600\",\"name\":\"reactemoji\"},\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"burst\":false}}"
+                        , T.websocketSendString 100 connection (reactEmojiReactionAdd "161098476632014848")
                         , T.checkState
                             100
                             (\data ->
@@ -435,7 +494,26 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                                 Err "The Discord guild channel is missing from the frontend"
                                     )
                             )
+
+                        -- A reaction button is a fixed width so that its popup can work
+                        -- out which way to open. The width has to grow once the count
+                        -- reaches two digits, and past 99 the count doesn't fit at all
+                        -- and becomes an infinity sign, so each of those is worth a look.
+                        , checkReactingUserCount admin 1
+                        , E2EHelper.tallSnapshot admin 100 { name = "Reaction count with one digit" }
                         ]
+                            ++ List.map
+                                (\index -> T.websocketSendString 10 connection (reactEmojiReactionAdd (reactingUserId index)))
+                                (List.range 1 9)
+                            ++ [ checkReactingUserCount admin 10
+                               , E2EHelper.tallSnapshot admin 100 { name = "Reaction count with two digits" }
+                               ]
+                            ++ List.map
+                                (\index -> T.websocketSendString 10 connection (reactEmojiReactionAdd (reactingUserId index)))
+                                (List.range 10 99)
+                            ++ [ checkReactingUserCount admin 100
+                               , E2EHelper.tallSnapshot admin 100 { name = "Reaction count past 99" }
+                               ]
                     )
                 ]
             )
