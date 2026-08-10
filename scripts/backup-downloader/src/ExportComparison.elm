@@ -12,9 +12,15 @@ Thread messages are checked against the same cutoff as top level messages rather
 than inheriting their parent's age, otherwise an old message with an active
 thread would look like it changed every time someone replied to it.
 
+Messages are matched up by their position in the `messages` array, since the
+export doesn't give them an id. That position is stable: messages are only ever
+appended, and deleting one leaves a placeholder behind instead of shortening the
+array, so the message at a given position is the same message in both exports.
+
 -}
 
-import Dict exposing (Dict)
+import Array exposing (Array)
+import Dict
 import Iso8601
 import Json.Decode
 import SafeJson exposing (SafeJson(..))
@@ -82,25 +88,18 @@ parseMessages name export =
 compareMessages : Time.Posix -> String -> List SafeJson -> List SafeJson -> List Difference
 compareMessages cutoff path reference new =
     let
-        newByIndex : Dict Int SafeJson
-        newByIndex =
-            byIndex new
+        newMessages : Array SafeJson
+        newMessages =
+            Array.fromList new
     in
-    List.concatMap
-        (\referenceMessage ->
+    List.indexedMap
+        (\index referenceMessage ->
             let
                 messagePath : String
                 messagePath =
-                    path
-                        ++ (case messageIndex referenceMessage of
-                                Just index ->
-                                    String.fromInt index
-
-                                Nothing ->
-                                    "?"
-                           )
+                    path ++ String.fromInt index
             in
-            case Maybe.andThen (\index -> Dict.get index newByIndex) (messageIndex referenceMessage) of
+            case Array.get index newMessages of
                 Just newMessage ->
                     (if isOldEnough cutoff referenceMessage && withoutThread referenceMessage /= withoutThread newMessage then
                         [ MessageChanged messagePath (withoutThread referenceMessage) (withoutThread newMessage) ]
@@ -125,22 +124,7 @@ compareMessages cutoff path reference new =
                         []
         )
         reference
-
-
-byIndex : List SafeJson -> Dict Int SafeJson
-byIndex messages =
-    List.filterMap (\message -> Maybe.map (\index -> ( index, message )) (messageIndex message)) messages
-        |> Dict.fromList
-
-
-messageIndex : SafeJson -> Maybe Int
-messageIndex message =
-    case field "index" message of
-        Just (JsonNumber index) ->
-            Just (round index)
-
-        _ ->
-            Nothing
+        |> List.concat
 
 
 {-| `deletedAt` is the fallback because a deleted message is the one kind of
