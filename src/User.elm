@@ -482,6 +482,7 @@ type AdminUiSection
     | WebsocketCloseEventsSection
     | SessionsSection
     | WordSpellingGameSwedishSection
+    | WebCodecsTestSection
 
 
 sectionToString : AdminUiSection -> String
@@ -531,6 +532,9 @@ sectionToString section2 =
 
         VoiceChatSection ->
             "Voice chat"
+
+        WebCodecsTestSection ->
+            "WebCodecs streaming test"
 
         WebsocketCloseEventsSection ->
             "Websocket close events"

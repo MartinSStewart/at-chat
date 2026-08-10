@@ -58,6 +58,7 @@ import Effect.Websocket exposing (CloseEventCode(..))
 import EmailAddress
 import Env
 import GuildName
+import Html
 import Html.Attributes
 import Html.Events
 import Icons
@@ -165,6 +166,8 @@ type Msg
     | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
     | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
     | PressedLoadCloudflareEgress
+    | PressedStartWebCodecsTest
+    | PressedStopWebCodecsTest
 
 
 type ToBackend
@@ -1356,6 +1359,12 @@ update navigationKey time adminData localState msg model =
         PressedDeleteCall ->
             ( model, Command.none, AdminChange EndAllCalls )
 
+        PressedStartWebCodecsTest ->
+            ( model, Ports.webCodecsTest True, NoOutMsg )
+
+        PressedStopWebCodecsTest ->
+            ( model, Ports.webCodecsTest False, NoOutMsg )
+
         PressedWebsocketCloseEventsPage page ->
             ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
 
@@ -1790,6 +1799,7 @@ view isMobile2 version time local adminData user model =
             , sessionsSection isMobile2 local.localUser.timezone user adminData
             , websocketCloseEventsSection isMobile2 time local.localUser.timezone user adminData model
             , voiceChatSection isMobile2 adminData model user
+            , webCodecsTestSection isMobile2 user
             , wordSpellingGameSwedishSection isMobile2 user adminData
             , filesSection isMobile2 user adminData
             , stickersAndEmojisSection isMobile2 local user
@@ -2369,6 +2379,75 @@ wordSpellingGameStatusText status =
 
         WordSpellingGameStatus_Loaded ->
             "Loaded"
+
+
+{-| Sends the webcam and mic through WebCodecs and the rust server's echo
+websocket, then plays back whatever comes home. The point is to see how the
+round trip behaves before committing to websockets over WebRTC, so the numbers
+under the video matter more than the picture.
+
+Elm only lays out the empty elements here. `elm-pkg-js/webcodecs-test.js` owns
+everything inside them, including the status text, which is why they are all
+rendered with no children.
+
+-}
+webCodecsTestSection : Bool -> BackendUser -> Element Msg
+webCodecsTestSection isMobile user =
+    section
+        isMobile
+        user.expandedSections
+        WebCodecsTestSection
+        [ Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_startWebCodecsTest")
+                PressedStartWebCodecsTest
+                (Ui.text "Start")
+            , MyUi.simpleButton
+                (Dom.id "admin_stopWebCodecsTest")
+                PressedStopWebCodecsTest
+                (Ui.text "Stop")
+            ]
+        , Html.div
+            [ Html.Attributes.id "webcodecsTest_status"
+            , Html.Attributes.style "font-family" "monospace"
+            , Html.Attributes.style "font-size" "13px"
+            , Html.Attributes.style "white-space" "pre"
+            , Html.Attributes.style "min-height" "90px"
+            ]
+            []
+            |> Ui.html
+        , Ui.row
+            [ Ui.spacing 8, Ui.wrap ]
+            [ Ui.column
+                [ Ui.spacing 4, Ui.width Ui.shrink ]
+                [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Input (camera)")
+                , Html.video
+                    [ Html.Attributes.id "webcodecsTest_localVideo"
+                    , Html.Attributes.style "width" "320px"
+                    , Html.Attributes.style "height" "240px"
+                    , Html.Attributes.style "background-color" "black"
+                    , Html.Attributes.style "border-radius" "4px"
+                    , Html.Attributes.attribute "playsinline" ""
+                    ]
+                    []
+                    |> Ui.html
+                ]
+            , Ui.column
+                [ Ui.spacing 4, Ui.width Ui.shrink ]
+                [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Output (round tripped through the rust server)")
+                , Html.canvas
+                    [ Html.Attributes.id "webcodecsTest_remoteCanvas"
+                    , Html.Attributes.style "width" "320px"
+                    , Html.Attributes.style "height" "240px"
+                    , Html.Attributes.style "background-color" "black"
+                    , Html.Attributes.style "border-radius" "4px"
+                    ]
+                    []
+                    |> Ui.html
+                ]
+            ]
+        ]
 
 
 voiceChatSection : Bool -> AdminData -> Model -> BackendUser -> Element Msg
