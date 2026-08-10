@@ -23,6 +23,7 @@ use web_push::SubscriptionInfo;
 use webpage::HTML;
 mod content_types;
 mod video;
+mod websocket;
 use rand::RngExt;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -72,6 +73,7 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
+                .route("/file/websocket", get(websocket::websocket_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024))

@@ -9,7 +9,7 @@ edition = "2024"
 rust-version = "1.91"
 
 [dependencies]
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["ws"] }
 chrono = "0.4.44"
 fs = "0.0.5"
 gufo = "0.3.0"
@@ -31,6 +31,13 @@ tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 vapid = "0.6.0"
 web-push = "0.11.0"
 webpage = { version = "2.0.1", features = ["serde"] }
+
+# Only used by the tests, which need a WebSocket client to talk to the echo
+# endpoint with. The server itself gets its WebSocket support from axum. The
+# version here matches the one axum builds on, so it is not compiled twice.
+[dev-dependencies]
+futures-util = "0.3.31"
+tokio-tungstenite = "0.26.2"
 
 
 
