@@ -1075,6 +1075,7 @@ update msg model =
 
                             ( messages2, linkedMessageIds ) =
                                 DiscordSync.messagesAndLinks
+                                    channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
                                     model.discordStickers
@@ -1106,6 +1107,7 @@ update msg model =
 
                                                     ( threadMessages, threadLinkedMessageIds ) =
                                                         DiscordSync.messagesAndLinks
+                                                            existingThread
                                                             (List.reverse thread.messages)
                                                             model.discordCustomEmojis
                                                             model.discordStickers
@@ -1180,6 +1182,7 @@ update msg model =
 
                             ( messages2, linkedMessageIds ) =
                                 DiscordSync.messagesAndLinks
+                                    channel
                                     (List.reverse reload.messages)
                                     model.discordCustomEmojis
                                     model.discordStickers

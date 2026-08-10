@@ -742,7 +742,11 @@ addDiscordChannel discordChannel =
 
 
 messagesAndLinks :
-    List Discord.Message
+    { a
+        | messages : IdArray messageId (Message messageId (Discord.Id Discord.UserId))
+        , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
+    }
+    -> List Discord.Message
     -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
@@ -750,7 +754,7 @@ messagesAndLinks :
         ( IdArray messageId (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks messages customEmojis discordStickers discordAttachments =
+messagesAndLinks existingChannelOrThread messages customEmojis discordStickers discordAttachments =
     let
         -- The ids of the messages a thread can hang off of. A thread created message isn't one
         -- of them, it stands in for a thread that has no message to hang off of.
@@ -819,6 +823,18 @@ messagesAndLinks messages customEmojis discordStickers discordAttachments =
                             List.filterMap (\sticker -> OneToOne.second sticker.id discordStickers) stickers
                     )
                     message.messageSnapshots
+                )
+                (case OneToOne.second message.id existingChannelOrThread.linkedMessageIds of
+                    Just messageId ->
+                        case IdArray.get messageId existingChannelOrThread.messages of
+                            Just existingMessage ->
+                                Message.reactionEmojis existingMessage
+
+                            Nothing ->
+                                SeqDict.empty
+
+                    Nothing ->
+                        SeqDict.empty
                 )
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
@@ -1596,7 +1612,7 @@ addForumPost authentication post guild channel model =
 
         message : Message ChannelMessageId (Discord.Id Discord.UserId)
         message =
-            Message.userTextMessageNoEmbeds createdAt post.ownerId richText Nothing SeqDict.empty
+            Message.userTextMessageNoEmbeds createdAt post.ownerId richText SeqDict.empty Nothing SeqDict.empty
     in
     -- A forum post's thread has the same id as the message the post hangs off of, the same
     -- as every other thread
