@@ -43,6 +43,7 @@ port module Ports exposing
     , textInputSelectAll
     , unregisterServiceWorker
     , visualViewportResized
+    , webCodecsTest
     )
 
 import Codec exposing (Codec)
@@ -365,6 +366,18 @@ setFavicon faviconPath =
 hapticFeedback : Command FrontendOnly toMsg msg
 hapticFeedback =
     Command.sendToJs "haptic_feedback" haptic_feedback Json.Encode.null
+
+
+port webcodecs_test_to_js : Json.Encode.Value -> Cmd msg
+
+
+{-| Starts and stops the admin page's WebCodecs streaming test. Everything the
+test does lives in `elm-pkg-js/webcodecs-test.js`, including the status readout
+it writes into the page, so there is no message coming back the other way.
+-}
+webCodecsTest : Bool -> Command FrontendOnly toMsg msg
+webCodecsTest isRunning =
+    Command.sendToJs "webcodecs_test_to_js" webcodecs_test_to_js (Json.Encode.bool isRunning)
 
 
 port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
