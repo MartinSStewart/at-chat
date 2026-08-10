@@ -5,6 +5,46 @@
 // endpoint, and decodes whatever comes back. Since the server mirrors the bytes
 // straight back, the picture and sound you get are your own, and the latency
 // shown is a real network round trip rather than an estimate.
+//
+// Frames are pulled off the camera with requestVideoFrameCallback and off the
+// mic with an AudioWorklet, rather than with MediaStreamTrackProcessor, which
+// reads better but Firefox has never implemented. Everything used here works in
+// Chrome 94+, Firefox 132+ and Safari 26+.
+
+const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_BLOCK_FRAMES = 960; // 20ms, which is the frame size opus wants.
+
+// Batches the mic into 20ms blocks on the audio thread. Doing it here rather
+// than on the main thread keeps this to one message per block instead of one
+// per 128 samples.
+const captureWorklet = `
+class CaptureProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.block = new Float32Array(${AUDIO_BLOCK_FRAMES});
+        this.filled = 0;
+    }
+
+    process(inputs) {
+        const channel = inputs[0] && inputs[0][0];
+        if (!channel) return true;
+
+        let offset = 0;
+        while (offset < channel.length) {
+            const take = Math.min(channel.length - offset, this.block.length - this.filled);
+            this.block.set(channel.subarray(offset, offset + take), this.filled);
+            this.filled += take;
+            offset += take;
+            if (this.filled === this.block.length) {
+                this.port.postMessage(this.block.slice());
+                this.filled = 0;
+            }
+        }
+        return true;
+    }
+}
+registerProcessor("capture-processor", CaptureProcessor);
+`;
 
 exports.init = async function init(app) {
     let test = null;
@@ -86,10 +126,10 @@ exports.init = async function init(app) {
     async function start() {
         await stop();
 
-        if (typeof VideoEncoder === "undefined" || typeof MediaStreamTrackProcessor === "undefined") {
+        if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
             setStatus([
-                "This browser is missing WebCodecs or MediaStreamTrackProcessor.",
-                "Chrome supports both. Safari added them in 18.4.",
+                "This browser is missing WebCodecs.",
+                "Needs Chrome 94+, Firefox 132+ or Safari 26+.",
             ]);
             return;
         }
@@ -99,7 +139,7 @@ exports.init = async function init(app) {
             stream: null,
             encoders: [],
             decoders: [],
-            readers: [],
+            audioNodes: [],
             audioContext: null,
             playheadSeconds: 0,
             stopped: false,
@@ -178,8 +218,11 @@ exports.init = async function init(app) {
         });
         state.decoders.push(videoDecoder);
 
-        const audioContext = new AudioContext();
+        // Pinned to opus's sample rate so the encoder never has to resample, and
+        // shared with the capture side below.
+        const audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
         state.audioContext = audioContext;
+        audioContext.resume().catch(function () {});
 
         const audioDecoder = new AudioDecoder({
             output: function (audioData) {
@@ -245,12 +288,12 @@ exports.init = async function init(app) {
         videoEncoder.configure(videoConfig);
         state.encoders.push(videoEncoder);
 
-        const audioTrack = stream.getAudioTracks()[0];
-        const audioSettings = audioTrack.getSettings();
+        // Mono, because that is what voice chat needs and it keeps the AudioData
+        // the worklet produces to a single plane.
         const audioConfig = {
             codec: "opus",
-            sampleRate: audioSettings.sampleRate || 48000,
-            numberOfChannels: audioSettings.channelCount || 1,
+            sampleRate: AUDIO_SAMPLE_RATE,
+            numberOfChannels: 1,
             bitrate: 64000,
         };
         audioDecoder.configure({
@@ -272,37 +315,100 @@ exports.init = async function init(app) {
 
         // Key frame every 2s so the decoder recovers quickly if it loses sync.
         let frameCount = 0;
-        pump(state, videoTrack, function (frame) {
+        pumpVideo(state, localVideo, function (frame) {
             videoEncoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
             frameCount += 1;
         });
-        pump(state, audioTrack, function (audioData) {
+        await pumpAudio(state, stream, function (audioData) {
             audioEncoder.encode(audioData);
         });
 
         reportStats(state);
     }
 
-    // Reads frames off a track and hands them to the encoder, closing each one
-    // afterwards. WebCodecs frames hold real memory and the pipeline stalls
-    // within a second or two if they are not released.
-    async function pump(state, track, encode) {
-        const reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
-        state.readers.push(reader);
-        try {
-            while (!state.stopped) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                // Encoding is faster than capture, but if the queue does back up
-                // it is better to drop than to grow an unbounded backlog.
-                if (state.socket && state.socket.readyState === WebSocket.OPEN) {
-                    encode(value);
-                }
-                value.close();
-            }
-        } catch (e) {
-            if (!state.stopped) state.stats.error = "capture: " + e;
+    function readyToSend(state) {
+        return !state.stopped && state.socket && state.socket.readyState === WebSocket.OPEN;
+    }
+
+    // Takes each new camera frame straight off the preview element. The frame
+    // has to be closed again immediately: WebCodecs frames hold real memory and
+    // the pipeline stalls within a second or two if they pile up.
+    function pumpVideo(state, videoElement, encode) {
+        if (!videoElement || typeof videoElement.requestVideoFrameCallback !== "function") {
+            state.stats.error = "requestVideoFrameCallback is missing, needs Firefox 132+";
+            return;
         }
+
+        function onFrame(now, metadata) {
+            if (state.stopped) return;
+
+            // Collapsing the admin section takes the preview out of the page,
+            // and with it the only thing feeding the encoder.
+            if (!videoElement.isConnected) {
+                state.stats.error = "preview video left the page, capture stopped";
+                return;
+            }
+
+            try {
+                const frame = new VideoFrame(videoElement, {
+                    timestamp: Math.round((metadata.mediaTime || now / 1000) * 1e6),
+                });
+                if (readyToSend(state)) encode(frame);
+                frame.close();
+            } catch (e) {
+                state.stats.error = "capture: " + e;
+            }
+
+            videoElement.requestVideoFrameCallback(onFrame);
+        }
+
+        videoElement.requestVideoFrameCallback(onFrame);
+    }
+
+    // Rebuilds AudioData from the raw samples the worklet batches up, since
+    // there is no portable way to get it off the track directly.
+    async function pumpAudio(state, stream, encode) {
+        const context = state.audioContext;
+        const moduleUrl = URL.createObjectURL(new Blob([captureWorklet], { type: "application/javascript" }));
+        try {
+            await context.audioWorklet.addModule(moduleUrl);
+        } finally {
+            URL.revokeObjectURL(moduleUrl);
+        }
+        if (state.stopped) return;
+
+        const source = context.createMediaStreamSource(stream);
+        const capture = new AudioWorkletNode(context, "capture-processor", {
+            channelCount: 1,
+            channelCountMode: "explicit",
+        });
+
+        let framesCaptured = 0;
+        capture.port.onmessage = function (event) {
+            if (!readyToSend(state)) return;
+            const samples = event.data;
+            const audioData = new AudioData({
+                format: "f32-planar",
+                sampleRate: AUDIO_SAMPLE_RATE,
+                numberOfFrames: samples.length,
+                numberOfChannels: 1,
+                timestamp: Math.round((framesCaptured / AUDIO_SAMPLE_RATE) * 1e6),
+                data: samples,
+            });
+            framesCaptured += samples.length;
+            encode(audioData);
+            audioData.close();
+        };
+
+        // The worklet only runs while its output goes somewhere, so it feeds a
+        // silent gain node. Routing it to the speakers directly would play the
+        // mic back on top of the decoded audio.
+        const silence = context.createGain();
+        silence.gain.value = 0;
+        source.connect(capture);
+        capture.connect(silence);
+        silence.connect(context.destination);
+        state.audioNodes = [source, capture, silence];
     }
 
     function send(state, kind, chunk) {
@@ -368,7 +474,7 @@ exports.init = async function init(app) {
         if (!state) return;
         state.stopped = true;
 
-        state.readers.forEach(function (reader) { reader.cancel().catch(function () {}); });
+        state.audioNodes.forEach(function (node) { node.disconnect(); });
         state.encoders.concat(state.decoders).forEach(function (codec) {
             if (codec.state !== "closed") codec.close();
         });
