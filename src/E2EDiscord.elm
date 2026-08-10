@@ -136,6 +136,46 @@ reactingUserId index =
     "90000000000000" ++ String.padLeft 4 '0' (String.fromInt index)
 
 
+{-| A Discord MESSAGE\_REACTION\_ADD adding a unicode emoji reaction to a message in the
+Bot Test guild. A message written in a thread is reacted to the same way, with the thread's
+id in the channel\_id field, which is how Discord addresses it.
+-}
+unicodeReactionAdd : { channelId : String, messageId : String, emoji : String, userId : String } -> String
+unicodeReactionAdd reaction =
+    "{\"t\":\"MESSAGE_REACTION_ADD\",\"s\":6,\"op\":0,\"d\":{\"user_id\":\""
+        ++ reaction.userId
+        ++ "\",\"message_id\":\""
+        ++ reaction.messageId
+        ++ "\",\"emoji\":{\"id\":null,\"name\":\""
+        ++ reaction.emoji
+        ++ "\"},\"channel_id\":\""
+        ++ reaction.channelId
+        ++ "\",\"guild_id\":\"705745250815311942\",\"burst\":false}}"
+
+
+{-| Have the admin reload the Bot Test guild's channel A, the same way the button on the
+admin page does. Discord answers with E2EHelper.botTestGuildChannelAHistory.
+-}
+reloadDiscordChannelA :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+    -> ChangeId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
+reloadDiscordChannelA admin changeId =
+    admin.sendToBackend
+        100
+        (LocalModelChangeRequest
+            changeId
+            (Local_Admin
+                (Pages.Admin.StartReloadingDiscordGuildChannel
+                    E2EHelper.startTime
+                    E2EHelper.currentDiscordUserId
+                    E2EHelper.botTestGuild
+                    E2EHelper.botTestGuild_ChannelA
+                )
+            )
+        )
+
+
 {-| Checks how many people the frontend thinks have reacted to that message, so that a
 snapshot of the count can't quietly end up being a snapshot of the wrong number.
 -}
@@ -1404,21 +1444,8 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0ReadySupplemental
             (\admin ->
                 [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , -- Admins can reload a Discord channel to load its messages again. Discord answers
-                  -- with E2EHelper.botTestGuildChannelAHistory.
-                  admin.sendToBackend
-                    100
-                    (LocalModelChangeRequest
-                        (ChangeId 0)
-                        (Local_Admin
-                            (Pages.Admin.StartReloadingDiscordGuildChannel
-                                E2EHelper.startTime
-                                E2EHelper.currentDiscordUserId
-                                E2EHelper.botTestGuild
-                                E2EHelper.botTestGuild_ChannelA
-                            )
-                        )
-                    )
+                , -- Admins can reload a Discord channel to load its messages again.
+                  reloadDiscordChannelA admin (ChangeId 0)
                 , -- The thread created message for the thread started from "Old message" is left out,
                   -- the one for the stand-alone thread is kept since that thread has no other message
                   -- to hang off of.
@@ -1471,6 +1498,89 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
                         , checkDiscordChannelAThreads
                             [ ( 0, [ "Message in old message thread", "Written after the reload" ] )
+                            , ( 1, [ "Message in stand-alone thread" ] )
+                            , ( 2, [ "Message in archived thread" ] )
+                            ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Reloading a Discord channel keeps the reactions it already had"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ reloadDiscordChannelA admin (ChangeId 0)
+                        , checkDiscordChannelAMessages [ "Old message", "Stand-alone thread", "Hello from history" ]
+                        , -- Two people react to "Old message", one of them twice, and someone reacts
+                          -- to a message written in the thread hanging off it.
+                          T.websocketSendString
+                            100
+                            connection
+                            (unicodeReactionAdd
+                                { channelId = "1072828564317159465"
+                                , messageId = "1533000000000000001"
+                                , emoji = "👍"
+                                , userId = "161098476632014848"
+                                }
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            (unicodeReactionAdd
+                                { channelId = "1072828564317159465"
+                                , messageId = "1533000000000000001"
+                                , emoji = "👍"
+                                , userId = reactingUserId 1
+                                }
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            (unicodeReactionAdd
+                                { channelId = "1072828564317159465"
+                                , messageId = "1533000000000000001"
+                                , emoji = "🎉"
+                                , userId = "161098476632014848"
+                                }
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            (unicodeReactionAdd
+                                { channelId = "1533000000000000001"
+                                , messageId = "1533096100000000000"
+                                , emoji = "👀"
+                                , userId = "161098476632014848"
+                                }
+                            )
+                        , checkDiscordChannelAMessages
+                            [ "Old message 👍×2 🎉×1", "Stand-alone thread", "Hello from history" ]
+                        , checkDiscordChannelAThreads
+                            [ ( 0, [ "Message in old message thread 👀×1" ] )
+                            , ( 1, [ "Message in stand-alone thread" ] )
+                            , ( 2, [ "Message in archived thread" ] )
+                            ]
+                        , -- Reloading builds the messages from what Discord sends back, and Discord
+                          -- doesn't include the reactions in a channel's history. The reactions have
+                          -- to be carried over from the messages that were already there instead,
+                          -- otherwise a reload silently wipes every reaction in the channel.
+                          reloadDiscordChannelA admin (ChangeId 1)
+                        , checkDiscordChannelAMessages
+                            [ "Old message 👍×2 🎉×1", "Stand-alone thread", "Hello from history" ]
+                        , checkDiscordChannelAThreads
+                            [ ( 0, [ "Message in old message thread 👀×1" ] )
                             , ( 1, [ "Message in stand-alone thread" ] )
                             , ( 2, [ "Message in archived thread" ] )
                             ]
@@ -3179,25 +3289,60 @@ at0232DiscordDmChannelId =
 
 
 {-| Renders a Discord message the backend has stored as plain text, so that tests can
-compare the contents of a channel or a thread against a list of strings.
+compare the contents of a channel or a thread against a list of strings. A message that
+has been reacted to gets each of its reactions and how many people added it appended to
+its text, for example `Old message 👍×2`.
 -}
 discordMessageToString : E2EHelper.BackendModel2 -> Message.Message messageId (Discord.Id Discord.UserId) -> String
 discordMessageToString backend message =
-    case message of
-        Message.UserTextMessage data ->
-            RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
+    let
+        text : String
+        text =
+            case message of
+                Message.UserTextMessage data ->
+                    RichText.toStringWithGetter Time.utc DiscordUserData.username True (E2EHelper.unwrapBackend backend).discordUsers data.content
 
-        Message.UserJoinedMessage _ _ _ _ ->
-            "<user joined>"
+                Message.UserJoinedMessage _ _ _ _ ->
+                    "<user joined>"
 
-        Message.DeletedMessage _ ->
-            "<deleted message>"
+                Message.DeletedMessage _ ->
+                    "<deleted message>"
 
-        Message.CallStarted _ ->
-            "<call started>"
+                Message.CallStarted _ ->
+                    "<call started>"
 
-        Message.GameStarted _ ->
-            "<game started>"
+                Message.GameStarted _ ->
+                    "<game started>"
+
+        reactions : List String
+        reactions =
+            Message.reactionEmojis message
+                |> SeqDict.toList
+                |> List.map
+                    (\( emoji, users ) ->
+                        discordReactionEmojiToString backend emoji ++ "×" ++ String.fromInt (NonemptySet.size users)
+                    )
+    in
+    String.join " " (text :: reactions)
+
+
+{-| Renders the emoji a reaction was made with. A custom emoji is written the way it's
+typed in Discord, so that a reaction with a custom emoji can't be mistaken for one with
+the ❓ emoji that stands in for a custom emoji that failed to load.
+-}
+discordReactionEmojiToString : E2EHelper.BackendModel2 -> EmojiOrCustomEmoji -> String
+discordReactionEmojiToString backend emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji unicodeEmoji ->
+            Emoji.toString unicodeEmoji
+
+        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+            case SeqDict.get customEmojiId (E2EHelper.unwrapBackend backend).customEmojis of
+                Just customEmoji ->
+                    ":" ++ CustomEmoji.emojiNameToString customEmoji.name ++ ":"
+
+                Nothing ->
+                    "<missing custom emoji>"
 
 
 {-| Joins message contents into something readable enough to be shown in a test failure.

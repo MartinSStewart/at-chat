@@ -83,14 +83,15 @@ userTextMessageNoEmbeds :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
     -> Message messageId userId
-userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
+userTextMessageNoEmbeds createdAt2 createdBy content reactions repliedTo attachedFiles =
     { createdAt = createdAt2
     , createdBy = createdBy
     , content = content
-    , reactions = SeqDict.empty
+    , reactions = reactions
     , editedAt = Nothing
     , repliedTo = repliedTo
     , attachedFiles = attachedFiles
