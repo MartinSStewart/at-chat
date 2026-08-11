@@ -636,9 +636,16 @@ enum Uploader {
     Backend,
 }
 
-/// Reads the `sid` cookie. A value containing a comma is refused because the
-/// session id is passed to Lamdera as one comma separated field among several,
-/// and a comma in it would let the caller write the fields either side.
+/// Reads the `sid` cookie. Two kinds of value are refused rather than returned:
+///
+/// A value containing a comma, because the session id is passed to Lamdera as
+/// one comma separated field among several, and a comma in it would let the
+/// caller write the fields either side.
+///
+/// An empty value, because an empty session id is how `is_file_upload_allowed`
+/// tells Lamdera the upload was the backend's own. A caller sending `sid=` would
+/// otherwise be taken for the backend and allowed to upload without any session
+/// at all.
 fn session_id_from_cookie(headers: &HeaderMap) -> Option<String> {
     headers
         .get("cookie")?
@@ -647,7 +654,9 @@ fn session_id_from_cookie(headers: &HeaderMap) -> Option<String> {
         .split(';')
         .find_map(|pair| {
             let (name, value) = pair.split_once('=')?;
-            (name.trim() == "sid" && !value.contains(',')).then(|| value.trim().to_owned())
+            let session_id: &str = value.trim();
+            (name.trim() == "sid" && !session_id.is_empty() && !session_id.contains(','))
+                .then(|| session_id.to_owned())
         })
 }
 
@@ -1631,6 +1640,25 @@ mod tests {
             None,
             "a session id that could forge extra fields should be refused"
         );
+    }
+
+    // An empty session id is what tells Lamdera the upload was the backend's
+    // own, so `sid=` must not be read as a session or anybody at all could
+    // upload without one.
+    #[test]
+    fn refuses_an_empty_session() {
+        for cookie in ["sid=", "sid=   ", "other=1; sid=; another=2"] {
+            let headers = headers_from(&[("cookie", cookie)]);
+            assert_eq!(
+                session_id_from_cookie(&headers),
+                None,
+                "an empty sid cookie should not be read as a session"
+            );
+            assert!(
+                uploader(&test_state("the-secret"), &headers).is_none(),
+                "an empty sid cookie should not be allowed to upload as the backend"
+            );
+        }
     }
 
     #[test]
