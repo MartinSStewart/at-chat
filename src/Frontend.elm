@@ -2848,14 +2848,9 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-
                         ( newImageEditor, cmd ) =
                             ImageEditor.update
                                 ImageEditor.ChangeUserAvatarRequest
-                                local.localUser.session.sessionIdHash
                                 model.windowSize
                                 imageEditorMsg
                                 loggedIn.profilePictureEditor
@@ -2870,10 +2865,6 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-
                         currentEditor : ImageEditor.Model
                         currentEditor =
                             case loggedIn.guildIconEditor of
@@ -2890,7 +2881,6 @@ updateLoaded msg model =
                         ( newImageEditor, cmd ) =
                             ImageEditor.update
                                 (ImageEditor.ChangeGuildIconRequest guildId)
-                                local.localUser.session.sessionIdHash
                                 model.windowSize
                                 imageEditorMsg
                                 currentEditor

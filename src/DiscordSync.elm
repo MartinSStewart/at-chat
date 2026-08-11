@@ -2,7 +2,6 @@ module DiscordSync exposing
     ( addDiscordChannel
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
-    , backendSessionIdHash
     , discordUserWebsocketMsg
     , getForumChannelReload
     , getManyMessages
@@ -61,7 +60,6 @@ import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
@@ -911,11 +909,6 @@ referencedMessageToMessageId message channel =
 
         Discord.NoReference ->
             Nothing
-
-
-backendSessionIdHash : SecretId ServerSecret -> SessionIdHash
-backendSessionIdHash secretKey =
-    SessionIdHash.fromString (SecretId.toString secretKey)
 
 
 taskResult : Task restriction a value -> Task restriction x (Result a value)
@@ -2831,7 +2824,7 @@ loadMessageAttachment :
     -> Discord.Attachment
     -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
 loadMessageAttachment secretKey attachment =
-    FileStatus.uploadUrl { sessionId = backendSessionIdHash secretKey, url = attachment.url }
+    FileStatus.uploadUrl secretKey attachment.url
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
         |> Task.onError (\error -> Task.succeed (Err error))
 
@@ -3115,9 +3108,8 @@ handleStickers secretKey stickersToCheck state =
                             in
                             { tasks =
                                 (FileStatus.uploadUrl
-                                    { sessionId = backendSessionIdHash secretKey
-                                    , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
-                                    }
+                                    secretKey
+                                    (Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id)
                                     |> taskResult
                                     |> Task.map (\result -> ( stickerId, result ))
                                 )
@@ -3165,13 +3157,12 @@ handleCustomEmojis secretKey emojisToCheck state =
                     in
                     { tasks =
                         (FileStatus.uploadUrl
-                            { sessionId = backendSessionIdHash secretKey
-                            , url =
-                                Discord.customEmojiUrl
-                                    (Discord.TwoToNthPower 7)
-                                    Nothing
-                                    (Discord.idToUInt64 emoji.id |> Discord.idFromUInt64)
-                            }
+                            secretKey
+                            (Discord.customEmojiUrl
+                                (Discord.TwoToNthPower 7)
+                                Nothing
+                                (Discord.idToUInt64 emoji.id |> Discord.idFromUInt64)
+                            )
                             |> taskResult
                             |> Task.map (\result -> ( customEmojiId, result ))
                         )
@@ -3474,7 +3465,7 @@ uploadAttachmentsForMessages model messages =
         |> SeqDict.toList
         |> List.map
             (\( _, attachment ) ->
-                FileStatus.uploadUrl { sessionId = backendSessionIdHash model.serverSecret, url = attachment.url }
+                FileStatus.uploadUrl model.serverSecret attachment.url
                     |> Task.map (\uploadResponse -> Ok ( DiscordAttachmentId.fromUrl attachment.url, uploadResponse ))
                     |> Task.onError (\error -> Task.succeed (Err error))
             )
@@ -4013,7 +4004,7 @@ loadImage secretKey url =
             (\maybeBytes ->
                 case maybeBytes of
                     Just bytes ->
-                        FileStatus.uploadBytes (backendSessionIdHash secretKey) bytes
+                        FileStatus.uploadBytes secretKey bytes
                             |> Task.map Just
                             |> Task.onError (\_ -> Task.succeed Nothing)
 

@@ -1,6 +1,5 @@
-module SessionIdHash exposing (SessionIdHash(..), codec, fromSessionId, fromString, toString)
+module SessionIdHash exposing (SessionIdHash(..), fromSessionId, fromString, toString)
 
-import Codec exposing (Codec)
 import Effect.Lamdera as Lamdera
 import Sha256
 
@@ -22,8 +21,3 @@ fromSessionId sessionId =
 fromString : String -> SessionIdHash
 fromString =
     SessionIdHash
-
-
-codec : Codec SessionIdHash
-codec =
-    Codec.map fromString toString Codec.string

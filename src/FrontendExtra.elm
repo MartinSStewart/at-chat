@@ -749,10 +749,6 @@ gotFiles guildOrDmId threadRoute files model =
     updateLoggedIn
         (\loggedIn ->
             let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
                 ( fileText, cmds, dict ) =
                     case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
                         Just dict2 ->
@@ -769,7 +765,6 @@ gotFiles guildOrDmId threadRoute files model =
                                            ]
                                     , FileStatus.uploadFile
                                         (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
                                         ( guildOrDmId, threadRoute )
                                         id
                                         file2
@@ -804,7 +799,6 @@ gotFiles guildOrDmId threadRoute files model =
                                     in
                                     FileStatus.uploadFile
                                         (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
                                         ( guildOrDmId, threadRoute )
                                         id
                                         file2
@@ -861,10 +855,6 @@ gotPastedText :
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg_ )
 gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPaste } loggedIn =
     let
-        local : LocalState
-        local =
-            Local.model loggedIn.localState
-
         fileId : Id FileId
         fileId =
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
@@ -905,7 +895,6 @@ gotPastedText guildOrDmId threadRoute { textBeforePaste, pastedText, textAfterPa
       }
     , FileStatus.uploadString
         (GotFileHashName ( guildOrDmId, threadRoute ) fileId)
-        local.localUser.session.sessionIdHash
         ( guildOrDmId, threadRoute )
         fileId
         pastedText
@@ -944,7 +933,6 @@ editMessage_gotPastedText guildOrDmId { textBeforePaste, pastedText, textAfterPa
               }
             , FileStatus.uploadString
                 (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                (Local.model loggedIn.localState).localUser.session.sessionIdHash
                 guildOrDmId
                 fileId
                 pastedText
@@ -989,7 +977,6 @@ editMessage_gotFiles guildOrDmId files model =
                                            ]
                                     , FileStatus.uploadFile
                                         (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
                                         guildOrDmId
                                         fileId
                                         file2

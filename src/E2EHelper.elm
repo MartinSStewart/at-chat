@@ -2367,6 +2367,48 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                 else
                     UnhandledHttpRequest
 
+            [ "upload-url" ] ->
+                case currentRequest.body of
+                    T.JsonBody json ->
+                        case Codec.decodeValue FileStatus.uploadUrlCodec json of
+                            Ok request ->
+                                -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
+                                if String.contains "796138864933863456" request.url then
+                                    UnhandledHttpRequest
+
+                                else
+                                    httpBasic
+                                        currentRequest.url
+                                        200
+                                        (Codec.encodeToString
+                                            0
+                                            FileStatus.uploadResponseCodec
+                                            { fileHash = FileStatus.fileHash request.url
+                                            , videoMetadata = Nothing
+                                            , imageMetadata =
+                                                { imageSize = Coord.xy 128 128
+                                                , orientation = Nothing
+                                                , gpsLocation = Nothing
+                                                , cameraOwner = Nothing
+                                                , exposureTime = Nothing
+                                                , fNumber = Nothing
+                                                , focalLength = Nothing
+                                                , isoSpeedRating = Nothing
+                                                , make = Nothing
+                                                , model = Nothing
+                                                , software = Nothing
+                                                , userComment = Nothing
+                                                }
+                                                    |> Just
+                                            }
+                                        )
+
+                            Err _ ->
+                                httpBasic currentRequest.url 500 ""
+
+                    _ ->
+                        httpBasic currentRequest.url 500 ""
+
             [ "custom-request" ] ->
                 case decodeCustomRequest currentRequest of
                     Just customRequest2 ->
