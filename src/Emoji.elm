@@ -80,7 +80,7 @@ fromString =
 
 view : UnicodeEmoji -> Element msg
 view (UnicodeEmoji emoji) =
-    Ui.el [ Ui.Font.size 20 ] (Ui.text emoji)
+    Ui.el [ Ui.Font.size 20, Ui.width Ui.shrink ] (Ui.text emoji)
 
 
 type Category
