@@ -1034,7 +1034,7 @@ update msg model =
                     DiscordSync.websocketCreateHandle
                         "WebsocketClosedByBackendForUser"
                         (WebsocketCreatedHandleForUser discordUserId)
-                        (Url.toString reconnectUrl)
+                        reconnectUrl
 
                 Nothing ->
                     Command.none

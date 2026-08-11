@@ -4957,7 +4957,7 @@ type alias ReadyData =
     --, consents : OptionalData Consents
     --, tutorial : Maybe (Maybe Tutorial)
     , shard : OptionalData ( Int, Int )
-    , resumeGatewayUrl : Url
+    , resumeGatewayUrl : String
     , apiCodeVersion : OptionalData Int
 
     --, experiments : OptionalData (List UserExperiment)
@@ -5013,23 +5013,10 @@ decodeReadyEvent =
         |> JD.andMap (decodeOptionalData "country_code" JD.string)
         |> JD.andMap (JD.field "geo_ordered_rtc_regions" (JD.list JD.string))
         |> JD.andMap (decodeOptionalData "shard" decodeShard)
-        |> JD.andMap (JD.field "resume_gateway_url" decodeUrl)
+        |> JD.andMap (JD.field "resume_gateway_url" JD.string)
         |> JD.andMap (decodeOptionalData "api_code_version" JD.int)
         |> JD.andMap (JD.field "explicit_content_scan_version" JD.int)
         |> JD.andMap (decodeOptionalData "av_sf_protocol_floor" JD.int)
-
-
-decodeUrl =
-    JD.andThen
-        (\text ->
-            case Url.fromString text of
-                Just url ->
-                    JD.succeed url
-
-                Nothing ->
-                    JD.fail ("Invalid URL: " ++ text)
-        )
-        JD.string
 
 
 decodeSessionType : JD.Decoder SessionType
@@ -5134,7 +5121,7 @@ decodeDispatchEvent eventName =
                 (JD.map2
                     DispatchBot_ReadyEvent
                     (JD.field "session_id" decodeSessionId)
-                    (JD.field "resume_gateway_url" decodeUrl)
+                    (JD.field "resume_gateway_url" JD.string)
                 )
 
         "RESUMED" ->
@@ -5674,7 +5661,7 @@ type GatewayEvent event
 
 
 type OpDispatchBotEvent
-    = DispatchBot_ReadyEvent SessionId Url
+    = DispatchBot_ReadyEvent SessionId String
     | DispatchBot_ResumedEvent
     | DispatchBot_MessageCreateEvent ChannelType Message
     | DispatchBot_MessageUpdateEvent MessageUpdate
@@ -6411,7 +6398,7 @@ encodeUserGatewayCommand gatewayCommand =
 
 
 type OutMsg connection
-    = CloseAndReopenHandle connection
+    = CloseAndReopenHandle connection String
     | OpenHandle
     | AuthenticationIsNoLongerValid
     | SendWebsocketData connection String
@@ -6430,7 +6417,7 @@ type OutMsg connection
 
 
 type UserOutMsg connection
-    = UserOutMsg_CloseAndReopenHandle connection Url
+    = UserOutMsg_CloseAndReopenHandle connection String
     | UserOutMsg_OpenHandle
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
@@ -6485,7 +6472,7 @@ decodePresence =
 
 type alias Model connection =
     { websocketHandle : Maybe connection
-    , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : Url }
+    , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : String }
     , heartbeatInterval : Maybe Duration
     }
 
@@ -6687,10 +6674,30 @@ handleGateway authToken intents response model =
                             ( updateCounter model, [ TypingStarted typingStart ] )
 
                 OpReconnect ->
-                    ( model, [ CloseAndReopenHandle connection ] )
+                    case model.gatewayState of
+                        Just gatewayState ->
+                            ( model
+                            , [ CloseAndReopenHandle
+                                    connection
+                                    (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+                              ]
+                            )
+
+                        Nothing ->
+                            ( model, [] )
 
                 OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, [ CloseAndReopenHandle connection ] )
+                    case model.gatewayState of
+                        Just gatewayState ->
+                            ( model
+                            , [ CloseAndReopenHandle
+                                    connection
+                                    (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+                              ]
+                            )
+
+                        Nothing ->
+                            ( model, [] )
 
         ( _, Err error ) ->
             ( model, [ FailedToParseWebsocketMessage error ] )
@@ -6927,7 +6934,12 @@ handleUserGateway authToken intents response model =
                 OpReconnect ->
                     case model.gatewayState of
                         Just gatewayState ->
-                            ( model, [ UserOutMsg_CloseAndReopenHandle connection gatewayState.resumeGatewayUrl ] )
+                            ( model
+                            , [ UserOutMsg_CloseAndReopenHandle
+                                    connection
+                                    (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+                              ]
+                            )
 
                         Nothing ->
                             ( model, [] )
@@ -6936,7 +6948,10 @@ handleUserGateway authToken intents response model =
                     case model.gatewayState of
                         Just gatewayState ->
                             ( { model | gatewayState = Nothing }
-                            , [ UserOutMsg_CloseAndReopenHandle connection gatewayState.resumeGatewayUrl ]
+                            , [ UserOutMsg_CloseAndReopenHandle
+                                    connection
+                                    (gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json")
+                              ]
                             )
 
                         Nothing ->
