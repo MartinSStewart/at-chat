@@ -12,6 +12,7 @@ rust-version = "1.91"
 axum = { version = "0.8.4", features = ["ws"] }
 chrono = "0.4.44"
 fs = "0.0.5"
+futures-util = "0.3.31"
 gufo = "0.3.0"
 gufo-common = "1.0.1"
 gufo-exif = "0.3.0"
@@ -27,16 +28,15 @@ serde = "1.0.219"
 serde_json = "1.0.143"
 sha2 = "0.10.9"
 subtle = "2.6.1"
-tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 vapid = "0.6.0"
 web-push = "0.11.0"
 webpage = { version = "2.0.1", features = ["serde"] }
 
-# Only used by the tests, which need a WebSocket client to talk to the echo
-# endpoint with. The server itself gets its WebSocket support from axum. The
+# Only used by the tests, which need a WebSocket client to talk to the
+# endpoints with. The server itself gets its WebSocket support from axum. The
 # version here matches the one axum builds on, so it is not compiled twice.
 [dev-dependencies]
-futures-util = "0.3.31"
 tokio-tungstenite = "0.26.2"
 
 

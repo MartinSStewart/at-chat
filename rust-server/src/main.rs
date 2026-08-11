@@ -39,6 +39,8 @@ async fn main() {
                 secret_key: secret_key.trim().as_bytes().to_vec(),
             }));
 
+            let rooms = websocket::rooms();
+
             let app = Router::new()
                 .route(
                     "/file/internal/embed",
@@ -74,8 +76,10 @@ async fn main() {
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
                 .route("/file/websocket", get(websocket::websocket_endpoint))
+                .route("/file/websocket/{room_id}", get(websocket::room_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
+                .layer(axum::Extension(rooms))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
