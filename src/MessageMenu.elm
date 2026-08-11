@@ -724,7 +724,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLi
             , button
                 isMobile
                 (Dom.id "messageMenu_markAsUnread")
-                Icons.closedEye
+                Icons.backward
                 "Mark as unread"
                 (MessageMenu_PressedMarkAsUnread guildOrDmId threadRoute)
                 |> ButtonItem
