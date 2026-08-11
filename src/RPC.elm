@@ -1,16 +1,20 @@
 module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
+import BackendExtra
+import Broadcast
+import Call exposing (CallId)
+import Codec exposing (Codec)
 import Coord
-import Dict
-import Effect.Lamdera
+import DiscordSync
+import Effect.Lamdera exposing (ClientId)
 import FileStatus
 import Http
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
-import SecretId
-import SeqDict
+import SessionIdHash exposing (SessionIdHash)
 import Task
+import Time
 import Toop exposing (T4(..))
 import Types exposing (BackendModel, BackendMsg(..))
 
@@ -52,7 +56,7 @@ checkFileUpload _ model headers text =
                     , model
                     , Task.perform
                         (\() ->
-                            GotRustServerFileUpload
+                            Rpc_GotFileUpload
                                 (FileStatus.fileHash fileHash)
                                 fileSize2
                                 (if width2 > 0 then
@@ -72,11 +76,61 @@ checkFileUpload _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+type alias CheckCallRequest =
+    { sessionIdHash : SessionIdHash
+    , clientId : ClientId
+    , callId : CallId
+    }
+
+
+checkCallRequestCodec : Codec CheckCallRequest
+checkCallRequestCodec =
+    Debug.todo ""
+
+
+checkCall : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+checkCall _ model _ text =
+    case Codec.decodeString checkCallRequestCodec text of
+        Ok request ->
+            case Broadcast.getSessionFromSessionIdHash request.sessionIdHash model of
+                Just ( sessionId, _ ) ->
+                    case request.callId of
+                        Call.DmRoomId otherUserId ->
+                            BackendExtra.asDmUserRpc
+                                model
+                                sessionId
+                                { otherUserId = otherUserId }
+                                (\session user otherUser channelId channel ->
+                                    ( Ok "valid"
+                                    , model
+                                    , Task.perform
+                                        (\time ->
+                                            Rpc_UserJoinedCall
+                                                time
+                                                sessionId
+                                                request.clientId
+                                                session.userId
+                                                request.callId
+                                        )
+                                        Time.now
+                                    )
+                                )
+
+                Nothing ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        _ ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
 lamdera_handleEndpoints _ req model =
     case req.endpoint of
         "is-file-upload-allowed" ->
             LamderaRPC.handleEndpointString checkFileUpload req model
+
+        "is-call-allowed" ->
+            LamderaRPC.handleEndpointString checkCall req model
 
         _ ->
             ( ResultString "Endpoint not found", model, Cmd.none )

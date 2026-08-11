@@ -373,7 +373,7 @@ drawingScalesWithImages imageUploadConfig =
                   admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
                 , T.backendUpdate
                     100
-                    (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 800 100)))
+                    (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 800 100)))
                 , E2EHelper.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.click 100 (Dom.id "channelHeader_drawOnMessages")

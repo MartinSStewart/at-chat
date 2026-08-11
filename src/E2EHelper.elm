@@ -1907,7 +1907,7 @@ uploadImageAttachment user =
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
         , T.backendUpdate
             100
-            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
+            (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 (Just (Coord.xy 128 128)))
         ]
 
 
@@ -1922,7 +1922,7 @@ uploadNonImageAttachment user =
         [ user.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
         , T.backendUpdate
             100
-            (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
+            (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 1234 Nothing)
         ]
 
 

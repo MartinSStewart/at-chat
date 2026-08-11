@@ -4195,13 +4195,7 @@ updateLoaded msg model =
 
                 Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
-                                loggedIn
-                                Command.none
-                        )
+                        (\loggedIn -> ( loggedIn, Call.startCallCmd roomId loggedIn.voiceChat ))
                         model
 
                 Call.PressedLeaveCall ->
@@ -6886,17 +6880,6 @@ updateLoadedFromBackend msg model =
                     , case localChange of
                         Local_VoiceChatChange callChange ->
                             case callChange of
-                                Call.Local_Join _ roomId (FilledInByBackend existingPeers) ->
-                                    case existingPeers of
-                                        Ok existingPeers2 ->
-                                            Call.startCallCmd roomId existingPeers2 loggedIn.voiceChat
-
-                                        Err () ->
-                                            Command.none
-
-                                Call.Local_Join _ _ EmptyPlaceholder ->
-                                    Command.none
-
                                 Call.Local_Leave _ ->
                                     Command.none
 

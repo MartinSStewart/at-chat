@@ -249,9 +249,6 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                Call.Local_Join _ _ _ ->
-                    "Joined voice chat"
-
                 Call.Local_Leave _ ->
                     "Left voice chat"
 
@@ -3554,74 +3551,6 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId peers ->
-                            let
-                                peers3 : Result () (List Call.ExistingPeer)
-                                peers3 =
-                                    case peers of
-                                        EmptyPlaceholder ->
-                                            Ok []
-
-                                        FilledInByBackend peers2 ->
-                                            peers2
-
-                                local2 : LocalState
-                                local2 =
-                                    case local.calls.currentRoom of
-                                        Just _ ->
-                                            leaveCall time local
-
-                                        Nothing ->
-                                            local
-                            in
-                            case peers3 of
-                                Ok peer4 ->
-                                    case roomId of
-                                        DmRoomId otherUserId ->
-                                            { local2
-                                                | calls =
-                                                    { calls
-                                                        | currentRoom = Just roomId
-                                                        , voiceChats =
-                                                            List.foldl
-                                                                (\peer5 set2 ->
-                                                                    SeqDictHelper.addToDict
-                                                                        roomId
-                                                                        peer5.connectionId.otherClientId
-                                                                        Call.defaultRemoteCallData
-                                                                        set2
-                                                                )
-                                                                calls.voiceChats
-                                                                peer4
-                                                        , error = Nothing
-                                                    }
-                                                , dmChannels =
-                                                    if SeqDict.member roomId calls.voiceChats then
-                                                        local2.dmChannels
-
-                                                    else
-                                                        SeqDict.update
-                                                            otherUserId
-                                                            (\maybe ->
-                                                                Maybe.withDefault DmChannel.frontendInit maybe
-                                                                    |> LocalState.createChannelMessageFrontend
-                                                                        (CallStarted
-                                                                            { startedAt = time
-                                                                            , endedAt = Nothing
-                                                                            , startedBy = local2.localUser.session.userId
-                                                                            , reactions = SeqDict.empty
-                                                                            , timestampDrawings = Drawing.emptyDrawing
-                                                                            , cardDrawings = Drawing.emptyDrawing
-                                                                            }
-                                                                        )
-                                                                    |> Just
-                                                            )
-                                                            local2.dmChannels
-                                            }
-
-                                Err () ->
-                                    { local2 | calls = { calls | error = Just Call.MissingApiKeys } }
-
                         Call.Local_Leave time ->
                             leaveCall time local
 

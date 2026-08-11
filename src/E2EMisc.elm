@@ -99,7 +99,7 @@ largePasteBecomesAttachment config =
                 -- like E2EHelper.uploadNonImageAttachment does).
                 , T.backendUpdate
                     100
-                    (Types.GotRustServerFileUpload (FileStatus.fileHash "123123123") 2500 Nothing)
+                    (Types.Rpc_GotFileUpload (FileStatus.fileHash "123123123") 2500 Nothing)
                 , admin.keyDown 1000 (Dom.id "channel_textinput") "Enter" []
                 , admin.checkView
                     100

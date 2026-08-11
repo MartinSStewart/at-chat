@@ -10,6 +10,7 @@ module BackendExtra exposing
     , asDiscordGuildMember
     , asDiscordUser
     , asDmUser
+    , asDmUserRpc
     , asGuildMember
     , asGuildOwner
     , asUser
@@ -59,6 +60,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
+import Http
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import IdArray exposing (IdArray)
 import Lamdera.Wire3
@@ -2612,6 +2614,42 @@ asDmUser model sessionId { otherUserId } func =
 
         Nothing ->
             ( model, Command.none )
+
+
+asDmUserRpc :
+    BackendModel
+    -> SessionId
+    -> { otherUserId : Id UserId }
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( Result Http.Error String, BackendModel, Cmd BackendMsg ))
+    -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
+asDmUserRpc model sessionId { otherUserId } func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            let
+                dmChannelId =
+                    DmChannelId.fromUserIds session.userId otherUserId
+            in
+            case
+                ( NonemptyDict.get session.userId model.users
+                , NonemptyDict.get otherUserId model.users
+                , SeqDict.get dmChannelId model.dmChannels
+                )
+            of
+                ( Just user, Just otherUser, Just dmChannel ) ->
+                    func session user otherUser dmChannelId dmChannel
+
+                ( Just user, Just otherUser, Nothing ) ->
+                    if usersHaveSharedGuilds session.userId otherUserId model then
+                        func session user otherUser dmChannelId DmChannel.backendInit
+
+                    else
+                        ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+                _ ->
+                    ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+        Nothing ->
+            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
 usersHaveSharedGuilds : Id UserId -> Id UserId -> BackendModel -> Bool

@@ -1814,7 +1814,7 @@ update msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedToReloadDiscordGuild guildId error) model responseCmd
 
-        GotRustServerFileUpload fileHash fileSize2 maybeImageSize ->
+        Rpc_GotFileUpload fileHash fileSize2 maybeImageSize ->
             ( { model
                 | files =
                     SeqDict.insert
@@ -1850,6 +1850,11 @@ update msg model =
               }
             , Command.none
             )
+
+        Rpc_UserJoinedCall time sessionId clientId userId callId ->
+            case callId of
+                Call.DmRoomId otherUserId ->
+                    joinDmVoiceChat sessionId clientId time otherUserId model userId
 
 
 gotDiscordStickers :
@@ -6549,17 +6554,11 @@ handleVoiceChatChange :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        Call.Local_Join _ voiceChatId _ ->
-            case voiceChatId of
-                Call.DmRoomId otherUserId ->
-                    BackendExtra.asDmUser
-                        model
-                        sessionId
-                        { otherUserId = otherUserId }
-                        (joinDmVoiceChat sessionId clientId time changeId otherUserId model)
-
         Call.Local_Leave _ ->
-            BackendExtra.asUser model sessionId (leaveVoice sessionId clientId time changeId model)
+            BackendExtra.asUser
+                model
+                sessionId
+                (\session _ -> leaveVoice sessionId clientId time changeId model session.userId)
 
         Call.Local_SetRemoteCallData remoteCallData ->
             BackendExtra.asUser model sessionId (handleSetInputEnabled sessionId clientId changeId remoteCallData model)
@@ -6638,10 +6637,9 @@ leaveVoice :
     -> Time.Posix
     -> ChangeId
     -> BackendModel
-    -> UserSession
-    -> BackendUser
+    -> Id UserId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-leaveVoice sessionId clientId time changeId model session _ =
+leaveVoice sessionId clientId time changeId model userId =
     let
         maybeRoomId : Maybe Call.CallId
         maybeRoomId =
@@ -6667,7 +6665,7 @@ leaveVoice sessionId clientId time changeId model session _ =
     in
     case maybeRoomId of
         Just roomId ->
-            leaveVoiceHelper sessionId clientId time (Just changeId) model session roomId
+            leaveVoiceHelper sessionId clientId time (Just changeId) model userId roomId
 
         Nothing ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -6679,10 +6677,10 @@ leaveVoiceHelper :
     -> Time.Posix
     -> Maybe ChangeId
     -> BackendModel
-    -> UserSession
+    -> Id UserId
     -> Call.CallId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
+leaveVoiceHelper sessionId clientId time maybeChangeId model userId roomId =
     ( { model
         | connections =
             SeqDict.updateIfExists
@@ -6694,7 +6692,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                 Call.DmRoomId otherUserId ->
                     let
                         dmChannelId =
-                            DmChannelId.fromUserIds session.userId otherUserId
+                            DmChannelId.fromUserIds userId otherUserId
                     in
                     if voiceChatRoomHasOtherMembers dmChannelId clientId model then
                         model.dmChannels
@@ -6714,13 +6712,13 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
             Call.DmRoomId otherUserId ->
                 Broadcast.toDmChannelExcludingOne
                     clientId
-                    session.userId
+                    userId
                     otherUserId
                     (\otherUserId2 ->
                         Call.Server_Left
                             time
                             { roomId = Call.DmRoomId otherUserId2
-                            , otherClientId = ( session.userId, clientId )
+                            , otherClientId = ( userId, clientId )
                             }
                             |> Server_VoiceChatChange
                     )
@@ -6733,18 +6731,17 @@ joinDmVoiceChat :
     SessionId
     -> ClientId
     -> Time.Posix
-    -> ChangeId
     -> Id UserId
     -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> BackendUser
-    -> DmChannelId
-    -> DmChannel
+    -> Id UserId
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ dmChannelId dmChannel =
-    case SeqDict.get sessionId model.connections of
-        Just connections ->
+joinDmVoiceChat sessionId clientId time otherUserId model userId =
+    let
+        dmChannelId =
+            DmChannelId.fromUserIds userId otherUserId
+    in
+    case ( SeqDict.get sessionId model.connections, SeqDict.get dmChannelId model.dmChannels ) of
+        ( Just connections, Just dmChannel ) ->
             case NonemptyDict.get clientId connections of
                 Just connection ->
                     let
@@ -6754,10 +6751,10 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                     ( model, Command.none )
 
                                 ConnectingToCall oldVoiceChatId ->
-                                    leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
+                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
 
                                 ConnectedToCall oldVoiceChatId ->
-                                    leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
+                                    leaveVoiceHelper sessionId clientId time Nothing model userId oldVoiceChatId
 
                         voiceChatId : Call.CallId
                         voiceChatId =
@@ -6765,7 +6762,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                         existingPeers : List Call.ExistingPeer
                         existingPeers =
-                            collectExistingPeers voiceChatId session.userId clientId model2
+                            collectExistingPeers voiceChatId userId clientId model2
 
                         model3 : BackendModel
                         model3 =
@@ -6783,7 +6780,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 , dmChannels =
                                     -- Only the person who starts the call adds a "started a call"
                                     -- message. Anyone joining an already ongoing call doesn't.
-                                    if isAnyoneElseInCall voiceChatId session.userId clientId model2 then
+                                    if isAnyoneElseInCall voiceChatId userId clientId model2 then
                                         model2.dmChannels
 
                                     else
@@ -6793,7 +6790,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                                 (CallStarted
                                                     { startedAt = time
                                                     , endedAt = Nothing
-                                                    , startedBy = session.userId
+                                                    , startedBy = userId
                                                     , reactions = SeqDict.empty
                                                     , timestampDrawings = Drawing.emptyDrawing
                                                     , cardDrawings = Drawing.emptyDrawing
@@ -6807,14 +6804,9 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                     in
                     ( model3
                     , Command.batch
-                        [ FilledInByBackend (Ok existingPeers)
-                            |> Call.Local_Join time voiceChatId
-                            |> Local_VoiceChatChange
-                            |> LocalChangeResponse changeId
-                            |> Lamdera.sendToFrontend clientId
-                        , Broadcast.toDmChannelExcludingOne
+                        [ Broadcast.toDmChannelExcludingOne
                             clientId
-                            session.userId
+                            userId
                             otherUserId
                             (\otherUserId2 ->
                                 Call.Server_Joining
@@ -6830,10 +6822,10 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                     )
 
                 Nothing ->
-                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    ( model, Command.none )
 
-        Nothing ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+        _ ->
+            ( model, Command.none )
 
 
 collectExistingPeers : Call.CallId -> Id UserId -> ClientId -> BackendModel -> List Call.ExistingPeer

@@ -77,8 +77,7 @@ import UserSession exposing (ChannelHeaderTab(..), ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix CallId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
-    | Local_Leave Time.Posix
+    = Local_Leave Time.Posix
     | Local_SetRemoteCallData RemoteCallData
 
 
@@ -1301,7 +1300,6 @@ type alias StartCallData =
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
-    , existingPeers : List ExistingPeer
     }
 
 
@@ -1313,7 +1311,6 @@ startCallDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
-        |> Codec.field "existingPeers" .existingPeers (Codec.list existingPeerCodec)
         |> Codec.buildObject
 
 
@@ -1397,14 +1394,13 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startCallCmd : CallId -> List ExistingPeer -> Model -> Command FrontendOnly toMsg msg
-startCallCmd roomId existingPeers model =
+startCallCmd : CallId -> Model -> Command FrontendOnly toMsg msg
+startCallCmd roomId model =
     { roomId = roomId
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.remoteCallData.audioInputEnabled
     , videoInputEnabled = model.remoteCallData.videoInputEnabled
-    , existingPeers = existingPeers
     }
         |> ToJs_StartCall
         |> toJs
