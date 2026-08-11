@@ -86,7 +86,6 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), LoginType(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
-import Url
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (DiscordFrontendUser, PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -486,8 +485,9 @@ update msg model =
                             Ok text ->
                                 Discord.GotWebsocketData text
 
-                            Err ( _, reason ) ->
-                                Discord.WebsocketClosed reason
+                            Err ( code, reason ) ->
+                                Discord.WebsocketClosed
+                                    { code = DiscordSync.closeEventCodeToInt code, reason = reason }
                         )
                         model
             in
