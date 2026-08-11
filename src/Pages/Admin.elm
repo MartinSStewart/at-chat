@@ -2120,37 +2120,37 @@ websocketCloseEventListItem timezone ( index, event ) =
                                     "1003 UnsupportedData"
 
                                 NoStatusReceived ->
-                                    "1004 NoStatusReceived"
+                                    "1005 NoStatusReceived"
 
                                 AbnormalClosure ->
-                                    "1005 AbnormalClosure"
+                                    "1006 AbnormalClosure"
 
                                 InvalidFramePayloadData ->
-                                    "1006 InvalidFramePayloadData"
+                                    "1007 InvalidFramePayloadData"
 
                                 PolicyViolation ->
-                                    "1007 PolicyViolation"
+                                    "1008 PolicyViolation"
 
                                 MessageTooBig ->
-                                    "1008 MessageTooBig"
+                                    "1009 MessageTooBig"
 
                                 MissingExtension ->
-                                    "1009 MissingExtension"
+                                    "1010 MissingExtension"
 
                                 InternalError ->
-                                    "1010 InternalError"
+                                    "1011 InternalError"
 
                                 ServiceRestart ->
-                                    "1011 ServiceRestart"
+                                    "1012 ServiceRestart"
 
                                 TryAgainLater ->
-                                    "1012 TryAgainLater"
+                                    "1013 TryAgainLater"
 
                                 BadGateway ->
-                                    "1013 BadGateway"
+                                    "1014 BadGateway"
 
                                 TlsHandshake ->
-                                    "1014 TlsHandshake"
+                                    "1015 TlsHandshake"
 
                                 UnknownCode int ->
                                     String.fromInt int ++ " Unknown code"

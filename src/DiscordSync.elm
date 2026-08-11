@@ -2,6 +2,7 @@ module DiscordSync exposing
     ( addDiscordChannel
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
+    , closeEventCodeToInt
     , discordUserWebsocketMsg
     , getForumChannelReload
     , getManyMessages
@@ -1871,6 +1872,62 @@ websocketClose debugName connection =
     Websocket.close connection |> Task.andThen (\() -> Time.now |> Task.map debugName)
 
 
+{-| Discord decides whether a session can be resumed based on the websocket close code, so we need
+the number rather than the name. Note that Effect.Websocket skips 1004 (it's reserved), so the
+constructors after UnsupportedData are all one higher than their name suggests.
+-}
+closeEventCodeToInt : Websocket.CloseEventCode -> Int
+closeEventCodeToInt code =
+    case code of
+        Websocket.NormalClosure ->
+            1000
+
+        Websocket.GoingAway ->
+            1001
+
+        Websocket.ProtocolError ->
+            1002
+
+        Websocket.UnsupportedData ->
+            1003
+
+        Websocket.NoStatusReceived ->
+            1005
+
+        Websocket.AbnormalClosure ->
+            1006
+
+        Websocket.InvalidFramePayloadData ->
+            1007
+
+        Websocket.PolicyViolation ->
+            1008
+
+        Websocket.MessageTooBig ->
+            1009
+
+        Websocket.MissingExtension ->
+            1010
+
+        Websocket.InternalError ->
+            1011
+
+        Websocket.ServiceRestart ->
+            1012
+
+        Websocket.TryAgainLater ->
+            1013
+
+        Websocket.BadGateway ->
+            1014
+
+        Websocket.TlsHandshake ->
+            1015
+
+        Websocket.UnknownCode int ->
+            int
+
+
 discordUserWebsocketMsg : Discord.Id Discord.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
     case SeqDict.get discordUserId model.discordUsers of
@@ -1882,17 +1939,20 @@ discordUserWebsocketMsg discordUserId discordMsg model =
             List.foldl
                 (\outMsg ( model2, cmds ) ->
                     case outMsg of
-                        Discord.UserOutMsg_CloseAndReopenHandle connection ->
+                        Discord.UserOutMsg_CloseAndReopenHandle connection reconnectTo ->
                             ( model2
                             , Task.perform
-                                (WebsocketClosedByBackendForUser discordUserId True)
+                                (WebsocketClosedByBackendForUser discordUserId (Just reconnectTo))
                                 (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_OpenHandle ->
+                        Discord.UserOutMsg_OpenHandle maybeResumeGatewayUrl ->
                             ( model2
-                            , websocketCreateHandle "OpenHandle" (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+                            , websocketCreateHandle
+                                "OpenHandle"
+                                (WebsocketCreatedHandleForUser discordUserId)
+                                (Maybe.withDefault Discord.websocketGatewayUrl maybeResumeGatewayUrl)
                                 :: cmds
                             )
 
@@ -2077,7 +2137,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                         data
 
                                                     Discord.WebsocketClosed data ->
-                                                        data
+                                                        data.reason
                                                 )
                                                 message
                                                 attachments

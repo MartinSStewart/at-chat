@@ -5116,7 +5116,13 @@ decodeDispatchEvent : String -> JD.Decoder OpDispatchBotEvent
 decodeDispatchEvent eventName =
     case eventName of
         "READY" ->
-            JD.field "d" (JD.map DispatchBot_ReadyEvent decodeSessionId)
+            JD.field
+                "d"
+                (JD.map2
+                    DispatchBot_ReadyEvent
+                    (JD.field "session_id" decodeSessionId)
+                    (JD.field "resume_gateway_url" JD.string)
+                )
 
         "RESUMED" ->
             JD.field "d" (JD.succeed DispatchBot_ResumedEvent)
@@ -5589,7 +5595,12 @@ decodeGatewayEvent eventDecoder =
                         JD.succeed OpReconnect
 
                     9 ->
-                        JD.succeed OpInvalidSession
+                        -- d tells us whether the session can still be resumed. It's usually false,
+                        -- which means we have to throw the session away and identify again. Assume
+                        -- the same if d is missing or isn't a bool, since guessing wrong the other
+                        -- way leaves us resuming a session that no longer exists.
+                        JD.oneOf [ JD.field "d" JD.bool, JD.succeed False ]
+                            |> JD.map OpInvalidSession
 
                     10 ->
                         JD.at [ "d", "heartbeat_interval" ] JD.int
@@ -5629,7 +5640,7 @@ decodeNonce =
 type GatewayCommand
     = OpIdentify Authentication Intents
     | OpResume Authentication SessionId SequenceCounter
-    | OpHeatbeat
+    | OpHeatbeat (Maybe SequenceCounter)
     | OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
     | OpUpdateVoiceState
     | OpUpdatePresence
@@ -5638,7 +5649,7 @@ type GatewayCommand
 type GatewayUserCommand
     = GatewayUser_OpIdentify UserAuth Intents
     | GatewayUser_OpResume UserAuth SessionId SequenceCounter
-    | GatewayUser_OpHeatbeat
+    | GatewayUser_OpHeatbeat (Maybe SequenceCounter)
     | GatewayUser_OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
     | GatewayUser_OpUpdateVoiceState
     | GatewayUser_OpUpdatePresence
@@ -5651,11 +5662,11 @@ type GatewayEvent event
     | OpAck
     | OpDispatch SequenceCounter event
     | OpReconnect
-    | OpInvalidSession
+    | OpInvalidSession Bool
 
 
 type OpDispatchBotEvent
-    = DispatchBot_ReadyEvent SessionId
+    = DispatchBot_ReadyEvent SessionId String
     | DispatchBot_ResumedEvent
     | DispatchBot_MessageCreateEvent ChannelType Message
     | DispatchBot_MessageUpdateEvent MessageUpdate
@@ -6309,8 +6320,8 @@ encodeGatewayCommand gatewayCommand =
                   )
                 ]
 
-        OpHeatbeat ->
-            JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
+        OpHeatbeat maybeSequenceCounter ->
+            JE.object [ ( "op", JE.int 1 ), ( "d", encodeHeartbeatSequenceCounter maybeSequenceCounter ) ]
 
         OpRequestGuildMembers guildIds nonce2 ->
             encodeRequestGuildMembers guildIds nonce2
@@ -6320,6 +6331,19 @@ encodeGatewayCommand gatewayCommand =
 
         OpUpdatePresence ->
             JE.object []
+
+
+{-| Discord expects the last sequence number we received in the heartbeat, or null if we haven't
+received any events yet.
+-}
+encodeHeartbeatSequenceCounter : Maybe SequenceCounter -> JE.Value
+encodeHeartbeatSequenceCounter maybeSequenceCounter =
+    case maybeSequenceCounter of
+        Just (SequenceCounter sequenceCounter) ->
+            JE.int sequenceCounter
+
+        Nothing ->
+            JE.null
 
 
 encodeRequestGuildMembers : List (Id idType) -> OptionalData Nonce -> JE.Value
@@ -6374,8 +6398,8 @@ encodeUserGatewayCommand gatewayCommand =
                   )
                 ]
 
-        GatewayUser_OpHeatbeat ->
-            JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
+        GatewayUser_OpHeatbeat maybeSequenceCounter ->
+            JE.object [ ( "op", JE.int 1 ), ( "d", encodeHeartbeatSequenceCounter maybeSequenceCounter ) ]
 
         GatewayUser_OpRequestGuildMembers guildIds nonce2 ->
             encodeRequestGuildMembers guildIds nonce2
@@ -6392,8 +6416,8 @@ encodeUserGatewayCommand gatewayCommand =
 
 
 type OutMsg connection
-    = CloseAndReopenHandle connection
-    | OpenHandle
+    = CloseAndReopenHandle connection String
+    | OpenHandle (Maybe String)
     | AuthenticationIsNoLongerValid
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
@@ -6411,8 +6435,8 @@ type OutMsg connection
 
 
 type UserOutMsg connection
-    = UserOutMsg_CloseAndReopenHandle connection
-    | UserOutMsg_OpenHandle
+    = UserOutMsg_CloseAndReopenHandle connection String
+    | UserOutMsg_OpenHandle (Maybe String)
     | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
@@ -6466,7 +6490,7 @@ decodePresence =
 
 type alias Model connection =
     { websocketHandle : Maybe connection
-    , gatewayState : Maybe ( SessionId, SequenceCounter )
+    , gatewayState : Maybe { sessionId : SessionId, sequenceCounter : SequenceCounter, resumeGatewayUrl : String }
     , heartbeatInterval : Maybe Duration
     }
 
@@ -6481,7 +6505,7 @@ init =
 
 type Msg
     = GotWebsocketData String
-    | WebsocketClosed String
+    | WebsocketClosed { code : Int, reason : String }
 
 
 websocketGatewayUrl : String
@@ -6489,12 +6513,44 @@ websocketGatewayUrl =
     "wss://gateway.discord.gg/?v=9&encoding=json"
 
 
+{-| The `resume_gateway_url` Discord hands us in the ready event has no query parameters on it.
+Discord requires that we reconnect with the same query parameters we used for the original
+connection, so we have to add them back on ourselves.
+-}
+resumeUrl : { a | resumeGatewayUrl : String } -> String
+resumeUrl gatewayState =
+    gatewayState.resumeGatewayUrl ++ "/?v=9&encoding=json"
+
+
+setSequenceCounter : SequenceCounter -> Model connection -> Model connection
+setSequenceCounter sequenceCounter model =
+    case model.gatewayState of
+        Just gatewayState ->
+            { model | gatewayState = Just { gatewayState | sequenceCounter = sequenceCounter } }
+
+        Nothing ->
+            model
+
+
+{-| Discord destroys the session when the connection is closed with 1000 or 1001, so there's
+nothing left to resume in that case (this includes us calling `Websocket.close` ourselves, since
+that closes with 1000). 4007 means we sent a bad sequence number and 4009 means the session timed
+out, both of which also leave us without a session. Everything else is worth trying to resume.
+-}
+canResumeAfterClose : Int -> Bool
+canResumeAfterClose closeCode =
+    not (List.member closeCode [ 1000, 1001, 4007, 4009 ])
+
+
 createdHandle : connection -> Model connection -> Model connection
 createdHandle connection model =
     { model | websocketHandle = Just connection }
 
 
-subscription : (connection -> (String -> Msg) -> (String -> Msg) -> sub) -> Model connection -> Maybe sub
+subscription :
+    (connection -> (String -> Msg) -> ({ code : Int, reason : String } -> Msg) -> sub)
+    -> Model connection
+    -> Maybe sub
 subscription listen model =
     case model.websocketHandle of
         Just handle ->
@@ -6510,16 +6566,26 @@ update authToken intents msg model =
         GotWebsocketData data ->
             handleGateway authToken intents data model
 
-        WebsocketClosed reason ->
+        WebsocketClosed { code, reason } ->
             let
                 _ =
-                    Debug.log "WebsocketClosed" ()
+                    Debug.log "WebsocketClosed" ( code, reason )
             in
-            if reason == "Authentication failed." then
+            if code == 4004 || reason == "Authentication failed." then
                 ( { model | websocketHandle = Nothing }, [ AuthenticationIsNoLongerValid ] )
 
             else
-                ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
+                case ( model.gatewayState, canResumeAfterClose code ) of
+                    ( Just gatewayState, True ) ->
+                        ( { model | websocketHandle = Nothing }
+                        , [ OpenHandle (Just (resumeUrl gatewayState)) ]
+                        )
+
+                    _ ->
+                        -- The session is gone, so start over with an identify on the main gateway.
+                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ OpenHandle Nothing ]
+                        )
 
 
 userUpdate : UserAuth -> Intents -> Msg -> Model connection -> ( Model connection, List (UserOutMsg connection) )
@@ -6528,16 +6594,26 @@ userUpdate authToken intents msg model =
         GotWebsocketData data ->
             handleUserGateway authToken intents data model
 
-        WebsocketClosed reason ->
+        WebsocketClosed { code, reason } ->
             let
                 _ =
-                    Debug.log "WebsocketClosed" ()
+                    Debug.log "WebsocketClosed" ( code, reason )
             in
-            if reason == "Authentication failed." then
+            if code == 4004 || reason == "Authentication failed." then
                 ( { model | websocketHandle = Nothing }, [ UserOutMsg_AuthenticationIsNoLongerValid ] )
 
             else
-                ( { model | websocketHandle = Nothing }, [ UserOutMsg_OpenHandle ] )
+                case ( model.gatewayState, canResumeAfterClose code ) of
+                    ( Just gatewayState, True ) ->
+                        ( { model | websocketHandle = Nothing }
+                        , [ UserOutMsg_OpenHandle (Just (resumeUrl gatewayState)) ]
+                        )
+
+                    _ ->
+                        -- The session is gone, so start over with an identify on the main gateway.
+                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ UserOutMsg_OpenHandle Nothing ]
+                        )
 
 
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
@@ -6547,7 +6623,7 @@ handleGateway authToken intents response model =
             let
                 heartbeat : String
                 heartbeat =
-                    encodeGatewayCommand OpHeatbeat
+                    encodeGatewayCommand (OpHeatbeat (Maybe.map .sequenceCounter model.gatewayState))
                         |> JE.encode 0
             in
             case data of
@@ -6555,8 +6631,8 @@ handleGateway authToken intents response model =
                     let
                         command =
                             (case model.gatewayState of
-                                Just ( discordSessionId, sequenceCounter ) ->
-                                    OpResume authToken discordSessionId sequenceCounter
+                                Just gatewayState ->
+                                    OpResume authToken gatewayState.sessionId gatewayState.sequenceCounter
 
                                 Nothing ->
                                     OpIdentify authToken intents
@@ -6583,77 +6659,104 @@ handleGateway authToken intents response model =
                     )
 
                 OpDispatch sequenceCounter opDispatchEvent ->
+                    let
+                        updateCounter : Model connection -> Model connection
+                        updateCounter =
+                            setSequenceCounter sequenceCounter
+                    in
                     case opDispatchEvent of
-                        DispatchBot_ReadyEvent discordSessionId ->
-                            ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, [] )
+                        DispatchBot_ReadyEvent discordSessionId resumeGatewayUrl ->
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = discordSessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = resumeGatewayUrl
+                                        }
+                              }
+                            , []
+                            )
 
                         DispatchBot_ResumedEvent ->
-                            ( model, [] )
+                            ( updateCounter model, [] )
 
                         DispatchBot_MessageCreateEvent channelType message ->
-                            ( model, [ UserCreatedMessage channelType message ] )
+                            ( updateCounter model, [ UserCreatedMessage channelType message ] )
 
                         DispatchBot_MessageUpdateEvent messageUpdate ->
-                            ( model, [ UserEditedMessage messageUpdate ] )
+                            ( updateCounter model, [ UserEditedMessage messageUpdate ] )
 
                         DispatchBot_MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
-                                    ( model
+                                    ( updateCounter model
                                     , [ UserDeletedMessage guildId channelId messageId ]
                                     )
 
                                 Missing ->
-                                    ( model
+                                    ( updateCounter model
                                     , []
                                     )
 
                         DispatchBot_MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
-                                    ( model
+                                    ( updateCounter model
                                     , List.map
                                         (UserDeletedMessage guildId channelId)
                                         messageIds
                                     )
 
                                 Missing ->
-                                    ( model, [] )
+                                    ( updateCounter model, [] )
 
                         DispatchBot_GuildMemberAddEvent guildId guildMember ->
-                            ( model
+                            ( updateCounter model
                             , []
                             )
 
                         DispatchBot_GuildMemberRemoveEvent guildId userId ->
-                            ( model, [ GuildMemberRemoved guildId userId ] )
+                            ( updateCounter model, [ GuildMemberRemoved guildId userId ] )
 
                         DispatchBot_GuildMemberUpdateEvent _ ->
-                            ( model, [] )
+                            ( updateCounter model, [] )
 
                         DispatchBot_ThreadCreatedOrUserAddedToThreadEvent channel ->
-                            ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
+                            ( updateCounter model, [ ThreadCreatedOrUserAddedToThread channel ] )
 
                         DispatchBot_MessageReactionAdd reactionAdd ->
-                            ( model, [ UserAddedReaction reactionAdd ] )
+                            ( updateCounter model, [ UserAddedReaction reactionAdd ] )
 
                         DispatchBot_MessageReactionRemove reactionRemove ->
-                            ( model, [ UserRemovedReaction reactionRemove ] )
+                            ( updateCounter model, [ UserRemovedReaction reactionRemove ] )
 
                         DispatchBot_MessageReactionRemoveAll reactionRemoveAll ->
-                            ( model, [ AllReactionsRemoved reactionRemoveAll ] )
+                            ( updateCounter model, [ AllReactionsRemoved reactionRemoveAll ] )
 
                         DispatchBot_MessageReactionRemoveEmoji reactionRemoveEmoji ->
-                            ( model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
+                            ( updateCounter model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
 
                         DispatchBot_TypingStart typingStart ->
-                            ( model, [ TypingStarted typingStart ] )
+                            ( updateCounter model, [ TypingStarted typingStart ] )
 
                 OpReconnect ->
-                    ( model, [ CloseAndReopenHandle connection ] )
+                    -- Discord closes the connection itself right after sending this, and we handle
+                    -- the reconnect in WebsocketClosed. We deliberately don't close the connection
+                    -- ourselves: Websocket.close closes with 1000, which makes Discord throw the
+                    -- session away and leaves us with nothing to resume.
+                    ( model, [] )
 
-                OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, [ CloseAndReopenHandle connection ] )
+                OpInvalidSession canResume ->
+                    if canResume then
+                        -- Same as OpReconnect. Discord is about to close the connection and the
+                        -- session survives, so leave the closing to Discord and resume afterwards.
+                        ( model, [] )
+
+                    else
+                        -- The session is unrecoverable, so closing it ourselves costs us nothing.
+                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ CloseAndReopenHandle connection websocketGatewayUrl ]
+                        )
 
         ( _, Err error ) ->
             ( model, [ FailedToParseWebsocketMessage error ] )
@@ -6669,7 +6772,7 @@ handleUserGateway authToken intents response model =
             let
                 heartbeat : String
                 heartbeat =
-                    encodeUserGatewayCommand GatewayUser_OpHeatbeat
+                    encodeUserGatewayCommand (GatewayUser_OpHeatbeat (Maybe.map .sequenceCounter model.gatewayState))
                         |> JE.encode 0
             in
             case data of
@@ -6677,8 +6780,8 @@ handleUserGateway authToken intents response model =
                     let
                         command =
                             (case model.gatewayState of
-                                Just ( discordSessionId, sequenceCounter ) ->
-                                    GatewayUser_OpResume authToken discordSessionId sequenceCounter
+                                Just gatewayState ->
+                                    GatewayUser_OpResume authToken gatewayState.sessionId gatewayState.sequenceCounter
 
                                 Nothing ->
                                     GatewayUser_OpIdentify authToken intents
@@ -6705,9 +6808,16 @@ handleUserGateway authToken intents response model =
                     )
 
                 OpDispatch sequenceCounter opDispatchEvent ->
-                    case opDispatchEvent of
+                    (case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
-                            ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }
+                            ( { model
+                                | gatewayState =
+                                    Just
+                                        { sessionId = readyEvent.sessionId
+                                        , sequenceCounter = sequenceCounter
+                                        , resumeGatewayUrl = readyEvent.resumeGatewayUrl
+                                        }
+                              }
                             , [ UserOutMsg_ReadyData readyEvent ]
                             )
 
@@ -6879,12 +6989,27 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildScheduledEventUserRemove eventUserData ->
                             ( model, [ UserOutMsg_GuildScheduledEventUserRemove eventUserData ] )
+                    )
+                        |> Tuple.mapFirst (setSequenceCounter sequenceCounter)
 
                 OpReconnect ->
-                    ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
+                    -- Discord closes the connection itself right after sending this, and we handle
+                    -- the reconnect in WebsocketClosed. We deliberately don't close the connection
+                    -- ourselves: Websocket.close closes with 1000, which makes Discord throw the
+                    -- session away and leaves us with nothing to resume.
+                    ( model, [] )
 
-                OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, [ UserOutMsg_CloseAndReopenHandle connection ] )
+                OpInvalidSession canResume ->
+                    if canResume then
+                        -- Same as OpReconnect. Discord is about to close the connection and the
+                        -- session survives, so leave the closing to Discord and resume afterwards.
+                        ( model, [] )
+
+                    else
+                        -- The session is unrecoverable, so closing it ourselves costs us nothing.
+                        ( { model | websocketHandle = Nothing, gatewayState = Nothing }
+                        , [ UserOutMsg_CloseAndReopenHandle connection websocketGatewayUrl ]
+                        )
 
         ( _, Err error ) ->
             ( model, [ UserOutMsg_FailedToParseWebsocketMessage error ] )

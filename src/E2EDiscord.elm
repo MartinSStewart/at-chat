@@ -299,6 +299,48 @@ checkGuildCustomEmojis admin expected data =
         )
 
 
+{-| Checks that the backend sent a resume (op 6) with the given session id and sequence number on
+this connection, and that it didn't identify (op 2) instead.
+-}
+checkResumeSent : { sessionId : String, seq : Int } -> T.WebsocketState -> Result String ()
+checkResumeSent expected websocketState =
+    let
+        sent : List String
+        sent =
+            Array.toList websocketState.dataSent |> List.map .data
+
+        decodeResume : Json.Decode.Decoder { sessionId : String, seq : Int }
+        decodeResume =
+            Json.Decode.map2
+                (\sessionId seq -> { sessionId = sessionId, seq = seq })
+                (Json.Decode.at [ "d", "session_id" ] Json.Decode.string)
+                (Json.Decode.at [ "d", "seq" ] Json.Decode.int)
+    in
+    if List.any E2EHelper.isOp2 (Array.toList websocketState.dataSent) then
+        Err "The backend identified with a new session instead of resuming the old one"
+
+    else
+        case List.filterMap (\data -> Json.Decode.decodeString decodeResume data |> Result.toMaybe) sent of
+            [ resume ] ->
+                if resume == expected then
+                    Ok ()
+
+                else
+                    Err
+                        ("Expected a resume with session id "
+                            ++ expected.sessionId
+                            ++ " and seq "
+                            ++ String.fromInt expected.seq
+                            ++ " but got session id "
+                            ++ resume.sessionId
+                            ++ " and seq "
+                            ++ String.fromInt resume.seq
+                        )
+
+            resumes ->
+                Err ("Expected exactly one resume to be sent but " ++ String.fromInt (List.length resumes) ++ " were sent")
+
+
 discordTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg E2EHelper.BackendModel2
     -> String
@@ -632,6 +674,57 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Typing..." ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , E2EHelper.startTest
+        "Discord gateway resumes with the last sequence number after an unexpected close"
+        E2EHelper.startTime
+        normalConfig
+        [ E2EHelper.linkDiscordAndLogin
+            E2EHelper.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            E2EHelper.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+
+                        -- The ready event was sequence number 1, this message moves us up to 204.
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":204,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1500000000000000204","flags":0,"embeds":[],"edited_timestamp":null,"content":"Message before the connection drops","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Message before the connection drops" ])
+
+                        -- Discord drops the connection with a close code that leaves the session
+                        -- intact, so we're allowed to resume rather than start a new session.
+                        , T.websocketClose 100 connection (Websocket.UnknownCode 4000) "Unknown error"
+                        ]
+                    )
+
+                -- A new connection is opened (against the resume_gateway_url from the ready event)
+                -- and Discord says hello on it.
+                , E2EHelper.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+
+                -- We resume the old session instead of identifying, and we tell Discord the
+                -- sequence number of the last event we actually received.
+                , E2EHelper.andThenWebsocket
+                    (\_ websocketState ->
+                        [ T.checkState
+                            0
+                            (\_ ->
+                                checkResumeSent
+                                    { sessionId = "6d59cfbfb4b2759747dacbd22d86d1dd", seq = 204 }
+                                    websocketState
                             )
                         ]
                     )
