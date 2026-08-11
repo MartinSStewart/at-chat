@@ -24,7 +24,7 @@ isProduction =
 -}
 secretKey : String
 secretKey =
-    "123"
+    "123ABCabc"
 
 
 slackClientId : String
