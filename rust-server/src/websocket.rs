@@ -6,12 +6,16 @@
 //! `/file/websocket/{room_id}` is the real shape: it passes each message on to
 //! everyone else in the same room and never back to whoever sent it.
 
+use crate::{AppState, rpc_url, session_id_from_cookie};
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::Path;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
+use http::HeaderMap;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -65,12 +69,79 @@ pub fn rooms() -> Rooms {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
+/// The client id is not secret, so the url is a fine place for it. It says which
+/// of the session's tabs is joining; the session itself is never taken from the
+/// url, because anything in a url is chosen by whoever opened the socket.
+#[derive(Deserialize)]
+pub struct RoomQuery {
+    #[serde(rename = "clientId")]
+    client_id: String,
+}
+
+/// Asks Lamdera whether this session may join this room. Room ids are derived
+/// from the two user ids in a DM, so they are guessable, and this is the check
+/// that stops somebody joining a conversation they are not part of.
+async fn is_call_allowed(
+    secret_key: &[u8],
+    session_id: &str,
+    client_id: &str,
+    room_id: &str,
+) -> Result<(), ()> {
+    let body = serde_json::json!({
+        "sessionId": session_id,
+        "clientId": client_id,
+        "roomId": room_id,
+    });
+
+    match reqwest::Client::new()
+        .post(rpc_url("is-call-allowed"))
+        .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
+        .body(body.to_string())
+        .send()
+        .await
+    {
+        Ok(response) => match response.text().await {
+            Ok(text) if text == "valid" => Ok(()),
+            _ => Err(()),
+        },
+        Err(_) => Err(()),
+    }
+}
+
+/// The session comes from the `sid` cookie, which the browser attaches to the
+/// handshake on its own. Cross site requests are turned away before this by
+/// `require_allowed_origin`, which is the only thing guarding these routes: a
+/// WebSocket handshake gets no CORS of its own.
+///
+/// The check happens before the upgrade so a client that is not allowed in gets
+/// a plain 403 rather than a socket that closes a moment later.
 pub async fn room_endpoint(
     upgrade: WebSocketUpgrade,
     Path(room_id): Path<String>,
+    Query(query): Query<RoomQuery>,
+    headers: HeaderMap,
+    State(state): State<Arc<Mutex<AppState>>>,
     Extension(rooms): Extension<Rooms>,
 ) -> Response<Body> {
-    upgrade.on_upgrade(move |socket| join_room(socket, room_id, rooms))
+    let session_id: String = match session_id_from_cookie(&headers) {
+        Some(session_id2) => session_id2,
+        None => return forbidden("Missing session"),
+    };
+
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+
+    match is_call_allowed(&secret_key, &session_id, &query.client_id, &room_id).await {
+        Ok(()) => upgrade.on_upgrade(move |socket| join_room(socket, room_id, rooms)),
+        Err(()) => forbidden("Not allowed to join this room"),
+    }
+}
+
+fn forbidden(message: &'static str) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .body(Body::from(message))
+        .unwrap()
 }
 
 async fn join_room(socket: WebSocket, room_id: String, rooms: Rooms) {
@@ -215,6 +286,11 @@ mod tests {
 
     // Serve the room endpoint on a random local port. Returns the URL to
     // connect to, minus the room id, and the map of live rooms.
+    //
+    // These tests are about how messages move between members of a room, so
+    // they join through `join_room` rather than `room_endpoint`. Going through
+    // the endpoint would mean standing up a fake Lamdera for it to ask about
+    // every connection, which is a different thing to be testing.
     async fn spawn_room_server() -> (String, Rooms) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -223,7 +299,16 @@ mod tests {
 
         let rooms = rooms();
         let router = Router::new()
-            .route("/file/websocket/{room_id}", get(room_endpoint))
+            .route(
+                "/file/websocket/{room_id}",
+                get(
+                    async |upgrade: WebSocketUpgrade,
+                           Path(room_id): Path<String>,
+                           Extension(rooms2): Extension<Rooms>| {
+                        upgrade.on_upgrade(move |socket| join_room(socket, room_id, rooms2))
+                    },
+                ),
+            )
             .layer(Extension(rooms.clone()));
 
         tokio::spawn(async move {
@@ -387,6 +472,43 @@ mod tests {
                 message.is_close(),
                 "no messages other than the close acknowledgement should arrive"
             );
+        }
+    }
+
+    // A connection with no `sid` cookie is turned away during the handshake, so
+    // it never reaches a room and Lamdera is never asked about it. Anything that
+    // does have a cookie is checked against Lamdera, which needs a backend to
+    // answer and so is covered by the tests over there rather than here.
+    #[tokio::test]
+    async fn refuses_a_room_connection_with_no_session() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let url = format!(
+            "ws://{}/file/websocket/room-a?clientId=client-1",
+            listener.local_addr().unwrap()
+        );
+
+        let state = Arc::new(Mutex::new(AppState {
+            secret_key: b"the-secret".to_vec(),
+        }));
+        let router = Router::new()
+            .route("/file/websocket/{room_id}", get(room_endpoint))
+            .layer(Extension(rooms()))
+            .with_state(state);
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        match tokio_tungstenite::connect_async(url).await {
+            Err(tungstenite::Error::Http(response)) => assert_eq!(
+                response.status(),
+                StatusCode::FORBIDDEN,
+                "a connection without a session should be refused"
+            ),
+            Err(error) => panic!("expected a 403, got {error:?}"),
+            Ok(_) => panic!("a connection without a session should not have been upgraded"),
         }
     }
 }

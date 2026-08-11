@@ -1,11 +1,11 @@
 module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import BackendExtra
-import Broadcast
-import Call exposing (CallId)
+import Call
 import Codec exposing (Codec)
 import Coord
 import Dict
+import DmChannelId
 import Effect.Lamdera exposing (ClientId)
 import FileStatus
 import Http
@@ -14,7 +14,6 @@ import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SecretId
 import SeqDict
-import SessionIdHash exposing (SessionIdHash)
 import Task
 import Time
 import Toop exposing (T4(..))
@@ -78,47 +77,66 @@ checkFileUpload _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
+{-| The session is whoever the `sid` cookie on the WebSocket handshake says it
+is, so unlike the room id and the client id it isn't something the page chose.
+-}
 type alias CheckCallRequest =
-    { sessionIdHash : SessionIdHash
+    { sessionId : Effect.Lamdera.SessionId
     , clientId : ClientId
-    , callId : CallId
+    , roomId : String
     }
 
 
 checkCallRequestCodec : Codec CheckCallRequest
 checkCallRequestCodec =
-    Debug.todo ""
+    Codec.object CheckCallRequest
+        |> Codec.field "sessionId" .sessionId (Codec.map Effect.Lamdera.sessionIdFromString Effect.Lamdera.sessionIdToString Codec.string)
+        |> Codec.field "clientId" .clientId (Codec.map Effect.Lamdera.clientIdFromString Effect.Lamdera.clientIdToString Codec.string)
+        |> Codec.field "roomId" .roomId Codec.string
+        |> Codec.buildObject
 
 
+{-| A room id is a `DmChannelId`, which both people in a DM derive the same way
+from the pair of user ids. That makes it guessable, so being in the room is not
+something the room id can be trusted to prove. `DmChannelId.otherUserId` is what
+proves it: it only answers for a user the room actually belongs to.
+-}
 checkCall : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd BackendMsg )
-checkCall _ model _ text =
-    case Codec.decodeString checkCallRequestCodec text of
-        Ok request ->
-            case Broadcast.getSessionFromSessionIdHash request.sessionIdHash model of
-                Just ( sessionId, _ ) ->
-                    case request.callId of
-                        Call.DmRoomId otherUserId ->
+checkCall _ model headers text =
+    case ( fromRustServer model headers, Codec.decodeString checkCallRequestCodec text ) of
+        ( True, Ok request ) ->
+            case
+                ( SeqDict.get request.sessionId model.sessions
+                , DmChannelId.fromString request.roomId
+                )
+            of
+                ( Just session, Ok dmChannelId ) ->
+                    case DmChannelId.otherUserId session.userId dmChannelId of
+                        Just otherUserId ->
                             BackendExtra.asDmUserRpc
                                 model
-                                sessionId
+                                request.sessionId
                                 { otherUserId = otherUserId }
-                                (\session user otherUser channelId channel ->
+                                (\_ _ _ _ _ ->
                                     ( Ok "valid"
                                     , model
                                     , Task.perform
                                         (\time ->
                                             Rpc_UserJoinedCall
                                                 time
-                                                sessionId
+                                                request.sessionId
                                                 request.clientId
                                                 session.userId
-                                                request.callId
+                                                (Call.DmRoomId otherUserId)
                                         )
                                         Time.now
                                     )
                                 )
 
-                Nothing ->
+                        Nothing ->
+                            ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
+
+                _ ->
                     ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
         _ ->

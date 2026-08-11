@@ -107,8 +107,8 @@ async fn main() {
 const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 
 #[derive(Clone)]
-struct AppState {
-    secret_key: Vec<u8>,
+pub struct AppState {
+    pub secret_key: Vec<u8>,
 }
 
 async fn require_internal_secret(
@@ -650,7 +650,7 @@ enum Uploader {
 /// tells Lamdera the upload was the backend's own. A caller sending `sid=` would
 /// otherwise be taken for the backend and allowed to upload without any session
 /// at all.
-fn session_id_from_cookie(headers: &HeaderMap) -> Option<String> {
+pub fn session_id_from_cookie(headers: &HeaderMap) -> Option<String> {
     headers
         .get("cookie")?
         .to_str()
@@ -724,6 +724,18 @@ async fn upload_url_endpoint(
 /// Should match RichText.maxImageHeight
 const MAX_THUMBNAIL_HEIGHT: u32 = 600;
 
+/// Where Lamdera answers RPC calls, which differs between the local `lamdera
+/// live` and the deployed app.
+pub fn rpc_url(endpoint: &str) -> String {
+    if cfg!(debug_assertions) {
+        format!("http://localhost:8000/_r/{endpoint}")
+    } else {
+        format!("https://at-chat.app/_r/{endpoint}")
+    }
+}
+
+/// Asks Lamdera whether this upload is allowed.
+///
 /// The server secret goes along with the question so that Lamdera can tell our
 /// answer apart from anyone else's: `_r/is-file-upload-allowed` is a public url,
 /// and without it a stranger could register files that were never uploaded.
@@ -742,11 +754,7 @@ async fn is_file_upload_allowed(
     };
 
     match reqwest::Client::new()
-        .post(if cfg!(debug_assertions) {
-            "http://localhost:8000/_r/is-file-upload-allowed"
-        } else {
-            "https://at-chat.app/_r/is-file-upload-allowed"
-        })
+        .post(rpc_url("is-file-upload-allowed"))
         .header("Content-Type", "text/plain")
         .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
         .body(format!("{hash},{size},{session_id},{width},{height}"))
