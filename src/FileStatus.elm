@@ -75,7 +75,6 @@ import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity, Rate)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
-import SessionIdHash exposing (SessionIdHash)
 import StringExtra
 import Ui exposing (Element)
 
@@ -457,13 +456,16 @@ secretKeyHeader secretKey =
     Http.header "x-secret-key" (SecretId.toString secretKey)
 
 
-uploadUrl : UploadUrlRequest -> Task restriction Http.Error UploadResponse
-uploadUrl request =
+{-| Backend initiated, so there is no browser and no cookie. The server secret
+is what tells the Rust server this came from us.
+-}
+uploadUrl : SecretId ServerSecret -> String -> Task restriction Http.Error UploadResponse
+uploadUrl secretKey url =
     Http.task
         { method = "POST"
-        , headers = []
-        , url = domain ++ "/file/upload-url"
-        , body = Http.jsonBody (Codec.encodeToValue uploadUrlCodec request)
+        , headers = [ secretKeyHeader secretKey ]
+        , url = domain ++ "/file/internal/upload-url"
+        , body = Http.jsonBody (Codec.encodeToValue uploadUrlCodec { url = url })
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }
@@ -490,28 +492,32 @@ discordStickerUrl stickerId format =
 
 
 type alias UploadUrlRequest =
-    { url : String, sessionId : SessionIdHash }
+    { url : String }
 
 
 uploadUrlCodec : Codec UploadUrlRequest
 uploadUrlCodec =
     Codec.object UploadUrlRequest
         |> Codec.field "url" .url Codec.string
-        |> Codec.field "sid" .sessionId SessionIdHash.codec
         |> Codec.buildObject
 
 
+{-| Uploads are authenticated by the `sid` cookie, which the browser attaches on
+its own. `riskyRequest` is what sets `withCredentials`, and without it the
+browser withholds cookies from `localhost:3000` when the page is served from
+`localhost:8000`. In production both are at-chat.app, so the cookie would be
+sent either way.
+-}
 uploadFile :
     (Result Http.Error UploadResponse -> msg)
-    -> SessionIdHash
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> File
     -> Command restriction toFrontend msg
-uploadFile onResult sessionId guildOrDmId fileId file2 =
-    Http.request
+uploadFile onResult guildOrDmId fileId file2 =
+    Http.riskyRequest
         { method = "POST"
-        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , headers = []
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
@@ -522,15 +528,14 @@ uploadFile onResult sessionId guildOrDmId fileId file2 =
 
 uploadString :
     (Result Http.Error UploadResponse -> msg)
-    -> SessionIdHash
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> String
     -> Command restriction toFrontend msg
-uploadString onResult sessionId guildOrDmId fileId text =
-    Http.request
+uploadString onResult guildOrDmId fileId text =
+    Http.riskyRequest
         { method = "POST"
-        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , headers = []
         , url = domain ++ "/file/upload"
         , body = Http.stringBody "text/plain" text
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
@@ -541,13 +546,12 @@ uploadString onResult sessionId guildOrDmId fileId text =
 
 uploadAvatar :
     (Result Http.Error UploadResponse -> msg)
-    -> SessionIdHash
     -> Bytes
     -> Command restriction toFrontend msg
-uploadAvatar onResult sessionId file2 =
-    Http.request
+uploadAvatar onResult file2 =
+    Http.riskyRequest
         { method = "POST"
-        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , headers = []
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
@@ -590,11 +594,11 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
         ++ Id.toString fileId
 
 
-uploadBytes : SessionIdHash -> Bytes -> Task restriction Http.Error UploadResponse
-uploadBytes sessionId bytes =
+uploadBytes : SecretId ServerSecret -> Bytes -> Task restriction Http.Error UploadResponse
+uploadBytes secretKey bytes =
     Http.task
         { method = "POST"
-        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , headers = [ secretKeyHeader secretKey ]
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" bytes
         , resolver = resolver uploadResponseCodec

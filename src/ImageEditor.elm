@@ -25,7 +25,6 @@ import MyUi
 import Pixels exposing (Pixels)
 import Ports exposing (CropImageDataResponse)
 import Quantity exposing (Quantity)
-import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
@@ -151,8 +150,8 @@ init =
     }
 
 
-update : (Maybe FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
-update toBackendMsg sessionIdHash windowSize msg model =
+update : (Maybe FileHash -> ToBackend) -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update toBackendMsg windowSize msg model =
     case msg of
         PressedProfileImage ->
             ( model, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
@@ -274,7 +273,7 @@ update toBackendMsg sessionIdHash windowSize msg model =
                                 [ _, base64 ] ->
                                     case Base64.toBytes base64 of
                                         Just bytes ->
-                                            ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
+                                            ( model, FileStatus.uploadAvatar UploadedImage bytes )
 
                                         Nothing ->
                                             ( { model | status = UploadingError }, Command.none )

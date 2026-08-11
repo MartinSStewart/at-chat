@@ -57,7 +57,7 @@ async fn main() {
                     post(upload_endpoint).options(options_endpoint),
                 )
                 .route(
-                    "/file/upload-url",
+                    "/file/internal/upload-url",
                     post(upload_url_endpoint).options(options_endpoint),
                 )
                 .route(
@@ -81,6 +81,7 @@ async fn main() {
                     state.clone(),
                     require_internal_secret,
                 ))
+                .layer(axum::middleware::from_fn(require_allowed_origin))
                 .fallback(fallback)
                 .with_state(state);
 
@@ -144,6 +145,24 @@ async fn require_internal_secret(
         }
     } else {
         next.run(req).await
+    }
+}
+
+/// Now that the `sid` cookie is what authorises an upload, the browser attaches
+/// it to any request a third party site makes to us as well. CORS on its own is
+/// not enough to stop that: a POST with a `text/plain` body is not preflighted,
+/// so the request is sent and only the response is withheld — by which time the
+/// file has been uploaded. Checking `Origin` rejects it before any work happens.
+///
+/// A request with no `Origin` at all did not come from a browser, so there is no
+/// ambient cookie for it to have abused, and it is left alone.
+async fn require_allowed_origin(req: Request, next: Next) -> Response<Body> {
+    match req.headers().get("origin").and_then(|v| v.to_str().ok()) {
+        Some(origin) if origin != allowed_origin() => Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Body::from("Origin not allowed"))
+            .unwrap(),
+        _ => next.run(req).await,
     }
 }
 
@@ -606,17 +625,58 @@ async fn push_notification_endpoint(
     }
 }
 
-async fn upload_endpoint(request: Request) -> Response<String> {
-    let session_id: Option<String> = match request.headers().get("sid") {
-        Some(header_value) => match header_value.to_str() {
-            Ok(s) => Some(s.to_owned()),
-            Err(_) => None,
-        },
-        None => None,
+/// Who an upload is being done on behalf of.
+enum Uploader {
+    /// A browser. The session id came out of the `sid` cookie, which the browser
+    /// attaches itself and page scripts cannot read in production, so unlike the
+    /// session id hash it used to send it is not something a caller can choose.
+    Session(String),
+    /// Our own backend, which has no cookie to be identified by and proves who
+    /// it is with the server secret instead.
+    Backend,
+}
+
+/// Reads the `sid` cookie. A value containing a comma is refused because the
+/// session id is passed to Lamdera as one comma separated field among several,
+/// and a comma in it would let the caller write the fields either side.
+fn session_id_from_cookie(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("cookie")?
+        .to_str()
+        .ok()?
+        .split(';')
+        .find_map(|pair| {
+            let (name, value) = pair.split_once('=')?;
+            (name.trim() == "sid" && !value.contains(',')).then(|| value.trim().to_owned())
+        })
+}
+
+fn uploader(state: &Mutex<AppState>, headers: &HeaderMap) -> Option<Uploader> {
+    let is_backend: bool = match headers.get("x-secret-key").and_then(|v| v.to_str().ok()) {
+        Some(provided) => provided
+            .as_bytes()
+            .to_vec()
+            .ct_eq(&state.lock().unwrap().secret_key)
+            .into(),
+        None => false,
     };
 
-    match (session_id, request.extract::<Bytes, _>().await) {
-        (Some(session_id2), Ok(bytes)) => file_upload_helper(session_id2, bytes).await,
+    if is_backend {
+        Some(Uploader::Backend)
+    } else {
+        session_id_from_cookie(headers).map(Uploader::Session)
+    }
+}
+
+async fn upload_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    request: Request,
+) -> Response<String> {
+    let uploader: Option<Uploader> = uploader(&state, request.headers());
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+
+    match (uploader, request.extract::<Bytes, _>().await) {
+        (Some(uploader2), Ok(bytes)) => file_upload_helper(&secret_key, &uploader2, bytes).await,
         _ => response_with_headers(
             StatusCode::UNAUTHORIZED,
             String::from("Invalid permissions 1"),
@@ -624,10 +684,18 @@ async fn upload_endpoint(request: Request) -> Response<String> {
     }
 }
 
-async fn upload_url_endpoint(Json(UploadUrl { url, sid }): Json<UploadUrl>) -> Response<String> {
+/// Lives under `/file/internal/` because only the backend fetches attachments by
+/// url, so `require_internal_secret` has already checked the caller by the time
+/// this runs.
+async fn upload_url_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+    Json(UploadUrl { url }): Json<UploadUrl>,
+) -> Response<String> {
+    let secret_key: Vec<u8> = state.lock().unwrap().secret_key.clone();
+
     match reqwest::Client::new().get(url).send().await {
         Ok(response) => match response.bytes().await {
-            Ok(bytes) => file_upload_helper(sid, bytes).await,
+            Ok(bytes) => file_upload_helper(&secret_key, &Uploader::Backend, bytes).await,
             Err(_) => response_with_headers(
                 StatusCode::UNAUTHORIZED,
                 String::from("Invalid permissions 2"),
@@ -643,12 +711,23 @@ async fn upload_url_endpoint(Json(UploadUrl { url, sid }): Json<UploadUrl>) -> R
 /// Should match RichText.maxImageHeight
 const MAX_THUMBNAIL_HEIGHT: u32 = 600;
 
+/// The server secret goes along with the question so that Lamdera can tell our
+/// answer apart from anyone else's: `_r/is-file-upload-allowed` is a public url,
+/// and without it a stranger could register files that were never uploaded.
 async fn is_file_upload_allowed(
+    secret_key: &[u8],
     hash: String,
     size: usize,
-    session_id: String,
+    uploader: &Uploader,
     (width, height): (u32, u32),
 ) -> Result<(), ()> {
+    // An empty session is how the backend says the upload was its own. It has
+    // already proved that with the secret key, which Lamdera checks as well.
+    let session_id: &str = match uploader {
+        Uploader::Session(session_id2) => session_id2,
+        Uploader::Backend => "",
+    };
+
     match reqwest::Client::new()
         .post(if cfg!(debug_assertions) {
             "http://localhost:8000/_r/is-file-upload-allowed"
@@ -656,6 +735,7 @@ async fn is_file_upload_allowed(
             "https://at-chat.app/_r/is-file-upload-allowed"
         })
         .header("Content-Type", "text/plain")
+        .header("x-secret-key", String::from_utf8_lossy(secret_key).as_ref())
         .body(format!("{hash},{size},{session_id},{width},{height}"))
         .send()
         .await
@@ -789,7 +869,11 @@ fn image_metadata(
     }
 }
 
-async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
+async fn file_upload_helper(
+    secret_key: &[u8],
+    uploader: &Uploader,
+    bytes: Bytes,
+) -> Response<String> {
     let hash = hash_bytes(&bytes);
 
     let size = bytes.len();
@@ -814,7 +898,8 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
 
             let image_size = metadata.image_size;
 
-            match is_file_upload_allowed(hash.clone(), size, session_id2, image_size).await {
+            match is_file_upload_allowed(secret_key, hash.clone(), size, uploader, image_size).await
+            {
                 Ok(()) => {
                     let path = filepath(&hash);
                     let response: String = serde_json::to_string(&UploadResponse {
@@ -870,7 +955,8 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
                 None => (0, 0),
             };
 
-            match is_file_upload_allowed(hash.clone(), size, session_id2, video_size).await {
+            match is_file_upload_allowed(secret_key, hash.clone(), size, uploader, video_size).await
+            {
                 Ok(()) => {
                     let path = filepath(&hash);
                     let response: String = serde_json::to_string(&UploadResponse {
@@ -902,11 +988,26 @@ async fn file_upload_helper(session_id2: String, bytes: Bytes) -> Response<Strin
     }
 }
 
+/// The page these endpoints are called from, and the only origin they answer
+/// for. It cannot be `*` any more: browsers reject a wildcard on a request that
+/// carries credentials, and uploads now rely on the `sid` cookie being sent.
+const fn allowed_origin() -> &'static str {
+    if cfg!(debug_assertions) {
+        // Lamdera live serves the app from a different port to this server,
+        // which makes every request cross-origin during development.
+        "http://localhost:8000"
+    } else {
+        "https://at-chat.app"
+    }
+}
+
 fn response_with_headers(status_code: StatusCode, body: impl Into<String>) -> Response<String> {
     Response::builder()
         .status(status_code)
-        .header("Access-Control-Allow-Origin", "*")
-        .header("Access-Control-Allow-Headers", "*")
+        .header("Access-Control-Allow-Origin", allowed_origin())
+        .header("Access-Control-Allow-Credentials", "true")
+        .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        .header("Access-Control-Allow-Headers", "content-type, x-secret-key")
         .header("Content-Type", "text/plain")
         .body(body.into())
         .unwrap()
@@ -918,8 +1019,10 @@ fn json_response_with_headers(
 ) -> Response<String> {
     Response::builder()
         .status(status_code)
-        .header("Access-Control-Allow-Origin", "*")
-        .header("Access-Control-Allow-Headers", "*")
+        .header("Access-Control-Allow-Origin", allowed_origin())
+        .header("Access-Control-Allow-Credentials", "true")
+        .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        .header("Access-Control-Allow-Headers", "content-type, x-secret-key")
         .header("Content-Type", "application/json")
         .body(body.into())
         .unwrap()
@@ -1246,7 +1349,6 @@ pub struct Header {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadUrl {
     pub url: String,
-    pub sid: String,
 }
 
 #[cfg(test)]
@@ -1476,6 +1578,152 @@ mod tests {
         assert!(
             build_embed(&client, &format!("{base}/")).await.is_none(),
             "HTML larger than the size cap should be rejected rather than parsed"
+        );
+    }
+
+    // --- who an upload is attributed to ---
+
+    fn headers_from(pairs: &[(&str, &str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (name, value) in pairs {
+            headers.insert(
+                axum::http::HeaderName::from_str(name).expect("bad header name"),
+                value.parse().expect("bad header value"),
+            );
+        }
+        headers
+    }
+
+    fn test_state(secret: &str) -> Mutex<AppState> {
+        Mutex::new(AppState {
+            secret_key: secret.as_bytes().to_vec(),
+        })
+    }
+
+    #[test]
+    fn reads_the_session_out_of_the_sid_cookie() {
+        let headers = headers_from(&[("cookie", "other=1; sid=abc123; another=2")]);
+        assert_eq!(
+            session_id_from_cookie(&headers).as_deref(),
+            Some("abc123"),
+            "the sid cookie should be found among the others"
+        );
+    }
+
+    #[test]
+    fn ignores_cookies_that_merely_end_in_sid() {
+        let headers = headers_from(&[("cookie", "notsid=abc123")]);
+        assert_eq!(
+            session_id_from_cookie(&headers),
+            None,
+            "only a cookie named exactly sid should count"
+        );
+    }
+
+    // The session id is one comma separated field among several in the question
+    // put to Lamdera, so a comma in it would let the caller write the fields on
+    // either side and claim any size or image dimensions it liked.
+    #[test]
+    fn refuses_a_session_containing_a_comma() {
+        let headers = headers_from(&[("cookie", "sid=abc,999,,1,1")]);
+        assert_eq!(
+            session_id_from_cookie(&headers),
+            None,
+            "a session id that could forge extra fields should be refused"
+        );
+    }
+
+    #[test]
+    fn a_browser_uploads_as_the_session_in_its_cookie() {
+        let state = test_state("the-secret");
+        let headers = headers_from(&[("cookie", "sid=abc123")]);
+        match uploader(&state, &headers) {
+            Some(Uploader::Session(session_id)) => assert_eq!(session_id, "abc123"),
+            _ => panic!("a request carrying a sid cookie should upload as that session"),
+        }
+    }
+
+    #[test]
+    fn the_server_secret_uploads_as_the_backend() {
+        let state = test_state("the-secret");
+        let headers = headers_from(&[("x-secret-key", "the-secret")]);
+        assert!(
+            matches!(uploader(&state, &headers), Some(Uploader::Backend)),
+            "the secret key is how the backend identifies itself"
+        );
+    }
+
+    #[test]
+    fn a_wrong_secret_does_not_upload_as_the_backend() {
+        let state = test_state("the-secret");
+        let headers = headers_from(&[("x-secret-key", "not-the-secret")]);
+        assert!(
+            uploader(&state, &headers).is_none(),
+            "a wrong secret with no cookie should not be allowed to upload at all"
+        );
+    }
+
+    #[test]
+    fn an_unidentified_request_cannot_upload() {
+        let state = test_state("the-secret");
+        assert!(
+            uploader(&state, &HeaderMap::new()).is_none(),
+            "a request with neither a cookie nor the secret should be refused"
+        );
+    }
+
+    // --- the origin check ---
+
+    // Serve a route behind `require_allowed_origin` and report what it answers.
+    async fn origin_check_status(origin: Option<&str>) -> StatusCode {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind test server");
+        let base = format!("http://{}", listener.local_addr().unwrap());
+
+        let router = Router::new()
+            .route("/file/upload", post(|| async { "uploaded" }))
+            .layer(axum::middleware::from_fn(require_allowed_origin));
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        let mut request = reqwest::Client::new().post(format!("{base}/file/upload"));
+        if let Some(origin2) = origin {
+            request = request.header("Origin", origin2);
+        }
+        request.send().await.expect("request failed").status()
+    }
+
+    #[tokio::test]
+    async fn accepts_requests_from_the_app() {
+        assert_eq!(
+            origin_check_status(Some(allowed_origin())).await,
+            StatusCode::OK,
+            "the app's own origin should be allowed through"
+        );
+    }
+
+    // Without this a third party page could POST here and the browser would
+    // attach the sid cookie on its behalf.
+    #[tokio::test]
+    async fn rejects_requests_from_other_sites() {
+        assert_eq!(
+            origin_check_status(Some("https://evil.example")).await,
+            StatusCode::FORBIDDEN,
+            "an upload from somebody else's page should be refused"
+        );
+    }
+
+    // Our own backend calls these endpoints server to server, where there is no
+    // origin and no cookie for anyone to have ridden on.
+    #[tokio::test]
+    async fn allows_requests_that_are_not_from_a_browser() {
+        assert_eq!(
+            origin_check_status(None).await,
+            StatusCode::OK,
+            "a request without an Origin header should be allowed through"
         );
     }
 }
